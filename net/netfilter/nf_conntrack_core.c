@@ -578,6 +578,11 @@ static void destroy_gre_conntrack(struct nf_conn *ct)
 #endif
 }
 
+#ifdef CONFIG_ENABLE_SFE
+void (*delete_sfe_entry)(struct nf_conn *ct) __rcu __read_mostly;
+EXPORT_SYMBOL_GPL(delete_sfe_entry);
+#endif
+
 void nf_ct_destroy(struct nf_conntrack *nfct)
 {
 	struct nf_conn *ct = (struct nf_conn *)nfct;
@@ -585,6 +590,9 @@ void nf_ct_destroy(struct nf_conntrack *nfct)
 	struct sip_list *sip_node = NULL;
 	struct list_head *sip_node_list;
 	struct list_head *sip_node_save_list;
+#endif
+#ifdef CONFIG_ENABLE_SFE
+	void (*delete_entry)(struct nf_conn *ct);
 #endif
 
 	WARN_ON(refcount_read(&nfct->use) != 0);
@@ -608,6 +616,14 @@ void nf_ct_destroy(struct nf_conntrack *nfct)
 			list_del(&sip_node->list);
 			kfree(sip_node);
 		}
+#endif
+
+#ifdef CONFIG_ENABLE_SFE
+	if (ct->sfe_entry) {
+		delete_entry = rcu_dereference(delete_sfe_entry);
+		if (delete_entry)
+			delete_entry(ct);
+	}
 #endif
 	/* Expectations will have been removed in clean_from_lists,
 	 * except TFTP can create an expectation on the first packet,

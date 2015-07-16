@@ -889,6 +889,10 @@ struct sk_buff {
 #endif
 	};
 
+#ifdef CONFIG_XFRM
+	struct sec_path		*sp;
+#endif
+
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	unsigned long		 _nfct;
 #endif
@@ -971,6 +975,10 @@ struct sk_buff {
 #endif
 #if IS_ENABLED(CONFIG_NETFILTER_XT_TARGET_TRACE) || IS_ENABLED(CONFIG_NF_TABLES)
 	__u8			nf_trace:1;
+#endif
+
+#ifdef CONFIG_ENABLE_SFE
+	__u8			fast_forwarded:1;
 #endif
 #ifdef CONFIG_NET_SWITCHDEV
 	__u8			offload_fwd_mark:1;
