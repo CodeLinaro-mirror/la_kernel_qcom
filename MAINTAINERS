@@ -70,6 +70,7 @@ Maintainers List
 SKB RECYCLER SUPPORT
 M:	Casey Chen <kexinc@codeaurora.org>
 S:	Maintained
+F:	net/core/skbuff_notifier.*
 F:	net/core/skbuff_recycle.*
 
 3C59X NETWORK DRIVER
