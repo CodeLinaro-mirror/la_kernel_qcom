@@ -309,6 +309,12 @@ config CRYPTO_DISABLE_AHASH_TYPE3_TESTS
 	help
 	  Support to disable AHASH type 3 tests
 
+config CRYPTO_DISABLE_AHASH_LARGE_KEY_TEST
+	bool "Disable AHASH test cases with auth key greater than block size"
+	default y
+	help
+	  Support to disable large key ahash tests
+
 config CRYPTO_SIMD
 	tristate
 	select CRYPTO_CRYPTD
