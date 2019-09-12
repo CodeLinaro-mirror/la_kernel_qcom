@@ -216,6 +216,22 @@ const u8 clk_alpha_pll_regs[][PLL_OFF_MAX_REGS] = {
 		[PLL_OFF_TEST_CTL_U1] = 0x34,
 		[PLL_OFF_TEST_CTL_U2] = 0x38,
 	},
+	[CLK_ALPHA_PLL_TYPE_LUCID_5LPE] = {
+		[PLL_OFF_L_VAL] = 0x04,
+		[PLL_OFF_CAL_L_VAL] = 0x08,
+		[PLL_OFF_USER_CTL] = 0x0c,
+		[PLL_OFF_USER_CTL_U] = 0x10,
+		[PLL_OFF_USER_CTL_U1] = 0x14,
+		[PLL_OFF_CONFIG_CTL] = 0x18,
+		[PLL_OFF_CONFIG_CTL_U] = 0x1c,
+		[PLL_OFF_CONFIG_CTL_U1] = 0x20,
+		[PLL_OFF_TEST_CTL] = 0x24,
+		[PLL_OFF_TEST_CTL_U] = 0x28,
+		[PLL_OFF_TEST_CTL_U1] = 0x2c,
+		[PLL_OFF_STATUS] = 0x30,
+		[PLL_OFF_OPMODE] = 0x38,
+		[PLL_OFF_ALPHA_VAL] = 0x40,
+	},
 	[CLK_ALPHA_PLL_TYPE_TAYCAN_ELU] = {
 		[PLL_OFF_OPMODE] = 0x04,
 		[PLL_OFF_STATE] = 0x08,
@@ -375,6 +391,7 @@ EXPORT_SYMBOL_GPL(clk_alpha_pll_regs);
 #define TRION_PCAL_DONE		BIT(26)
 
 /* LUCID PLL specific settings and offsets */
+#define LUCID_PLL_CAL_VAL		0x44
 #define LUCID_PCAL_DONE		BIT(27)
 
 /* LUCID 5LPE PLL specific settings and offsets */
@@ -1298,6 +1315,10 @@ static void clk_pll_restore_context(struct clk_hw *hw)
 	case CLK_ALPHA_PLL_TYPE_RIVIAN_EKO_T:
 		clk_rivian_eko_t_pll_configure(pll, pll->clkr.regmap, pll->config);
 		break;
+	case CLK_ALPHA_PLL_TYPE_LUCID_5LPE:
+		clk_lucid_5lpe_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
 	default:
 		pr_err("Invalid pll type!\n");
 	}
@@ -2055,6 +2076,57 @@ const struct clk_ops clk_alpha_pll_postdiv_fabia_ops = {
 	.set_rate = clk_alpha_pll_postdiv_fabia_set_rate,
 };
 EXPORT_SYMBOL_GPL(clk_alpha_pll_postdiv_fabia_ops);
+
+/**
+ * clk_lucid_5lpe_pll_configure - configure the trion pll
+ *
+ * @pll: clk alpha pll
+ * @regmap: register map
+ * @config: configuration to apply for pll
+ */
+void clk_lucid_5lpe_pll_configure(struct clk_alpha_pll *pll,
+		struct regmap *regmap,	const struct alpha_pll_config *config)
+{
+	/*
+	 * If the bootloader left the PLL enabled it's likely that there are
+	 * RCGs that will lock up if we disable the PLL below.
+	 */
+	if (trion_pll_is_enabled(pll, regmap)) {
+		pr_debug("Trion PLL is already enabled, skipping configuration\n");
+		return;
+	}
+
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_L_VAL, config->l);
+
+	if (config->cal_l)
+		regmap_write(regmap, PLL_CAL_L_VAL(pll), config->cal_l);
+	else
+		regmap_write(regmap, PLL_CAL_L_VAL(pll), LUCID_PLL_CAL_VAL);
+
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_ALPHA_VAL, config->alpha);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_CONFIG_CTL, config->config_ctl_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_CONFIG_CTL_U, config->config_ctl_hi_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_CONFIG_CTL_U1, config->config_ctl_hi1_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_USER_CTL, config->user_ctl_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_USER_CTL_U, config->user_ctl_hi_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_USER_CTL_U1, config->user_ctl_hi1_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_TEST_CTL, config->test_ctl_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_TEST_CTL_U, config->test_ctl_hi_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_TEST_CTL_U1, config->test_ctl_hi1_val);
+
+	/* Disable PLL output */
+	regmap_update_bits(regmap, PLL_MODE(pll),  PLL_OUTCTRL, 0);
+
+	/* Set operation mode to STANDBY */
+	regmap_write(regmap, PLL_OPMODE(pll), PLL_STANDBY);
+
+	/* PLL should be in OFF mode before continuing */
+	wmb();
+
+	/* Place the PLL in STANDBY mode */
+	regmap_update_bits(regmap, PLL_MODE(pll), PLL_RESET_N, PLL_RESET_N);
+}
+EXPORT_SYMBOL_GPL(clk_lucid_5lpe_pll_configure);
 
 /**
  * clk_trion_pll_configure - configure the trion pll
