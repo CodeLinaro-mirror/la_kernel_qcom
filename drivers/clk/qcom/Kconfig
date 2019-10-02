@@ -1014,4 +1014,13 @@ config SM_DISPCC_8350
 	  Say Y if you want to support display devices and functionality such as
 	  splash screen.
 
+config SM_CAMCC_8350
+	tristate "SM8350 Camera Clock Controller"
+	select SM_GCC_8350
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  SM8350 devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 endif
