@@ -27,6 +27,7 @@
 #include "qti_charger_boost_lib.h"
 #include <linux/kernel.h>
 #endif
+#include "qti_typec_class.h"
 
 #define MSG_OWNER_BC			32778
 #define MSG_TYPE_REQ_RESP		1
@@ -251,6 +252,7 @@ struct battery_chg_dev {
 	struct device			*dev;
 	struct class			battery_class;
 	struct pmic_glink_client	*client;
+	struct typec_role_class		*typec_class;
 	struct mutex			rw_lock;
 	struct rw_semaphore		state_sem;
 	struct completion		ack;
@@ -785,7 +787,7 @@ static void battery_chg_update_uusb_type(struct battery_chg_dev *bcdev,
 
 	/* Handle the extcon notification for uUSB case only */
 	if ((bcdev->connector_type != USB_CONNECTOR_TYPE_MICRO_USB) ||
-	    !bcdev->extcon)
+	    !bcdev->extcon || !bcdev->typec_class)
 		return;
 
 	rc = read_property_id(bcdev, pst, USB_SCOPE);
@@ -802,12 +804,21 @@ static void battery_chg_update_uusb_type(struct battery_chg_dev *bcdev,
 			/* Device mode connect notification */
 			extcon_set_state_sync(bcdev->extcon, EXTCON_USB, 1);
 			bcdev->usb_prev_mode = EXTCON_USB;
+			rc = qti_typec_partner_register(bcdev->typec_class,
+							TYPEC_DEVICE);
+			if (rc < 0)
+				dev_err(bcdev->dev, "Failed to register typec partner rc=%d\n",
+					rc);
 		}
 		break;
 	case POWER_SUPPLY_SCOPE_SYSTEM:
 		/* Host mode connect notification */
 		extcon_set_state_sync(bcdev->extcon, EXTCON_USB_HOST, 1);
 		bcdev->usb_prev_mode = EXTCON_USB_HOST;
+		rc = qti_typec_partner_register(bcdev->typec_class, TYPEC_HOST);
+		if (rc < 0)
+			dev_err(bcdev->dev, "Failed to register typec partner rc=%d\n",
+				rc);
 		break;
 	default:
 		if (bcdev->usb_prev_mode == EXTCON_USB ||
@@ -816,6 +827,7 @@ static void battery_chg_update_uusb_type(struct battery_chg_dev *bcdev,
 			extcon_set_state_sync(bcdev->extcon,
 					      bcdev->usb_prev_mode, 0);
 			bcdev->usb_prev_mode = EXTCON_NONE;
+			qti_typec_partner_unregister(bcdev->typec_class);
 		}
 		break;
 	}
@@ -2827,6 +2839,15 @@ static int battery_chg_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (bcdev->connector_type == USB_CONNECTOR_TYPE_MICRO_USB) {
+		bcdev->typec_class = qti_typec_class_init(bcdev->dev);
+		if (IS_ERR_OR_NULL(bcdev->typec_class)) {
+			rc = PTR_ERR_OR_ZERO(bcdev->typec_class);
+			dev_err(dev, "Failed to init typec class err=%d\n", rc);
+			goto error;
+		}
+	}
+
 	schedule_work(&bcdev->usb_type_work);
 
 	rc = get_charge_control_en(bcdev);
@@ -2872,6 +2893,8 @@ static void battery_chg_remove(struct platform_device *pdev)
 	cancel_work_sync(&bcdev->battery_check_work);
 	unregister_reboot_notifier(&bcdev->reboot_notifier);
 	pmic_glink_unregister_client(bcdev->client);
+	if (bcdev->typec_class)
+		qti_typec_class_deinit(bcdev->typec_class);
 }
 
 static const struct of_device_id battery_chg_match_table[] = {
