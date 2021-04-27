@@ -10,7 +10,6 @@ input-core-y := input.o input-compat.o input-mt.o input-poller.o ff-core.o
 input-core-y += touchscreen.o
 
 obj-$(CONFIG_INPUT_FF_MEMLESS)	+= ff-memless.o
-obj-$(CONFIG_INPUT_POLLDEV)	+= input-polldev.o
 obj-$(CONFIG_INPUT_SPARSEKMAP)	+= sparse-keymap.o
 obj-$(CONFIG_INPUT_MATRIXKMAP)	+= matrix-keymap.o
 obj-$(CONFIG_INPUT_VIVALDIFMAP)	+= vivaldi-fmap.o
@@ -28,8 +27,6 @@ obj-$(CONFIG_INPUT_TABLET)	+= tablet/
 obj-$(CONFIG_INPUT_TOUCHSCREEN)	+= touchscreen/
 obj-$(CONFIG_INPUT_MISC)	+= misc/
 obj-$(CONFIG_INPUT_KUNIT_TEST)	+= tests/
-
-obj-$(CONFIG_INPUT_SMI230)	+= sensors/smi230/
 
 obj-$(CONFIG_INPUT_APMPOWER)	+= apm-power.o
 
