@@ -14,6 +14,7 @@ source "drivers/iio/imu/stm/imu/Kconfig"
 source "drivers/iio/imu/stm/magnetometer/Kconfig"
 source "drivers/iio/imu/stm/pressure/Kconfig"
 source "drivers/iio/imu/stm/temperature/Kconfig"
+source "drivers/iio/imu/stm/tmos/Kconfig"
 
 endif # IIO_STM
 
