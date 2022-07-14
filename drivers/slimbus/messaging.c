@@ -156,6 +156,7 @@ int slim_do_transfer(struct slim_controller *ctrl, struct slim_msg_txn *txn)
 							msecs_to_jiffies(ms));
 		if (!time_left) {
 			ret = -ETIMEDOUT;
+			txn->comp = NULL;
 			slim_free_txn_tid(ctrl, txn);
 		}
 	}
