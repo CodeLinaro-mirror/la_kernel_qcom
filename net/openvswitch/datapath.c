@@ -288,7 +288,7 @@ static void ovs_dp_port_add_notify(struct datapath *dp, struct vport *vp,
 }
 
 /* Notify datapath port delete event to acceleration callback */
-static void ovs_dp_port_del_notify(struct datapath *dp, struct vport *vp)
+void ovs_dp_port_del_notify(struct datapath *dp, struct vport *vp)
 {
 	struct ovs_accel_callback *ovs_cb;
 
@@ -2817,6 +2817,7 @@ struct net_device *ovs_accel_egress_dev_find(void *dp_inst,
 				goto done;
 
 			dev = vport->dev;
+			dev_hold(dev);
 			rcu_read_unlock();
 			return dev;
 		}
