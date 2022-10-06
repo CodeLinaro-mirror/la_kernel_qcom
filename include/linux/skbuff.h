@@ -1010,6 +1010,10 @@ struct sk_buff {
 	/* Linear packets processed by dev_fast_xmit() */
 	__u8			fast_xmit:1;
 
+	/* Flag to check if skb is allocated from recycler */
+	__u8			is_from_recycler:1;
+	/* Flag for fast recycle in fast xmit path */
+	__u8			fast_recycled:1;
 	/* Flag for recycle in PPE DS */
 	__u8			recycled_for_ds:1;
 
