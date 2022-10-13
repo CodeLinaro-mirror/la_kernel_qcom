@@ -1010,6 +1010,9 @@ struct sk_buff {
 	/* Linear packets processed by dev_fast_xmit() */
 	__u8			fast_xmit:1;
 
+	/* Flag for recycle in PPE DS */
+	__u8			recycled_for_ds:1;
+
 #if defined(CONFIG_NET_SCHED) || defined(CONFIG_NET_XGRESS)
 	__u16			tc_index;	/* traffic control index */
 #endif
