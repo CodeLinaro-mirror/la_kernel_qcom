@@ -117,3 +117,13 @@ config INV_MPU_IIO_IPL
 	depends on INV_MPU_IIO_ICM20608D
 	help
 	  Select here if you want to build a driver with IPL support.
+
+config ENABLE_IAM_ACC_GYRO_BUFFERING
+        bool "Enable accel & gyro  boot time sensor sample buffering"
+        depends on INV_MPU_IIO_IAM20680 && INPUT && INPUT_EVDEV
+        help
+          Say Y here if you want to buffer boot time sensor
+          samples for IAM20680 accelerometer and gyroscope.
+          This will ensure the boot samples are stored in
+          kernel buffer on driver probe, and can be retrieved
+          from the userspace via sysfs entry.
