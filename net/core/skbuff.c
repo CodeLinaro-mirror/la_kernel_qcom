@@ -875,6 +875,7 @@ struct sk_buff *__netdev_alloc_skb_no_skb_reset(struct net_device *dev,
 		kmemleak_update_trace(skb->head);
 		kmemleak_restore(skb->head, 1);
 #endif
+		skb->fast_qdisc = 0;
 		return skb;
 	}
 
@@ -887,9 +888,9 @@ struct sk_buff *__netdev_alloc_skb_no_skb_reset(struct net_device *dev,
 	if (!skb)
 		return NULL;
 
-       /* Set truesize as the needed buffer size
-	* rather than the allocated size by __alloc_skb().
-	*/
+	/* Set truesize as the needed buffer size
+	 * rather than the allocated size by __alloc_skb().
+	 */
 	if (length + NET_SKB_PAD < SKB_WITH_OVERHEAD(PAGE_SIZE))
 		skb->truesize = SKB_TRUESIZE(SKB_DATA_ALIGN(length + NET_SKB_PAD));
 
