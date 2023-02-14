@@ -389,6 +389,13 @@ config SKB_RECYCLER_MULTI_CPU
 	  This feature depends on SMP and SKB_RECYCLER and it uses
 	  SKB_RECYCLER_MULTI_CPU to implement SKB_RECYCLER.
 
+config SKB_RECYCLE_SIZE
+	int "SKB recycler size"
+	depends on SKB_RECYCLER
+	default 2304
+	help
+	SKB recycler default size
+
 menu "Network testing"
 
 config NET_PKTGEN
