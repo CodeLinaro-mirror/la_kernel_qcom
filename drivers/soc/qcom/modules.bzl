@@ -1216,6 +1216,9 @@ def register_modules(registry):
             "drivers/soc/qcom/qmi_encdec.c",
             "drivers/soc/qcom/qmi_interface.c",
         ],
+        deps = [
+            "kernel/trace/qcom_ipc_logging",
+        ],
     )
 
     registry.register(
