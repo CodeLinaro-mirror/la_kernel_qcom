@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __LPASS_MACRO_COMMON_H__
@@ -73,4 +74,6 @@ static inline const char *lpass_macro_get_codec_version_string(int version)
 	return "NA";
 }
 
+int lpass_macro_add_chmap_ctls(struct snd_soc_pcm_runtime *rtd,
+				struct snd_soc_dai *dai, int dir);
 #endif /* __LPASS_MACRO_COMMON_H__ */
