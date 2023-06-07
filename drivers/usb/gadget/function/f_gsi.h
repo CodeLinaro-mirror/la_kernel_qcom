@@ -83,7 +83,7 @@
 #define log_event_err(x, ...) do { \
 	if (gsi) { \
 		ipc_log_string(gsi->ipc_log_ctxt, x, ##__VA_ARGS__); \
-		pr_err(x, ##__VA_ARGS__); \
+		pr_err_ratelimited(x, ##__VA_ARGS__); \
 	} \
 } while (0)
 
