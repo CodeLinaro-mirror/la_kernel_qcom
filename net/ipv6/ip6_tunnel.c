@@ -884,7 +884,7 @@ static void ip4ip6_fmr_calc(struct in6_addr *dest,
 		struct icmphdr *ih = (struct icmphdr *)(((u8 *)dsth) + dsth->ihl * 4);
 
 		/* use icmp identifier as port */
-		if (((u8 *)&ih) <= end &&
+		if (((u8 *)ih) <= end &&
 		    ((use_dest_addr &&
 		      (ih->type == ICMP_ECHOREPLY ||
 		       ih->type == ICMP_TIMESTAMPREPLY ||
@@ -894,7 +894,8 @@ static void ip4ip6_fmr_calc(struct in6_addr *dest,
 		      (ih->type == ICMP_ECHO ||
 		       ih->type == ICMP_TIMESTAMP ||
 		       ih->type == ICMP_INFO_REQUEST ||
-		       ih->type == ICMP_ADDRESS))))
+		       ih->type == ICMP_ADDRESS)
+		     )))
 			portp = (u8 *)&ih->un.echo.id;
 	}
 
