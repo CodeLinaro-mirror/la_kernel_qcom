@@ -2242,8 +2242,8 @@ static void ip6_tnl_netlink_parms(struct nlattr *data[],
 			struct nlattr *fmrd[IFLA_IPTUN_FMR_MAX + 1], *c;
 			struct __ip6_tnl_fmr *nfmr;
 
-			nla_parse_nested(fmrd, IFLA_IPTUN_FMR_MAX,
-					 fmr, ip6_tnl_fmr_policy, NULL);
+			nla_parse_nested_deprecated(fmrd, IFLA_IPTUN_FMR_MAX,
+						    fmr, ip6_tnl_fmr_policy, NULL);
 
 			nfmr = kzalloc(sizeof(*nfmr), GFP_KERNEL);
 			if (!(nfmr))
