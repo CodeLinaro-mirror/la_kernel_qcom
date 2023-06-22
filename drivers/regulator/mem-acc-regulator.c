@@ -115,8 +115,11 @@ static u64 mem_acc_read_efuse_row(struct mem_acc_regulator *mem_acc_vreg,
 	u64 efuse_bits;
 
 	if (!use_tz_api) {
-		efuse_bits = readl_relaxed(mem_acc_vreg->efuse_base
-			+ row_num * BYTES_PER_FUSE_ROW);
+		efuse_bits = readl_relaxed((mem_acc_vreg->efuse_base + row_num *
+			BYTES_PER_FUSE_ROW) + 4);
+		efuse_bits <<= 32;
+		efuse_bits |=  readl_relaxed((mem_acc_vreg->efuse_base + row_num *
+			BYTES_PER_FUSE_ROW));
 		return efuse_bits;
 	}
 
