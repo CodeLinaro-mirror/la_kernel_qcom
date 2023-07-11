@@ -164,6 +164,10 @@ static inline int qcom_scm_qseecom_app_send(u32 app_id,
 	return -EINVAL;
 }
 
+extern int qcom_scm_derive_sw_secret(const u8 *wrapped_key,
+				     u32 wrapped_key_size, u8 *sw_secret,
+				     u32 secret_size);
+
 #endif /* CONFIG_QCOM_QSEECOM */
 
 #endif
