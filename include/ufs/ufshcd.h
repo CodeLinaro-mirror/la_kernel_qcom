@@ -324,6 +324,7 @@ struct ufs_pwr_mode_info {
  * @config_scaling_param: called to configure clock scaling parameters
  * @program_key: program or evict an inline encryption key
  * @fill_crypto_prdt: initialize crypto-related fields in the PRDT
+ * @derive_sw_secret: derive sw secret from a wrapped key
  * @event_notify: called to notify important events
  * @reinit_notify: called to notify reinit of UFSHCD during max gear switch
  * @mcq_config_resource: called to configure MCQ platform resources
@@ -375,6 +376,9 @@ struct ufs_hba_variant_ops {
 	int	(*fill_crypto_prdt)(struct ufs_hba *hba,
 				    const struct bio_crypt_ctx *crypt_ctx,
 				    void *prdt, unsigned int num_segments);
+	int	(*derive_sw_secret)(struct ufs_hba *hba, const u8 wrapped_key[],
+				    unsigned int wrapped_key_size,
+				    u8 sw_secret[BLK_CRYPTO_SW_SECRET_SIZE]);
 	void	(*event_notify)(struct ufs_hba *hba,
 				enum ufs_event_type evt, void *data);
 	void	(*reinit_notify)(struct ufs_hba *);
@@ -686,6 +690,12 @@ enum ufshcd_quirks {
 	 * single doorbell mode.
 	 */
 	UFSHCD_QUIRK_BROKEN_LSDBS_CAP			= 1 << 25,
+
+	/*
+	 * This quirk indicates that UFS will be using HW wrapped keys
+	 * when using inline encryption.
+	 */
+	UFSHCD_QUIRK_USES_WRAPPED_CRYPTO_KEYS		= 1 << 22,
 };
 
 enum ufshcd_caps {
