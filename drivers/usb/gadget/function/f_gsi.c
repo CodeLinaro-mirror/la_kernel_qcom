@@ -3203,7 +3203,11 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 
 dereg_rndis:
 	rndis_deregister(gsi->params);
-	kfree(f->os_desc_table);
+	if (gsi->prot_id == IPA_USB_MBIM) {
+		kfree(f->os_desc_table);
+		f->os_desc_table = NULL;
+		f->os_desc_n = 0;
+	}
 fail:
 	return status;
 }
