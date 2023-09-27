@@ -20,6 +20,7 @@ obj-$(CONFIG_RASPBERRYPI_FIRMWARE) += raspberrypi.o
 obj-$(CONFIG_FW_CFG_SYSFS)	+= qemu_fw_cfg.o
 obj-$(CONFIG_QCOM_SCM)		+= qcom-scm.o
 qcom-scm-objs-$(CONFIG_QTEE_SHM_BRIDGE) += qtee_shmbridge.o
+qcom-scm-objs-$(CONFIG_QCOM_SCM_QCPE_HOS) += qcom_scm-coqoshv.o
 qcom-scm-objs += qcom_scm.o qcom_scm-smc.o qcom_scm-legacy.o $(qcom-scm-objs-y)
 obj-$(CONFIG_QCOM_SCM_HAB)	+= qcom_scm_hab.o
 obj-$(CONFIG_SYSFB)		+= sysfb.o

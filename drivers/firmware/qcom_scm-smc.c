@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015,2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/io.h>
@@ -16,6 +16,9 @@
 #include <linux/qcom_scm_hab.h>
 
 #include "qcom_scm.h"
+#if IS_ENABLED(CONFIG_QCOM_SCM_QCPE_HOS)
+#include "qcom_scm-coqoshv.h"
+#endif
 
 static bool hab_calling_convention;
 
@@ -33,15 +36,20 @@ static DEFINE_MUTEX(qcom_scm_lock);
 static void __scm_smc_do_quirk(const struct arm_smccc_args *smc,
 			       struct arm_smccc_res *res)
 {
+	bool atomic = ARM_SMCCC_IS_FAST_CALL(smc->args[0]) ? true : false;
+#if !(IS_ENABLED(CONFIG_QCOM_SCM_QCPE_HOS))
 	unsigned long a0 = smc->args[0];
 	struct arm_smccc_quirk quirk = { .id = ARM_SMCCC_QUIRK_QCOM_A6 };
-	bool atomic = ARM_SMCCC_IS_FAST_CALL(smc->args[0]) ? true : false;
 
 	quirk.state.a6 = 0;
 
+#endif
 	if (hab_calling_convention) {
 		scm_call_qcpe(smc, res, atomic);
 	} else {
+#if IS_ENABLED(CONFIG_QCOM_SCM_QCPE_HOS)
+		coqoshv_call_qcpe((const struct coqoshv_smc_mailbox *)smc, res, atomic);
+#else
 		do {
 			arm_smccc_smc_quirk(a0, smc->args[1], smc->args[2],
 					smc->args[3], smc->args[4],
@@ -50,6 +58,7 @@ static void __scm_smc_do_quirk(const struct arm_smccc_args *smc,
 			if (res->a0 == QCOM_SCM_INTERRUPTED)
 				a0 = res->a0;
 		} while (res->a0 == QCOM_SCM_INTERRUPTED);
+#endif /* CONFIG_QCOM_SCM_QCPE_HOS */
 	}
 
 }
@@ -166,7 +175,9 @@ static int __scm_smc_do(struct device *dev, struct arm_smccc_args *smc,
 			 bool multicall_allowed)
 {
 	int ret, retry_count = 0;
+#if !(IS_ENABLED(CONFIG_QCOM_SCM_LOCK_DISABLE))
 	bool multi_smc_call = qcom_scm_multi_call_allow(dev, multicall_allowed);
+#endif
 
 	if (call_type == QCOM_SCM_CALL_ATOMIC) {
 		__scm_smc_do_quirk(smc, res);
@@ -174,6 +185,9 @@ static int __scm_smc_do(struct device *dev, struct arm_smccc_args *smc,
 	}
 
 	do {
+#if IS_ENABLED(CONFIG_QCOM_SCM_LOCK_DISABLE)
+		ret = scm_smc_do_quirk(dev, smc, res);
+#else
 		if (!multi_smc_call)
 			mutex_lock(&qcom_scm_lock);
 		down(&qcom_scm_sem_lock);
@@ -181,6 +195,7 @@ static int __scm_smc_do(struct device *dev, struct arm_smccc_args *smc,
 		up(&qcom_scm_sem_lock);
 		if (!multi_smc_call)
 			mutex_unlock(&qcom_scm_lock);
+#endif
 		if (ret)
 			return ret;
 
