@@ -882,7 +882,8 @@ static const struct ath12k_hw_params ath12k_hw_params[] = {
 		.vdev_start_delay = false,
 
 		.interface_modes = BIT(NL80211_IFTYPE_STATION) |
-					BIT(NL80211_IFTYPE_AP),
+					BIT(NL80211_IFTYPE_AP) |
+					BIT(NL80211_IFTYPE_MESH_POINT),
 		.supports_monitor = false,
 
 		.idle_ps = false,
@@ -1007,7 +1008,8 @@ static const struct ath12k_hw_params ath12k_hw_params[] = {
 		.vdev_start_delay = false,
 
 		.interface_modes = BIT(NL80211_IFTYPE_STATION) |
-					BIT(NL80211_IFTYPE_AP),
+					BIT(NL80211_IFTYPE_AP) |
+					BIT(NL80211_IFTYPE_MESH_POINT),
 		.supports_monitor = false,
 
 		.idle_ps = false,
