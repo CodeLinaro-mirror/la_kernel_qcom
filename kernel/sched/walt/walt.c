@@ -5668,9 +5668,8 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	cluster = cpu_cluster(cpu);
 	smart_freq_info = cluster->smart_freq_info;
 
-	if (smart_freq_init_done &&
-		smart_freq_info->smart_freq_ipc_participation_mask & IPC_PARTICIPATION
-		&& IS_ENABLED(CONFIG_ARM64_AMU_EXTN)) {
+	if (smart_freq_init_done && cpu_has_amu_support
+			&& smart_freq_info->smart_freq_ipc_participation_mask & IPC_PARTICIPATION) {
 		last_ipc_level = per_cpu(ipc_level, cpu);
 		last_deactivate_ns = per_cpu(ipc_deactivate_ns, cpu);
 		ipc = calculate_ipc(cpu);
@@ -6058,6 +6057,7 @@ static void register_walt_hooks(void)
 atomic64_t walt_irq_work_lastq_ws;
 bool walt_disabled = true;
 bool walt_quiet_state;
+bool cpu_has_amu_support;
 
 static int walt_init_stop_handler(void *data)
 {
@@ -6143,6 +6143,11 @@ static void walt_init(struct work_struct *work)
 	static atomic_t already_inited = ATOMIC_INIT(0);
 	struct root_domain *rd = cpu_rq(cpumask_first(cpu_active_mask))->rd;
 	int i;
+
+	if (IS_ENABLED(CONFIG_ARM64_AMU_EXTN))
+		cpu_has_amu_support =
+			cpuid_feature_extract_unsigned_field(read_cpuid(ID_AA64PFR0_EL1),
+					ID_AA64PFR0_EL1_AMU_SHIFT) > 0;
 
 	might_sleep();
 
