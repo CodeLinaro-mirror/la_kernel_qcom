@@ -44,6 +44,7 @@ obj-$(CONFIG_PCIE_MT7621) += pcie-mt7621.o
 obj-y				+= dwc/
 obj-y				+= mobiveil/
 obj-y				+= plda/
+obj-y				+= misc/
 
 
 # The following drivers are for devices that use the generic ACPI

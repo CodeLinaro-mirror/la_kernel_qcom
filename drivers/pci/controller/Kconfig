@@ -349,4 +349,5 @@ source "drivers/pci/controller/cadence/Kconfig"
 source "drivers/pci/controller/dwc/Kconfig"
 source "drivers/pci/controller/mobiveil/Kconfig"
 source "drivers/pci/controller/plda/Kconfig"
+source "drivers/pci/controller/misc/Kconfig"
 endmenu
