@@ -6861,7 +6861,9 @@ struct net_device *bond_create_mlo(struct net *net, const char *name,
 
 	/* MLO specific initialization.
 	 */
+#if IS_ENABLED(CONFIG_CFG80211)
 	bond_dev->ieee80211_ptr = mlo_info->wdev;
+#endif
 	bond->params.mode = BOND_MODE_MLO;
 	mlo_info->wdev->netdev = bond_dev;
 
