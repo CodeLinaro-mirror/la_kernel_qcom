@@ -15,9 +15,9 @@
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
-#include <linux/platform_device.h>
 #include <linux/phy.h>
 #include <linux/phy/phy.h>
+#include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
@@ -1515,6 +1515,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ETHQOSDBG(": emac_core_version = %d\n", ethqos->emac_ver);
 
+	if (of_property_read_bool(pdev->dev.of_node,
+				  "gdsc-off-on-suspend")) {
+		ethqos->gdsc_off_on_suspend = true;
+	} else {
+		ethqos->gdsc_off_on_suspend = false;
+	}
+	ETHQOSDBG("gdsc-off-on-suspend = %d\n",
+		  ethqos->gdsc_off_on_suspend);
+
 	if (!ethqos_phy_intr_config(ethqos)) {
 		ret = ethqos_phy_intr_enable(ethqos);
 		if (ret)
@@ -1575,6 +1584,13 @@ static int qcom_ethqos_suspend(struct device *dev)
 	ret = stmmac_suspend(dev);
 	qcom_ethqos_phy_suspend_clks(ethqos);
 
+	if (ethqos->gdsc_off_on_suspend) {
+		if (ethqos->gdsc_emac) {
+			regulator_disable(ethqos->gdsc_emac);
+			ETHQOSDBG("Disabled <%s>\n", EMAC_GDSC_EMAC_NAME);
+		}
+	}
+
 	ETHQOSDBG(" ret = %d\n", ret);
 	return ret;
 }
@@ -1594,6 +1610,13 @@ static int qcom_ethqos_resume(struct device *dev)
 	if (!ethqos)
 		return -ENODEV;
 
+	if (ethqos->gdsc_off_on_suspend) {
+		ret = regulator_enable(ethqos->gdsc_emac);
+		if (ret)
+			ETHQOSERR("Can not enable <%s>\n", EMAC_GDSC_EMAC_NAME);
+		ETHQOSDBG("Enabled <%s>\n", EMAC_GDSC_EMAC_NAME);
+	}
+
 	ndev = dev_get_drvdata(dev);
 	if (!ndev) {
 		ETHQOSERR(" Resume not possible\n");
@@ -1601,6 +1624,8 @@ static int qcom_ethqos_resume(struct device *dev)
 	}
 
 	qcom_ethqos_phy_resume_clks(ethqos);
+	if (ethqos->gdsc_off_on_suspend)
+		ethqos_set_func_clk_en(ethqos);
 
 	ret = stmmac_resume(dev);
 
