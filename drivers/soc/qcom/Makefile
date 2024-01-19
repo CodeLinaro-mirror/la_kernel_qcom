@@ -45,3 +45,4 @@ obj-$(CONFIG_QCOM_PBS) +=	qcom-pbs.o
 obj-$(CONFIG_QCOM_MEM_BUF) += mem_buf/
 obj-$(CONFIG_QCOM_SMCINVOKE) += smcinvoke/
 obj-$(CONFIG_QCOM_SOC_DEBUG) += qcom_soc_debug.o
+obj-$(CONFIG_QCOM_SECURE_BUFFER) += secure_buffer.o
