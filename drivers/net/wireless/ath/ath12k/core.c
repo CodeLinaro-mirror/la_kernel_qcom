@@ -14,6 +14,7 @@
 #include "dp_rx.h"
 #include "debug.h"
 #include "hif.h"
+#include "fw.h"
 
 unsigned int ath12k_debug_mask;
 module_param_named(debug_mask, ath12k_debug_mask, uint, 0644);
@@ -1115,6 +1116,8 @@ int ath12k_core_pre_init(struct ath12k_base *ab)
 		return ret;
 	}
 
+	ath12k_fw_map(ab);
+
 	return 0;
 }
 
@@ -1143,6 +1146,7 @@ void ath12k_core_deinit(struct ath12k_base *ab)
 	ath12k_hif_power_down(ab);
 	ath12k_mac_destroy(ab);
 	ath12k_core_soc_destroy(ab);
+	ath12k_fw_unmap(ab);
 }
 
 void ath12k_core_free(struct ath12k_base *ab)
