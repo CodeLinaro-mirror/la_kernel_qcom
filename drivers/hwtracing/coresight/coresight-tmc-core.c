@@ -2,6 +2,8 @@
 /* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * Description: CoreSight Trace Memory Controller driver
+ *
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -29,6 +31,7 @@
 
 #include "coresight-priv.h"
 #include "coresight-tmc.h"
+#include "coresight-common.h"
 
 DEFINE_CORESIGHT_DEVLIST(etb_devs, "tmc_etb");
 DEFINE_CORESIGHT_DEVLIST(etf_devs, "tmc_etf");
@@ -328,7 +331,6 @@ static ssize_t buffer_size_store(struct device *dev,
 	drvdata->size = val;
 	return size;
 }
-
 static DEVICE_ATTR_RW(buffer_size);
 
 static struct attribute *coresight_tmc_attrs[] = {
@@ -508,6 +510,17 @@ static int __tmc_probe(struct device *dev, struct resource *res)
 		drvdata->size = readl_relaxed(drvdata->base + TMC_RSZ) * 4;
 	}
 
+	ret = of_get_coresight_csr_name(dev->of_node, &drvdata->csr_name);
+	if (ret)
+		dev_info(dev, "No csr data\n");
+	else {
+		drvdata->csr = coresight_csr_get(drvdata->csr_name);
+		if (IS_ERR(drvdata->csr)) {
+			dev_info(dev, "failed to get csr, defer probe\n");
+			return -EPROBE_DEFER;
+		}
+	}
+
 	desc.dev = dev;
 
 	switch (drvdata->config_type) {
@@ -529,6 +542,8 @@ static int __tmc_probe(struct device *dev, struct resource *res)
 		idr_init(&drvdata->idr);
 		mutex_init(&drvdata->idr_mutex);
 		dev_list = &etr_devs;
+
+		drvdata->byte_cntr = byte_cntr_init(dev, drvdata);
 		break;
 	case TMC_CONFIG_TYPE_ETF:
 		desc.groups = coresight_etf_groups;
@@ -622,6 +637,11 @@ static void __tmc_remove(struct device *dev)
 	 * etb fops in this case, device is there until last file
 	 * handler to this device is closed.
 	 */
+
+	if (drvdata->config_type == TMC_CONFIG_TYPE_ETR
+			&& drvdata->byte_cntr)
+		byte_cntr_remove(drvdata->byte_cntr);
+
 	misc_deregister(&drvdata->miscdev);
 	coresight_unregister(drvdata->csdev);
 }
