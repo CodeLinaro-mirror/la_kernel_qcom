@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (c) 2022, The Linux Foundation. All rights reserved.
-// Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/export.h>
 #include <linux/module.h>
@@ -19,6 +19,22 @@
 
 static DEFINE_MUTEX(lpass_codec_mutex);
 static enum lpass_codec_version lpass_codec_version;
+static bool lpi_state;
+
+bool lpass_macro_get_lpi_state(void)
+{
+	return lpi_state;
+}
+EXPORT_SYMBOL_GPL(lpass_macro_get_lpi_state);
+
+void lpass_macro_set_lpi_state(int status)
+{
+	if (status)
+		lpi_state = true;
+	else
+		lpi_state = false;
+}
+EXPORT_SYMBOL_GPL(lpass_macro_set_lpi_state);
 
 static int lpass_macro_chmap_ctl_get(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
