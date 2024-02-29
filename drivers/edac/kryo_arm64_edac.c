@@ -20,7 +20,7 @@
 #include "drivers/edac/edac_mc.h"
 #include "drivers/edac/edac_device.h"
 
-#ifdef CONFIG_EDAC_KRYO_ARM64_PANIC_ON_UE
+#if IS_ENABLED(CONFIG_EDAC_KRYO_ARM64_PANIC_ON_UE)
 #define ARM64_ERP_PANIC_ON_UE 1
 #else
 #define ARM64_ERP_PANIC_ON_UE 0
@@ -103,7 +103,7 @@ static void kryo_edac_handle_ce(struct edac_device_ctl_info *edac_dev,
 				int inst_nr, int block_nr, const char *msg)
 {
 	edac_device_handle_ce(edac_dev, inst_nr, block_nr, msg);
-#ifdef CONFIG_EDAC_KRYO_ARM64_PANIC_ON_CE
+#if IS_ENABLED(CONFIG_EDAC_KRYO_ARM64_PANIC_ON_CE)
 	panic("EDAC %s CE: %s\n", edac_dev->ctl_name, msg);
 #endif
 }
@@ -139,6 +139,9 @@ static void kryo_edac_handle_de(struct edac_device_ctl_info *edac_dev,
 			   "DE: %s instance: %s block: %s '%s'\n",
 			   edac_dev->ctl_name, instance->name,
 			   block ? block->name : "N/A", msg);
+#if IS_ENABLED(CONFIG_EDAC_KRYO_ARM64_PANIC_ON_DE)
+	panic("EDAC %s DE: %s\n", edac_dev->ctl_name, msg);
+#endif
 }
 
 struct errors_edac {
