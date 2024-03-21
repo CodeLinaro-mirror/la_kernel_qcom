@@ -140,6 +140,7 @@ enum usb_property_id {
 	USB_SCOPE,
 	USB_CONNECTOR_TYPE,
 	F_ACTIVE,
+	USB_NUM_PORTS,
 	USB_PROP_MAX,
 };
 
@@ -309,7 +310,7 @@ struct battery_chg_dev {
 #ifdef CONFIG_QTI_CHARGER_NFC_VREG
 	struct bharger_regulator	nfc_vreg;
 #endif
-	bool				has_usb_2;
+	unsigned int			num_usb_ports;
 };
 
 static const int battery_prop_map[BATT_PROP_MAX] = {
@@ -707,7 +708,7 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 
 		break;
 	case BC_USB_STATUS_GET(USB_2_PORT_ID):
-		if (!bcdev->has_usb_2) {
+		if (bcdev->num_usb_ports < 2) {
 			pr_debug("opcode: %u for missing USB_2 port\n",
 					resp_msg->hdr.opcode);
 			break;
@@ -730,7 +731,7 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 
 		break;
 	case BC_USB_STATUS_SET(USB_2_PORT_ID):
-		if (!bcdev->has_usb_2) {
+		if (bcdev->num_usb_ports < 2) {
 			pr_debug("opcode: %u for missing USB_2 port\n",
 					resp_msg->hdr.opcode);
 			break;
@@ -1038,7 +1039,7 @@ static void handle_notification(struct battery_chg_dev *bcdev, void *data,
 		schedule_work(&bcdev->usb_type_work);
 		break;
 	case BC_USB_STATUS_GET(USB_2_PORT_ID):
-		if (!bcdev->has_usb_2) {
+		if (bcdev->num_usb_ports < 2) {
 			pr_debug("notification: %u for missing USB_2 port\n",
 					notification);
 			break;
@@ -1640,6 +1641,7 @@ static const struct power_supply_desc batt_psy_desc = {
 static int battery_chg_init_psy(struct battery_chg_dev *bcdev)
 {
 	struct power_supply_config psy_cfg = {};
+	struct psy_state *pst;
 	int rc;
 
 	psy_cfg.drv_data = bcdev;
@@ -1653,7 +1655,23 @@ static int battery_chg_init_psy(struct battery_chg_dev *bcdev)
 		return rc;
 	}
 
-	if (bcdev->has_usb_2) {
+	pst = &bcdev->psy_list[PSY_TYPE_USB];
+	rc = read_property_id(bcdev, pst, USB_NUM_PORTS);
+	if (rc < 0) {
+		pr_debug("Failed to read prop USB_NUM_PORTS, rc=%d\n", rc);
+		bcdev->num_usb_ports = 1;
+	} else if (pst->prop[USB_NUM_PORTS] > NUM_USB_PORTS) {
+		pr_err("Number of USB ports detected as supported:%d, greater than 2\n",
+			pst->prop[USB_NUM_PORTS]);
+		return -EINVAL;
+	} else if (pst->prop[USB_NUM_PORTS] != bcdev->num_usb_ports) {
+		pr_err("Number of USB ports detected as supported:%d, configured in apps:%d\n",
+			pst->prop[USB_NUM_PORTS], bcdev->num_usb_ports);
+		bcdev->num_usb_ports = 1;
+	}
+
+	if (bcdev->num_usb_ports == 2) {
+		bcdev->usb_active[USB_2_PORT_ID] = true;
 		bcdev->psy_list[PSY_TYPE_USB_2].psy =
 			devm_power_supply_register(bcdev->dev,
 				&usb_psy_desc[USB_2_PORT_ID], &psy_cfg);
@@ -1720,7 +1738,7 @@ static void battery_chg_subsys_up_work(struct work_struct *work)
 				bcdev->usb_icl_ua[USB_1_PORT_ID], rc);
 	}
 
-	if (bcdev->has_usb_2 && bcdev->usb_icl_ua[USB_2_PORT_ID]) {
+	if (bcdev->num_usb_ports == 2 && bcdev->usb_icl_ua[USB_2_PORT_ID]) {
 		pst = &bcdev->psy_list[PSY_TYPE_USB_2];
 		rc = usb_psy_set_icl(bcdev, pst, USB_INPUT_CURR_LIMIT,
 				bcdev->usb_icl_ua[USB_2_PORT_ID]);
@@ -1849,7 +1867,7 @@ static int wireless_fw_update(struct battery_chg_dev *bcdev, bool force)
 	if (rc < 0)
 		goto out;
 
-	if (bcdev->has_usb_2 && !pst->prop[USB_ONLINE]) {
+	if (bcdev->num_usb_ports == 2 && !pst->prop[USB_ONLINE]) {
 		pst = &bcdev->psy_list[PSY_TYPE_USB_2];
 		rc = read_property_id(bcdev, pst, USB_ONLINE);
 		if (rc < 0)
@@ -2141,6 +2159,8 @@ static CLASS_ATTR_RW(charge_control_en);
 
 QTI_CHARGER_RO_SHOW(usb_typec_compliant, PSY_TYPE_USB, USB_TYPEC_COMPLIANT);
 
+QTI_CHARGER_RO_SHOW(usb_num_ports, PSY_TYPE_USB, USB_NUM_PORTS);
+
 QTI_CHARGER_TYPE_RO_SHOW(usb_real_type, usb, PSY_TYPE_USB, USB_REAL_TYPE);
 
 QTI_CHARGER_RO_SHOW(usb_2_typec_compliant, PSY_TYPE_USB_2, USB_TYPEC_COMPLIANT);
@@ -2391,6 +2411,7 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_ship_mode_en.attr,
 	&class_attr_restrict_chg.attr,
 	&class_attr_restrict_cur.attr,
+	&class_attr_usb_num_ports.attr,
 	&class_attr_usb_real_type.attr,
 	&class_attr_usb_typec_compliant.attr,
 	&class_attr_charge_control_en.attr,
@@ -2442,6 +2463,7 @@ static struct attribute *battery_class_usb_2_attrs[] = {
 	&class_attr_ship_mode_en.attr,
 	&class_attr_restrict_chg.attr,
 	&class_attr_restrict_cur.attr,
+	&class_attr_usb_num_ports.attr,
 	&class_attr_usb_real_type.attr,
 	&class_attr_usb_2_real_type.attr,
 	&class_attr_usb_typec_compliant.attr,
@@ -2487,6 +2509,10 @@ static int battery_chg_parse_dt(struct battery_chg_dev *bcdev)
 				&bcdev->shutdown_volt_mv);
 
 	bcdev->ship_mode_immediate = of_property_read_bool(node, "qcom,ship-mode-immediate");
+	if (of_property_read_bool(bcdev->dev->of_node, "qcom,multiport-usb"))
+		bcdev->num_usb_ports = 2;
+	else
+		bcdev->num_usb_ports = 1;
 
 	rc = read_property_id(bcdev, pst, BATT_CHG_CTRL_LIM_MAX);
 	if (rc < 0) {
@@ -2812,14 +2838,10 @@ static int battery_chg_probe(struct platform_device *pdev)
 	bcdev->psy_list[PSY_TYPE_WLS].opcode_set = BC_WLS_STATUS_SET;
 	bcdev->usb_active[USB_1_PORT_ID] = true;
 
-	bcdev->has_usb_2 = of_property_read_bool(dev->of_node, "qcom,multiport-usb");
-	if (bcdev->has_usb_2) {
-		bcdev->psy_list[PSY_TYPE_USB_2].map = usb_prop_map;
-		bcdev->psy_list[PSY_TYPE_USB_2].prop_count = USB_PROP_MAX;
-		bcdev->psy_list[PSY_TYPE_USB_2].opcode_get = BC_USB_STATUS_GET(USB_2_PORT_ID);
-		bcdev->psy_list[PSY_TYPE_USB_2].opcode_set = BC_USB_STATUS_SET(USB_2_PORT_ID);
-		bcdev->usb_active[USB_2_PORT_ID] = true;
-	}
+	bcdev->psy_list[PSY_TYPE_USB_2].map = usb_prop_map;
+	bcdev->psy_list[PSY_TYPE_USB_2].prop_count = USB_PROP_MAX;
+	bcdev->psy_list[PSY_TYPE_USB_2].opcode_get = BC_USB_STATUS_GET(USB_2_PORT_ID);
+	bcdev->psy_list[PSY_TYPE_USB_2].opcode_set = BC_USB_STATUS_SET(USB_2_PORT_ID);
 
 	for (i = 0; i < PSY_TYPE_MAX; i++) {
 		bcdev->psy_list[i].prop =
@@ -2892,7 +2914,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 
 	bcdev->battery_class.name = "qcom-battery";
 
-	if (bcdev->has_usb_2)
+	if (bcdev->num_usb_ports == 2)
 		bcdev->battery_class.class_groups = battery_class_usb_2_groups;
 	else if (of_device_is_compatible(dev->of_node, "qcom,pmw6100-battery-charger"))
 		bcdev->battery_class.class_groups = battery_class_pmw6100_groups;
