@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+// Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
 
 /* Disable MMIO tracing to prevent excessive logging of unwanted MMIO traces */
 #define __DISABLE_TRACE_MMIO__
@@ -15,6 +16,8 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/soc/qcom/geni-se.h>
+#include <linux/pm_opp.h>
+#include <linux/pm_domain.h>
 
 /**
  * DOC: Overview
@@ -87,13 +90,14 @@
  * struct geni_wrapper - Data structure to represent the QUP Wrapper Core
  * @dev:		Device pointer of the QUP wrapper core
  * @base:		Base address of this instance of QUP wrapper core
- * @ahb_clks:		Handle to the primary & secondary AHB clocks
- * @to_core:		Core ICC path
+ * @ahb_clks:		Handle to/ the primary & secondary AHB clocks
+ * @is_fw_managed:	Indicates that this is an firmware managed driver
  */
 struct geni_wrapper {
 	struct device *dev;
 	void __iomem *base;
 	struct clk_bulk_data ahb_clks[NUM_AHB_CLKS];
+	bool is_fw_managed;
 };
 
 static const char * const icc_path_names[] = {"qup-core", "qup-config",
@@ -871,6 +875,94 @@ int geni_icc_disable(struct geni_se *se)
 }
 EXPORT_SYMBOL(geni_icc_disable);
 
+int geni_se_domain_attach(struct device *dev, struct geni_se *se)
+{
+	struct dev_pm_domain_attach_data pd_data = {
+		.pd_flags = PD_FLAG_DEV_LINK_ON,
+		.pd_names = (const char*[]) { "power", "perf" },
+		.num_pd_names = 2,
+	};
+	int ret;
+
+	ret = dev_pm_domain_attach_list(dev, &pd_data, &se->pd_list);
+	if (ret <= 0) {
+		dev_err(dev, "multi domain attachment failed(ret=%d)\n", ret);
+		return ret;
+	}
+
+	se->perf_dev = se->pd_list->pd_devs[DOMAIN_IDX_PERF];
+	if (!se->perf_dev) {
+		dev_err(dev, "%s: getting perf domain failed\n", __func__);
+		dev_pm_domain_detach_list(se->pd_list);
+		return 0;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(geni_se_domain_attach);
+
+bool geni_se_is_fw_managed(struct geni_se *se)
+{
+	struct geni_wrapper *wrapper = se->wrapper;
+
+	return wrapper->is_fw_managed;
+}
+EXPORT_SYMBOL_GPL(geni_se_is_fw_managed);
+
+/*
+ * geni_se_get_level - get perf level
+ * @dev: pointer to device structure.
+ * @clk_freq: clock frequency value.
+ *
+ * return: 0 on success otherwise error.
+ */
+unsigned int geni_se_get_level(struct device *dev, unsigned long clk_freq)
+{
+	struct dev_pm_opp *opp = dev_pm_opp_find_freq_floor(dev, &clk_freq);
+	unsigned int level;
+
+	if (IS_ERR(opp)) {
+		dev_err(dev, "failed to find opp for freq %lu\n", clk_freq);
+		return PTR_ERR(opp);
+	}
+
+	level = dev_pm_opp_get_level(opp);
+	dev_pm_opp_put(opp);
+
+	return level;
+}
+EXPORT_SYMBOL_GPL(geni_se_get_level);
+
+/**
+ * geni_se_set_perf_level() - Set the perf level
+ * @se: Pointer to the concerned serial engine.
+ * @level: The opp level is to set.
+ *
+ * Return: 0 on success, standard Linux error codes on failure/error
+ */
+int geni_se_set_perf_level(struct geni_se *se, struct device *dev,
+			   unsigned int level)
+{
+	int ret;
+
+	ret = dev_pm_opp_get_opp_count(dev);
+	if (ret <= 0) {
+		dev_err(se->dev, "%s: opp levels are zero or failed to get ret=%d\n",
+			__func__, ret);
+		return -EINVAL;
+	}
+
+	ret = dev_pm_opp_set_level(dev, level);
+	if (ret) {
+		dev_err(se->dev, "performance operation(%d) failed with err=%d\n",
+			level, ret);
+		return ret;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(geni_se_set_perf_level);
+
 static int geni_se_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -887,6 +979,11 @@ static int geni_se_probe(struct platform_device *pdev)
 		return PTR_ERR(wrapper->base);
 
 	if (!has_acpi_companion(&pdev->dev)) {
+		wrapper->is_fw_managed = device_property_read_bool(dev,
+						"qcom,firmware-managed-resources");
+		if (wrapper->is_fw_managed)
+			goto out;
+
 		wrapper->ahb_clks[0].id = "m-ahb";
 		wrapper->ahb_clks[1].id = "s-ahb";
 		ret = devm_clk_bulk_get(dev, NUM_AHB_CLKS, wrapper->ahb_clks);
@@ -896,6 +993,7 @@ static int geni_se_probe(struct platform_device *pdev)
 		}
 	}
 
+out:
 	dev_set_drvdata(dev, wrapper);
 	dev_dbg(dev, "GENI SE Driver probed\n");
 	return devm_of_platform_populate(dev);
