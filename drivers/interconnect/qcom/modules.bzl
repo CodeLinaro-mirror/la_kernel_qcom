@@ -202,6 +202,18 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/interconnect/qcom/qnoc-qos-rpm",
+        out = "qnoc-qos-rpm.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_QOS_RPM",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.c",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+        ],
+    )
+
+    registry.register(
         name = "drivers/interconnect/qcom/qnoc-sun",
         out = "qnoc-sun.ko",
         config = "CONFIG_INTERCONNECT_QCOM_SUN",

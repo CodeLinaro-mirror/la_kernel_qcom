@@ -72,6 +72,13 @@ config INTERCONNECT_QCOM_RPMH
 config INTERCONNECT_QCOM_RPM
 	tristate
 
+config INTERCONNECT_QCOM_QOS_RPM
+	tristate
+	help
+	  This option enables Quality of Service (QoS) support for RPM-based
+	  interconnect drivers. It provides the necessary infrastructure for
+	  configuring QoS settings on Network-on-Chip (NoC) for RPM platforms.
+
 config INTERCONNECT_QCOM_SA8775P
 	tristate "Qualcomm SA8775P interconnect driver"
 	depends on INTERCONNECT_QCOM_RPMH_POSSIBLE
