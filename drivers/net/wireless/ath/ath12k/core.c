@@ -1051,9 +1051,6 @@ static void ath12k_core_restart(struct work_struct *work)
 	struct ath12k_base *ab = container_of(work, struct ath12k_base, restart_work);
 	int ret;
 
-	if (!ab->is_reset)
-		ath12k_core_pre_reconfigure_recovery(ab);
-
 	ret = ath12k_core_reconfigure_on_crash(ab);
 	if (ret) {
 		ath12k_err(ab, "failed to reconfigure driver on crash recovery\n");
@@ -1062,9 +1059,6 @@ static void ath12k_core_restart(struct work_struct *work)
 
 	if (ab->is_reset)
 		complete_all(&ab->reconfigure_complete);
-
-	if (!ab->is_reset)
-		ath12k_core_post_reconfigure_recovery(ab);
 }
 
 static void ath12k_core_reset(struct work_struct *work)
