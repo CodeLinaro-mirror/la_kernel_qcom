@@ -501,7 +501,7 @@ static int qcom_glink_send_open_req(struct qcom_glink *glink,
 	req->cmd = cpu_to_le16(GLINK_CMD_OPEN);
 	req->param1 = cpu_to_le16(channel->lcid);
 	req->param2 = cpu_to_le32(name_len);
-	strcpy(req->data, channel->name);
+	strscpy(req->data, channel->name, GLINK_NAME_SIZE);
 
 	trace_qcom_glink_cmd_open_tx(glink->label, channel->name,
 				     channel->lcid, channel->rcid);
@@ -842,7 +842,6 @@ static void qcom_glink_handle_intent_req(struct qcom_glink *glink,
 {
 	struct glink_core_rx_intent *intent;
 	struct glink_channel *channel;
-	unsigned long flags;
 
 	spin_lock_irqsave(&glink->idr_lock, flags);
 	channel = idr_find(&glink->rcids, cid);
