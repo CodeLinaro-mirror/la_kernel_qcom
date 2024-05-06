@@ -637,6 +637,28 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/clk/qcom/debugcc-monaco",
+        out = "debugcc-monaco.ko",
+        config = "CONFIG_SDW_DEBUGCC_MONACO",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-debug.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/debugcc-monaco.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-dummy",
+            "drivers/clk/qcom/clk-qcom",
+            "drivers/clk/qcom/gdsc-regulator",
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
         name = "drivers/clk/qcom/debugcc-x1e80100",
         out = "debugcc-x1e80100.ko",
         config = "CONFIG_SC_DEBUGCC_X1E80100",
