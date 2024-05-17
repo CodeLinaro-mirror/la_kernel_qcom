@@ -1569,7 +1569,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		return -ENODEV;
 
 	ndev = dev_get_drvdata(dev);
-	if (!ndev || !netif_running(ndev))
+	if (!ndev)
 		return -EINVAL;
 
 	ret = stmmac_suspend(dev);
@@ -1595,7 +1595,7 @@ static int qcom_ethqos_resume(struct device *dev)
 		return -ENODEV;
 
 	ndev = dev_get_drvdata(dev);
-	if (!ndev || !netif_running(ndev)) {
+	if (!ndev) {
 		ETHQOSERR(" Resume not possible\n");
 		return -EINVAL;
 	}
