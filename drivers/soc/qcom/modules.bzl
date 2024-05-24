@@ -1696,3 +1696,50 @@ def register_modules(registry):
         ],
         includes = ["include"],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/slatecom_event",
+        out = "slatecom_event.ko",
+        config = "CONFIG_MSM_SLATECOM_EVENT",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slatecom_event.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/slate_events_bridge",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slate_events_bridge",
+        out = "slate_events_bridge.ko",
+        config = "CONFIG_MSM_SEB",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slate_events_bridge_rpmsg.h",
+            "drivers/soc/qcom/slate_events_bridge.h",
+            "drivers/soc/qcom/slate_events_bridge.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/slate_events_bridge_rpmsg",
+            "drivers/remoteproc/rproc_qcom_common",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slate_events_bridge_rpmsg",
+        out = "slate_events_bridge_rpmsg.ko",
+        config = "CONFIG_MSM_SEB_RPMSG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slate_events_bridge.h",
+            "drivers/soc/qcom/slate_events_bridge_rpmsg.h",
+            "drivers/soc/qcom/slate_events_bridge_rpmsg.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/minidump",
+        ],
+    )
