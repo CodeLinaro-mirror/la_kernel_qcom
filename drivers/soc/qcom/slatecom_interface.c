@@ -991,7 +991,7 @@ static long slate_com_ioctl(struct file *filp,
 		unsigned int ui_slatecom_cmd, unsigned long arg)
 {
 	int ret = 0;
-	struct slate_ui_data ui_obj_msg = {0, 0, 0, 0, 0, NULL};
+	struct slate_ui_data ui_obj_msg;
 
 	if (!dev || (dev->slatecom_current_state == SLATECOM_STATE_UNKNOWN) || (filp == NULL)) {
 		pr_err("slatecom driver not initialized\n");
