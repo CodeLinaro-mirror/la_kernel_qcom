@@ -1085,4 +1085,15 @@ config CLK_SHIKRA_GPUCC
 	  SHIKRA devices.
 	  Say Y if you want to support graphics controller devices and
 	  functionality such as 3D graphics.
+
+config SM_GCC_4450
+	tristate "SM4450 Global Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  SM4450 devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, UFS, SD/eMMC, PCIe, Video, etc.
+
 endif
