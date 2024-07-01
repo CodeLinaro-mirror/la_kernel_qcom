@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19, Linaro Limited
-/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/debugfs.h>
 #include <linux/io.h>
@@ -537,7 +537,9 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 	if ((ethqos->phy_mode != PHY_INTERFACE_MODE_RGMII_ID &&
 	     ethqos->phy_mode != PHY_INTERFACE_MODE_RGMII_TXID) ||
 		ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
-		ethqos->emac_ver == EMAC_HW_v2_1_2)
+		ethqos->emac_ver == EMAC_HW_v2_1_2 ||
+		ethqos->emac_ver == EMAC_HW_v2_1_1 ||
+		ethqos->emac_ver == EMAC_HW_v2_3_1)
 		phase_shift = RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN;
 	else
 		phase_shift = 0;
@@ -675,7 +677,9 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 			      0, RGMII_IO_MACRO_CONFIG2);
 		if (ethqos->has_emac_ge_3 ||
 		    ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
-			ethqos->emac_ver == EMAC_HW_v2_1_2)
+			ethqos->emac_ver == EMAC_HW_v2_1_2 ||
+			ethqos->emac_ver == EMAC_HW_v2_3_1 ||
+			ethqos->emac_ver == EMAC_HW_v2_1_1)
 			rgmii_updatel(ethqos, RGMII_CONFIG2_RX_PROG_SWAP,
 				      RGMII_CONFIG2_RX_PROG_SWAP,
 				      RGMII_IO_MACRO_CONFIG2);
