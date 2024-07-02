@@ -4619,8 +4619,12 @@ struct cfg80211_ops {
 
 	int	(*set_tx_power)(struct wiphy *wiphy, struct wireless_dev *wdev,
 				enum nl80211_tx_power_setting type, int mbm);
+
 	int	(*get_tx_power)(struct wiphy *wiphy, struct wireless_dev *wdev,
 				int *dbm);
+
+	int	(*get_tx_power_link)(struct wiphy *wiphy, struct wireless_dev *wdev,
+				unsigned int link_id, int *dbm);
 
 	void	(*rfkill_poll)(struct wiphy *wiphy);
 
