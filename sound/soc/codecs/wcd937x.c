@@ -113,6 +113,7 @@ struct wcd937x_priv {
 
 	atomic_t rx_clk_cnt;
 	atomic_t ana_clk_count;
+	bool has_always_on_supplies;
 };
 
 static const SNDRV_CTL_TLVD_DECLARE_DB_MINMAX(ear_pa_gain, 600, -1800);
@@ -2885,19 +2886,28 @@ static int wcd937x_probe(struct platform_device *pdev)
 	cfg = &wcd937x->mbhc_cfg;
 	cfg->swap_gnd_mic = wcd937x_swap_gnd_mic;
 
-	wcd937x->supplies[0].supply = "vdd-rxtx";
-	wcd937x->supplies[1].supply = "vdd-px";
-	wcd937x->supplies[2].supply = "vdd-mic-bias";
-	wcd937x->supplies[3].supply = "vdd-buck";
+	wcd937x->has_always_on_supplies = of_property_read_bool(dev->of_node,
+				"qcom,always-on-supply");
+	if (!wcd937x->has_always_on_supplies) {
+		wcd937x->supplies[0].supply = "vdd-rxtx";
+		wcd937x->supplies[1].supply = "vdd-px";
+		wcd937x->supplies[2].supply = "vdd-mic-bias";
+		ret = devm_regulator_bulk_get(dev, WCD937X_MAX_BULK_SUPPLY, wcd937x->supplies);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to get supplies\n");
 
-	ret = devm_regulator_bulk_get(dev, WCD937X_MAX_BULK_SUPPLY, wcd937x->supplies);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to get supplies\n");
+		ret = regulator_bulk_enable(WCD937X_MAX_BULK_SUPPLY, wcd937x->supplies);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to enable supplies\n");
 
-	ret = regulator_bulk_enable(WCD937X_MAX_BULK_SUPPLY, wcd937x->supplies);
-	if (ret) {
-		regulator_bulk_free(WCD937X_MAX_BULK_SUPPLY, wcd937x->supplies);
-		return dev_err_probe(dev, ret, "Failed to enable supplies\n");
+		/* Get the buck separately, as it needs special handling */
+		wcd937x->buck_supply = devm_regulator_get(dev, "vdd-buck");
+		if (IS_ERR(wcd937x->buck_supply))
+			return dev_err_probe(dev, PTR_ERR(wcd937x->buck_supply),
+					"Failed to get buck supply\n");
+		ret = regulator_enable(wcd937x->buck_supply);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to enable buck supply\n");
 	}
 
 	wcd937x_dt_parse_micbias_info(dev, wcd937x);
