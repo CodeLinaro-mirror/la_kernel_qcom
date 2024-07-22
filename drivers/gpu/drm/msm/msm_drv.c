@@ -1008,10 +1008,8 @@ bool msm_disp_drv_should_bind(struct device *dev, bool dpu_driver)
  * as components.
  */
 static const struct of_device_id msm_gpu_match[] = {
-	{ .compatible = "qcom,adreno" },
 	{ .compatible = "qcom,adreno-3xx" },
 	{ .compatible = "amd,imageon" },
-	{ .compatible = "qcom,kgsl-3d0" },
 	{ },
 };
 
