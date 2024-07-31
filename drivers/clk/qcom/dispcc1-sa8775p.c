@@ -1460,6 +1460,16 @@ static int disp_cc_1_sa8775p_probe(struct platform_device *pdev)
 	qcom_branch_set_clk_en(regmap, 0xc070); /* MDSS_1_DISP_CC_SLEEP_CLK */
 	qcom_branch_set_clk_en(regmap, 0xc054); /* MDSS_1_DISP_CC_XO_CLK */
 
+	/*
+	 * Reparent below clocks to XO
+	 *	mdss_1_disp_cc_mdss_dptx0_crypto_clk_src
+	 *	mdss_1_disp_cc_mdss_dptx1_crypto_clk_src
+	 */
+	regmap_write(regmap, 0x8174, 0x0);
+	regmap_update_bits(regmap, 0x8170, BIT(0), BIT(0));
+	regmap_write(regmap, 0x8220, 0x0);
+	regmap_update_bits(regmap, 0x821c, BIT(0), BIT(0));
+
 	ret = qcom_cc_really_probe(&pdev->dev, &disp_cc_1_sa8775p_desc, regmap);
 
 	pm_runtime_put(&pdev->dev);
