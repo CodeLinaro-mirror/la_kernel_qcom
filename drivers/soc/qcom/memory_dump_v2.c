@@ -1161,12 +1161,13 @@ static int mem_dump_alloc(struct platform_device *pdev, struct device_node *node
 	return ret;
 }
 
-static void dynamic_mem_dump_free_rmem(phys_addr_t base, uint32_t size)
+static void mem_dump_free_rmem(phys_addr_t base, uint32_t size)
 {
 	u64 tmp;
 
 	for (tmp = base; tmp < base + size; tmp += PAGE_SIZE)
 		free_reserved_page(phys_to_page(tmp));
+	pr_info("free unused reserved memory: %uK\n", size/1024);
 
 }
 
@@ -1177,7 +1178,7 @@ static int dynamic_mem_dump_disable(struct memdump_info *dump_info)
 	if (!dump_info->active)
 		return 0;
 
-	dynamic_mem_dump_free_rmem(dump_info->base, dump_info->size);
+	mem_dump_free_rmem(dump_info->base, dump_info->size);
 
 	dump_info->active = false;
 
@@ -1256,7 +1257,7 @@ static int dynamic_mem_dump_alloc(struct platform_device *pdev, struct device_no
 {
 	struct device_node *child_node;
 	int ret = 0;
-	size_t total_size, used_size, free_size;
+	size_t total_size, used_size;
 	struct memdump_info *dump_info;
 	struct dentry *dump_dir, *dbg_dir;
 
@@ -1288,9 +1289,6 @@ static int dynamic_mem_dump_alloc(struct platform_device *pdev, struct device_no
 		debugfs_create_file("enable", 0600, dump_dir, dump_info, &enable_fops);
 	}
 
-	free_size = rmem->size - used_size;
-	if (free_size > 0)
-		dynamic_mem_dump_free_rmem(rmem->base + used_size, free_size);
 	*rmem_offset = used_size;
 
 	return ret;
@@ -1300,14 +1298,6 @@ static int dynamic_mem_dump_alloc(struct platform_device *pdev, struct device_no
 static int dynamic_mem_dump_alloc(struct platform_device *pdev, struct device_node *node,
 			struct reserved_mem *rmem, size_t *rmem_offset)
 {
-	size_t free_size;
-
-	free_size = rmem->size - *rmem_offset;
-	if (free_size > 0)
-		dynamic_mem_dump_free_rmem(rmem->base + *rmem_offset, free_size);
-
-	dev_info(&pdev->dev, "free reserved memory for dynamic dump\n");
-
 	return 0;
 }
 #endif
@@ -1322,7 +1312,7 @@ static int mem_dump_probe(struct platform_device *pdev)
 	uint32_t ns_vmids[] = {VMID_HLOS};
 	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
 	u64 shm_bridge_handle;
-	size_t used_size = 0;
+	size_t free_size, used_size = 0;
 	void *memdump_vaddr;
 	phys_addr_t phys_addr;
 	struct md_region md_entry;
@@ -1367,6 +1357,10 @@ static int mem_dump_probe(struct platform_device *pdev)
 				dev_err(&pdev->dev, "static dump alloc failed\n");
 		}
 	}
+
+	free_size = rmem->size - used_size;
+	if (free_size > 0)
+		mem_dump_free_rmem(rmem->base + used_size, free_size);
 
 	ret = qtee_shmbridge_register(phys_addr, used_size, ns_vmids,
 			ns_vm_perms, 1, PERM_READ|PERM_WRITE, &shm_bridge_handle);
