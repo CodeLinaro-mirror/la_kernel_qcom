@@ -180,6 +180,7 @@ def define_monaco():
         "kernel/trace/qcom_ipc_logging.ko",
         "net/qrtr/qrtr.ko",
         "net/qrtr/qrtr-smd.ko",
+        "net/wireless/cfg80211.ko",
     ]
 
     _monaco_consolidate_in_tree_modules = _monaco_in_tree_modules + [
