@@ -878,7 +878,6 @@ EXPORT_SYMBOL(geni_icc_disable);
 int geni_se_domain_attach(struct device *dev, struct geni_se *se)
 {
 	struct dev_pm_domain_attach_data pd_data = {
-		.pd_flags = PD_FLAG_DEV_LINK_ON,
 		.pd_names = (const char*[]) { "power", "perf" },
 		.num_pd_names = 2,
 	};
@@ -888,6 +887,13 @@ int geni_se_domain_attach(struct device *dev, struct geni_se *se)
 	if (ret <= 0) {
 		dev_err(dev, "multi domain attachment failed(ret=%d)\n", ret);
 		return ret;
+	}
+
+	se->pwr_dev = se->pd_list->pd_devs[DOMAIN_IDX_POWER];
+	if (!se->pwr_dev) {
+		dev_err(dev, "%s: getting power domain failed\n", __func__);
+		dev_pm_domain_detach_list(se->pd_list);
+		return 0;
 	}
 
 	se->perf_dev = se->pd_list->pd_devs[DOMAIN_IDX_PERF];
