@@ -37,20 +37,34 @@ static unsigned long scmi_clk_recalc_rate(struct clk_hw *hw,
 	return rate;
 }
 
+static long scmi_clk_round_rate_discrete(struct scmi_clk *clk, unsigned long rate)
+{
+	long ret = rate;
+	int i;
+
+	if (!clk->info->list.num_rates)
+		return rate;
+
+	ret = clk->info->list.rates[clk->info->list.num_rates - 1];
+
+	for (i = 0; i < clk->info->list.num_rates; i++) {
+		if (clk->info->list.rates[i] >= rate) {
+			ret = clk->info->list.rates[i];
+			break;
+		}
+	}
+
+	return ret;
+}
+
 static long scmi_clk_round_rate(struct clk_hw *hw, unsigned long rate,
 				unsigned long *parent_rate)
 {
 	u64 fmin, fmax, ftmp;
 	struct scmi_clk *clk = to_scmi_clk(hw);
 
-	/*
-	 * We can't figure out what rate it will be, so just return the
-	 * rate back to the caller. scmi_clk_recalc_rate() will be called
-	 * after the rate is set and we'll know what rate the clock is
-	 * running at then.
-	 */
 	if (clk->info->rate_discrete)
-		return rate;
+		return scmi_clk_round_rate_discrete(clk, rate);
 
 	fmin = clk->info->range.min_rate;
 	fmax = clk->info->range.max_rate;
