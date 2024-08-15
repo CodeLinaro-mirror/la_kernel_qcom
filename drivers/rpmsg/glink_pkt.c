@@ -322,6 +322,9 @@ static void glink_pkt_rpdev_remove(struct rpmsg_device *rpdev)
 	struct rpmsg_driver *rpdrv = drv_to_rpdrv(drv);
 	struct glink_pkt_device *gpdev = rpdrv_to_gpdev(rpdrv);
 
+	GLINK_PKT_INFO("for %s by %s:%d ref_cnt[%d]\n",
+			gpdev->ch_name, current->comm,
+			task_pid_nr(current), refcount_read(&gpdev->refcount));
 	mutex_lock(&gpdev->lock);
 	glink_pkt_clear_queues(gpdev);
 	gpdev->rpdev = NULL;
@@ -426,7 +429,10 @@ static int glink_pkt_release(struct inode *inode, struct file *file)
 
 	refcount_dec(&gpdev->refcount);
 	if (refcount_read(&gpdev->refcount) == 1) {
-		glink_pkt_clear_queues(gpdev);
+		mutex_lock(&gpdev->lock);
+		if (gpdev->rpdev != NULL)
+			glink_pkt_clear_queues(gpdev);
+		mutex_unlock(&gpdev->lock);
 
 		spin_lock_irqsave(&gpdev->queue_lock, flags);
 		gpdev->sig_change = false;

@@ -29,6 +29,7 @@
 #include "trace-cluster-lpm.h"
 #include "qcom-lpm.h"
 
+static DEFINE_PER_CPU(ktime_t, cpu_next_wakeup);
 LIST_HEAD(cluster_dev_list);
 
 static struct lpm_cluster *to_cluster(struct generic_pm_domain *genpd)
@@ -278,6 +279,8 @@ static int cluster_power_down(struct lpm_cluster *cluster_gov)
 	struct genpd_governor_data *gd = genpd->gd;
 	int idx = genpd->state_idx;
 	uint32_t residency;
+	s64 cpus_qos;
+	int i;
 
 	if (idx < 0)
 		return 0;
@@ -286,6 +289,13 @@ static int cluster_power_down(struct lpm_cluster *cluster_gov)
 	cluster_gov->entry_idx = idx;
 	trace_cluster_pred_select(genpd->state_idx, gd->next_wakeup, cluster_gov->restrict_idx,
 				  cluster_gov->predicted, cluster_gov->pred_residency);
+
+	cpus_qos = get_cpus_qos(cluster_gov->genpd->cpus);
+	for (i = 0; i < genpd->state_count; i++) {
+		if (idx == i &&
+		    cpus_qos < genpd->states[i].power_on_latency_ns)
+			return -1;
+	}
 
 	if (cluster_gov->use_bias_timer &&
 	    num_possible_cpus() != cpumask_weight(cluster_gov->genpd->cpus)) {
@@ -404,7 +414,7 @@ ktime_t get_cluster_sleep_time(struct lpm_cluster *cluster_gov)
 
 	next_wakeup = KTIME_MAX;
 	for_each_cpu_and(cpu, genpd->cpus, cpu_online_mask) {
-		next_cpu_wakeup = cluster_gov->cpu_next_wakeup[cpu];
+		next_cpu_wakeup = per_cpu(cpu_next_wakeup, cpu);
 		if (ktime_before(next_cpu_wakeup, next_wakeup))
 			next_wakeup = next_cpu_wakeup;
 	}
@@ -448,7 +458,7 @@ void update_cluster_select(struct lpm_cpu *cpu_gov)
 		if (cpumask_test_cpu(cpu, genpd->cpus)) {
 			spin_lock(&cluster_gov->lock);
 			cluster_gov->now = cpu_gov->now;
-			cluster_gov->cpu_next_wakeup[cpu] = cpu_gov->next_wakeup;
+			per_cpu(cpu_next_wakeup, cpu) = cpu_gov->next_wakeup;
 			update_cluster_next_wakeup(cluster_gov);
 			spin_unlock(&cluster_gov->lock);
 		}

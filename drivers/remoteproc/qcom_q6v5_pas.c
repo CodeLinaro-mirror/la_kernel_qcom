@@ -406,8 +406,11 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 	goto exit_load;
 
 release_dtb_metadata:
-	qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
+	if (adsp->dtb_pas_id && adsp->dma_phys_below_32b)
+		qcom_scm_pas_shutdown(adsp->dtb_pas_id);
 
+	if (adsp->dtb_pas_id)
+		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
 release_dtb_firmware:
 	release_firmware(adsp->dtb_firmware);
 
@@ -546,7 +549,8 @@ static int adsp_start(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
 	struct device *dev = NULL;
-	int ret;
+	bool auth_reset_ret = false;
+	int ret, err;
 
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "enter");
 
@@ -570,7 +574,7 @@ static int adsp_start(struct rproc *rproc)
 
 	ret = adsp_pds_enable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
 	if (ret < 0)
-		goto disable_irqs;
+		goto unassign_memory;
 
 	ret = clk_prepare_enable(adsp->xo);
 	if (ret)
@@ -603,6 +607,8 @@ static int adsp_start(struct rproc *rproc)
 		if (ret)
 			panic("Panicking, auth and reset failed for remoteproc %s dtb ret=%d\n",
 				rproc->name, ret);
+
+		auth_reset_ret = true;
 	}
 
 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_firmware_loading", "enter");
@@ -610,13 +616,13 @@ static int adsp_start(struct rproc *rproc)
 	ret = qcom_mdt_pas_init(adsp->dev, adsp->firmware, rproc->firmware, adsp->pas_id,
 				adsp->mem_phys, &adsp->pas_metadata, adsp->dma_phys_below_32b);
 	if (ret)
-		goto release_dtb_pas_id;
+		goto disable_regulator;
 
 	ret = qcom_mdt_load_no_init(adsp->dev, adsp->firmware, rproc->firmware, adsp->pas_id,
 				    adsp->mem_region, adsp->mem_phys, adsp->mem_size,
 				    &adsp->mem_reloc);
 	if (ret)
-		goto release_pas_metadata;
+		goto unlock_pas_metadata;
 
 	qcom_pil_info_store(adsp->info_name, adsp->mem_phys, adsp->mem_size);
 	adsp_add_coredump_segments(adsp, adsp->firmware);
@@ -636,28 +642,34 @@ static int adsp_start(struct rproc *rproc)
 			panic("Panicking, remoteproc %s failed to bootup.\n", adsp->rproc->name);
 		else if (ret == -ETIMEDOUT) {
 			dev_err(adsp->dev, "start timed out\n");
-			qcom_scm_pas_shutdown(adsp->pas_id);
 			goto release_pas_metadata;
 		}
 	}
 
 	qcom_scm_pas_metadata_release(&adsp->pas_metadata, dev);
 
-	if (adsp->dtb_pas_id)
-		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
-
-	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
-	adsp->firmware = NULL;
-
+	adsp->q6v5.seq++;
 	goto exit_start;
 
+unlock_pas_metadata:
+	/*
+	 * Unlocking of pas metadata only required either the call to
+	 * auth and reset is not reached after qcom_mdt_pas_init() success.
+	 * In case auth and reset is success, no need to call shutdown or
+	 * unlock pas metadata.
+	 */
+	if (adsp->dma_phys_below_32b) {
+		err = qcom_scm_pas_shutdown(adsp->pas_id);
+		if (err && adsp->decrypt_shutdown)
+			err = adsp_shutdown_poll_decrypt(adsp);
+		if (err)
+			panic("Panicking, remoteproc %s failed to unlock pas_metadata.\n",
+			      rproc->name);
+	}
 release_pas_metadata:
 	qcom_scm_pas_metadata_release(&adsp->pas_metadata, dev);
-release_dtb_pas_id:
-	if (adsp->dtb_pas_id) {
-		qcom_scm_pas_shutdown(adsp->dtb_pas_id);
-		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
-	}
+disable_regulator:
+	disable_regulators(adsp);
 disable_px_supply:
 	if (adsp->px_supply)
 		regulator_disable(adsp->px_supply);
@@ -670,12 +682,21 @@ disable_xo_clk:
 	clk_disable_unprepare(adsp->xo);
 disable_proxy_pds:
 	adsp_pds_disable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
+unassign_memory:
+	adsp->region_assigned = false;
+	adsp_unassign_memory_region(adsp);
 disable_irqs:
 	qcom_q6v5_unprepare(&adsp->q6v5);
+exit_start:
+	if (adsp->dtb_pas_id && adsp->dma_phys_below_32b && !auth_reset_ret)
+		qcom_scm_pas_shutdown(adsp->dtb_pas_id);
 
+	if (adsp->dtb_pas_id)
+		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
+
+	release_firmware(adsp->dtb_firmware);
 	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
 	adsp->firmware = NULL;
-exit_start:
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_start", "exit");
 	return ret;
 }
@@ -703,12 +724,27 @@ static irqreturn_t soccp_running_ack(int irq, void *data)
  */
 static int rproc_config_check(struct qcom_adsp *adsp, u32 state)
 {
+	unsigned int retry_num = 50;
+	u32 val;
+
+	do {
+		usleep_range(SOCCP_SLEEP_US, SOCCP_SLEEP_US + 100);
+		/* Making sure the mem mapped io is read correctly*/
+		dsb(sy);
+		val = readl(adsp->config_addr);
+		if ((state == SOCCP_D0) && (val == SOCCP_D1))
+			return 0;
+	} while (val != state && --retry_num);
+
+	return (val == state) ? 0 : -ETIMEDOUT;
+}
+static int rproc_config_check_atomic(struct qcom_adsp *adsp, u32 state)
+{
 	u32 val;
 
 	return readx_poll_timeout_atomic(readl, adsp->config_addr, val,
 				val == state, SOCCP_SLEEP_US, SOCCP_TIMEOUT_US);
 }
-
 /*
  * rproc_find_status_register: Find the power control regs and INT's
  *
@@ -834,6 +870,7 @@ int rproc_set_state(struct rproc *rproc, bool state)
 
 		ret = rproc_config_check(adsp, SOCCP_D0);
 		if (ret) {
+			dsb(sy);
 			dev_err(adsp->dev, "%s requested D3->D0: soccp failed to update tcsr val=%d\n",
 				current->comm, readl(adsp->config_addr));
 			goto soccp_out;
@@ -865,6 +902,7 @@ int rproc_set_state(struct rproc *rproc, bool state)
 
 			ret = rproc_config_check(adsp, SOCCP_D3);
 			if (ret) {
+				dsb(sy);
 				dev_err(adsp->dev, "%s requested D0->D3 failed: TCSR value:%d\n",
 					current->comm, readl(adsp->config_addr));
 				goto soccp_out;
@@ -905,7 +943,7 @@ static int rproc_panic_handler(struct notifier_block *this,
 		dev_err(adsp->dev, "failed to update smem bits for D3 to D0\n");
 		goto done;
 	}
-	ret = rproc_config_check(adsp, SOCCP_D0);
+	ret = rproc_config_check_atomic(adsp, SOCCP_D0);
 	if (ret)
 		dev_err(adsp->dev, "failed to change to D0\n");
 done:
@@ -919,10 +957,13 @@ static void qcom_pas_handover(struct qcom_q6v5 *q6v5)
 
 	if (adsp->check_status) {
 		ret = rproc_config_check(adsp, SOCCP_D3);
+		dsb(sy);
 		if (ret)
-			dev_err(adsp->dev, "state not changed in handover\n");
+			dev_err(adsp->dev, "state not changed in handover TCSR val = %d\n",
+				readl(adsp->config_addr));
 		else
-			dev_info(adsp->dev, "state changed in handover for soccp!\n");
+			dev_info(adsp->dev, "state changed in handover for soccp! TCSR val = %d\n",
+					readl(adsp->config_addr));
 	}
 	if (adsp->px_supply)
 		regulator_disable(adsp->px_supply);
@@ -967,6 +1008,7 @@ static int adsp_stop(struct rproc *rproc)
 
 	adsp_unassign_memory_region(adsp);
 
+	adsp->q6v5.seq++;
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "exit");
 
 	return ret;
@@ -1226,9 +1268,6 @@ static void rproc_recovery_set(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = (struct qcom_adsp *)rproc->priv;
 
-	if (strnstr(rproc->name, "spss", strlen(rproc->name)))
-		return;
-
 	adsp->subsys_recovery_disabled = rproc->recovery_disabled;
 }
 
@@ -1431,7 +1470,7 @@ static int adsp_probe(struct platform_device *pdev)
 	rproc_recovery_set_fn = rproc_recovery_set;
 
 	if (adsp->check_status) {
-		adsp->panic_blk.priority = INT_MAX - 1;
+		adsp->panic_blk.priority = INT_MAX - 2;
 		adsp->panic_blk.notifier_call = rproc_panic_handler;
 		atomic_notifier_chain_register(&panic_notifier_list, &adsp->panic_blk);
 	}

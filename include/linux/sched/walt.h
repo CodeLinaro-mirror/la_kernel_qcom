@@ -158,6 +158,7 @@ struct walt_task_struct {
 	u64				mark_start_birth_ts;
 	u8				high_util_history;
 	u8				mpam_part_id;
+	u8				yield_state;
 };
 
 #define wts_to_ts(wts) ({ \
@@ -199,6 +200,7 @@ extern int walt_unset_cpus_taken(struct cpumask *unset);
 extern cpumask_t walt_get_cpus_taken(void);
 extern int walt_get_cpus_in_state1(struct cpumask *cpus);
 
+extern void sched_walt_oscillate(unsigned int busy_cpu);
 extern int walt_pause_cpus(struct cpumask *cpus, enum pause_client client);
 extern int walt_resume_cpus(struct cpumask *cpus, enum pause_client client);
 extern int walt_partial_pause_cpus(struct cpumask *cpus, enum pause_client client);
@@ -207,6 +209,7 @@ extern int sched_set_boost(int type);
 extern bool should_boost_bus_dcvs(void);
 extern cpumask_t walt_get_halted_cpus(void);
 #else
+static inline void sched_walt_oscillate(unsigned int busy_cpu) { }
 static inline int sched_lpm_disallowed_time(int cpu, u64 *timeout)
 {
 	return INT_MAX;

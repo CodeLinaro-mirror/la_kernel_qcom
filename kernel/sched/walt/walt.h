@@ -992,7 +992,7 @@ static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
 	 */
 	cpumask_andnot(&other_cluster, cpu_possible_mask, &cpu_cluster(dst_cpu)->cpus);
 	if (!cpumask_intersects(&other_cluster, p->cpus_ptr))
-		return false;
+		return true;
 
 	if (is_max_possible_cluster_cpu(dst_cpu))
 		return true;
@@ -1308,8 +1308,7 @@ void dec_rq_walt_stats(struct rq *rq, struct task_struct *p);
 extern bool is_obet;
 extern int oscillate_cpu;
 extern int oscillate_period_ns;
-extern enum hrtimer_restart walt_oscillate_timer_cb(struct hrtimer *hrt);
-extern bool should_oscillate(void);
+extern bool should_oscillate(unsigned int busy_cpu);
 extern bool now_is_sbt;
 extern bool is_sbt_or_oscillate(void);
 
@@ -1430,4 +1429,18 @@ extern int sched_smart_freq_ipc_handler(struct ctl_table *table, int write,
 				      loff_t *ppos);
 extern unsigned int sysctl_sched_legacy_smart_freq_hyst_cpu_ns[WALT_NR_CPUS];
 extern unsigned int sysctl_sched_legacy_smart_freq_hyst_enable_cpus;
+
+/* frequent yielder */
+#define MAX_YIELD_CNT_PER_TASK_THR		25
+#define	YIELD_INDUCED_SLEEP			BIT(7)
+#define YIELD_CNT_MASK				0x7F
+#define MAX_YIELD_CNT_GLOBAL_THR		8000
+#define YIELD_WINDOW_SIZE_USEC			(16ULL * USEC_PER_MSEC)
+#define YIELD_WINDOW_SIZE_NSEC			(YIELD_WINDOW_SIZE_USEC * NSEC_PER_USEC)
+#define	YIELD_GRACE_PERIOD_NSEC			(4ULL * NSEC_PER_MSEC)
+#define MIN_CONTIGUOUS_YIELDING_WINDOW		3
+#define YIELD_SLEEP_TIME_USEC			250
+#define MAX_YIELD_SLEEP_CNT_GLOBAL_THR		(YIELD_WINDOW_SIZE_USEC /		\
+								YIELD_SLEEP_TIME_USEC / 2)
+extern u8 contiguous_yielding_windows;
 #endif /* _WALT_H */

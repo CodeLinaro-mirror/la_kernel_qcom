@@ -1346,6 +1346,8 @@ static int mem_dump_probe(struct platform_device *pdev)
 	used_size = ALIGN(used_size, SZ_4K);
 	phys_addr = rmem->base;
 	memdump_vaddr = memremap(phys_addr, used_size, MEMREMAP_WB);
+	if (!memdump_vaddr)
+		return -ENOMEM;
 	memset(memdump_vaddr, 0x0, used_size);
 
 	ret = init_memory_dump(memdump_vaddr, phys_addr);

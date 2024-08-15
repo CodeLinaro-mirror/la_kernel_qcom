@@ -38,6 +38,19 @@ static struct clk_branch tcsr_pcie_0_clkref_en = {
 	},
 };
 
+static struct clk_branch tcsr_pcie_1_clkref_en = {
+	.halt_reg = 0x1c,
+	.halt_check = BRANCH_HALT_DELAY,
+	.clkr = {
+		.enable_reg = 0x1c,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "tcsr_pcie_1_clkref_en",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch tcsr_ufs_clkref_en = {
 	.halt_reg = 0x8,
 	.halt_check = BRANCH_HALT_DELAY,
@@ -79,6 +92,7 @@ static struct clk_branch tcsr_usb3_clkref_en = {
 
 static struct clk_regmap *tcsr_cc_tuna_clocks[] = {
 	[TCSR_PCIE_0_CLKREF_EN] = &tcsr_pcie_0_clkref_en.clkr,
+	[TCSR_PCIE_1_CLKREF_EN] = &tcsr_pcie_1_clkref_en.clkr,
 	[TCSR_UFS_CLKREF_EN] = &tcsr_ufs_clkref_en.clkr,
 	[TCSR_USB2_CLKREF_EN] = &tcsr_usb2_clkref_en.clkr,
 	[TCSR_USB3_CLKREF_EN] = &tcsr_usb3_clkref_en.clkr,
@@ -88,7 +102,7 @@ static const struct regmap_config tcsr_cc_tuna_regmap_config = {
 	.reg_bits = 32,
 	.reg_stride = 4,
 	.val_bits = 32,
-	.max_register = 0x10,
+	.max_register = 0x1c,
 	.fast_io = true,
 };
 
@@ -100,9 +114,27 @@ static const struct qcom_cc_desc tcsr_cc_tuna_desc = {
 
 static const struct of_device_id tcsr_cc_tuna_match_table[] = {
 	{ .compatible = "qcom,tuna-tcsrcc" },
+	{ .compatible = "qcom,kera-tcsrcc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, tcsr_cc_tuna_match_table);
+
+static int tcsr_cc_tuna_fixup(struct platform_device *pdev)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (strcmp(compat, "qcom,tuna-tcsrcc"))
+		return 0;
+
+	tcsr_cc_tuna_clocks[TCSR_PCIE_1_CLKREF_EN] = NULL;
+
+	return 0;
+}
 
 static int tcsr_cc_tuna_probe(struct platform_device *pdev)
 {
@@ -112,6 +144,10 @@ static int tcsr_cc_tuna_probe(struct platform_device *pdev)
 	regmap = qcom_cc_map(pdev, &tcsr_cc_tuna_desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
+
+	ret = tcsr_cc_tuna_fixup(pdev);
+	if (ret)
+		return ret;
 
 	ret = qcom_cc_really_probe(pdev, &tcsr_cc_tuna_desc, regmap);
 	if (ret) {

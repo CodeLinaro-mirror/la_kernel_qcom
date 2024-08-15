@@ -1908,6 +1908,7 @@ static int configure_bwmon_resources(struct platform_device *pdev, struct bwmon 
 {
 	struct device *dev = &pdev->dev;
 	struct resource *res;
+	bool map_ne = false;
 	u32 data;
 	int ret;
 
@@ -1917,12 +1918,18 @@ static int configure_bwmon_resources(struct platform_device *pdev, struct bwmon 
 		return -ENODEV;
 	}
 
+	if (of_find_property(dev->of_node, "qcom,map-ne", NULL))
+		map_ne = true;
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "base");
 	if (!res) {
 		dev_err(dev, "base not found!\n");
 		return -EINVAL;
 	}
-	m->base = devm_ioremap(dev, res->start, resource_size(res));
+	if (map_ne)
+		m->base = ioremap_np(res->start, resource_size(res));
+	else
+		m->base = ioremap(res->start, resource_size(res));
 	if (!m->base) {
 		dev_err(dev, "Unable map base!\n");
 		return -ENOMEM;
@@ -1935,8 +1942,10 @@ static int configure_bwmon_resources(struct platform_device *pdev, struct bwmon 
 			dev_err(dev, "global_base not found!\n");
 			return -EINVAL;
 		}
-		m->global_base = devm_ioremap(dev, res->start,
-					      resource_size(res));
+		if (map_ne)
+			m->global_base = ioremap_np(res->start, resource_size(res));
+		else
+			m->global_base = ioremap(res->start, resource_size(res));
 		if (!m->global_base) {
 			dev_err(dev, "Unable map global_base!\n");
 			return -ENOMEM;
@@ -2179,15 +2188,15 @@ static int qcom_bwmon_driver_probe(struct platform_device *pdev)
 
 	ret = configure_bwmon_resources(pdev, m);
 	if (ret < 0)
-		return ret;
+		goto err;
 
 	ret = configure_bwmon_hw(pdev, m);
 	if (ret < 0)
-		return ret;
+		goto err;
 
 	ret = bwmon_dcvs_register(pdev, m);
 	if (ret < 0)
-		return ret;
+		goto err;
 
 	node = m->hw.node;
 	ret = init_and_start_bwmon(pdev, m);
@@ -2215,6 +2224,9 @@ err_sysfs:
 	spin_lock_irqsave(&list_lock, flags);
 	list_del(&node->list);
 	spin_unlock_irqrestore(&list_lock, flags);
+err:
+	iounmap(m->base);
+	iounmap(m->global_base);
 	return ret;
 }
 

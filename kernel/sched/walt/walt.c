@@ -15,6 +15,7 @@
 #include <linux/cpu.h>
 #include <linux/sysctl.h>
 #include <linux/of_platform.h>
+#include <linux/delay.h>
 
 #include <trace/hooks/sched.h>
 #include <trace/hooks/cpufreq.h>
@@ -78,6 +79,11 @@ unsigned int __read_mostly sched_init_task_load_windows;
  * sched_load_granule.
  */
 unsigned int __read_mostly sched_load_granule;
+
+/* frequent yielder tracking */
+static unsigned int total_yield_cnt;
+static unsigned int total_sleep_cnt;
+static u64 yield_counting_window_ts;
 
 bool walt_is_idle_task(struct task_struct *p)
 {
@@ -417,6 +423,8 @@ update_window_start(struct rq *rq, u64 wallclock, int event)
 	s64 delta;
 	int nr_windows;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
+	struct walt_sched_cluster *cluster = cpu_cluster(task_cpu(current));
+	struct smart_freq_cluster_info *smart_freq_info = cluster->smart_freq_info;
 	u64 old_window_start = wrq->window_start;
 	bool full_window;
 
@@ -445,6 +453,49 @@ update_window_start(struct rq *rq, u64 wallclock, int event)
 	full_window = nr_windows > 1;
 	rollover_cpu_window(rq, full_window);
 	rollover_top_tasks(rq, full_window);
+
+	/* Update yielder statistics */
+	if (cpu_of(rq) == 0) {
+		u64 delta = wallclock - yield_counting_window_ts;
+
+		/* window boundary crossed */
+		if (delta > YIELD_WINDOW_SIZE_NSEC) {
+			unsigned int target_threshold_wake = MAX_YIELD_CNT_GLOBAL_THR;
+			unsigned int target_threshold_sleep = MAX_YIELD_SLEEP_CNT_GLOBAL_THR;
+
+			/*
+			 * if update_window_start comes more than
+			 * YIELD_GRACE_PERIOD_NSEC after the YIELD_WINDOW_SIZE_NSEC then
+			 * extrapolate the threasholds based on  delta time.
+			 */
+
+			if (unlikely(delta > YIELD_WINDOW_SIZE_NSEC + YIELD_GRACE_PERIOD_NSEC)) {
+				target_threshold_wake =
+					div64_u64(delta * MAX_YIELD_CNT_GLOBAL_THR,
+							YIELD_WINDOW_SIZE_NSEC);
+				target_threshold_sleep =
+					div64_u64(delta * MAX_YIELD_SLEEP_CNT_GLOBAL_THR,
+									YIELD_WINDOW_SIZE_NSEC);
+			}
+
+			if ((total_yield_cnt >= target_threshold_wake) ||
+			    (total_sleep_cnt >= target_threshold_sleep / 2)) {
+				if (contiguous_yielding_windows < MIN_CONTIGUOUS_YIELDING_WINDOW)
+					contiguous_yielding_windows++;
+			} else {
+				contiguous_yielding_windows = 0;
+			}
+			trace_sched_yielder(wallclock, yield_counting_window_ts,
+					    contiguous_yielding_windows,
+					    total_yield_cnt, target_threshold_wake,
+					    total_sleep_cnt, target_threshold_sleep,
+					    smart_freq_info->cluster_active_reason);
+
+			yield_counting_window_ts = wallclock;
+			total_yield_cnt = 0;
+			total_sleep_cnt = 0;
+		}
+	}
 
 	return old_window_start;
 }
@@ -2112,6 +2163,11 @@ static void update_history(struct rq *rq, struct task_struct *p,
 	u16 trailblazer_demand = 0;
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
+	/* clear yield status of task if there is a change in window */
+
+	if ((wts->yield_state & YIELD_CNT_MASK) < MAX_YIELD_CNT_PER_TASK_THR)
+		wts->yield_state = 0;
+
 	/* Ignore windows where task had no activity */
 	if (!runtime || walt_is_idle_task(p) || !samples)
 		goto done;
@@ -2502,6 +2558,7 @@ static void init_new_task_load(struct task_struct *p)
 	wts->prev_on_rq = 0;
 	wts->prev_on_rq_cpu = -1;
 	wts->pipeline_cpu = -1;
+	wts->yield_state = 0;
 
 	for (i = 0; i < NUM_BUSY_BUCKETS; ++i)
 		wts->busy_buckets[i] = 0;
@@ -3915,8 +3972,9 @@ void update_cpu_capacity_helper(int cpu)
 	cluster = cpu_cluster(cpu);
 	/* reduce the fmax_capacity under cpufreq constraints */
 	if (cluster->walt_internal_freq_limit != cluster->max_possible_freq)
-		fmax_capacity = mult_frac(fmax_capacity, cluster->walt_internal_freq_limit,
-					 cluster->max_possible_freq);
+		fmax_capacity = mult_frac(fmax_capacity,
+					min(cluster->walt_internal_freq_limit, cluster->max_freq),
+					cluster->max_possible_freq);
 
 	old = rq->cpu_capacity_orig;
 	rq->cpu_capacity_orig = min(fmax_capacity, thermal_cap);
@@ -4589,6 +4647,7 @@ static void android_rvh_update_misfit_status(void *unused, struct task_struct *p
 static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 {
 	struct rq *rq = cpu_rq(task_cpu(p));
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	struct rq_flags rf;
 	u64 wallclock;
 	unsigned int old_load;
@@ -4599,6 +4658,17 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 	rq_lock_irqsave(rq, &rf);
 	old_load = task_load(p);
 	wallclock = walt_sched_clock();
+
+	/*
+	 * Once task does a sleep(not the yield induce sleep)
+	 * reset the flag, to ensure task is no longer qualified
+	 * as frequent yielder.
+	 * i.e. task needs to qualify again as frequent yielder.
+	 */
+	if (!(wts->yield_state & YIELD_INDUCED_SLEEP))
+		wts->yield_state = 0;
+	else
+		wts->yield_state &= YIELD_CNT_MASK;
 
 	if (walt_is_idle_task(rq->curr) && p->in_iowait)
 		walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
@@ -4686,22 +4756,16 @@ EXPORT_SYMBOL_GPL(should_boost_bus_dcvs);
  * If it is -1, no big task oscillation is occurring.
  */
 int oscillate_cpu = -1;
-static struct hrtimer walt_oscillate_timer;
 
-bool should_oscillate(void)
+bool should_oscillate(unsigned int busy_cpu)
 {
 	int cpu;
 	int is_only_one_cpu_active = 0;
-	int this_cpu = raw_smp_processor_id();
-	int thermal_pressure = arch_scale_thermal_pressure(this_cpu);
-
-	if (!thermal_pressure)
-		return false;
 
 	if (!is_obet)
 		return false;
 
-	if (!is_max_possible_cluster_cpu(this_cpu))
+	if (!is_max_possible_cluster_cpu(busy_cpu))
 		return false;
 
 	if (cpumask_weight(&cpu_array[0][num_sched_clusters - 1]) == 1)
@@ -4714,20 +4778,6 @@ bool should_oscillate(void)
 		return false;
 
 	return true;
-}
-
-static void should_oscillate_tick(void)
-{
-	int this_cpu = raw_smp_processor_id();
-
-	if (should_oscillate()) {
-		if (oscillate_cpu == -1) {
-			hrtimer_start(&walt_oscillate_timer,
-					ns_to_ktime(oscillate_period_ns),
-				HRTIMER_MODE_REL_PINNED_HARD);
-			oscillate_cpu = this_cpu;
-		}
-	}
 }
 
 static void android_vh_scheduler_tick(void *unused, struct rq *rq)
@@ -4764,9 +4814,6 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	rcu_read_unlock();
 
 	walt_lb_tick(rq);
-
-	if (soc_feat(SOC_ENABLE_EXPERIMENT3))
-		should_oscillate_tick();
 
 	/* IPC based smart FMAX */
 	cluster = cpu_cluster(cpu);
@@ -4825,18 +4872,6 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 			wts->last_sleep_ts = wallclock;
 		walt_update_task_ravg(prev, rq, PUT_PREV_TASK, wallclock, 0);
 		walt_update_task_ravg(next, rq, PICK_NEXT_TASK, wallclock, 0);
-		if (soc_feat(SOC_ENABLE_EXPERIMENT3) &&
-				oscillate_cpu == raw_smp_processor_id()) {
-			if (should_oscillate()) {
-				if (!hrtimer_active(&walt_oscillate_timer)) {
-					hrtimer_start(&walt_oscillate_timer,
-						ns_to_ktime(oscillate_period_ns),
-						HRTIMER_MODE_REL_PINNED_HARD);
-				}
-			} else {
-				oscillate_cpu = -1;
-			}
-		}
 	} else {
 		walt_update_task_ravg(prev, rq, TASK_UPDATE, wallclock, 0);
 	}
@@ -4912,6 +4947,41 @@ static void rebuild_sd_workfn(struct work_struct *work)
 	complete(&rebuild_domains_completion);
 }
 
+u8 contiguous_yielding_windows;
+static void walt_do_sched_yield_before(void *unused, long *skip)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *)current->android_vendor_data1;
+	struct walt_sched_cluster *cluster = cpu_cluster(task_cpu(current));
+	struct smart_freq_cluster_info *smart_freq_info = cluster->smart_freq_info;
+	bool in_legacy_uncap;
+
+	if (!walt_fair_task(current))
+		return;
+
+	if ((wts->yield_state & YIELD_CNT_MASK) >= MAX_YIELD_CNT_PER_TASK_THR) {
+		total_yield_cnt++;
+		if (contiguous_yielding_windows >= MIN_CONTIGUOUS_YIELDING_WINDOW) {
+			/*
+			 * if we are under any legacy frequency uncap(i.e some
+			 * load condition, ignore injecting sleep for the
+			 * yielding task.
+			 */
+			in_legacy_uncap =
+				!!(smart_freq_info->cluster_active_reason &
+								~BIT(NO_REASON_SMART_FREQ));
+			if (!in_legacy_uncap) {
+				wts->yield_state |= YIELD_INDUCED_SLEEP;
+				total_sleep_cnt++;
+				*skip = true;
+				usleep_range_state(YIELD_SLEEP_TIME_USEC, YIELD_SLEEP_TIME_USEC,
+							TASK_INTERRUPTIBLE);
+			}
+		}
+	} else {
+		wts->yield_state++;
+	}
+}
+
 static void walt_do_sched_yield(void *unused, struct rq *rq)
 {
 	struct task_struct *curr = rq->curr;
@@ -4921,6 +4991,7 @@ static void walt_do_sched_yield(void *unused, struct rq *rq)
 		return;
 
 	walt_lockdep_assert_rq(rq, NULL);
+
 	if (!list_empty(&wts->mvp_list) && wts->mvp_list.next)
 		walt_cfs_deactivate_mvp_task(rq, curr);
 
@@ -5014,6 +5085,7 @@ static void register_walt_hooks(void)
 	register_trace_android_rvh_build_perf_domains(android_rvh_build_perf_domains, NULL);
 	register_trace_cpu_frequency_limits(walt_cpu_frequency_limits, NULL);
 	register_trace_android_rvh_do_sched_yield(walt_do_sched_yield, NULL);
+	register_trace_android_rvh_before_do_sched_yield(walt_do_sched_yield_before, NULL);
 	register_trace_android_rvh_update_thermal_stats(android_rvh_update_thermal_stats, NULL);
 }
 
@@ -5151,11 +5223,6 @@ static void walt_init(struct work_struct *work)
 	if (i >= 0) {
 		static_key_disable(&sched_feat_keys[i]);
 		sysctl_sched_features &= ~(1UL << i);
-	}
-
-	if (soc_feat(SOC_ENABLE_EXPERIMENT3)) {
-		hrtimer_init(&walt_oscillate_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED_HARD);
-		walt_oscillate_timer.function = walt_oscillate_timer_cb;
 	}
 
 	topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpu_online_mask);

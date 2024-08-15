@@ -558,7 +558,6 @@ static void qcom_glink_handle_intent_req_ack(struct qcom_glink *glink,
 
 static void qcom_glink_intent_req_abort(struct glink_channel *channel)
 {
-	WRITE_ONCE(channel->intent_req_result, 0);
 	wake_up_all(&channel->intent_req_wq);
 }
 
@@ -920,7 +919,7 @@ static int qcom_glink_queue_rx_intent_alloc(struct qcom_glink *glink,
 	list_add_tail(&intent->node, &channel->rx_queue);
 	spin_unlock_irqrestore(&channel->recv_lock, flags);
 
-	wake_up(&channel->rx_wq);
+	wake_up_interruptible(&channel->rx_wq);
 
 	return 0;
 }
@@ -1091,13 +1090,17 @@ static int qcom_glink_rx_thread(void *data)
 	struct glink_channel *channel = data;
 	struct qcom_glink *glink = channel->glink;
 	unsigned long flags;
-	int ret;
+	int ret = 0;
 
 	for (;;) {
-		wait_event(channel->rx_wq, !list_empty(&channel->rx_queue) ||
+		ret = wait_event_interruptible(channel->rx_wq, !list_empty(&channel->rx_queue) ||
 			   kthread_should_stop());
+
 		if (kthread_should_stop())
 			break;
+
+		if (ret)
+			continue;
 
 		spin_lock_irqsave(&channel->recv_lock, flags);
 		if (list_empty(&channel->rx_queue)) {
@@ -1258,7 +1261,7 @@ static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
 		list_add_tail(&intent->node, &channel->rx_queue);
 		spin_unlock(&channel->recv_lock);
 
-		wake_up(&channel->rx_wq);
+		wake_up_interruptible(&channel->rx_wq);
 
 		channel->buf = NULL;
 	}
@@ -1336,7 +1339,7 @@ static int qcom_glink_rx_data_zero_copy(struct qcom_glink *glink, size_t avail)
 	list_add_tail(&intent->node, &channel->rx_queue);
 	spin_unlock(&channel->recv_lock);
 
-	wake_up(&channel->rx_wq);
+	wake_up_interruptible(&channel->rx_wq);
 
 advance_rx:
 	qcom_glink_rx_advance(glink, ALIGN(sizeof(hdr), 8));
@@ -1799,6 +1802,19 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 	return rc;
 }
 
+static int qcom_glink_announce_destroy(struct rpmsg_device *rpdev)
+{
+	struct glink_channel *channel = to_glink_channel(rpdev->ept);
+
+	CH_INFO(channel, "Entered\n");
+
+	if (channel->rx_task)
+		kthread_stop(channel->rx_task);
+
+	CH_INFO(channel, "Exit\n");
+	return 0;
+}
+
 static void qcom_glink_destroy_ept(struct rpmsg_endpoint *ept)
 {
 	struct glink_channel *channel = to_glink_channel(ept);
@@ -1812,9 +1828,6 @@ static void qcom_glink_destroy_ept(struct rpmsg_endpoint *ept)
 	}
 	channel->ept.cb = NULL;
 	spin_unlock_irqrestore(&channel->recv_lock, flags);
-
-	if (channel->rx_task)
-		kthread_stop(channel->rx_task);
 
 	qcom_glink_send_close_req(glink, channel);
 }
@@ -1847,8 +1860,9 @@ static int qcom_glink_request_intent(struct qcom_glink *glink,
 		goto unlock;
 
 	ret = wait_event_timeout(channel->intent_req_wq,
-				 READ_ONCE(channel->intent_req_result) >= 0 &&
-				 READ_ONCE(channel->intent_received),
+				 (READ_ONCE(channel->intent_req_result) >= 0 &&
+				 READ_ONCE(channel->intent_received)) ||
+				 glink->abort_tx,
 				 10 * HZ);
 	if (!ret) {
 		dev_err(glink->dev, "%s: intent request ack timed out (%d)\n",
@@ -2064,6 +2078,7 @@ static struct device_node *qcom_glink_match_channel(struct device_node *node,
 static const struct rpmsg_device_ops glink_device_ops = {
 	.create_ept = qcom_glink_create_ept,
 	.announce_create = qcom_glink_announce_create,
+	.announce_destroy = qcom_glink_announce_destroy,
 };
 
 static const struct rpmsg_endpoint_ops glink_endpoint_ops = {

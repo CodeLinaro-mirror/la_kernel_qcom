@@ -1364,7 +1364,7 @@ config SM_GCC_TUNA
 
 config SM_TCSRCC_TUNA
 	tristate "Tuna Top-Level CSR Clock Controller"
-	depends on SM_GCC_TUNA
+	depends on SM_GCC_TUNA || SM_GCC_KERA
 	help
 	  Support for the TCSR clock controller on Qualcomm Technologies, Inc
 	  Tuna devices.
@@ -1424,5 +1424,41 @@ config SM_EVACC_TUNA
 	  TUNA devices.
 	  Say Y if you want to support EVA devices to get better
 	  visual analysis.
+
+config SM_GPUCC_TUNA
+	tristate "TUNA Graphics Clock Controller"
+        depends on SM_GCC_TUNA
+        help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc
+	  Tuna devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SM_GCC_KERA
+	tristate "Kera Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  Kera devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, SD/UFS, PCIe etc.
+
+config SM_CAMCC_TUNA
+        tristate "TUNA Camera Clock Controller"
+        depends on SM_GCC_TUNA
+        help
+          Support for the camera clock controller on Qualcomm Technologies, Inc
+          Tuna devices.
+          Say Y if you want to support camera devices and functionality such as
+          capturing pictures.
+
+config SM_CAMBISTMCLKCC_TUNA
+	tristate "TUNA CAMBISTMCLK Clock Controller"
+	depends on SM_GCC_TUNA
+	help
+	  Support for the CAMBISTMCLK clock controller on Qualcomm Technologies,
+	  Inc Tuna devices.
+	  Say Y if you want to support camera devices for a better low-latency
+	  clock.
 
 endif

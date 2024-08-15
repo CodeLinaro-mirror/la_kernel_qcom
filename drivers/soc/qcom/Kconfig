@@ -144,6 +144,15 @@ config QCOM_CPUCP
          the subsystems.
          If unsure, say n.
 
+config QCOM_CPUCP_FAST
+        tristate "Qualcomm Technologies, Inc. CPUCP FAST driver"
+        depends on QCOM_CPUCP
+        help
+	 Qualcomm Technologies, Inc. CPUCP Firmware Assisted System Tuning driver
+	 for MSM devices. This driver gets hints from CPUCP firmware through mailbox
+	 and informs to scheduler.
+         If unsure, say n.
+
 config QTI_CPUCP_LOG
         tristate "Qualcomm Technologies Inc. HW CPUCP Logging"
         depends on QCOM_CPUCP
@@ -949,6 +958,16 @@ config QCOM_MEM_HOOKS
 	  hooks, which are used to control the behavior of the core.
 	  If unsure, say 'M' here to ensure that the hooks are compiled
 	  in.
+
+config QCOM_FSA4480_I2C
+	tristate "Fairchild FSA4480 chip with I2C"
+	select REGMAP_I2C
+	depends on I2C
+	help
+	  Support for the Fairchild FSA4480 IC switch chip controlled
+	  using I2C. This driver provides common support
+	  for accessing the device, switching between USB and Audio
+	  modes, changing orientation.
 
 source "drivers/soc/qcom/mem_buf/Kconfig"
 source "drivers/soc/qcom/tmecom/Kconfig"

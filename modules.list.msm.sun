@@ -13,10 +13,12 @@ mem_buf_dev.ko
 mem_buf_msgq.ko
 msm_dma_iommu_mapping.ko
 qcom-pdc.ko
+dcc_v2.ko
 debug_symbol.ko
 minidump.ko
 qcom_logbuf_vendor_hooks.ko
 qcom_logbuf_boot_log.ko
+memory_dump_v2.ko
 qcom-dload-mode.ko
 pinctrl-msm.ko
 pinctrl-sun.ko
@@ -49,6 +51,7 @@ rtc-pm8xxx.ko
 pmic-pon-log.ko
 gcc-sun.ko
 gcc-tuna.ko
+gcc-kera.ko
 gpucc-sun.ko
 secure_buffer.ko
 dispcc-sun.ko

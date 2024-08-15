@@ -615,6 +615,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(IPQ5300) },
 	{ qcom_board_id(MONACO) },
 	{ qcom_board_id(TUNA) },
+	{ qcom_board_id(KERA) },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];
@@ -1227,6 +1228,7 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 	int i = 0;
 
 	switch (socinfo_format) {
+	case SOCINFO_VERSION(0, 22):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_raw_package_type.attr;
@@ -1482,6 +1484,7 @@ static void socinfo_debugfs_init(struct qcom_socinfo *qcom_socinfo,
 			   &qcom_socinfo->info.fmt);
 
 	switch (qcom_socinfo->info.fmt) {
+	case SOCINFO_VERSION(0, 22):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
 		qcom_socinfo->info.raw_package_type = __le32_to_cpu(info->raw_package_type);

@@ -226,6 +226,10 @@ static int tmc_enable_etf_sink_sysfs(struct coresight_device *csdev)
 		goto out;
 	}
 
+	if (!drvdata->pm_config.hw_powered) {
+		ret = -EINVAL;
+		goto out;
+	}
 	/*
 	 * In sysFS mode we can have multiple writers per sink.  Since this
 	 * sink is already enabled no memory is needed and the HW need not be
@@ -294,6 +298,10 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev, void *data)
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 	do {
 		ret = -EINVAL;
+
+		if (!drvdata->pm_config.hw_powered)
+			break;
+
 		if (drvdata->reading)
 			break;
 		/*
@@ -375,6 +383,12 @@ static int tmc_disable_etf_sink(struct coresight_device *csdev)
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
+	if (!drvdata->pm_config.hw_powered) {
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		ret = -EINVAL;
+		goto disable_clk;
+	}
+
 	if (drvdata->reading) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
 		ret = -EBUSY;
@@ -420,6 +434,13 @@ static int tmc_enable_etf_link(struct coresight_device *csdev,
 	}
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
+
+	if (!drvdata->pm_config.hw_powered) {
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		ret = -EINVAL;
+		goto disable_clk;
+	}
+
 	if (drvdata->reading) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
 		ret = -EBUSY;
@@ -459,11 +480,16 @@ static void tmc_disable_etf_link(struct coresight_device *csdev,
 		return;
 	}
 
+	if (!drvdata->pm_config.hw_powered)
+		goto disable_clk;
+
 	if (atomic_dec_return(&csdev->refcnt) == 0) {
 		tmc_etf_disable_hw(drvdata);
 		drvdata->mode = CS_MODE_DISABLED;
 		last_disable = true;
 	}
+
+disable_clk:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
 	if (drvdata->dclk)
@@ -548,6 +574,9 @@ static unsigned long tmc_update_etf_buffer(struct coresight_device *csdev,
 		return 0;
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
+
+	if (!drvdata->pm_config.hw_powered)
+		goto out;
 
 	/* Don't do anything if another tracer is using this sink */
 	if (atomic_read(&csdev->refcnt) != 1)
@@ -703,6 +732,10 @@ int tmc_read_prepare_etb(struct tmc_drvdata *drvdata)
 
 	/* Disable the TMC if need be */
 	if (drvdata->mode == CS_MODE_SYSFS) {
+		if (!drvdata->pm_config.hw_powered) {
+			ret = -EINVAL;
+			goto out;
+		}
 		/* There is no point in reading a TMC in HW FIFO mode */
 		mode = readl_relaxed(drvdata->base + TMC_MODE);
 		if (mode != TMC_MODE_CIRCULAR_BUFFER) {
@@ -724,6 +757,7 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 	char *buf = NULL;
 	enum tmc_mode mode;
 	unsigned long flags;
+	int ret = 0;
 
 	/* config types are set a boot time and never change */
 	if (WARN_ON_ONCE(drvdata->config_type != TMC_CONFIG_TYPE_ETB &&
@@ -734,6 +768,10 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 
 	/* Re-enable the TMC if need be */
 	if (drvdata->mode == CS_MODE_SYSFS) {
+		if (!drvdata->pm_config.hw_powered) {
+			ret = -EINVAL;
+			goto out;
+		}
 		/* There is no point in reading a TMC in HW FIFO mode */
 		mode = readl_relaxed(drvdata->base + TMC_MODE);
 		if (mode != TMC_MODE_CIRCULAR_BUFFER) {
@@ -758,7 +796,7 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 		buf = drvdata->buf;
 		drvdata->buf = NULL;
 	}
-
+out:
 	drvdata->reading = false;
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
@@ -768,5 +806,5 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 	 */
 	kfree(buf);
 
-	return 0;
+	return ret;
 }

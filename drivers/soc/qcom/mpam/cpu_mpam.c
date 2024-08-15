@@ -502,7 +502,7 @@ static const struct config_item_type cpu_mpam_subsys_type = {
 static struct configfs_subsystem cpu_mpam_subsys = {
 	.su_group = {
 		.cg_item = {
-			.ci_namebuf = "cpu_mpam",
+			.ci_namebuf = "qcom_mpam",
 			.ci_type = &cpu_mpam_subsys_type,
 		},
 	},
