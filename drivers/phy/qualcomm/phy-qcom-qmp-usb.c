@@ -2251,6 +2251,9 @@ static const struct of_device_id qmp_usb_of_match_table[] = {
 		.compatible = "qcom,qdu1000-qmp-usb3-uni-phy",
 		.data = &qdu1000_usb3_uniphy_cfg,
 	}, {
+		.compatible = "qcom,qcs8300-qmp-usb3-uni-phy",
+		.data = &sa8775p_usb3_uniphy_cfg,
+	}, {
 		.compatible = "qcom,sa8775p-qmp-usb3-uni-phy",
 		.data = &sa8775p_usb3_uniphy_cfg,
 	}, {
