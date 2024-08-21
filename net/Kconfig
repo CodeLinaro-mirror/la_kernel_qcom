@@ -63,6 +63,15 @@ config NET_REDIRECT
 config SKB_EXTENSIONS
 	bool
 
+config NET_NEIGH_ARP_PROBE
+	tristate "ARP protocol probe support"
+	help
+	  Send ARP probe and generate RTM_NEWNEIGH if the neighbor
+	  state is not NUD_REACHABLE. Also featurize changes for
+	  sending neighbor probe.
+
+	  To compile it as a module, choose M here.  If unsure, say N.
+
 menu "Networking options"
 
 source "net/packet/Kconfig"
