@@ -1156,6 +1156,9 @@ struct dwc3_scratchpad_array {
  * @debug_root: root debugfs directory for this device to put its files in.
  * @runtime_suspend_on_usb_suspend: true if dwc3 runtime suspend is allowed
  *			during bus suspend scenario.
+ * @wakeup_pending_funcs: Indicates whether any interface has requested for
+ *			  function wakeup in bitmap format where bit position
+ *			  represents interface_id.
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1373,6 +1376,7 @@ struct dwc3 {
 	unsigned		wakeup_configured:1;
 	unsigned		suspended:1;
 	unsigned		runtime_suspend_on_usb_suspend:1;
+	u32			wakeup_pending_funcs;
 
 	u16			imod_interval;
 
