@@ -15,7 +15,7 @@
  */
 
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 
@@ -173,6 +173,7 @@ struct ci13xxx {
 	u32                        ep0_dir;    /* ep0 direction */
 #define ep0out ci13xxx_ep[0]
 #define ep0in  ci13xxx_ep[hw_ep_max / 2]
+	u8                         remote_wakeup; /* host-enabled remote wakeup */
 	u8                         suspended;  /* suspended by the host */
 	u8                         configured;  /* is device configured */
 	u8                         test_mode;  /* the selected test mode */
@@ -189,6 +190,7 @@ struct ci13xxx {
 						 * upon flush timeout for the
 						 * first EP.
 						 */
+	bool			  l1_supported; /* is LPM supported */
 };
 
 /******************************************************************************
