@@ -6368,10 +6368,18 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-	if (dwc3_msm_check_extcon_prop(pdev))
-		goto put_dwc3;
-
-
+	ret = dwc3_msm_check_extcon_prop(pdev);
+	if (ret == -517) {
+		msleep(2000);
+		ret = dwc3_msm_check_extcon_prop(pdev);
+		if (ret == -517) {
+			msleep(2000);
+			ret = dwc3_msm_check_extcon_prop(pdev);
+			if (ret == -517) {
+				goto put_dwc3;
+			}
+		}
+	}
 	/* Add pm_qos with default mode intially */
 	if (mdwc->pm_qos_latency)
 		cpu_latency_qos_add_request(&mdwc->pm_qos_req_dma,
