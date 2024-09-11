@@ -1236,6 +1236,14 @@ static const struct stats_config rpm_data = {
 	.subsystem_stats_in_smem = false,
 };
 
+static const struct stats_config rpm_v2_data = {
+	.stats_offset = 0,
+	.num_records = 2,
+	.appended_stats_avail = true,
+	.dynamic_offset = true,
+	.subsystem_stats_in_smem = true,
+};
+
 /* Older RPM firmwares have the stats at a fixed offset instead */
 static const struct stats_config rpm_data_dba0 = {
 	.stats_offset = 0xdba0,
@@ -1307,6 +1315,7 @@ static const struct of_device_id qcom_stats_table[] = {
 	{ .compatible = "qcom,msm8916-rpm-stats", .data = &rpm_data_dba0 },
 	{ .compatible = "qcom,msm8974-rpm-stats", .data = &rpm_data_dba0 },
 	{ .compatible = "qcom,rpm-stats", .data = &rpm_data },
+	{ .compatible = "qcom,rpm-stats-v2", .data = &rpm_v2_data },
 	{ .compatible = "qcom,rpmh-stats", .data = &rpmh_data },
 	{ .compatible = "qcom,rpmh-stats-v2", .data = &rpmh_v2_data },
 	{ .compatible = "qcom,rpmh-stats-v3", .data = &rpmh_v3_data },
