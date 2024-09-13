@@ -52,6 +52,7 @@ description: |
         qrb2210
         qrb4210
         qru1000
+        sa7255p
         sa8155p
         sa8540p
         sa8255p
@@ -1050,6 +1051,11 @@ properties:
               - samsung,q5q
               - sony,pdx234
           - const: qcom,sm8550
+
+      - items:
+          - enum:
+              - qcom,sa7255p-ride
+          - const: qcom,sa7255p
 
       - items:
           - enum:
