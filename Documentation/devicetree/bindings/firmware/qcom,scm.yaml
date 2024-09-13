@@ -206,6 +206,7 @@ allOf:
           compatible:
             contains:
               enum:
+                - qcom,scm-sa7255p
                 - qcom,scm-sa8255p
                 - qcom,scm-sa8775p
     then:
