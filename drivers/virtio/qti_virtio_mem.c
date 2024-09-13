@@ -14,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/mmzone.h>
 #include <linux/vmstat.h>
+#include <linux/of.h>
 #include <uapi/linux/qti_virtio_mem.h>
 #include "qti_virtio_mem.h"
 
@@ -391,7 +392,49 @@ static struct notifier_block qvm_oom_nb = {
 		.priority = QVM_OOM_NOTIFY_PRIORITY,
 };
 
-static int __init qti_virtio_mem_init(void)
+static int add_initial_blocks(struct device *dev)
+{
+	u32 requested_size, size = 0;
+	int ret;
+	struct qti_virtio_mem_hint *hint, *tmp;
+	uint64_t device_block_size = virtio_mem_dev->device_block_size;
+
+	/* Optional */
+	if (of_property_read_u32(dev->of_node, "qcom,initial-movable-zone-size",
+				 &requested_size))
+		return 0;
+
+	while (size < requested_size) {
+		mutex_lock(&qvm_lock);
+		hint = qti_virtio_mem_hint_create("init-movable-zone", device_block_size);
+		mutex_unlock(&qvm_lock);
+		if (IS_ERR(hint)) {
+			ret = PTR_ERR(hint);
+			goto err;
+		}
+
+		mutex_lock(&qvm_kernel_plugged_lock);
+		list_add(&hint->kernel_plugged_list, &qvm_kernel_plugged);
+		kernel_plugged++;
+		mutex_unlock(&qvm_kernel_plugged_lock);
+
+		size += device_block_size;
+	}
+
+	dev_info(dev, "Setup Movable Zone with size %x\n", size);
+	return 0;
+err:
+	mutex_lock(&qvm_kernel_plugged_lock);
+	list_for_each_entry_safe(hint, tmp, &qvm_kernel_plugged, kernel_plugged_list) {
+		list_del(&hint->kernel_plugged_list);
+		qti_virtio_mem_hint_release(hint);
+		kernel_plugged--;
+	}
+	mutex_unlock(&qvm_kernel_plugged_lock);
+	return ret;
+}
+
+int qti_virtio_mem_init(struct platform_device *pdev)
 {
 	int ret;
 	struct device *dev;
@@ -431,7 +474,13 @@ static int __init qti_virtio_mem_init(void)
 		goto err_dev_create;
 	}
 
+	ret = add_initial_blocks(&pdev->dev);
+	if (ret)
+		goto err_oom_notifier;
+
 	return 0;
+err_oom_notifier:
+	unregister_oom_notifier(&qvm_oom_nb);
 err_dev_create:
 	cdev_del(&qvm_char_dev);
 err_cdev_add:
@@ -441,16 +490,19 @@ err_class_create:
 err_chrdev_region:
 	return ret;
 }
-module_init(qti_virtio_mem_init);
 
-static void __exit qti_virtio_mem_exit(void)
+void qti_virtio_mem_exit(struct platform_device *pdev)
 {
-	WARN(!list_empty(&qvm_list), "Unloading module with nonzero hint objects\n");
+	struct device *dev;
+
+	WARN(!list_empty(&qvm_list), "Unloading driver with nonzero hint objects\n");
 
 	unregister_oom_notifier(&qvm_oom_nb);
+	dev = class_find_device_by_devt(qvm_class, qvm_dev_no);
+	if (dev)
+		sysfs_remove_group(&dev->kobj, &dev_group);
 	device_destroy(qvm_class, qvm_dev_no);
 	cdev_del(&qvm_char_dev);
 	class_destroy(qvm_class);
 	unregister_chrdev_region(qvm_dev_no, QTI_VIRTIO_MEM_MAX_DEVS);
 }
-module_exit(qti_virtio_mem_exit);

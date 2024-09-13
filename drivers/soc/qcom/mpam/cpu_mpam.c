@@ -575,7 +575,14 @@ static int cpu_mpam_probe(struct platform_device *pdev)
 	struct resource *res;
 	struct device_node *node;
 	const char *msc_name_dt;
+	struct mpam_ver_ret mpam_version;
 	struct mpam_read_cache_portion mpam_param;
+
+	ret = qcom_mpam_get_version(&mpam_version);
+	if (ret || mpam_version.version < 0x10000) {
+		dev_err(&pdev->dev, "CPU MPAM is not available\n");
+		return -ENODEV;
+	}
 
 	mpam_msc_cnt = of_get_child_count(pdev->dev.of_node);
 	if (!mpam_msc_cnt) {

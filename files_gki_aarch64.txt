@@ -650,6 +650,7 @@ drivers/android/binder_pick_impl.c
 drivers/android/binder_pick_impl.h
 drivers/android/binder_trace.h
 drivers/android/binderfs.c
+drivers/android/dbitmap.h
 drivers/android/debug_kinfo.c
 drivers/android/debug_kinfo.h
 drivers/android/vendor_hooks.c
@@ -708,7 +709,10 @@ drivers/base/regmap/regcache.c
 drivers/base/regmap/regmap-debugfs.c
 drivers/base/regmap/regmap-i2c.c
 drivers/base/regmap/regmap-irq.c
+drivers/base/regmap/regmap-kunit.c
 drivers/base/regmap/regmap-mmio.c
+drivers/base/regmap/regmap-ram.c
+drivers/base/regmap/regmap-raw-ram.c
 drivers/base/regmap/regmap-spi.c
 drivers/base/regmap/regmap-spmi.c
 drivers/base/regmap/regmap.c
@@ -764,12 +768,14 @@ drivers/clk/clk-fixed-rate.c
 drivers/clk/clk-fractional-divider.c
 drivers/clk/clk-fractional-divider.h
 drivers/clk/clk-gate.c
+drivers/clk/clk-gate_test.c
 drivers/clk/clk-gpio.c
 drivers/clk/clk-multiplier.c
 drivers/clk/clk-mux.c
 drivers/clk/clk-scpi.c
 drivers/clk/clk.c
 drivers/clk/clk.h
+drivers/clk/clk_test.c
 drivers/clk/clkdev.c
 drivers/clk/hisilicon/clk-hi3519.c
 drivers/clk/hisilicon/clk-hi3559a.c
@@ -1116,6 +1122,7 @@ drivers/hid/hid-steam.c
 drivers/hid/hid-uclogic-core.c
 drivers/hid/hid-uclogic-params.c
 drivers/hid/hid-uclogic-params.h
+drivers/hid/hid-uclogic-rdesc-test.c
 drivers/hid/hid-uclogic-rdesc.c
 drivers/hid/hid-uclogic-rdesc.h
 drivers/hid/hid-wiimote-core.c
@@ -1148,6 +1155,7 @@ drivers/iio/industrialio-core.c
 drivers/iio/industrialio-event.c
 drivers/iio/industrialio-trigger.c
 drivers/iio/inkern.c
+drivers/iio/test/iio-test-format.c
 drivers/input/evdev.c
 drivers/input/ff-core.c
 drivers/input/ff-memless.c
@@ -1166,6 +1174,7 @@ drivers/input/misc/uinput.c
 drivers/input/serio/libps2.c
 drivers/input/serio/serio.c
 drivers/input/serio/serport.c
+drivers/input/tests/input_test.c
 drivers/input/touchscreen.c
 drivers/input/vivaldi-fmap.c
 drivers/interconnect/bulk.c
@@ -1651,6 +1660,7 @@ drivers/rtc/class.c
 drivers/rtc/dev.c
 drivers/rtc/interface.c
 drivers/rtc/lib.c
+drivers/rtc/lib_test.c
 drivers/rtc/nvmem.c
 drivers/rtc/proc.c
 drivers/rtc/rtc-core.h
@@ -2128,6 +2138,7 @@ fs/ext4/hash.c
 fs/ext4/ialloc.c
 fs/ext4/indirect.c
 fs/ext4/inline.c
+fs/ext4/inode-test.c
 fs/ext4/inode.c
 fs/ext4/ioctl.c
 fs/ext4/mballoc.c
@@ -2183,6 +2194,7 @@ fs/f2fs/xattr.h
 fs/fat/cache.c
 fs/fat/dir.c
 fs/fat/fat.h
+fs/fat/fat_test.c
 fs/fat/fatent.c
 fs/fat/file.c
 fs/fat/inode.c
@@ -4467,6 +4479,7 @@ include/trace/hooks/fault.h
 include/trace/hooks/fips140.h
 include/trace/hooks/fpsimd.h
 include/trace/hooks/fs.h
+include/trace/hooks/fsnotify.h
 include/trace/hooks/ftrace_dump.h
 include/trace/hooks/fuse.h
 include/trace/hooks/futex.h
@@ -4476,11 +4489,13 @@ include/trace/hooks/gzvm.h
 include/trace/hooks/hung_task.h
 include/trace/hooks/iommu.h
 include/trace/hooks/logbuf.h
+include/trace/hooks/lz4_decompress.h
 include/trace/hooks/madvise.h
 include/trace/hooks/mm.h
 include/trace/hooks/mmc.h
 include/trace/hooks/mpam.h
 include/trace/hooks/net.h
+include/trace/hooks/perf.h
 include/trace/hooks/power.h
 include/trace/hooks/preemptirq.h
 include/trace/hooks/printk.h
@@ -5393,6 +5408,7 @@ kernel/time/tick-oneshot.c
 kernel/time/tick-sched.c
 kernel/time/tick-sched.h
 kernel/time/time.c
+kernel/time/time_test.c
 kernel/time/timeconv.c
 kernel/time/timecounter.c
 kernel/time/timekeeping.c
@@ -5582,6 +5598,8 @@ lib/kunit/debugfs.h
 lib/kunit/executor.c
 lib/kunit/hooks-impl.h
 lib/kunit/hooks.c
+lib/kunit/kunit-example-test.c
+lib/kunit/kunit-test.c
 lib/kunit/resource.c
 lib/kunit/static_stub.c
 lib/kunit/string-stream.c
@@ -5788,6 +5806,7 @@ mm/mmu_notifier.c
 mm/mmzone.c
 mm/mprotect.c
 mm/mremap.c
+mm/mseal.c
 mm/msync.c
 mm/oom_kill.c
 mm/page-writeback.c
@@ -5949,6 +5968,7 @@ net/core/datagram.c
 net/core/dev.c
 net/core/dev.h
 net/core/dev_addr_lists.c
+net/core/dev_addr_lists_test.c
 net/core/dev_ioctl.c
 net/core/dst.c
 net/core/dst_cache.c
@@ -6672,7 +6692,9 @@ sound/soc/soc-jack.c
 sound/soc/soc-link.c
 sound/soc/soc-ops.c
 sound/soc/soc-pcm.c
+sound/soc/soc-topology-test.c
 sound/soc/soc-topology.c
+sound/soc/soc-utils-test.c
 sound/soc/soc-utils.c
 sound/sound_core.c
 sound/usb/card.c

@@ -197,6 +197,16 @@ config QCOM_LLCC_PERFMON
 	  interface. sysfs interface is used to configure and dump the LLCC
 	  performance events.
 
+config QCOM_LLCC_HEURISTICS
+	tristate "Qualcomm Technologies, Inc. LLCC HEURISTICS Driver"
+	depends on QCOM_LLCC
+	help
+	  This option enables driver for LLCC Heuristics support to pass the
+	  parameter input to heuristics algorithm parameters to control CPU
+	  HEURISTICS SCID. Parameters taken from DTB and can determine feature
+	  enablement from DTB itself. Also Provide the capability to disable,
+	  enable HERISTIC SCID functionality from SYSFS.
+
 config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
@@ -431,6 +441,15 @@ config QSEE_IPC_IRQ_BRIDGE
 	  Qualcomm Technologies, Inc. Secure Execution Environment(QSEE) to
 	  userspace. The interrupt will be propagated through a character device
 	  that userspace clients can poll on.
+
+config QCOM_GLINK
+	tristate "GLINK Probe Helper"
+	depends on RPMSG_QCOM_GLINK_SMEM
+	help
+	  This enables the GLINK Probe module. This is designed to set up
+	  other edges in the system. It will initialize all the transports for
+	  all the edges present in the device.
+	  Say M if you want to enable this module.
 
 config QTI_SYS_PM_VX
 	tristate "Qualcomm Technologies, Inc. (QTI) System PM Violators driver"

@@ -17,6 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/suspend.h>
 
 #include "coresight-priv.h"
 #include "coresight-common.h"
@@ -4454,6 +4455,51 @@ static int static_tpdm_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static int tpdm_suspend(struct device *dev)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev);
+	struct coresight_device	*csdev = drvdata->csdev;
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		do {
+			coresight_disable(csdev);
+		} while (atomic_read(&csdev->refcnt));
+	}
+
+	return 0;
+}
+#else
+static int tpdm_suspend(struct device *dev)
+{
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_HIBERNATION
+static int tpdm_freeze(struct device *dev)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev);
+	struct coresight_device	*csdev = drvdata->csdev;
+
+	do {
+		coresight_disable(csdev);
+	} while (atomic_read(&csdev->refcnt));
+
+	return 0;
+}
+#else
+static int tpdm_freeze(struct device *dev)
+{
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops tpdm_dev_pm_ops = {
+	.suspend = tpdm_suspend,
+	.freeze  = tpdm_freeze,
+};
+
 static struct amba_id tpdm_ids[] = {
 	{
 		.id     = 0x0003b968,
@@ -4469,6 +4515,7 @@ static struct amba_driver tpdm_driver = {
 		.name   = "coresight-tpdm",
 		.owner	= THIS_MODULE,
 		.suppress_bind_attrs = true,
+		.pm	= pm_ptr(&tpdm_dev_pm_ops),
 	},
 	.probe          = tpdm_probe,
 	.remove		= tpdm_remove,

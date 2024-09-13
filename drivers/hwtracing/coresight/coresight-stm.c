@@ -31,10 +31,12 @@
 #include <linux/perf_event.h>
 #include <linux/pm_runtime.h>
 #include <linux/stm.h>
+#include <linux/suspend.h>
 
 #include "coresight-priv.h"
 #include "coresight-trace-id.h"
 #include "coresight-common.h"
+#include "../stm/stm.h"
 
 #define STMDMASTARTR			0xc04
 #define STMDMASTOPR			0xc08
@@ -970,8 +972,115 @@ static int stm_runtime_resume(struct device *dev)
 }
 #endif
 
+#ifdef CONFIG_DEEPSLEEP
+static int stm_suspend(struct device *dev)
+{
+	struct stm_drvdata *drvdata = dev_get_drvdata(dev);
+	struct coresight_device *csdev = drvdata->csdev;
+	struct stm_device *stm_dev;
+	struct list_head *head, *p;
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		do {
+			coresight_disable(csdev);
+		} while (atomic_read(&csdev->refcnt));
+
+		stm_dev = drvdata->stm.stm;
+		if (stm_dev) {
+			head = &stm_dev->link_list;
+			list_for_each(p, head)
+				pm_runtime_put_autosuspend(&stm_dev->dev);
+		}
+	}
+
+	return 0;
+}
+
+static int stm_resume(struct device *dev)
+{
+	struct stm_drvdata *drvdata = dev_get_drvdata(dev);
+	struct stm_device *stm_dev;
+	struct list_head *head, *p;
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		stm_dev = drvdata->stm.stm;
+		if (stm_dev) {
+			head = &stm_dev->link_list;
+			list_for_each(p, head)
+				pm_runtime_get(&stm_dev->dev);
+		}
+	}
+
+	return 0;
+}
+#else
+static int stm_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int stm_resume(struct device *dev)
+{
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_HIBERNATION
+static int stm_freeze(struct device *dev)
+{
+	struct stm_drvdata *drvdata = dev_get_drvdata(dev);
+	struct coresight_device *csdev = drvdata->csdev;
+	struct stm_device *stm_dev;
+	struct list_head *head, *p;
+
+	do {
+		coresight_disable(csdev);
+	} while (atomic_read(&csdev->refcnt));
+
+	stm_dev = drvdata->stm.stm;
+	if (stm_dev) {
+		head = &stm_dev->link_list;
+		list_for_each(p, head)
+			pm_runtime_put_autosuspend(&stm_dev->dev);
+	}
+
+	return 0;
+}
+
+static int stm_restore(struct device *dev)
+{
+	struct stm_drvdata *drvdata = dev_get_drvdata(dev);
+	struct stm_device *stm_dev;
+	struct list_head *head, *p;
+
+	stm_dev = drvdata->stm.stm;
+	if (stm_dev) {
+		head = &stm_dev->link_list;
+		list_for_each(p, head)
+			pm_runtime_get(&stm_dev->dev);
+	}
+
+	return 0;
+}
+#else
+static int stm_freeze(struct device *dev)
+{
+	return 0;
+}
+
+static int stm_restore(struct device *dev)
+{
+	return 0;
+}
+
+#endif
+
 static const struct dev_pm_ops stm_dev_pm_ops = {
 	SET_RUNTIME_PM_OPS(stm_runtime_suspend, stm_runtime_resume, NULL)
+	.suspend = stm_suspend,
+	.resume  = stm_resume,
+	.freeze  = stm_freeze,
+	.restore = stm_restore,
 };
 
 static const struct amba_id stm_ids[] = {

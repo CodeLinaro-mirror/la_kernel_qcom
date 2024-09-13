@@ -516,10 +516,39 @@ static const struct reg_info gpi_debug_ch_cntxt[] = {
 
 static const struct reg_info gpi_debug_regs[] = {
 	{ "DEBUG_PC", GPI_DEBUG_PC_FOR_DEBUG },
+	{ "DEBUG_BUSY", GPI_DEBUG_BUSY_REG },
+	{ "SW_RF_0", GPI_DEBUG_SW_RF_n_READ(0) },
+	{ "SW_RF_1", GPI_DEBUG_SW_RF_n_READ(1) },
+	{ "SW_RF_2", GPI_DEBUG_SW_RF_n_READ(2) },
+	{ "SW_RF_3", GPI_DEBUG_SW_RF_n_READ(3) },
+	{ "SW_RF_4", GPI_DEBUG_SW_RF_n_READ(4) },
+	{ "SW_RF_5", GPI_DEBUG_SW_RF_n_READ(5) },
+	{ "SW_RF_6", GPI_DEBUG_SW_RF_n_READ(6) },
+	{ "SW_RF_7", GPI_DEBUG_SW_RF_n_READ(7) },
+	{ "SW_RF_8", GPI_DEBUG_SW_RF_n_READ(8) },
+	{ "SW_RF_9", GPI_DEBUG_SW_RF_n_READ(9) },
 	{ "SW_RF_10", GPI_DEBUG_SW_RF_n_READ(10) },
 	{ "SW_RF_11", GPI_DEBUG_SW_RF_n_READ(11) },
 	{ "SW_RF_12", GPI_DEBUG_SW_RF_n_READ(12) },
+	{ "SW_RF_13", GPI_DEBUG_SW_RF_n_READ(13) },
+	{ "SW_RF_14", GPI_DEBUG_SW_RF_n_READ(14) },
+	{ "SW_RF_15", GPI_DEBUG_SW_RF_n_READ(15) },
+	{ "SW_RF_16", GPI_DEBUG_SW_RF_n_READ(16) },
+	{ "SW_RF_17", GPI_DEBUG_SW_RF_n_READ(17) },
+	{ "SW_RF_18", GPI_DEBUG_SW_RF_n_READ(18) },
+	{ "SW_RF_19", GPI_DEBUG_SW_RF_n_READ(19) },
+	{ "SW_RF_20", GPI_DEBUG_SW_RF_n_READ(20) },
 	{ "SW_RF_21", GPI_DEBUG_SW_RF_n_READ(21) },
+	{ "SW_RF_22", GPI_DEBUG_SW_RF_n_READ(22) },
+	{ "SW_RF_23", GPI_DEBUG_SW_RF_n_READ(23) },
+	{ "SW_RF_24", GPI_DEBUG_SW_RF_n_READ(24) },
+	{ "SW_RF_25", GPI_DEBUG_SW_RF_n_READ(25) },
+	{ "SW_RF_26", GPI_DEBUG_SW_RF_n_READ(26) },
+	{ "SW_RF_27", GPI_DEBUG_SW_RF_n_READ(27) },
+	{ "SW_RF_28", GPI_DEBUG_SW_RF_n_READ(28) },
+	{ "SW_RF_29", GPI_DEBUG_SW_RF_n_READ(29) },
+	{ "SW_RF_30", GPI_DEBUG_SW_RF_n_READ(30) },
+	{ "SW_RF_31", GPI_DEBUG_SW_RF_n_READ(31) },
 	{ NULL },
 };
 
@@ -798,6 +827,14 @@ static void gpi_dump_cntxt_regs(struct gpii *gpii)
 		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_CH_%d_RE_FETCH_READ_PTRg_val:0x%x\n",
 			 gpii->gpii_id, chan, reg_val);
 	}
+
+	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
+		offset = GPI_GPII_MAP_EE_n_CH_k_VP_TABLE(gpii->gpii_id,
+							 gpii->gpii_chan[chan].chid);
+		reg_val = readl_relaxed(gpii->regs + offset);
+		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_CH_%d_VP_TABLE_val:0x%x\n",
+			 gpii->gpii_id, chan, reg_val);
+	}
 }
 
 static void gpi_dump_debug_reg(struct gpii *gpii)
@@ -824,6 +861,12 @@ static void gpi_dump_debug_reg(struct gpii *gpii)
 		{ "IEOB_IRQ_MSK", GPI_GPII_n_CNTXT_SRC_IEOB_IRQ_MSK_OFFS
 					(gpii->gpii_id) },
 		{ "GLOB_IRQ", GPI_GPII_n_CNTXT_GLOB_IRQ_STTS_OFFS
+					(gpii->gpii_id) },
+		{ "GLOB_IRQ_EN", GPI_GPII_n_CNTXT_GLOB_IRQ_EN_OFFS
+					(gpii->gpii_id) },
+		{ "GPII_IRQ_STTS", GPI_GPII_n_CNTXT_GPII_IRQ_STTS_OFFS
+					(gpii->gpii_id) },
+		{ "GPII_IRQ_EN", GPI_GPII_n_CNTXT_GPII_IRQ_EN_OFFS
 					(gpii->gpii_id) },
 		{ NULL },
 	};

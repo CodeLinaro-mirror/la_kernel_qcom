@@ -49,7 +49,7 @@
 #define QCOM_ICE_REG_HWKM_BANK0_BBAC_4			0x5010
 
 /* QCOM ICE HWKM BIST vals */
-#define QCOM_ICE_HWKM_BIST_DONE_V1_VAL		0x11
+#define QCOM_ICE_HWKM_BIST_DONE_V1_VAL		0x14007
 #define QCOM_ICE_HWKM_BIST_DONE_V2_VAL		0x287
 
 /* QCOM ICE HWKM version*/
@@ -336,7 +336,7 @@ static int translate_hwkm_slot(struct qcom_ice *ice, int slot)
 	return (ice->hwkm_version == 1) ? slot : ((slot * 2) + offset);
 }
 
-#if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI)
+#if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI) || IS_ENABLED(CONFIG_MMC_CRYPTO_QTI)
 static int qcom_ice_program_wrapped_key(struct qcom_ice *ice,
 					const struct blk_crypto_key *key,
 					u8 data_unit_size, int slot)

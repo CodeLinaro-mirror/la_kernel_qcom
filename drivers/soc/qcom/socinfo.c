@@ -135,6 +135,25 @@ static const char * const hw_platform_feature_code[] = {
 	[SOCINFO_FC_AH] = "AH",
 };
 
+static const char * const hw_platform_wfeature_code[] = {
+	[SOCINFO_FC_W0 - SOCINFO_FC_W0] = "W0",
+	[SOCINFO_FC_W1 - SOCINFO_FC_W0] = "W1",
+	[SOCINFO_FC_W2 - SOCINFO_FC_W0] = "W2",
+	[SOCINFO_FC_W3 - SOCINFO_FC_W0] = "W3",
+	[SOCINFO_FC_W4 - SOCINFO_FC_W0] = "W4",
+	[SOCINFO_FC_W5 - SOCINFO_FC_W0] = "W5",
+	[SOCINFO_FC_W6 - SOCINFO_FC_W0] = "W6",
+	[SOCINFO_FC_W7 - SOCINFO_FC_W0] = "W7",
+	[SOCINFO_FC_W8 - SOCINFO_FC_W0] = "W8",
+	[SOCINFO_FC_W9 - SOCINFO_FC_W0] = "W9",
+	[SOCINFO_FC_WA - SOCINFO_FC_W0] = "WA",
+	[SOCINFO_FC_WB - SOCINFO_FC_W0] = "WB",
+	[SOCINFO_FC_WC - SOCINFO_FC_W0] = "WC",
+	[SOCINFO_FC_WD - SOCINFO_FC_W0] = "WD",
+	[SOCINFO_FC_WE - SOCINFO_FC_W0] = "WE",
+	[SOCINFO_FC_WF - SOCINFO_FC_W0] = "WF",
+};
+
 static const char * const hw_platform_ifeature_code[] = {
 	[SOCINFO_FC_Y0 - SOCINFO_FC_Y0] = "Y0",
 	[SOCINFO_FC_Y1 - SOCINFO_FC_Y0] = "Y1",
@@ -274,7 +293,6 @@ struct socinfo_params {
 	u32 boot_cluster;
 	u32 boot_core;
 	u32 raw_package_type;
-	u32 nsubpart_feat_array_offset;
 };
 
 struct smem_image_version {
@@ -754,6 +772,8 @@ static const char *socinfo_get_feature_code_mapping(void)
 
 	if (id > SOCINFO_FC_UNKNOWN && id < SOCINFO_FC_EXT_RESERVE)
 		return hw_platform_feature_code[id];
+	else if (id >= SOCINFO_FC_W0 && id < SOCINFO_FC_SUBPART_RESERVE)
+		return hw_platform_wfeature_code[id - SOCINFO_FC_W0];
 	else if (id >= SOCINFO_FC_Y0 && id < SOCINFO_FC_INT_RESERVE)
 		return hw_platform_ifeature_code[id - SOCINFO_FC_Y0];
 
@@ -872,29 +892,47 @@ uint32_t socinfo_get_partinfo_vulkan_id(unsigned int part_id)
 }
 EXPORT_SYMBOL(socinfo_get_partinfo_vulkan_id);
 
-uint32_t
-socinfo_get_cluster_info(enum subset_cluster_type cluster)
+uint32_t socinfo_get_cluster_info(void)
 {
-	uint32_t sub_cluster, num_cluster, offset;
-	void *cluster_val;
+	uint32_t cluster_info = 0, num_cluster, offset;
+	uint32_t num_cpu_offset, shift = 0;
+	void *tmp_cluster_val;
 	void *info = socinfo;
-
-	if (cluster >= NUM_CLUSTERS_MAX) {
-		pr_err("Bad cluster\n");
-		return -EINVAL;
-	}
+	void *cpuinfo = socinfo;
+	int i;
 
 	num_cluster = socinfo_get_num_clusters();
 	offset = socinfo_get_ncluster_array_offset();
-
 	if (!num_cluster || !offset)
-		return -EINVAL;
+		return 0;
 
 	info += offset;
-	cluster_val = info + (sizeof(uint32_t) * cluster);
-	sub_cluster = get_unaligned_le32(cluster_val);
+	if (socinfo_format >= SOCINFO_VERSION(0, 22)) {
+		num_cpu_offset = le32_to_cpu(socinfo->ncluster_cores_array_offset);
+		if (!num_cpu_offset)
+			return 0;
 
-	return sub_cluster;
+		cpuinfo += num_cpu_offset;
+		for (i = 0; i < num_cluster; i++) {
+			void *tmp_cpu_val;
+			int cluster_val, num_cpu_val;
+
+			tmp_cluster_val = info + (sizeof(uint32_t) * i);
+			cluster_val = get_unaligned_le32(tmp_cluster_val);
+			tmp_cpu_val = cpuinfo + (sizeof(uint32_t) * i);
+			num_cpu_val = get_unaligned_le32(tmp_cpu_val);
+			cluster_info |= (cluster_val & ((1 << num_cpu_val) - 1)) << shift;
+			shift += num_cpu_val;
+		}
+	} else if (num_cluster == 1) {
+		tmp_cluster_val = info + sizeof(uint32_t) * (num_cluster - 1);
+		cluster_info = get_unaligned_le32(tmp_cluster_val);
+	} else {
+		pr_err("Socinfo version < 22 and num_cluster > 1\n");
+		return 0;
+	}
+
+	return cluster_info;
 }
 EXPORT_SYMBOL(socinfo_get_cluster_info);
 
@@ -1115,9 +1153,7 @@ msm_get_subset_cores(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
 {
-	uint32_t sub_cluster = socinfo_get_cluster_info(CLUSTER_CPUSS);
-
-	return scnprintf(buf, PAGE_SIZE, "%x\n", sub_cluster);
+	return scnprintf(buf, PAGE_SIZE, "%x\n", socinfo_get_cluster_info());
 }
 ATTR_DEFINE(subset_cores);
 

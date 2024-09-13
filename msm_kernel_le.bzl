@@ -40,7 +40,8 @@ def _define_build_config(
       msm_target: name of target platform (e.g. "kalama")
       variant: variant of kernel to build (e.g. "gki")
     """
-
+    earlycon_param = "={}".format(boot_image_opts.earlycon_addr) if boot_image_opts.earlycon_addr != None else ""
+    earlycon_param = "earlycon" + earlycon_param
     gen_config_command = """
       cat << 'EOF' > "$@"
 KERNEL_DIR="msm-kernel"
@@ -59,7 +60,7 @@ BUILD_INITRAMFS=1
 [ -z "$${DT_OVERLAY_SUPPORT}" ] && DT_OVERLAY_SUPPORT=1
 
 if [ "$${KERNEL_CMDLINE_CONSOLE_AUTO}" != "0" ]; then
-        KERNEL_VENDOR_CMDLINE+=' console=ttyMSM0,115200n8 earlycon=qcom_geni,0x00a9C000 qcom_geni_serial.con_enabled=1 '
+        KERNEL_VENDOR_CMDLINE+=' console=ttyMSM0,115200n8 %s qcom_geni_serial.con_enabled=1 '
 fi
 EOF
     """ % (
@@ -69,6 +70,7 @@ EOF
         boot_image_opts.boot_image_header_version,
         boot_image_opts.base_address,
         boot_image_opts.page_size,
+        earlycon_param,
     )
 
     # Generate the build config
@@ -129,6 +131,12 @@ def _define_kernel_build(
     out_list.remove("Image.lz4")
     out_list.remove("Image.gz")
 
+    out_list.extend([
+        "scripts/sign-file",
+        "certs/signing_key.pem",
+        "certs/signing_key.x509",
+    ])
+
     kernel_build(
         name = target,
         module_outs = in_tree_module_list,
@@ -175,6 +183,9 @@ def _define_kernel_dist(target, msm_target, variant):
         ":{}_images".format(target),
         ":{}_merged_kernel_uapi_headers".format(target),
         ":{}_build_config".format(target),
+        ":{}_headers".format(target),
+        ":signing_key",
+        ":verity_key",
     ]
 
     # For allyes target, keeping perf super image as common for both debug & perf variants.
@@ -199,6 +210,7 @@ def _define_kernel_dist(target, msm_target, variant):
             "**/Image": "755",
             "**/*.dtb*": "755",
             "**/LinuxLoader*": "755",
+            "**/sign-file": "755",
             "**/*": "644",
         },
         log = "info",

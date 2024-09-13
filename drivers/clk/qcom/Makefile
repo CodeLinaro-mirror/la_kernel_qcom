@@ -109,6 +109,7 @@ obj-$(CONFIG_SDW_GCC_MONACO) += gcc-monaco.o
 obj-$(CONFIG_SDW_GPUCC_MONACO) += gpucc-monaco.o
 obj-$(CONFIG_SDX_GCC_55) += gcc-sdx55.o
 obj-$(CONFIG_SDX_GCC_65) += gcc-sdx65.o
+obj-$(CONFIG_SDX_DEBUGCC_75) += debugcc-sdx75.o
 obj-$(CONFIG_SDX_GCC_75) += gcc-sdx75.o
 obj-$(CONFIG_SM_CAMCC_4450) += camcc-sm4450.o
 obj-$(CONFIG_SM_CAMCC_6350) += camcc-sm6350.o

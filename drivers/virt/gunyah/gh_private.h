@@ -65,5 +65,6 @@ long gh_vm_configure(u16 auth_mech, u64 image_offset,
 			u32 pas_id, struct gh_vm *vm);
 long gh_vm_init(const char *fw_name, struct gh_vm *vm);
 void gh_uevent_notify_change(unsigned int type, struct gh_vm *vm);
+bool gh_firmware_is_legacy(void);
 
 #endif /* _GH_PRIVATE_H */

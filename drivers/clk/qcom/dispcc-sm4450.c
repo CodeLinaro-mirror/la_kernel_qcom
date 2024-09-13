@@ -55,7 +55,7 @@ static const struct alpha_pll_config disp_cc_pll0_config = {
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00182261,
 	.config_ctl_hi1_val = 0x32aa299c,
-	.user_ctl_val = 0x00000000,
+	.user_ctl_val = 0x00000001,
 	.user_ctl_hi_val = 0x00000805,
 };
 
@@ -276,12 +276,13 @@ static struct clk_rcg2 disp_cc_mdss_mdp_clk_src = {
 	.hid_width = 5,
 	.parent_map = disp_cc_parent_map_1,
 	.freq_tbl = ftbl_disp_cc_mdss_mdp_clk_src,
-	.clkr.hw.init = &(const struct clk_init_data) {
+	.enable_safe_config = true,
+	.clkr.hw.init = &(const struct clk_init_data){
 		.name = "disp_cc_mdss_mdp_clk_src",
 		.parent_data = disp_cc_parent_data_1,
 		.num_parents = ARRAY_SIZE(disp_cc_parent_data_1),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
 	},
 	.clkr.vdd_data = {
 		.vdd_classes = disp_cc_sm4450_regulators,

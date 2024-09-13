@@ -494,7 +494,7 @@ static const struct llcc_slice_config sun_data[] = {
 						0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 33},
 	{LLCC_CAMSRTRF, 21, 6144, 1, 1, 0xFFFFFFFF, 0, 0, 0, 0, 0, 0,
 						0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 33},
-	{LLCC_CPUSSMPAM, 6, 2048, 1, 1, 0xFFFFFFFF, 0, 0, 0, 0, 0, 0,
+	{LLCC_CPUSSMPAM, 6, 2048, 1, 1, 0xFFFFFFFF, 0, 0, 0, 0, 0, 1,
 						1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
@@ -635,6 +635,14 @@ static const u32 llcc_v6_reg_offset[] = {
 	[LLCC_TRP_WRS_CACHEABLE_EN]	= 0x00042088,
 };
 
+static const struct llcc_slice_config sdxpinn_data[] = {
+	{LLCC_MDMHPGRW,     25,  128, 1, 1,      0xC, 0x0, 0, 0x0, 0, 0, 0, 0},
+	{LLCC_MODHW,        26,  128, 1, 1,      0xC, 0x0, 0, 0x0, 0, 0, 0, 0},
+	{LLCC_MODPE,        29,   64, 1, 1,      0xC, 0x0, 0, 0x0, 0, 0, 0, 0},
+	{LLCC_APTCM,        30,  128, 3, 1,      0x0, 0x1, 1, 0x0, 1, 0, 0, 0},
+	{LLCC_MDMCLAD2,     20,  128, 1, 1,      0x3, 0x0, 0, 0x0, 0, 0, 0, 0},
+};
+
 static const struct qcom_llcc_config sc7180_cfg = {
 	.sct_data	= sc7180_data,
 	.size		= ARRAY_SIZE(sc7180_data),
@@ -754,6 +762,13 @@ static const struct qcom_llcc_config x1e80100_cfg = {
 		.need_llcc_cfg	= true,
 		.reg_offset	= llcc_v2_1_reg_offset,
 		.edac_reg_offset = &llcc_v2_1_edac_reg_offset,
+};
+
+static const struct qcom_llcc_config sdxpinn_cfg = {
+	.sct_data   = sdxpinn_data,
+	.size       = ARRAY_SIZE(sdxpinn_data),
+	.need_llcc_cfg  = true,
+	.reg_offset = llcc_v2_1_reg_offset,
 };
 
 static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
@@ -1630,6 +1645,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,pineapple-llcc", .data = &pineapple_cfg },
 	{ .compatible = "qcom,sun-llcc", .data = &sun_cfg },
 	{ .compatible = "qcom,x1e80100-llcc", .data = &x1e80100_cfg },
+	{ .compatible = "qcom,sdxpinn-llcc", .data = &sdxpinn_cfg },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_llcc_of_match);

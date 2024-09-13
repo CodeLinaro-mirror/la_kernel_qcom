@@ -929,7 +929,9 @@ int rpmh_rsc_write_ctrl_data(struct rsc_drv *drv, const struct tcs_request *msg,
 	int ret;
 
 	if (!msg->num_cmds) {
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 		ipc_log_string(drv->ipc_log_ctx, "Empty num_cmds, returning");
+#endif
 		return 0;
 	}
 

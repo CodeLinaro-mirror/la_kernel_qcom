@@ -23,6 +23,7 @@ static const struct msm_pinctrl_soc_data parrot_tlmm = {
 	.ngpios = 142,
 	.wakeirq_map = parrot_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(parrot_pdc_map),
+	.egpio_func = 11,
 };
 
 static const struct msm_pinctrl_soc_data parrot_vm_tlmm = {
@@ -33,6 +34,7 @@ static const struct msm_pinctrl_soc_data parrot_vm_tlmm = {
 	.groups = parrot_groups,
 	.ngroups = ARRAY_SIZE(parrot_groups),
 	.ngpios = 142,
+	.egpio_func = 11,
 };
 
 static int parrot_tlmm_probe(struct platform_device *pdev)

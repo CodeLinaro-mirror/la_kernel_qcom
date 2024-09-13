@@ -30,10 +30,8 @@ cpu_phys_log_map.ko
 qcom_cpu_vendor_hooks.ko
 pinctrl-monaco.ko
 qcom_iommu_util.ko
-ufs-qcom.ko
 qcom-pdc.ko
 socinfo.ko
-ufshcd-crypto-qti.ko
 smem.ko
 rtc-pm8xxx.ko
 rpm-smd-regulator.ko
@@ -61,3 +59,4 @@ qnoc-qos-rpm.ko
 spmi-pmic-arb.ko
 regmap-spmi.ko
 nvmem_qcom-spmi-sdam.ko
+cqhci-crypto-qti.ko

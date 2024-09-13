@@ -28,7 +28,6 @@ struct qcom_q6v5 {
 	int ready_irq;
 	int handover_irq;
 	int stop_irq;
-	int active_state_ack_irq;
 
 	struct rproc_subdev *ssr_subdev;
 
@@ -38,7 +37,6 @@ struct qcom_q6v5 {
 
 	struct completion start_done;
 	struct completion stop_done;
-	struct completion running_ack;
 
 	int crash_reason;
 	int crash_stack;

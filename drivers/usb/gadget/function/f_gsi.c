@@ -1098,6 +1098,8 @@ static void ipa_work_handler(struct work_struct *w)
 			log_event_dbg("%s: get = %d", __func__,
 				atomic_read(&gad_dev->power.usage_count));
 
+			msm_ep_set_mode(d_port->in_ep, USB_EP_GSI);
+			msm_ep_set_mode(d_port->out_ep, USB_EP_GSI);
 			ret = ipa_connect_channels(d_port);
 			if (ret) {
 				log_event_err("%s: ipa_connect_channels failed\n",
@@ -3544,6 +3546,9 @@ static struct config_item_type gsi_func_rndis_type = {
 
 static void gsi_inst_clean(struct gsi_opts *opts)
 {
+	if (!opts)
+		return;
+
 	if (opts->gsi->c_port.cdev.dev) {
 		struct cdev *cdev = &opts->gsi->c_port.cdev;
 		int minor = MINOR(cdev->dev);
@@ -3626,7 +3631,7 @@ static void gsi_free_inst(struct usb_function_instance *f)
 	enum ipa_usb_teth_prot prot_id;
 	struct f_gsi *gsi;
 
-	if (!opts->gsi)
+	if (!opts || !opts->gsi)
 		return;
 
 	prot_id = opts->gsi->prot_id;

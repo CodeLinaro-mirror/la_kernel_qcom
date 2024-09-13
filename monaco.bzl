@@ -24,8 +24,6 @@ def define_monaco():
         "drivers/dma/qcom/bam_dma.ko",
         "drivers/dma/qcom/msm_gpi.ko",
         "drivers/firmware/qcom-scm.ko",
-        "drivers/firmware/qcom/si_core/mem_object.ko",
-        "drivers/firmware/qcom/si_core/si_core_module.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
         "drivers/hwtracing/coresight/coresight.ko",
         "drivers/hwtracing/coresight/coresight-csr.ko",
@@ -125,7 +123,6 @@ def define_monaco():
         "drivers/soc/qcom/qcom_cpu_vendor_hooks.ko",
         "drivers/soc/qcom/qcom_ice.ko",
         "drivers/soc/qcom/qcom_logbuf_boot_log.ko",
-        "drivers/soc/qcom/qcom_logbuf_vendor_hooks.ko",
         "drivers/soc/qcom/qcom_ramdump.ko",
         "drivers/soc/qcom/qcom_soc_wdt.ko",
         "drivers/soc/qcom/qcom_wdt_core.ko",
@@ -164,8 +161,6 @@ def define_monaco():
         "drivers/thermal/qcom/thermal_config.ko",
         "drivers/thermal/qcom/thermal_pause.ko",
         "drivers/tty/serial/msm_geni_serial.ko",
-        "drivers/ufs/host/ufs-qcom.ko",
-        "drivers/ufs/host/ufshcd-crypto-qti.ko",
         "drivers/uio/msm_sharedmem/msm_sharedmem.ko",
         "drivers/usb/dwc3/dwc3-msm.ko",
         "drivers/usb/gadget/function/f_fs_ipc_log.ko",
@@ -195,12 +190,7 @@ def define_monaco():
         "lib/test_user_copy.ko",
     ]
 
-    kernel_vendor_cmdline_extras = [
-        # do not sort
-        "console=ttyMSM0,115200n8",
-        "qcom_geni_serial.con_enabled=1",
-        "bootconfig",
-    ]
+    kernel_vendor_cmdline_extras = ["bootconfig"]
 
     for variant in la_variants:
         board_kernel_cmdline_extras = []
@@ -208,11 +198,22 @@ def define_monaco():
 
         if variant == "consolidate":
             mod_list = _monaco_consolidate_in_tree_modules
+            board_bootconfig_extras += ["androidboot.serialconsole=1"]
+            board_kernel_cmdline_extras += [
+                # do not sort
+                "console=ttyMSM0,115200n8",
+                "earlycon",
+            ]
+            kernel_vendor_cmdline_extras += [
+                # do not sort
+                "console=ttyMSM0,115200n8",
+                "earlycon",
+            ]
         else:
             mod_list = _monaco_in_tree_modules
-            board_kernel_cmdline_extras += ["nosoftlockup"]
-            kernel_vendor_cmdline_extras += ["nosoftlockup"]
-            board_bootconfig_extras += ["androidboot.console=0"]
+            board_kernel_cmdline_extras += ["nosoftlockup console=ttynull"]
+            kernel_vendor_cmdline_extras += ["nosoftlockup console=ttynull"]
+            board_bootconfig_extras += ["androidboot.serialconsole=0"]
 
         define_msm_la(
             msm_target = target_name,

@@ -168,6 +168,9 @@ struct cti_config {
 	int enable_req_count;
 	bool hw_enabled;
 	bool hw_powered;
+#if defined(CONFIG_DEEPSLEEP) || defined(CONFIG_HIBERNATION)
+	bool hw_enabled_store;
+#endif
 
 	/* registered triggers and filtering */
 	DECLARE_BITMAP(trig_in_use, CTIINOUTEN_MAX);

@@ -2076,6 +2076,34 @@ static int __maybe_unused adc5_gen3_restore(struct device *dev)
 	return ret;
 }
 
+static void adc5_gen3_shutdown(struct platform_device *pdev)
+{
+	struct adc5_chip *adc = platform_get_drvdata(pdev);
+	u8 data = 0;
+	int i, sdam_index;
+
+	mutex_lock(&adc->lock);
+
+	for (i = 0; i < adc->num_interrupts; i++)
+		devm_free_irq(adc->dev, adc->base[i].irq, adc);
+
+	/* Disable all available channels */
+	for (i = 0; i < adc->num_sdams * 8; i++) {
+		sdam_index = i / 8;
+		data = MEAS_INT_DISABLE;
+		adc5_write(adc, sdam_index, ADC5_GEN3_TIMER_SEL, &data, 1);
+
+		/* To indicate there is an actual conversion request */
+		data = ADC5_GEN3_CHAN_CONV_REQ | (i - (sdam_index*8));
+		adc5_write(adc, sdam_index, ADC5_GEN3_PERPH_CH, &data, 1);
+
+		data = ADC5_GEN3_CONV_REQ_REQ;
+		adc5_write(adc, sdam_index, ADC5_GEN3_CONV_REQ, &data, 1);
+	}
+
+	mutex_unlock(&adc->lock);
+}
+
 static const struct dev_pm_ops __maybe_unused adc5_gen3_pm_ops = {
 	.freeze = pm_ptr(adc5_gen3_freeze),
 	.restore = pm_ptr(adc5_gen3_restore),
@@ -2088,6 +2116,7 @@ static struct platform_driver adc5_gen3_driver = {
 		.pm = pm_ptr(&adc5_gen3_pm_ops),
 	},
 	.probe = adc5_gen3_probe,
+	.shutdown = adc5_gen3_shutdown,
 	.remove = adc5_gen3_exit,
 };
 module_platform_driver(adc5_gen3_driver);

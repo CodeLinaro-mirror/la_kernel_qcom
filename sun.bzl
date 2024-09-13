@@ -87,6 +87,7 @@ def define_sun():
         "drivers/interconnect/qcom/icc-rpmh.ko",
         "drivers/interconnect/qcom/qnoc-qos.ko",
         "drivers/interconnect/qcom/qnoc-sun.ko",
+        "drivers/interconnect/qcom/qnoc-tuna.ko",
         "drivers/iommu/arm/arm-smmu/arm_smmu.ko",
         "drivers/iommu/iommu-logger.ko",
         "drivers/iommu/msm_dma_iommu_mapping.ko",
@@ -151,6 +152,7 @@ def define_sun():
         "drivers/soc/qcom/charger-ulog-glink.ko",
         "drivers/soc/qcom/cmd-db.ko",
         "drivers/soc/qcom/cpu_phys_log_map.ko",
+        "drivers/soc/qcom/cpucp_fast.ko",
         "drivers/soc/qcom/cpucp_log.ko",
         "drivers/soc/qcom/crm-v2.ko",
         "drivers/soc/qcom/dcc_v2.ko",
@@ -166,8 +168,10 @@ def define_sun():
         "drivers/soc/qcom/eud.ko",
         "drivers/soc/qcom/gh_tlmm_vm_mem_access.ko",
         "drivers/soc/qcom/gic_intr_routing.ko",
+        "drivers/soc/qcom/glink_probe.ko",
         "drivers/soc/qcom/hung_task_enh.ko",
         "drivers/soc/qcom/llcc-qcom.ko",
+        "drivers/soc/qcom/llcc_heuristics.ko",
         "drivers/soc/qcom/llcc_perfmon.ko",
         "drivers/soc/qcom/mdt_loader.ko",
         "drivers/soc/qcom/mem-hooks.ko",
@@ -181,7 +185,10 @@ def define_sun():
         "drivers/soc/qcom/minidump.ko",
         "drivers/soc/qcom/mpam/cpu_mpam.ko",
         "drivers/soc/qcom/mpam/mpam.ko",
+        "drivers/soc/qcom/mpam/mpam_msc.ko",
+        "drivers/soc/qcom/mpam/mpam_msc_slc.ko",
         "drivers/soc/qcom/mpam/platform_mpam.ko",
+        "drivers/soc/qcom/mpam/slc_mpam.ko",
         "drivers/soc/qcom/msm_performance.ko",
         "drivers/soc/qcom/msm_show_epoch.ko",
         "drivers/soc/qcom/panel_event_notifier.ko",
@@ -283,8 +290,10 @@ def define_sun():
 
     _sun_consolidate_in_tree_modules = _sun_in_tree_modules + [
         # keep sorted
+        "drivers/cpuidle/governors/qcom_simple_lpm.ko",
         "drivers/hwtracing/coresight/coresight-etm4x.ko",
         "drivers/misc/lkdtm/lkdtm.ko",
+        "drivers/usb/misc/lvstest.ko",
         "kernel/locking/locktorture.ko",
         "kernel/rcu/rcutorture.ko",
         "kernel/sched/walt/sched-walt-debug.ko",
@@ -307,6 +316,7 @@ def define_sun():
                 "console=ttyMSM0,115200n8",
                 "qcom_geni_serial.con_enabled=1",
                 "earlycon",
+                "ufshcd_core.uic_cmd_timeout=2000",
             ]
             kernel_vendor_cmdline_extras += [
                 # do not sort

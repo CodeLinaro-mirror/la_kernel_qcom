@@ -741,6 +741,15 @@ config SDX_GCC_75
 	  Say Y if you want to use peripheral devices such as UART,
 	  SPI, I2C, USB, SD/eMMC, PCIe etc.
 
+config SDX_DEBUGCC_75
+	tristate "SDX75 Debug Clock Controller"
+	depends on SDX_GCC_75
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc.
+	  SDX75 devices.
+	  Say Y if you want to support the debug clocks such as clock measurement
+	  functionality.
+
 config SM_CAMCC_6350
 	tristate "SM6350 Camera Clock Controller"
 	depends on ARM64 || COMPILE_TEST

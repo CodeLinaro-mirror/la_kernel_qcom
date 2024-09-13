@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021, 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_TSENS_H__
@@ -20,6 +20,7 @@
 #define TIMEOUT_US		100
 #define THRESHOLD_MAX_ADC_CODE	0x3ff
 #define THRESHOLD_MIN_ADC_CODE	0x0
+#define COLD_SENSOR_HW_ID	128
 
 #define MAX_SENSORS 16
 
@@ -43,12 +44,47 @@ enum tsens_irq_type {
 	LOWER,
 	UPPER,
 	CRITICAL,
+	COLD,
+};
+
+/**
+ * struct tsens_irq_data - IRQ status and temperature violations
+ * @up_viol:        upper threshold violated
+ * @up_thresh:      upper threshold temperature value
+ * @up_irq_mask:    mask register for upper threshold irqs
+ * @up_irq_clear:   clear register for uppper threshold irqs
+ * @low_viol:       lower threshold violated
+ * @low_thresh:     lower threshold temperature value
+ * @low_irq_mask:   mask register for lower threshold irqs
+ * @low_irq_clear:  clear register for lower threshold irqs
+ * @crit_viol:      critical threshold violated
+ * @crit_thresh:    critical threshold temperature value
+ * @crit_irq_mask:  mask register for critical threshold irqs
+ * @crit_irq_clear: clear register for critical threshold irqs
+ *
+ * Structure containing data about temperature threshold settings and
+ * irq status if they were violated.
+ */
+struct tsens_irq_data {
+	u32 up_viol;
+	int up_thresh;
+	u32 up_irq_mask;
+	u32 up_irq_clear;
+	u32 low_viol;
+	int low_thresh;
+	u32 low_irq_mask;
+	u32 low_irq_clear;
+	u32 crit_viol;
+	u32 crit_thresh;
+	u32 crit_irq_mask;
+	u32 crit_irq_clear;
 };
 
 /**
  * struct tsens_sensor - data for each sensor connected to the tsens device
  * @priv: tsens device instance that this sensor is connected to
  * @tzd: pointer to the thermal zone that this sensor is in
+ * @irq_d: Latest sensor irq and violation status for this sensor
  * @offset: offset of temperature adjustment curve
  * @hw_id: HW ID can be used in case of platform-specific IDs
  * @slope: slope of temperature adjustment curve
@@ -57,6 +93,7 @@ enum tsens_irq_type {
 struct tsens_sensor {
 	struct tsens_priv		*priv;
 	struct thermal_zone_device	*tzd;
+	struct tsens_irq_data		irq_d;
 	int				offset;
 	unsigned int			hw_id;
 	int				slope;
@@ -85,6 +122,7 @@ struct tsens_ops {
 	void (*disable)(struct tsens_priv *priv);
 	int (*suspend)(struct tsens_priv *priv);
 	int (*resume)(struct tsens_priv *priv);
+	int (*get_cold_status)(const struct tsens_sensor *s, bool *cold_status);
 };
 
 #define REG_FIELD_FOR_EACH_SENSOR11(_name, _offset, _startbit, _stopbit) \
@@ -156,20 +194,18 @@ struct tsens_ops {
 
 #define IPC_LOGPAGES 10
 #define TSENS_DBG(dev, msg, args...) do {		\
-		pr_debug("%s:" msg, __func__, args);	\
 		if ((dev) && (dev)->ipc_log) {		\
 			ipc_log_string((dev)->ipc_log,	\
-			"%s: " msg " [%s]\n",		\
-			__func__, args, current->comm);	\
+			"" msg " [%s]\n",		\
+			args, current->comm);	        \
 		}					\
 	} while (0)
 
 #define TSENS_DBG_1(priv, msg, args...) do {		\
-		dev_dbg((priv)->dev, "%s:" msg, __func__, args);	\
 		if ((priv) && (priv)->ipc_log1) {		\
 			ipc_log_string((priv)->ipc_log1,	\
-			"%s: " msg " [%s]\n",		\
-			__func__, args, current->comm);	\
+			"" msg " [%s]\n",		\
+			args, current->comm);		\
 		}					\
 	} while (0)
 
@@ -513,6 +549,16 @@ enum regfield_ids {
 	MAX_STATUS_14,
 	MAX_STATUS_15,
 
+	/* TEMP PERSIST MAX_MIN data */
+	TEMP_PERSIST_CTRL,
+	TEMP_PERSIST_MAX_TEMP,
+	TEMP_PERSIST_MAX_SENSOR_ID,
+	TEMP_PERSIST_MAX_VALID,
+	TEMP_PERSIST_MIN_TEMP,
+	TEMP_PERSIST_MIN_SENSOR_ID,
+	TEMP_PERSIST_MIN_VALID,
+
+	COLD_STATUS,		/* COLD interrupt status */
 	/* Keep last */
 	MAX_REGFIELDS
 };
@@ -527,6 +573,7 @@ enum regfield_ids {
  *              with SROT only being available to secure boot firmware?
  * @has_watchdog: does this IP support watchdog functionality?
  * @max_sensors: maximum sensors supported by this version of the IP
+ * @persist_max_min: does this IP support persist max-min data?
  * @trip_min_temp: minimum trip temperature supported by this version of the IP
  * @trip_max_temp: maximum trip temperature supported by this version of the IP
  */
@@ -537,7 +584,9 @@ struct tsens_features {
 	unsigned int adc:1;
 	unsigned int srot_split:1;
 	unsigned int has_watchdog:1;
+	unsigned int cold_int:1;
 	unsigned int max_sensors;
+	unsigned int persist_max_min:1;
 	int trip_min_temp;
 	int trip_max_temp;
 };
@@ -572,6 +621,7 @@ struct tsens_context {
  * struct tsens_priv - private data for each instance of the tsens IP
  * @dev: pointer to struct device
  * @num_sensors: number of sensors enabled on this device
+ * @ul_irq_cnt: upper lower irq triggered count
  * @tm_map: pointer to TM register address space
  * @srot_map: pointer to SROT register address space
  * @tm_offset: deal with old device trees that don't address TM and SROT
@@ -588,10 +638,12 @@ struct tsens_context {
  * @ipc_log: pointer for first ipc log context id
  * @ipc_log1: pointer for second ipc log context id
  * @sensor: list of sensors attached to this device
+ * @cold_sensor: pointer to cold sensor attached to this device
  */
 struct tsens_priv {
 	struct device			*dev;
 	u32				num_sensors;
+	u32				ul_irq_cnt;
 	struct regmap			*tm_map;
 	struct regmap			*srot_map;
 	u32				tm_offset;
@@ -610,6 +662,7 @@ struct tsens_priv {
 	void				*ipc_log;
 	void				*ipc_log1;
 
+	struct tsens_sensor		*cold_sensor;
 	struct tsens_sensor		sensor[];
 };
 
@@ -659,6 +712,7 @@ void compute_intercept_slope(struct tsens_priv *priv, u32 *pt1, u32 *pt2, u32 mo
 int init_common(struct tsens_priv *priv);
 int get_temp_tsens_valid(const struct tsens_sensor *s, int *temp);
 int get_temp_common(const struct tsens_sensor *s, int *temp);
+int get_cold_int_status(const struct tsens_sensor *s, bool *cold_status);
 
 /* TSENS target */
 extern struct tsens_plat_data data_8960;

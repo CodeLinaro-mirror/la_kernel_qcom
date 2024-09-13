@@ -16,6 +16,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/coresight.h>
+#include <linux/suspend.h>
 
 #include "coresight-qmi.h"
 #include "coresight-trace-id.h"
@@ -345,12 +346,58 @@ static const struct of_device_id remote_etm_match[] = {
 	{}
 };
 
+#ifdef CONFIG_DEEPSLEEP
+static int remote_etm_suspend(struct device *dev)
+{
+	struct remote_etm_drvdata *drvdata = dev_get_drvdata(dev);
+	struct coresight_device	*csdev = drvdata->csdev;
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		do {
+			coresight_disable(csdev);
+		} while (atomic_read(&csdev->refcnt));
+	}
+
+	return 0;
+}
+#else
+static int remote_etm_suspend(struct device *dev)
+{
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_HIBERNATION
+static int remote_etm_freeze(struct device *dev)
+{
+	struct remote_etm_drvdata *drvdata = dev_get_drvdata(dev);
+	struct coresight_device	*csdev = drvdata->csdev;
+
+	do {
+		coresight_disable(csdev);
+	} while (atomic_read(&csdev->refcnt));
+
+	return 0;
+}
+#else
+static int remote_etm_freeze(struct device *dev)
+{
+	return 0;
+}
+#endif
+
+static const struct dev_pm_ops remote_etm_dev_pm_ops = {
+	.suspend = remote_etm_suspend,
+	.freeze  = remote_etm_freeze,
+};
+
 static struct platform_driver remote_etm_driver = {
 	.probe          = remote_etm_probe,
 	.remove         = remote_etm_remove,
 	.driver         = {
 		.name   = "coresight-remote-etm",
 		.of_match_table = remote_etm_match,
+		.pm = pm_ptr(&remote_etm_dev_pm_ops),
 	},
 };
 

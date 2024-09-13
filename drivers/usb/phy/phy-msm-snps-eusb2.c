@@ -767,6 +767,9 @@ static int msm_eusb2_phy_init(struct usb_phy *uphy)
 
 	msm_eusb2_write_readback(phy->base, USB_PHY_HS_PHY_CTRL2,
 			USB2_SUSPEND_N_SEL, 0);
+
+	msm_eusb2_write_readback(phy->base, USB_PHY_CFG0,
+			CMN_CTRL_OVERRIDE_EN, 0x00);
 	return 0;
 }
 
@@ -984,7 +987,7 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 		goto err_ret;
 	}
 
-	phy->ref_clk = devm_clk_get(dev, "ref_clk");
+	phy->ref_clk = devm_clk_get_optional(dev, "ref_clk");
 	if (IS_ERR(phy->ref_clk)) {
 		dev_err(dev, "clk get failed for ref_clk\n");
 		ret = PTR_ERR(phy->ref_clk);

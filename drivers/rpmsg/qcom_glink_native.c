@@ -24,6 +24,7 @@
 #include <linux/suspend.h>
 #include <linux/termios.h>
 #include <linux/ipc_logging.h>
+#include <uapi/linux/sched/types.h>
 
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"
@@ -332,7 +333,9 @@ static void qcom_glink_channel_release(struct kref *ref)
 
 	spin_lock_irqsave(&channel->recv_lock, flags);
 	list_for_each_entry_safe(intent, tmp, &channel->rx_queue, node) {
+		spin_lock(&channel->intent_lock);
 		idr_remove(&channel->liids, intent->id);
+		spin_unlock(&channel->intent_lock);
 		if (!intent->size)
 			intent->data = NULL;
 		kfree(intent->data);
@@ -350,6 +353,8 @@ static void qcom_glink_channel_release(struct kref *ref)
 	}
 
 	idr_for_each_entry(&channel->liids, tmp, iid) {
+		if (!tmp->size)
+			tmp->data = NULL;
 		kfree(tmp->data);
 		kfree(tmp);
 	}
@@ -1544,6 +1549,7 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 	unsigned int param2;
 	unsigned int avail;
 	unsigned int cmd;
+	int retry = 0;
 	int ret = 0;
 
 	if (should_wake) {
@@ -1606,9 +1612,14 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 			qcom_glink_handle_signals(glink, param1, param2);
 			break;
 		default:
-			dev_err(glink->dev, "unhandled rx cmd: %d\n", cmd);
-			ret = -EINVAL;
-			break;
+			dev_err(glink->dev, "unhandled rx cmd: 0x%x\n", cmd);
+			retry++;
+			if (retry < 5)
+				continue;
+			else {
+				ret = -EINVAL;
+				break;
+			}
 		}
 
 		if (ret)
@@ -1742,6 +1753,7 @@ static struct rpmsg_endpoint *qcom_glink_create_ept(struct rpmsg_device *rpdev,
 static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 {
 	struct glink_channel *channel = to_glink_channel(rpdev->ept);
+	struct sched_param param = {.sched_priority = 1};
 	struct device_node *np = rpdev->dev.of_node;
 	struct qcom_glink *glink = channel->glink;
 	struct glink_core_rx_intent *intent;
@@ -1796,8 +1808,16 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 		CH_ERR(channel, "channel thread failed to run\n");
 		rc = PTR_ERR(channel->rx_task);
 		channel->rx_task = NULL;
+		goto exit;
 	}
 
+	if (of_property_read_bool(np, "qcom,ch-sched-rt")) {
+		rc = sched_setscheduler(channel->rx_task, SCHED_FIFO, &param);
+		if (rc)
+			pr_err("failed to set [%s] thread policy.\n", channel->name);
+	}
+
+exit:
 	CH_INFO(channel, "Exit\n");
 	return rc;
 }

@@ -34,6 +34,7 @@
 #include <linux/property.h>
 #include <linux/of.h>
 #include <linux/clk/clk-conf.h>
+#include <linux/suspend.h>
 
 #include <asm/barrier.h>
 #include <asm/sections.h>
@@ -2360,8 +2361,43 @@ static int etm4_runtime_resume(struct device *dev)
 }
 #endif
 
+#ifdef CONFIG_DEEPSLEEP
+static int etm_suspend(struct device *dev)
+{
+	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev);
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		coresight_disable(drvdata->csdev);
+
+	return 0;
+}
+#else
+static int etm_suspend(struct device *dev)
+{
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_HIBERNATION
+static int etm_freeze(struct device *dev)
+{
+	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_disable(drvdata->csdev);
+
+	return 0;
+}
+#else
+static int etm_freeze(struct device *dev)
+{
+	return 0;
+}
+#endif
+
 static const struct dev_pm_ops etm4_dev_pm_ops = {
 	SET_RUNTIME_PM_OPS(etm4_runtime_suspend, etm4_runtime_resume, NULL)
+	.suspend = etm_suspend,
+	.freeze  = etm_freeze,
 };
 
 static const struct of_device_id etm4_sysreg_match[] = {

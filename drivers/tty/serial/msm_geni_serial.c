@@ -552,9 +552,16 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	void __iomem *base = uport->membase;
 
+	if (!mutex_trylock(&port->suspend_resume_lock)) {
+		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+			     "%s: Device is being suspended, %s\n",
+			     __func__, current->comm);
+		return;
+	}
 	if (device_pending_suspend(uport)) {
 		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 			     "%s: Device is suspended, Return\n", __func__);
+		mutex_unlock(&port->suspend_resume_lock);
 		return;
 	}
 
@@ -667,6 +674,7 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 		     "dma_if_en:0x%x, geni_clk_ctrl:0x%x fifo_if_disable:0x%x\n",
 		     dma_if_en, geni_clk_ctrl, fifo_if_disable);
+	mutex_unlock(&port->suspend_resume_lock);
 }
 
 int msm_geni_serial_resources_on(struct msm_geni_serial_port *port)
@@ -1457,10 +1465,17 @@ static void msm_geni_serial_set_mctrl(struct uart_port *uport,
 	u32 uart_manual_rfr = 0;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
+	if (!mutex_trylock(&port->suspend_resume_lock)) {
+		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+			     "%s: Device is being suspended, %s\n",
+			     __func__, current->comm);
+		return;
+	}
 	if (device_pending_suspend(uport)) {
 		UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 			     "%s.Device is suspended, %s: mctrl=0x%x\n",
 			     __func__, current->comm, mctrl);
+		mutex_unlock(&port->suspend_resume_lock);
 		return;
 	}
 
@@ -1489,6 +1504,7 @@ static void msm_geni_serial_set_mctrl(struct uart_port *uport,
 		     "%s:%s, mctrl=0x%x, manual_rfr=0x%x, flow=%s\n",
 		     __func__, current->comm, mctrl, uart_manual_rfr,
 		     (port->manual_flow ? "OFF" : "ON"));
+	mutex_unlock(&port->suspend_resume_lock);
 }
 
 static const char *msm_geni_serial_get_type(struct uart_port *uport)
@@ -3941,8 +3957,10 @@ static void msm_geni_serial_flush(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
-	atomic_set(&port->flush_buffers, 1);
-	msm_geni_serial_stop_tx(uport);
+	if (port->ioctl_count) {
+		atomic_set(&port->flush_buffers, 1);
+		msm_geni_serial_stop_tx(uport);
+	}
 }
 
 static void msm_geni_serial_shutdown(struct uart_port *uport)
@@ -4045,6 +4063,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 					if (device_pending_suspend(uport)) {
 						UART_LOG_DBG(msm_port->ipc_log_pwr, uport->dev,
 							     "%s Uport Suspended\n", __func__);
+						ret = 0;
 						break;
 					}
 					j++;
@@ -5234,6 +5253,76 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	return ret;
 }
 
+static int msm_geni_serial_port_init(struct platform_device *pdev,
+				     struct msm_geni_serial_port *dev_port)
+{
+	int ret = 0;
+	struct uart_port *uport = &dev_port->uport;
+
+	ret = msm_geni_serial_get_ver_info(uport);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to Read FW ver: %d\n", ret);
+		return ret;
+	}
+
+	dev_port->tx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
+	dev_port->rx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
+	dev_port->tx_fifo_width = DEF_FIFO_WIDTH_BITS;
+	uport->fifosize =
+		((dev_port->tx_fifo_depth * dev_port->tx_fifo_width) >> 3);
+	/* Complete signals to handle cancel cmd completion */
+	init_completion(&dev_port->m_cmd_timeout);
+	init_completion(&dev_port->s_cmd_timeout);
+	init_completion(&dev_port->xfer);
+	init_completion(&dev_port->tx_xfer);
+
+	init_completion(&dev_port->wakeup_comp);
+	platform_set_drvdata(pdev, dev_port);
+
+	/*
+	 * To Disable PM runtime API that will make ioctl based
+	 * vote_clock_on/off optional and rely on system PM
+	 */
+	dev_port->pm_auto_suspend_disable =
+		of_property_read_bool(pdev->dev.of_node, "qcom,auto-suspend-disable");
+
+	if (dev_port->is_console) {
+		dev_port->handle_rx = handle_rx_console;
+		dev_port->rx_fifo = devm_kzalloc(uport->dev, sizeof(u32), GFP_KERNEL);
+	} else {
+		dev_port->handle_rx = handle_rx_hs;
+		dev_port->rx_fifo = devm_kzalloc(uport->dev,
+			sizeof(dev_port->rx_fifo_depth * sizeof(u32)),
+								GFP_KERNEL);
+		if (dev_port->pm_auto_suspend_disable) {
+			pm_runtime_set_active(&pdev->dev);
+			pm_runtime_forbid(&pdev->dev);
+		} else {
+			pm_runtime_set_suspended(&pdev->dev);
+			pm_runtime_set_autosuspend_delay(&pdev->dev, 150);
+			pm_runtime_use_autosuspend(&pdev->dev);
+			pm_runtime_enable(&pdev->dev);
+		}
+	}
+
+	if (IS_ENABLED(CONFIG_SERIAL_MSM_GENI_HALF_SAMPLING) &&
+		dev_port->rumi_platform && dev_port->is_console) {
+		/* No ver info available, if do later then RUMI console fails */
+		geni_write_reg(0x21, uport->membase, GENI_SER_M_CLK_CFG);
+		geni_write_reg(0x21, uport->membase, GENI_SER_S_CLK_CFG);
+		geni_read_reg(uport->membase, GENI_SER_M_CLK_CFG);
+	}
+
+	device_create_file(uport->dev, &dev_attr_loopback);
+	device_create_file(uport->dev, &dev_attr_xfer_mode);
+	device_create_file(uport->dev, &dev_attr_ver_info);
+	device_create_file(uport->dev, &dev_attr_hs_uart_operation);
+	device_create_file(uport->dev, &dev_attr_hs_uart_version);
+	device_create_file(uport->dev, &dev_attr_capture_kpi);
+
+	return ret;
+}
+
 static int msm_geni_serial_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -5321,75 +5410,18 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	}
 
 	uport->dev = &pdev->dev;
+	uport->private_data = (void *)drv;
 
 	ret = msm_geni_serial_read_dtsi(pdev, dev_port);
 	if (ret)
 		goto exit_geni_serial_probe;
 
-	dev_port->tx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
-	dev_port->rx_fifo_depth = DEF_FIFO_DEPTH_WORDS;
-	dev_port->tx_fifo_width = DEF_FIFO_WIDTH_BITS;
-	uport->fifosize =
-		((dev_port->tx_fifo_depth * dev_port->tx_fifo_width) >> 3);
-	/* Complete signals to handle cancel cmd completion */
-	init_completion(&dev_port->m_cmd_timeout);
-	init_completion(&dev_port->s_cmd_timeout);
-	init_completion(&dev_port->xfer);
-	init_completion(&dev_port->tx_xfer);
-
-	init_completion(&dev_port->wakeup_comp);
-	uport->private_data = (void *)drv;
-	platform_set_drvdata(pdev, dev_port);
-	ret = msm_geni_serial_get_ver_info(uport);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to Read FW ver: %d\n", ret);
+	ret = msm_geni_serial_port_init(pdev, dev_port);
+	if (ret)
 		goto exit_geni_serial_probe;
-	}
-	/*
-	 * To Disable PM runtime API that will make ioctl based
-	 * vote_clock_on/off optional and rely on system PM
-	 */
-	dev_port->pm_auto_suspend_disable =
-		of_property_read_bool(pdev->dev.of_node,
-		"qcom,auto-suspend-disable");
 
-	if (is_console) {
-		dev_port->handle_rx = handle_rx_console;
-		dev_port->rx_fifo = devm_kzalloc(uport->dev, sizeof(u32),
-								GFP_KERNEL);
-	} else {
-		dev_port->handle_rx = handle_rx_hs;
-		dev_port->rx_fifo = devm_kzalloc(uport->dev,
-				sizeof(dev_port->rx_fifo_depth * sizeof(u32)),
-								GFP_KERNEL);
-		if (dev_port->pm_auto_suspend_disable) {
-			pm_runtime_set_active(&pdev->dev);
-			pm_runtime_forbid(&pdev->dev);
-		} else {
-			pm_runtime_set_suspended(&pdev->dev);
-			pm_runtime_set_autosuspend_delay(&pdev->dev, 150);
-			pm_runtime_use_autosuspend(&pdev->dev);
-			pm_runtime_enable(&pdev->dev);
-		}
-	}
-
-	if (IS_ENABLED(CONFIG_SERIAL_MSM_GENI_HALF_SAMPLING) &&
-			dev_port->rumi_platform && dev_port->is_console) {
-		/* No ver info available, if do later then RUMI console fails */
-		geni_write_reg(0x21, uport->membase, GENI_SER_M_CLK_CFG);
-		geni_write_reg(0x21, uport->membase, GENI_SER_S_CLK_CFG);
-		geni_read_reg(uport->membase, GENI_SER_M_CLK_CFG);
-	}
-
-	dev_info(&pdev->dev, "Serial port%d added.FifoSize %d is_console%d\n",
-				line, uport->fifosize, is_console);
-
-	device_create_file(uport->dev, &dev_attr_loopback);
-	device_create_file(uport->dev, &dev_attr_xfer_mode);
-	device_create_file(uport->dev, &dev_attr_ver_info);
-	device_create_file(uport->dev, &dev_attr_hs_uart_operation);
-	device_create_file(uport->dev, &dev_attr_hs_uart_version);
-	device_create_file(uport->dev, &dev_attr_capture_kpi);
+	dev_info(&pdev->dev, "Serial port: %d added.FifoSize: %d is_console: %d\n",
+		 line, uport->fifosize, is_console);
 
 	msm_geni_serial_debug_init(uport, is_console);
 	dev_port->port_setup = false;
