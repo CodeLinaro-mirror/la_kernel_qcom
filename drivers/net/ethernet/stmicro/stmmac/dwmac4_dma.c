@@ -491,10 +491,7 @@ static void dwmac4_enable_sph(void __iomem *ioaddr, bool en, u32 chan)
 	writel(value, ioaddr + GMAC_EXT_CONFIG);
 
 	value = readl(ioaddr + GMAC_EXT_CFG1);
-	value &= ~GMAC_CONFIG1_SPLM;
-	value |= GMAC_CONFIG1_SPLM_L2OFST_EN << GMAC_CONFIG1_SPLM_SHIFT;
-	value &= ~GMAC_CONFIG1_SAVO;
-	value |= 4 << GMAC_CONFIG1_SAVO_SHIFT;
+	value |= GMAC_CONFIG1_SPLM(1);
 	value |= GMAC_CONFIG1_SAVE_EN;
 	writel(value, ioaddr + GMAC_EXT_CFG1);
 
