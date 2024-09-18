@@ -87,6 +87,13 @@ void nf_conntrack_lock(spinlock_t *lock);
 
 extern spinlock_t nf_conntrack_expect_lock;
 
+#ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
+struct sip_list {
+	struct nf_queue_entry *entry;
+	struct list_head list;
+};
+#endif
+
 /* ctnetlink code shared by both ctnetlink and nf_conntrack_bpf */
 
 static inline void __nf_ct_set_timeout(struct nf_conn *ct, u64 timeout)
