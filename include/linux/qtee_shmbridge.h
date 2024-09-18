@@ -18,22 +18,7 @@ struct qtee_shm {
 	size_t size;
 };
 
-/**
- * Check whether shmbridge mechanism is enabled in HYP or not
- *
- * return true when enabled, false when not enabled
- */
-bool qtee_shmbridge_is_enabled(void);
-
-/**
- * Check whether a bridge starting from paddr exists
- *
- * @ [IN] paddr: physical addr of the buffer
- *
- * return 0 or -EEXIST
- */
-int32_t qtee_shmbridge_query(phys_addr_t paddr);
-
+#ifdef CONFIG_QTEE_SHM_BRIDGE
 /**
  * Register paddr & size as a bridge, get bridge handle
  *
@@ -55,6 +40,22 @@ int32_t qtee_shmbridge_register(
 		uint32_t ns_vmid_num,
 		uint32_t tz_perm,
 		uint64_t *handle);
+
+/**
+ * Check whether shmbridge mechanism is enabled in HYP or not
+ *
+ * return true when enabled, false when not enabled
+ */
+bool qtee_shmbridge_is_enabled(void);
+
+/**
+ * Check whether a bridge starting from paddr exists
+ *
+ * @ [IN] paddr: physical addr of the buffer
+ *
+ * return 0 or -EEXIST
+ */
+int32_t qtee_shmbridge_query(phys_addr_t paddr);
 
 /**
  * Deregister bridge
@@ -103,20 +104,51 @@ void qtee_shmbridge_flush_shm_buf(struct qtee_shm *shm);
  */
 void qtee_shmbridge_inv_shm_buf(struct qtee_shm *shm);
 
-#ifndef CONFIG_QTEE_SHM_BRIDGE
-bool qtee_shmbridge_is_enabled(void)
-{
-	return false;
-}
-
-int32_t qtee_shmbridge_allocate_shm(size_t size, struct qtee_shm *shm)
+#else
+static int32_t qtee_shmbridge_register(
+		phys_addr_t paddr,
+		size_t size,
+		uint32_t *ns_vmid_list,
+		uint32_t *ns_vm_perm_list,
+		uint32_t ns_vmid_num,
+		uint32_t tz_perm,
+		uint64_t *handle)
 {
 	return -EINVAL;
 }
 
-void qtee_shmbridge_free_shm(struct qtee_shm *shm)
+static bool qtee_shmbridge_is_enabled(void)
+{
+	return false;
+}
+
+static int32_t qtee_shmbridge_allocate_shm(size_t size, struct qtee_shm *shm)
+{
+	return -EINVAL;
+}
+
+static void qtee_shmbridge_free_shm(struct qtee_shm *shm)
 {
 }
+
+static void qtee_shmbridge_flush_shm_buf(struct qtee_shm *shm)
+{
+}
+
+static void qtee_shmbridge_inv_shm_buf(struct qtee_shm *shm)
+{
+}
+
+static int32_t qtee_shmbridge_query(phys_addr_t paddr)
+{
+	return -EINVAL;
+}
+
+static int32_t qtee_shmbridge_deregister(uint64_t handle)
+{
+	return -EINVAL;
+}
+
 #endif
 
 #endif /*__QTEE_SHMBRIDGE_H__*/
