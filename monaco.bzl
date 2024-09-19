@@ -125,6 +125,7 @@ def define_monaco():
         "drivers/soc/qcom/qcom_logbuf_boot_log.ko",
         "drivers/soc/qcom/qcom_ramdump.ko",
         "drivers/soc/qcom/qcom_soc_wdt.ko",
+        "drivers/soc/qcom/qcom_stats.ko",
         "drivers/soc/qcom/qcom_wdt_core.ko",
         "drivers/soc/qcom/qmi_helpers.ko",
         "drivers/soc/qcom/qsee_ipc_irq_bridge.ko",
