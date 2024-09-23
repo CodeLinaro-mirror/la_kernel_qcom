@@ -387,11 +387,69 @@ static bool ssctl_request_shutdown(struct qcom_sysmon *sysmon)
 }
 
 /**
+ * ssctl_send_event_legacy() - send notification of other remote's SSR event
+ * @sysmon:	sysmon context
+ * @event:	sysmon event context
+ */
+static int ssctl_send_event_legacy(struct qcom_sysmon *sysmon,
+			const struct qcom_sysmon *source)
+{
+	struct ssctl_subsys_event_resp resp;
+	struct ssctl_subsys_event_req req;
+	struct qmi_txn txn;
+	int ret;
+
+	if (sysmon->ssctl_instance == -EINVAL)
+		return -EINVAL;
+
+	memset(&resp, 0, sizeof(resp));
+	ret = qmi_txn_init(&sysmon->qmi, &txn, ssctl_subsys_event_resp_ei, &resp);
+	if (ret < 0) {
+		dev_err(sysmon->dev, "failed to allocate QMI txn\n");
+		return ret;
+	}
+
+	memset(&req, 0, sizeof(req));
+	strscpy(req.subsys_name, source->name, sizeof(req.subsys_name));
+	req.subsys_name_len = strlen(req.subsys_name);
+	req.event = source->state;
+	req.evt_driven_valid = true;
+	req.evt_driven = SSCTL_SSR_EVENT_FORCED;
+
+	ret = qmi_send_request(&sysmon->qmi, &sysmon->ssctl, &txn,
+			       SSCTL_SUBSYS_EVENT_REQ, 40, ssctl_subsys_event_req_ei,
+				   &req);
+	if (ret < 0) {
+		dev_err(sysmon->dev, "failed to send shutdown request\n");
+		qmi_txn_cancel(&txn);
+		return ret;
+	}
+
+	ret = qmi_txn_wait(&txn, 5 * HZ);
+
+	if (ret < 0) {
+		dev_err(sysmon->dev, "failed receiving QMI response\n");
+		return ret;
+	}
+
+	if (resp.resp.result) {
+		dev_err(sysmon->dev, "failed to receive %s ssr %s event. response result: %d\n",
+			source->name, subdevice_state_string[source->state],
+			resp.resp.result);
+		return resp.resp.result;
+	}
+
+	dev_dbg(sysmon->dev, "ssr event send completed\n");
+	return 0;
+
+}
+
+/**
  * ssctl_send_event() - send notification of other remote's SSR event
  * @sysmon:	sysmon context
  * @event:	sysmon event context
  */
-static void ssctl_send_event(struct qcom_sysmon *sysmon,
+static int ssctl_send_event(struct qcom_sysmon *sysmon,
 			     const struct qcom_sysmon *source)
 {
 	struct ssctl_subsys_event_resp resp;
@@ -400,13 +458,13 @@ static void ssctl_send_event(struct qcom_sysmon *sysmon,
 	int ret;
 
 	if (sysmon->ssctl_instance == -EINVAL)
-		return;
+		return -EINVAL;
 
 	memset(&resp, 0, sizeof(resp));
 	ret = qmi_txn_init(&sysmon->qmi, &txn, ssctl_subsys_event_resp_ei, &resp);
 	if (ret < 0) {
 		dev_err(sysmon->dev, "failed to allocate QMI txn\n");
-		return;
+		return ret;
 	}
 
 	memset(&req, 0, sizeof(req));
@@ -423,18 +481,24 @@ static void ssctl_send_event(struct qcom_sysmon *sysmon,
 	if (ret < 0) {
 		dev_err(sysmon->dev, "failed to send subsystem event\n");
 		qmi_txn_cancel(&txn);
-		return;
+		return ret;
 	}
 
 	ret = qmi_txn_wait(&txn, 5 * HZ);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(sysmon->dev, "timeout waiting for subsystem event response\n");
-	else if (resp.resp.result)
+		return ret;
+	}
+	if (resp.resp.result) {
 		dev_err(sysmon->dev, "failed to receive %s ssr %s event. response result: %d\n",
 			source->name, subdevice_state_string[source->state],
 			resp.resp.result);
-	else
-		dev_info(sysmon->dev, "subsystem event accepted\n");
+		return resp.resp.result;
+	}
+
+	dev_info(sysmon->dev, "subsystem event accepted\n");
+	return 0;
+
 }
 
 /**
@@ -528,6 +592,7 @@ static void sysmon_shutdown_notif_timeout_handler(struct timer_list *t)
 static inline void send_event(struct qcom_sysmon *sysmon, struct qcom_sysmon *source)
 {
 	unsigned long timeout;
+	int ret;
 
 	source->timeout_data.timer.function = sysmon_notif_timeout_handler;
 	source->timeout_data.dest = sysmon;
@@ -535,9 +600,17 @@ static inline void send_event(struct qcom_sysmon *sysmon, struct qcom_sysmon *so
 	mod_timer(&source->timeout_data.timer, timeout);
 
 	/* Only SSCTL version 2 supports SSR events */
-	if (sysmon->ssctl_version == 2)
-		ssctl_send_event(sysmon, source);
-	else if (sysmon->ept)
+	if (sysmon->ssctl_version == 2) {
+		ret = ssctl_send_event(sysmon, source);
+		if (ret == 1) {
+			/* Retry with older ssctl event */
+			dev_err(sysmon->dev, "Retrying legacy EVENT_REQ\n");
+			ret = ssctl_send_event_legacy(sysmon, source);
+		}
+		/* if ret !=1 we dont retry */
+		if (ret)
+			pr_err("Failed to send event\n");
+	} else if (sysmon->ept)
 		sysmon_send_event(sysmon, source);
 
 	del_timer_sync(&source->timeout_data.timer);
