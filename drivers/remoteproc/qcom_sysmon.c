@@ -299,6 +299,68 @@ static const struct qmi_elem_info ssctl_subsys_event_resp_ei[] = {
 	{}
 };
 
+struct ssctl_subsys_event_req_legacy {
+	u8 subsys_name_len;
+	char subsys_name[SSCTL_SUBSYS_NAME_LENGTH];
+	u32 event;
+	u8 evt_driven_valid;
+	u32 evt_driven;
+};
+
+static struct qmi_elem_info ssctl_subsys_event_req_ei_legacy[] = {
+	{
+		.data_type	= QMI_DATA_LEN,
+		.elem_len	= 1,
+		.elem_size	= sizeof(uint8_t),
+		.array_type	= NO_ARRAY,
+		.tlv_type	= 0x01,
+		.offset		= offsetof(struct ssctl_subsys_event_req_legacy,
+					   subsys_name_len),
+		.ei_array	= NULL,
+	},
+	{
+		.data_type	= QMI_UNSIGNED_1_BYTE,
+		.elem_len	= SSCTL_SUBSYS_NAME_LENGTH,
+		.elem_size	= sizeof(char),
+		.array_type	= VAR_LEN_ARRAY,
+		.tlv_type	= 0x01,
+		.offset		= offsetof(struct ssctl_subsys_event_req_legacy,
+					   subsys_name),
+		.ei_array	= NULL,
+	},
+	{
+		.data_type	= QMI_SIGNED_4_BYTE_ENUM,
+		.elem_len	= 1,
+		.elem_size	= sizeof(uint32_t),
+		.array_type	= NO_ARRAY,
+		.tlv_type	= 0x02,
+		.offset		= offsetof(struct ssctl_subsys_event_req_legacy,
+					   event),
+		.ei_array	= NULL,
+	},
+	{
+		.data_type	= QMI_OPT_FLAG,
+		.elem_len	= 1,
+		.elem_size	= sizeof(uint8_t),
+		.array_type	= NO_ARRAY,
+		.tlv_type	= 0x10,
+		.offset		= offsetof(struct ssctl_subsys_event_req_legacy,
+					   evt_driven_valid),
+		.ei_array	= NULL,
+	},
+	{
+		.data_type	= QMI_SIGNED_4_BYTE_ENUM,
+		.elem_len	= 1,
+		.elem_size	= sizeof(uint32_t),
+		.array_type	= NO_ARRAY,
+		.tlv_type	= 0x10,
+		.offset		= offsetof(struct ssctl_subsys_event_req_legacy,
+					   evt_driven),
+		.ei_array	= NULL,
+	},
+	{}
+};
+
 static const struct qmi_elem_info ssctl_shutdown_ind_ei[] = {
 	{}
 };
@@ -395,7 +457,7 @@ static int ssctl_send_event_legacy(struct qcom_sysmon *sysmon,
 			const struct qcom_sysmon *source)
 {
 	struct ssctl_subsys_event_resp resp;
-	struct ssctl_subsys_event_req req;
+	struct ssctl_subsys_event_req_legacy req;
 	struct qmi_txn txn;
 	int ret;
 
@@ -417,7 +479,7 @@ static int ssctl_send_event_legacy(struct qcom_sysmon *sysmon,
 	req.evt_driven = SSCTL_SSR_EVENT_FORCED;
 
 	ret = qmi_send_request(&sysmon->qmi, &sysmon->ssctl, &txn,
-			       SSCTL_SUBSYS_EVENT_REQ, 40, ssctl_subsys_event_req_ei,
+			       SSCTL_SUBSYS_EVENT_REQ, 40, ssctl_subsys_event_req_ei_legacy,
 				   &req);
 	if (ret < 0) {
 		dev_err(sysmon->dev, "failed to send shutdown request\n");
