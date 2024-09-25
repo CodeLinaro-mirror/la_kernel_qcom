@@ -3,7 +3,7 @@
  * QTI TEE shared memory bridge driver
  *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -300,8 +300,8 @@ int32_t qtee_shmbridge_register(
 	mutex_lock(&bridge_list_head.lock);
 	ret = qtee_shmbridge_query_locked(paddr);
 	if (ret) {
-		pr_debug("%s: found 0%llu already exist with shmbridge\n",
-			__func__, paddr);
+		pr_debug("%s: found 0%pa already exist with shmbridge\n",
+			__func__, &paddr);
 		goto bridge_exist;
 	}
 

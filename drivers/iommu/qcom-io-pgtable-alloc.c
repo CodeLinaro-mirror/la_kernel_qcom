@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -39,7 +39,7 @@ static int io_pgtable_hyp_assign_page(u32 vmid, struct page *page)
 	ret = qcom_scm_assign_mem(page_to_phys(page), PAGE_SIZE, &src_vmid_list,
 			      dst_vmids, ARRAY_SIZE(dst_vmids));
 	if (ret)
-		pr_err("failed qcom_assign for %pa address of size %zx - subsys VMid %d rc:%d\n",
+		pr_err("failed qcom_assign for %pa address of size %lx - subsys VMid %d rc:%d\n",
 			&page_addr, PAGE_SIZE, vmid, ret);
 
 	WARN(ret, "failed to assign memory to VMID: %u rc:%d\n", vmid, ret);
@@ -57,7 +57,7 @@ static int io_pgtable_hyp_unassign_page(u32 vmid, struct page *page)
 	ret = qcom_scm_assign_mem(page_to_phys(page), PAGE_SIZE, &src_vmid_list,
 			      dst_vmids, ARRAY_SIZE(dst_vmids));
 	if (ret)
-		pr_err("failed qcom_assign for unassigning %pa address of size %zx - subsys VMid %d rc:%d\n",
+		pr_err("failed qcom_assign for unassigning %pa address of size %lx - subsys VMid %d rc:%d\n",
 			&page_addr, PAGE_SIZE, vmid, ret);
 
 	WARN(ret, "failed to unassign memory from VMID: %u rc: %d\n", vmid, ret);

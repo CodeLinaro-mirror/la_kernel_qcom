@@ -297,8 +297,8 @@ static void merge_resv_region(struct list_head *list, struct iommu_resv_region *
 
 		start = min(new->start, cur->start);
 		end = max(new_end, cur_end);
-		pr_debug("%s: Merging %llx-%llx into %llx-%llx\n",
-			__func__, new->start, new_end, cur->start, cur_end);
+		pr_debug("%s: Merging %pa-%pa into %pa-%pa\n",
+			__func__, &new->start, &new_end, &cur->start, &cur_end);
 
 		list_del(&cur->list);
 		kfree(cur);
@@ -316,8 +316,8 @@ static void merge_resv_region(struct list_head *list, struct iommu_resv_region *
 
 		start = min(new->start, cur->start);
 		end = max(new_end, cur_end);
-		pr_debug("%s: Merging %llx-%llx into %llx-%llx\n",
-			__func__, new->start, new_end, cur->start, cur_end);
+		pr_debug("%s: Merging %pa-%pa into %pa-%pa\n",
+			__func__, &new->start, &new_end, &cur->start, &cur_end);
 
 		list_del(&cur->list);
 		kfree(cur);
@@ -371,7 +371,7 @@ static int get_iova_range_from_iommu_addresses(struct device *dev, struct iova_r
 
 	pr_debug("%s: Sorted & Merged iommu-address regions\n", __func__);
 	list_for_each_entry(x, &mergelist, list)
-		pr_debug("%s: %llx-%llx\n", __func__, x->start, x->start + x->length - 1);
+		pr_debug("%s: %pa-%pa\n", __func__, &x->start, &(x->start) + x->length - 1);
 
 	region = list_first_entry(&mergelist, struct iommu_resv_region, list);
 	dma_range->base = 0;
@@ -384,7 +384,7 @@ static int get_iova_range_from_iommu_addresses(struct device *dev, struct iova_r
 	    region->start + region->length - 1 >= fastmap_max_iova)
 		dma_range->end = region->start - 1;
 
-	pr_debug("%s: Result: %llx-%llx\n", __func__, dma_range->base, dma_range->end);
+	pr_debug("%s: Result: %pa-%pa\n", __func__, &dma_range->base, &dma_range->end);
 	ret = 0;
 
 out:
