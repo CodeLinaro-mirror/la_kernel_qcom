@@ -17,6 +17,7 @@
 #include <asm/io.h>
 
 #include "stmmac.h"
+#include "hwif.h"
 #include "dwmac_dma.h"
 #include "dwxgmac2.h"
 
@@ -74,6 +75,11 @@ static const struct stmmac_stats stmmac_gstrings_stats[] = {
 	STMMAC_STAT(sa_rx_filter_fail),
 	STMMAC_STAT(rx_missed_cntr),
 	STMMAC_STAT(rx_overflow_cntr),
+	STMMAC_STAT(q_rx_overflow_cntr[0]),
+	STMMAC_STAT(q_rx_overflow_cntr[1]),
+	STMMAC_STAT(q_rx_overflow_cntr[2]),
+	STMMAC_STAT(q_rx_overflow_cntr[3]),
+	STMMAC_STAT(q_rx_overflow_cntr[4]),
 	STMMAC_STAT(rx_vlan),
 	STMMAC_STAT(rx_split_hdr_pkt_n),
 	/* Tx/Rx IRQ error info */
@@ -86,9 +92,18 @@ static const struct stmmac_stats stmmac_gstrings_stats[] = {
 	STMMAC_STAT(rx_watchdog_irq),
 	STMMAC_STAT(tx_early_irq),
 	STMMAC_STAT(fatal_bus_error_irq),
+	STMMAC_STAT(tx_buf_unav_irq),
 	/* Tx/Rx IRQ Events */
 	STMMAC_STAT(rx_early_irq),
 	STMMAC_STAT(threshold),
+	STMMAC_STAT(tx_pkt_n),
+	STMMAC_STAT(rx_pkt_n),
+	STMMAC_STAT(normal_irq_n),
+	STMMAC_STAT(rx_normal_irq_n),
+	STMMAC_STAT(napi_poll),
+	STMMAC_STAT(tx_normal_irq_n),
+	STMMAC_STAT(tx_clean),
+	STMMAC_STAT(tx_set_ic_bit),
 	STMMAC_STAT(irq_receive_pmt_irq_n),
 	/* MMC info */
 	STMMAC_STAT(mmc_tx_irq_n),
@@ -155,6 +170,9 @@ static const struct stmmac_stats stmmac_gstrings_stats[] = {
 	STMMAC_STAT(mtl_rx_fifo_ctrl_active),
 	STMMAC_STAT(mac_rx_frame_ctrl_fifo),
 	STMMAC_STAT(mac_gmii_rx_proto_engine),
+	/* TSO */
+	STMMAC_STAT(tx_tso_frames),
+	STMMAC_STAT(tx_tso_nfrags),
 	/* EST */
 	STMMAC_STAT(mtl_est_cgce),
 	STMMAC_STAT(mtl_est_hlbs),
@@ -163,23 +181,6 @@ static const struct stmmac_stats stmmac_gstrings_stats[] = {
 	STMMAC_STAT(mtl_est_btrlm),
 };
 #define STMMAC_STATS_LEN ARRAY_SIZE(stmmac_gstrings_stats)
-
-/* statistics collected in queue which will be summed up for all TX or RX
- * queues, or summed up for both TX and RX queues(napi_poll, normal_irq_n).
- */
-static const char stmmac_qstats_string[][ETH_GSTRING_LEN] = {
-	"rx_pkt_n",
-	"rx_normal_irq_n",
-	"tx_pkt_n",
-	"tx_normal_irq_n",
-	"tx_clean",
-	"tx_set_ic_bit",
-	"tx_tso_frames",
-	"tx_tso_nfrags",
-	"normal_irq_n",
-	"napi_poll",
-};
-#define STMMAC_QSTATS ARRAY_SIZE(stmmac_qstats_string)
 
 /* HW MAC Management counters (if supported) */
 #define STMMAC_MMC_STAT(m)	\
@@ -278,12 +279,22 @@ static const struct stmmac_stats stmmac_mmc[] = {
 static const char stmmac_qstats_tx_string[][ETH_GSTRING_LEN] = {
 	"tx_pkt_n",
 	"tx_irq_n",
+	"fatal_bus_err_irq_n",
+	"txch_desc_list_laddr",
+	"txch_desc_ring_len",
+	"txch_desc_tail",
+	"tx_buf_unav_irq",
 #define STMMAC_TXQ_STATS ARRAY_SIZE(stmmac_qstats_tx_string)
 };
 
 static const char stmmac_qstats_rx_string[][ETH_GSTRING_LEN] = {
 	"rx_pkt_n",
 	"rx_irq_n",
+	"rx_buf_unav_irq_n",
+	"rx_process_stopped_irq",
+	"rxch_desc_list_laddr",
+	"rxch_desc_ring_len",
+	"rxch_desc_tail",
 #define STMMAC_RXQ_STATS ARRAY_SIZE(stmmac_qstats_rx_string)
 };
 
@@ -304,6 +315,7 @@ static void stmmac_ethtool_getdrvinfo(struct net_device *dev,
 		strscpy(info->bus_info, pci_name(priv->plat->pdev),
 			sizeof(info->bus_info));
 	}
+	strscpy(info->version, DRV_MODULE_VERSION, sizeof(info->version));
 }
 
 static int stmmac_ethtool_get_link_ksettings(struct net_device *dev,
@@ -311,9 +323,11 @@ static int stmmac_ethtool_get_link_ksettings(struct net_device *dev,
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
-	if (!(priv->plat->flags & STMMAC_FLAG_HAS_INTEGRATED_PCS) &&
-	    (priv->hw->pcs & STMMAC_PCS_RGMII ||
-	     priv->hw->pcs & STMMAC_PCS_SGMII)) {
+	if (!netif_running(dev))
+		return -EBUSY;
+
+	if (!priv->plat->has_gmac4 && (priv->hw->pcs & STMMAC_PCS_RGMII ||
+				       priv->hw->pcs & STMMAC_PCS_SGMII)) {
 		struct rgmii_adv adv;
 		u32 supported, advertising, lp_advertising;
 
@@ -389,7 +403,10 @@ static int stmmac_ethtool_get_link_ksettings(struct net_device *dev,
 		return 0;
 	}
 
-	return phylink_ethtool_ksettings_get(priv->phylink, cmd);
+	if (!priv->plat->mac2mac_en)
+		return phylink_ethtool_ksettings_get(priv->phylink, cmd);
+	else
+		return 0;
 }
 
 static int
@@ -397,13 +414,38 @@ stmmac_ethtool_set_link_ksettings(struct net_device *dev,
 				  const struct ethtool_link_ksettings *cmd)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
+	struct phy_device *phy = dev->phydev;
+	int rc = 0;
 
-	if (!(priv->plat->flags & STMMAC_FLAG_HAS_INTEGRATED_PCS) &&
-	    (priv->hw->pcs & STMMAC_PCS_RGMII ||
-	     priv->hw->pcs & STMMAC_PCS_SGMII)) {
+	if (!phy) {
+		pr_err("%s: %s: PHY is not registered\n",
+		       __func__, dev->name);
+		return -ENODEV;
+	}
+
+	if (priv->plat->has_xgmac &&
+	    (priv->plat->interface == PHY_INTERFACE_MODE_USXGMII ||
+	     priv->plat->interface == PHY_INTERFACE_MODE_SGMII)) {
+		if (cmd->base.autoneg == AUTONEG_DISABLE)
+			return -EINVAL;
+		else if (cmd->base.speed) /* Autoneg on and speed change is not supported */
+			return 0;
+	}
+
+	if  (!priv->plat->has_gmac4 && (priv->hw->pcs & STMMAC_PCS_RGMII ||
+					priv->hw->pcs & STMMAC_PCS_SGMII)) {
+		u32 mask = ADVERTISED_Autoneg | ADVERTISED_Pause;
+
 		/* Only support ANE */
 		if (cmd->base.autoneg != AUTONEG_ENABLE)
 			return -EINVAL;
+
+		mask &= (ADVERTISED_1000baseT_Half |
+			ADVERTISED_1000baseT_Full |
+			ADVERTISED_100baseT_Half |
+			ADVERTISED_100baseT_Full |
+			ADVERTISED_10baseT_Half |
+			ADVERTISED_10baseT_Full);
 
 		mutex_lock(&priv->lock);
 		stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, priv->hw->ps, 0);
@@ -412,7 +454,17 @@ stmmac_ethtool_set_link_ksettings(struct net_device *dev,
 		return 0;
 	}
 
-	return phylink_ethtool_ksettings_set(priv->phylink, cmd);
+	if (!priv->plat->mac2mac_en) {
+		rc = phylink_ethtool_ksettings_set(priv->phylink, cmd);
+
+		if (phy)
+			linkmode_copy(priv->adv_old, phy->advertising);
+
+		return rc;
+	} else {
+		return 0;
+	}
+
 }
 
 static u32 stmmac_ethtool_getmsglevel(struct net_device *dev)
@@ -472,26 +524,26 @@ static int stmmac_nway_reset(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
-	return phylink_ethtool_nway_reset(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		return phylink_ethtool_nway_reset(priv->phylink);
+	else
+		return 0;
+
 }
 
 static void stmmac_get_ringparam(struct net_device *netdev,
-				 struct ethtool_ringparam *ring,
-				 struct kernel_ethtool_ringparam *kernel_ring,
-				 struct netlink_ext_ack *extack)
+				 struct ethtool_ringparam *ring)
 {
 	struct stmmac_priv *priv = netdev_priv(netdev);
 
 	ring->rx_max_pending = DMA_MAX_RX_SIZE;
 	ring->tx_max_pending = DMA_MAX_TX_SIZE;
-	ring->rx_pending = priv->dma_conf.dma_rx_size;
-	ring->tx_pending = priv->dma_conf.dma_tx_size;
+	ring->rx_pending = priv->dma_rx_size;
+	ring->tx_pending = priv->dma_tx_size;
 }
 
 static int stmmac_set_ringparam(struct net_device *netdev,
-				struct ethtool_ringparam *ring,
-				struct kernel_ethtool_ringparam *kernel_ring,
-				struct netlink_ext_ack *extack)
+				struct ethtool_ringparam *ring)
 {
 	if (ring->rx_mini_pending || ring->rx_jumbo_pending ||
 	    ring->rx_pending < DMA_MIN_RX_SIZE ||
@@ -518,7 +570,13 @@ stmmac_get_pauseparam(struct net_device *netdev,
 		if (!adv_lp.pause)
 			return;
 	} else {
-		phylink_ethtool_get_pauseparam(priv->phylink, pause);
+		if (!priv->plat->mac2mac_en)
+			phylink_ethtool_get_pauseparam(priv->phylink, pause);
+
+		if (priv->flow_ctrl & FLOW_RX)
+			pause->rx_pause = 1;
+		if (priv->flow_ctrl & FLOW_TX)
+			pause->tx_pause = 1;
 	}
 }
 
@@ -529,89 +587,58 @@ stmmac_set_pauseparam(struct net_device *netdev,
 	struct stmmac_priv *priv = netdev_priv(netdev);
 	struct rgmii_adv adv_lp;
 
+	u32 tx_cnt = priv->plat->tx_queues_to_use;
+	struct phy_device *phy = netdev->phydev;
+	int new_pause = FLOW_OFF;
+
+	if (!phy && !priv->plat->mac2mac_en) {
+		pr_err("%s: %s: PHY is not registered\n",
+		       __func__, netdev->name);
+		return -ENODEV;
+	}
+
 	if (priv->hw->pcs && !stmmac_pcs_get_adv_lp(priv, priv->ioaddr, &adv_lp)) {
 		pause->autoneg = 1;
 		if (!adv_lp.pause)
 			return -EOPNOTSUPP;
 		return 0;
 	} else {
-		return phylink_ethtool_set_pauseparam(priv->phylink, pause);
+		if (!priv->plat->mac2mac_en)
+			return phylink_ethtool_set_pauseparam(priv->phylink, pause);
+		if (pause->rx_pause)
+			new_pause |= FLOW_RX;
+		if (pause->tx_pause)
+			new_pause |= FLOW_TX;
+
+		priv->flow_ctrl = new_pause;
+		stmmac_flow_ctrl(priv, priv->hw, 0, priv->flow_ctrl,
+				 priv->pause, tx_cnt);
+		return 0;
 	}
-}
-
-static u64 stmmac_get_rx_normal_irq_n(struct stmmac_priv *priv, int q)
-{
-	u64 total;
-	int cpu;
-
-	total = 0;
-	for_each_possible_cpu(cpu) {
-		struct stmmac_pcpu_stats *pcpu;
-		unsigned int start;
-		u64 irq_n;
-
-		pcpu = per_cpu_ptr(priv->xstats.pcpu_stats, cpu);
-		do {
-			start = u64_stats_fetch_begin(&pcpu->syncp);
-			irq_n = u64_stats_read(&pcpu->rx_normal_irq_n[q]);
-		} while (u64_stats_fetch_retry(&pcpu->syncp, start));
-		total += irq_n;
-	}
-	return total;
-}
-
-static u64 stmmac_get_tx_normal_irq_n(struct stmmac_priv *priv, int q)
-{
-	u64 total;
-	int cpu;
-
-	total = 0;
-	for_each_possible_cpu(cpu) {
-		struct stmmac_pcpu_stats *pcpu;
-		unsigned int start;
-		u64 irq_n;
-
-		pcpu = per_cpu_ptr(priv->xstats.pcpu_stats, cpu);
-		do {
-			start = u64_stats_fetch_begin(&pcpu->syncp);
-			irq_n = u64_stats_read(&pcpu->tx_normal_irq_n[q]);
-		} while (u64_stats_fetch_retry(&pcpu->syncp, start));
-		total += irq_n;
-	}
-	return total;
 }
 
 static void stmmac_get_per_qstats(struct stmmac_priv *priv, u64 *data)
 {
 	u32 tx_cnt = priv->plat->tx_queues_to_use;
 	u32 rx_cnt = priv->plat->rx_queues_to_use;
-	unsigned int start;
-	int q;
+	int q, stat;
+	char *p;
 
 	for (q = 0; q < tx_cnt; q++) {
-		struct stmmac_txq_stats *txq_stats = &priv->xstats.txq_stats[q];
-		u64 pkt_n;
-
-		do {
-			start = u64_stats_fetch_begin(&txq_stats->napi_syncp);
-			pkt_n = u64_stats_read(&txq_stats->napi.tx_pkt_n);
-		} while (u64_stats_fetch_retry(&txq_stats->napi_syncp, start));
-
-		*data++ = pkt_n;
-		*data++ = stmmac_get_tx_normal_irq_n(priv, q);
+		p = (char *)priv + offsetof(struct stmmac_priv,
+					    xstats.txq_stats[q].tx_pkt_n);
+		for (stat = 0; stat < STMMAC_TXQ_STATS; stat++) {
+			*data++ = (*(unsigned long *)p);
+			p += sizeof(unsigned long);
+		}
 	}
-
 	for (q = 0; q < rx_cnt; q++) {
-		struct stmmac_rxq_stats *rxq_stats = &priv->xstats.rxq_stats[q];
-		u64 pkt_n;
-
-		do {
-			start = u64_stats_fetch_begin(&rxq_stats->napi_syncp);
-			pkt_n = u64_stats_read(&rxq_stats->napi.rx_pkt_n);
-		} while (u64_stats_fetch_retry(&rxq_stats->napi_syncp, start));
-
-		*data++ = pkt_n;
-		*data++ = stmmac_get_rx_normal_irq_n(priv, q);
+		p = (char *)priv + offsetof(struct stmmac_priv,
+					    xstats.rxq_stats[q].rx_pkt_n);
+		for (stat = 0; stat < STMMAC_RXQ_STATS; stat++) {
+			*data++ = (*(unsigned long *)p);
+			p += sizeof(unsigned long);
+		}
 	}
 }
 
@@ -621,10 +648,8 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 rx_queues_count = priv->plat->rx_queues_to_use;
 	u32 tx_queues_count = priv->plat->tx_queues_to_use;
-	u64 napi_poll = 0, normal_irq_n = 0;
-	int i, j = 0, pos, ret;
 	unsigned long count;
-	unsigned int start;
+	int i, j = 0, ret;
 
 	if (priv->dma_cap.asp) {
 		for (i = 0; i < STMMAC_SAFETY_FEAT_SIZE; i++) {
@@ -635,7 +660,8 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 	}
 
 	/* Update the DMA HW counters for dwmac10/100 */
-	ret = stmmac_dma_diagnostic_fr(priv, &priv->xstats, priv->ioaddr);
+	ret = stmmac_dma_diagnostic_fr(priv, &dev->stats, (void *)&priv->xstats,
+				       priv->ioaddr);
 	if (ret) {
 		/* If supported, for new GMAC chips expose the MMC counters */
 		if (priv->dma_cap.rmon) {
@@ -651,73 +677,29 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 			}
 		}
 		if (priv->eee_enabled) {
-			int val = phylink_get_eee_err(priv->phylink);
-			if (val)
-				priv->xstats.phy_eee_wakeup_error_n = val;
+			if (!priv->plat->mac2mac_en) {
+				int val = phylink_get_eee_err(priv->phylink);
+
+				if (val)
+					priv->xstats.phy_eee_wakeup_error_n = val;
+			}
 		}
 
 		if (priv->synopsys_id >= DWMAC_CORE_3_50)
 			stmmac_mac_debug(priv, priv->ioaddr,
 					(void *)&priv->xstats,
 					rx_queues_count, tx_queues_count);
+
+		if (priv->synopsys_id == DWXLGMAC_CORE_3_10)
+			stmmac_desc_stats(priv, priv->ioaddr, &priv->xstats,
+					  priv->plat->tx_queues_to_use,
+					  priv->plat->rx_queues_to_use);
 	}
 	for (i = 0; i < STMMAC_STATS_LEN; i++) {
 		char *p = (char *)priv + stmmac_gstrings_stats[i].stat_offset;
 		data[j++] = (stmmac_gstrings_stats[i].sizeof_stat ==
 			     sizeof(u64)) ? (*(u64 *)p) : (*(u32 *)p);
 	}
-
-	pos = j;
-	for (i = 0; i < rx_queues_count; i++) {
-		struct stmmac_rxq_stats *rxq_stats = &priv->xstats.rxq_stats[i];
-		struct stmmac_napi_rx_stats snapshot;
-		u64 n_irq;
-
-		j = pos;
-		do {
-			start = u64_stats_fetch_begin(&rxq_stats->napi_syncp);
-			snapshot = rxq_stats->napi;
-		} while (u64_stats_fetch_retry(&rxq_stats->napi_syncp, start));
-
-		data[j++] += u64_stats_read(&snapshot.rx_pkt_n);
-		n_irq = stmmac_get_rx_normal_irq_n(priv, i);
-		data[j++] += n_irq;
-		normal_irq_n += n_irq;
-		napi_poll += u64_stats_read(&snapshot.poll);
-	}
-
-	pos = j;
-	for (i = 0; i < tx_queues_count; i++) {
-		struct stmmac_txq_stats *txq_stats = &priv->xstats.txq_stats[i];
-		struct stmmac_napi_tx_stats napi_snapshot;
-		struct stmmac_q_tx_stats q_snapshot;
-		u64 n_irq;
-
-		j = pos;
-		do {
-			start = u64_stats_fetch_begin(&txq_stats->q_syncp);
-			q_snapshot = txq_stats->q;
-		} while (u64_stats_fetch_retry(&txq_stats->q_syncp, start));
-		do {
-			start = u64_stats_fetch_begin(&txq_stats->napi_syncp);
-			napi_snapshot = txq_stats->napi;
-		} while (u64_stats_fetch_retry(&txq_stats->napi_syncp, start));
-
-		data[j++] += u64_stats_read(&napi_snapshot.tx_pkt_n);
-		n_irq = stmmac_get_tx_normal_irq_n(priv, i);
-		data[j++] += n_irq;
-		normal_irq_n += n_irq;
-		data[j++] += u64_stats_read(&napi_snapshot.tx_clean);
-		data[j++] += u64_stats_read(&q_snapshot.tx_set_ic_bit) +
-			u64_stats_read(&napi_snapshot.tx_set_ic_bit);
-		data[j++] += u64_stats_read(&q_snapshot.tx_tso_frames);
-		data[j++] += u64_stats_read(&q_snapshot.tx_tso_nfrags);
-		napi_poll += u64_stats_read(&napi_snapshot.poll);
-	}
-	normal_irq_n += priv->xstats.rx_early_irq;
-	data[j++] = normal_irq_n;
-	data[j++] = napi_poll;
-
 	stmmac_get_per_qstats(priv, &data[j]);
 }
 
@@ -730,7 +712,7 @@ static int stmmac_get_sset_count(struct net_device *netdev, int sset)
 
 	switch (sset) {
 	case ETH_SS_STATS:
-		len = STMMAC_STATS_LEN + STMMAC_QSTATS +
+		len = STMMAC_STATS_LEN +
 		      STMMAC_TXQ_STATS * tx_cnt +
 		      STMMAC_RXQ_STATS * rx_cnt;
 
@@ -803,11 +785,8 @@ static void stmmac_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 				p += ETH_GSTRING_LEN;
 			}
 		for (i = 0; i < STMMAC_STATS_LEN; i++) {
-			memcpy(p, stmmac_gstrings_stats[i].stat_string, ETH_GSTRING_LEN);
-			p += ETH_GSTRING_LEN;
-		}
-		for (i = 0; i < STMMAC_QSTATS; i++) {
-			memcpy(p, stmmac_qstats_string[i], ETH_GSTRING_LEN);
+			memcpy(p, stmmac_gstrings_stats[i].stat_string,
+			       ETH_GSTRING_LEN);
 			p += ETH_GSTRING_LEN;
 		}
 		stmmac_get_qstats_string(priv, p);
@@ -843,12 +822,23 @@ static int stmmac_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 support = WAKE_MAGIC | WAKE_UCAST;
+	int ret = 0;
 
-	if (!device_can_wakeup(priv->device))
+	if (!priv->phydev) {
+		pr_err("%s: %s: PHY is not registered\n",
+		       __func__, dev->name);
+		return -ENODEV;
+	}
+
+	if (!device_can_wakeup(priv->device) && priv->plat->pmt)
 		return -EOPNOTSUPP;
 
+	if (priv->plat->enable_wol)
+		return priv->plat->enable_wol(dev, wol);
+
 	if (!priv->plat->pmt) {
-		int ret = phylink_ethtool_set_wol(priv->phylink, wol);
+		wol->cmd = ETHTOOL_SWOL;
+		ret = phylink_ethtool_set_wol(priv->phylink, wol);
 
 		if (!ret)
 			device_set_wakeup_enable(priv->device, !!wol->wolopts);
@@ -866,7 +856,13 @@ static int stmmac_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 
 	if (wol->wolopts) {
 		pr_info("stmmac: wakeup enable\n");
+		device_set_wakeup_capable(priv->device, 1);
 		device_set_wakeup_enable(priv->device, 1);
+		enable_irq_wake(priv->wol_irq);
+		if (wol->wolopts == 0)
+			priv->en_wol = false;
+		else
+			priv->en_wol = true;
 		/* Avoid unbalanced enable_irq_wake calls */
 		if (priv->wol_irq_disabled)
 			enable_irq_wake(priv->wol_irq);
@@ -889,17 +885,41 @@ static int stmmac_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 static int stmmac_ethtool_op_get_eee(struct net_device *dev,
 				     struct ethtool_eee *edata)
 {
+	int val;
 	struct stmmac_priv *priv = netdev_priv(dev);
 
-	if (!priv->dma_cap.eee)
+	if (!priv->dma_cap.eee || priv->plat->mac2mac_en)
 		return -EOPNOTSUPP;
-
 	edata->eee_enabled = priv->eee_enabled;
 	edata->eee_active = priv->eee_active;
 	edata->tx_lpi_timer = priv->tx_lpi_timer;
 	edata->tx_lpi_enabled = priv->tx_lpi_enabled;
 
-	return phylink_ethtool_get_eee(priv->phylink, edata);
+	val = phylink_ethtool_get_eee(priv->phylink, edata);
+	if (val < 0)
+		return val;
+
+	/* Currently, the eee status is shown active even in case of speeds for which
+	 * eee is not supported. The below code checks if eee_active after returning from
+	 * phylink_ethtool_get_eee function, and using phy_lookup_setting, we reset
+	 * eee_active if the link speed is not advertised or supported.
+	 */
+	if (edata->eee_active) {
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(common);
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(adv) = {};
+		__ETHTOOL_DECLARE_LINK_MODE_MASK(lp) = {};
+
+		ethtool_convert_legacy_u32_to_link_mode(adv, edata->advertised);
+		ethtool_convert_legacy_u32_to_link_mode(lp, edata->lp_advertised);
+		linkmode_and(common, adv, lp);
+
+		edata->eee_active = !!phy_lookup_setting(priv->phydev->speed,
+							priv->phydev->duplex,
+							common,
+							true);
+	}
+
+	return 0;
 }
 
 static int stmmac_ethtool_op_set_eee(struct net_device *dev,
@@ -915,12 +935,30 @@ static int stmmac_ethtool_op_set_eee(struct net_device *dev,
 		netdev_warn(priv->dev,
 			    "Setting EEE tx-lpi is not supported\n");
 
+	if (priv->hw->xpcs) {
+		ret = xpcs_config_eee(priv->hw->xpcs,
+				      priv->plat->mult_fact_100ns,
+				      edata->eee_enabled);
+		if (ret)
+			return ret;
+	}
+
+	if (priv->hw->qxpcs) {
+		ret = qcom_xpcs_config_eee(priv->hw->qxpcs,
+					   priv->plat->mult_fact_100ns,
+					   edata->eee_enabled);
+		if (ret)
+			return ret;
+	}
+
 	if (!edata->eee_enabled)
 		stmmac_disable_eee_mode(priv);
 
-	ret = phylink_ethtool_set_eee(priv->phylink, edata);
-	if (ret)
-		return ret;
+	if (!priv->plat->mac2mac_en) {
+		ret = phylink_ethtool_set_eee(priv->phylink, edata);
+		if (ret)
+			return ret;
+	}
 
 	if (edata->eee_enabled &&
 	    priv->tx_lpi_timer != edata->tx_lpi_timer) {

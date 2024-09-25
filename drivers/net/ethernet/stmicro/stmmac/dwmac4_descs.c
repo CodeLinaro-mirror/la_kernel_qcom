@@ -13,10 +13,11 @@
 #include "dwmac4.h"
 #include "dwmac4_descs.h"
 
-static int dwmac4_wrback_get_tx_status(struct stmmac_extra_stats *x,
+static int dwmac4_wrback_get_tx_status(void *data, struct stmmac_extra_stats *x,
 				       struct dma_desc *p,
 				       void __iomem *ioaddr)
 {
+	struct net_device_stats *stats = (struct net_device_stats *)data;
 	unsigned int tdes3;
 	int ret = tx_done;
 
@@ -31,37 +32,37 @@ static int dwmac4_wrback_get_tx_status(struct stmmac_extra_stats *x,
 		return tx_not_ls;
 
 	if (unlikely(tdes3 & TDES3_ERROR_SUMMARY)) {
-		ret = tx_err;
-
 		if (unlikely(tdes3 & TDES3_JABBER_TIMEOUT))
 			x->tx_jabber++;
 		if (unlikely(tdes3 & TDES3_PACKET_FLUSHED))
 			x->tx_frame_flushed++;
 		if (unlikely(tdes3 & TDES3_LOSS_CARRIER)) {
 			x->tx_losscarrier++;
+			stats->tx_carrier_errors++;
 		}
 		if (unlikely(tdes3 & TDES3_NO_CARRIER)) {
 			x->tx_carrier++;
+			stats->tx_carrier_errors++;
 		}
 		if (unlikely((tdes3 & TDES3_LATE_COLLISION) ||
 			     (tdes3 & TDES3_EXCESSIVE_COLLISION)))
-			x->tx_collision +=
+			stats->collisions +=
 			    (tdes3 & TDES3_COLLISION_COUNT_MASK)
 			    >> TDES3_COLLISION_COUNT_SHIFT;
 
 		if (unlikely(tdes3 & TDES3_EXCESSIVE_DEFERRAL))
 			x->tx_deferred++;
 
-		if (unlikely(tdes3 & TDES3_UNDERFLOW_ERROR)) {
+		if (unlikely(tdes3 & TDES3_UNDERFLOW_ERROR))
 			x->tx_underflow++;
-			ret |= tx_err_bump_tc;
-		}
 
 		if (unlikely(tdes3 & TDES3_IP_HDR_ERROR))
 			x->tx_ip_header_error++;
 
 		if (unlikely(tdes3 & TDES3_PAYLOAD_ERROR))
 			x->tx_payload_error++;
+
+		ret = tx_err;
 	}
 
 	if (unlikely(tdes3 & TDES3_DEFERRED))
@@ -70,9 +71,11 @@ static int dwmac4_wrback_get_tx_status(struct stmmac_extra_stats *x,
 	return ret;
 }
 
-static int dwmac4_wrback_get_rx_status(struct stmmac_extra_stats *x,
-				       struct dma_desc *p)
+static int dwmac4_wrback_get_rx_status_err(void *data,
+					   struct stmmac_extra_stats *x,
+					   struct dma_desc *p, int *status)
 {
+	struct net_device_stats *stats = (struct net_device_stats *)data;
 	unsigned int rdes1 = le32_to_cpu(p->des1);
 	unsigned int rdes2 = le32_to_cpu(p->des2);
 	unsigned int rdes3 = le32_to_cpu(p->des3);
@@ -82,28 +85,46 @@ static int dwmac4_wrback_get_rx_status(struct stmmac_extra_stats *x,
 	if (unlikely(rdes3 & RDES3_OWN))
 		return dma_own;
 
-	if (unlikely(rdes3 & RDES3_CONTEXT_DESCRIPTOR))
-		return discard_frame;
+	if (likely((rdes3 & RDES3_CONTEXT_DESCRIPTOR)))
+		return (discard_frame | ctxt_desc);
+
+	/* Verify rx error by looking at the last segment. */
 	if (likely(!(rdes3 & RDES3_LAST_DESCRIPTOR)))
-		return rx_not_ls;
+		return discard_frame;
+
+	if (unlikely(!(rdes3 & RDES3_PACKET_LEN_TYPE_MASK))) {
+		pr_info("rdes3 = 0xX\n", rdes3);
+		ret = llc_snap;
+	}
 
 	if (unlikely(rdes3 & RDES3_ERROR_SUMMARY)) {
 		if (unlikely(rdes3 & RDES3_GIANT_PACKET))
-			x->rx_length++;
-		if (unlikely(rdes3 & RDES3_OVERFLOW_ERROR))
+			stats->rx_length_errors++;
+		if (unlikely(rdes3 & RDES3_OVERFLOW_ERROR)) {
 			x->rx_gmac_overflow++;
+			*status = OVERFLOW_ERR;
+		}
 
-		if (unlikely(rdes3 & RDES3_RECEIVE_WATCHDOG))
+		if (unlikely(rdes3 & RDES3_RECEIVE_WATCHDOG)) {
 			x->rx_watchdog++;
+			*status = WDT_ERR;
+		}
 
-		if (unlikely(rdes3 & RDES3_RECEIVE_ERROR))
+		if (unlikely(rdes3 & RDES3_RECEIVE_ERROR)) {
 			x->rx_mii++;
+			*status = RECEIVE_ERR;
+		}
 
-		if (unlikely(rdes3 & RDES3_CRC_ERROR))
+		if (unlikely(rdes3 & RDES3_CRC_ERROR)) {
 			x->rx_crc_errors++;
+			stats->rx_crc_errors++;
+			*status = CRC_ERR;
+		}
 
-		if (unlikely(rdes3 & RDES3_DRIBBLE_ERROR))
+		if (unlikely(rdes3 & RDES3_DRIBBLE_ERROR)) {
 			x->dribbling_bit++;
+			*status = DRIBBLE_ERR;
+		}
 
 		ret = discard_frame;
 	}
@@ -167,6 +188,14 @@ static int dwmac4_wrback_get_rx_status(struct stmmac_extra_stats *x,
 		x->l3_l4_filter_no_match++;
 
 	return ret;
+}
+
+static int dwmac4_wrback_get_rx_status(void *data, struct stmmac_extra_stats *x,
+				       struct dma_desc *p)
+{
+	int status;
+
+	return dwmac4_wrback_get_rx_status_err(data, x, p, &status);
 }
 
 static int dwmac4_rd_get_tx_len(struct dma_desc *p)
@@ -456,6 +485,11 @@ static void dwmac4_set_mss_ctxt(struct dma_desc *p, unsigned int mss)
 	p->des3 = cpu_to_le32(TDES3_CONTEXT_TYPE | TDES3_CTXT_TCMSSV);
 }
 
+static void dwmac4_get_addr(struct dma_desc *p, unsigned int *addr)
+{
+	*addr = le32_to_cpu(p->des0);
+}
+
 static void dwmac4_set_addr(struct dma_desc *p, dma_addr_t addr)
 {
 	p->des0 = cpu_to_le32(lower_32_bits(addr));
@@ -546,6 +580,7 @@ static void dwmac4_set_tbs(struct dma_edesc *p, u32 sec, u32 nsec)
 const struct stmmac_desc_ops dwmac4_desc_ops = {
 	.tx_status = dwmac4_wrback_get_tx_status,
 	.rx_status = dwmac4_wrback_get_rx_status,
+	.rx_status_err = dwmac4_wrback_get_rx_status_err,
 	.get_tx_len = dwmac4_rd_get_tx_len,
 	.get_tx_owner = dwmac4_get_tx_owner,
 	.set_tx_owner = dwmac4_set_tx_owner,
@@ -564,6 +599,7 @@ const struct stmmac_desc_ops dwmac4_desc_ops = {
 	.init_tx_desc = dwmac4_rd_init_tx_desc,
 	.display_ring = dwmac4_display_ring,
 	.set_mss = dwmac4_set_mss_ctxt,
+	.get_addr = dwmac4_get_addr,
 	.set_addr = dwmac4_set_addr,
 	.clear = dwmac4_clear,
 	.set_sarc = dwmac4_set_sarc,

@@ -17,6 +17,9 @@
 #include "stmmac_ptp.h"
 #include "dwmac4.h"
 #include "stmmac.h"
+#include "dwxgmac2.h"
+
+#define PTP_LIMIT 100000
 
 static void config_hw_tstamping(void __iomem *ioaddr, u32 data)
 {
@@ -27,7 +30,7 @@ static void config_sub_second_increment(void __iomem *ioaddr,
 		u32 ptp_clock, int gmac4, u32 *ssinc)
 {
 	u32 value = readl(ioaddr + PTP_TCR);
-	unsigned long data;
+	u64 ss_inc = 0, sns_inc = 0, ptpclock = 0;
 	u32 reg_value;
 
 	/* For GMAC3.x, 4.x versions, in "fine adjustement mode" set sub-second
@@ -39,72 +42,50 @@ static void config_sub_second_increment(void __iomem *ioaddr,
 	 * 2000000000ULL / ptp_clock.
 	 */
 	if (value & PTP_TCR_TSCFUPDT)
-		data = (2000000000ULL / ptp_clock);
+		ptpclock = (u64)ptp_clock;
 	else
-		data = (1000000000ULL / ptp_clock);
+		ptpclock = (u64)ptp_clock;
+
+	ss_inc = div_u64((1 * 1000000000ULL), ptpclock);
+	sns_inc = 1000000000ULL - (ss_inc * ptpclock); //take remainder
+
+	//sns_inc needs to be multiplied by 2^8, per spec.
+	sns_inc = div_u64((sns_inc * 256), ptpclock);
 
 	/* 0.465ns accuracy */
 	if (!(value & PTP_TCR_TSCTRLSSR))
-		data = (data * 1000) / 465;
+		ss_inc = div_u64((ss_inc * 1000), 465);
 
-	if (data > PTP_SSIR_SSINC_MAX)
-		data = PTP_SSIR_SSINC_MAX;
+	ss_inc &= PTP_SSIR_SSINC_MAX;
+	sns_inc &= PTP_SSIR_SNSINC_MASK;
 
-	reg_value = data;
+	reg_value = ss_inc;
+
 	if (gmac4)
 		reg_value <<= GMAC4_PTP_SSIR_SSINC_SHIFT;
+
+	reg_value |= (sns_inc << GMAC4_PTP_SSIR_SNSINC_SHIFT);
 
 	writel(reg_value, ioaddr + PTP_SSIR);
 
 	if (ssinc)
-		*ssinc = data;
-}
-
-static void hwtstamp_correct_latency(struct stmmac_priv *priv)
-{
-	void __iomem *ioaddr = priv->ptpaddr;
-	u32 reg_tsic, reg_tsicsns;
-	u32 reg_tsec, reg_tsecsns;
-	u64 scaled_ns;
-	u32 val;
-
-	/* MAC-internal ingress latency */
-	scaled_ns = readl(ioaddr + PTP_TS_INGR_LAT);
-
-	/* See section 11.7.2.5.3.1 "Ingress Correction" on page 4001 of
-	 * i.MX8MP Applications Processor Reference Manual Rev. 1, 06/2021
-	 */
-	val = readl(ioaddr + PTP_TCR);
-	if (val & PTP_TCR_TSCTRLSSR)
-		/* nanoseconds field is in decimal format with granularity of 1ns/bit */
-		scaled_ns = ((u64)NSEC_PER_SEC << 16) - scaled_ns;
-	else
-		/* nanoseconds field is in binary format with granularity of ~0.466ns/bit */
-		scaled_ns = ((1ULL << 31) << 16) -
-			DIV_U64_ROUND_CLOSEST(scaled_ns * PSEC_PER_NSEC, 466U);
-
-	reg_tsic = scaled_ns >> 16;
-	reg_tsicsns = scaled_ns & 0xff00;
-
-	/* set bit 31 for 2's compliment */
-	reg_tsic |= BIT(31);
-
-	writel(reg_tsic, ioaddr + PTP_TS_INGR_CORR_NS);
-	writel(reg_tsicsns, ioaddr + PTP_TS_INGR_CORR_SNS);
-
-	/* MAC-internal egress latency */
-	scaled_ns = readl(ioaddr + PTP_TS_EGR_LAT);
-
-	reg_tsec = scaled_ns >> 16;
-	reg_tsecsns = scaled_ns & 0xff00;
-
-	writel(reg_tsec, ioaddr + PTP_TS_EGR_CORR_NS);
-	writel(reg_tsecsns, ioaddr + PTP_TS_EGR_CORR_SNS);
+		*ssinc = reg_value;
 }
 
 static int init_systime(void __iomem *ioaddr, u32 sec, u32 nsec)
 {
 	u32 value;
+	int limit;
+
+	/* wait for previous(if any) time initialization to complete. */
+	limit = PTP_LIMIT;
+	while (limit--) {
+		if (!(readl_relaxed(ioaddr + PTP_TCR) &  PTP_TCR_TSINIT))
+			break;
+		usleep_range(1000, 1500);
+	}
+	if (limit < 0)
+		return -EBUSY;
 
 	writel(sec, ioaddr + PTP_STSUR);
 	writel(nsec, ioaddr + PTP_STNSUR);
@@ -148,6 +129,16 @@ static int adjust_systime(void __iomem *ioaddr, u32 sec, u32 nsec,
 {
 	u32 value;
 	int limit;
+
+	/* wait for previous(if any) time adjust/update to complete. */
+	limit = PTP_LIMIT;
+	while (limit--) {
+		if (!(readl_relaxed(ioaddr + PTP_TCR) & PTP_TCR_TSUPDT))
+			break;
+		usleep_range(1000, 1500);
+	}
+	if (limit < 0)
+		return -EBUSY;
 
 	if (add_sub) {
 		/* If the new sec value needs to be subtracted with
@@ -222,12 +213,10 @@ static void timestamp_interrupt(struct stmmac_priv *priv)
 	u64 ptp_time;
 	int i;
 
-	if (priv->plat->flags & STMMAC_FLAG_INT_SNAPSHOT_EN) {
-		wake_up(&priv->tstamp_busy_wait);
-		return;
-	}
-
-	tsync_int = readl(priv->ioaddr + GMAC_INT_STATUS) & GMAC_INT_TSIE;
+	if (priv->plat->has_xgmac)
+		tsync_int = readl(priv->ioaddr + XGMAC_INT_STATUS) & XGMAC_TSIE;
+	else
+		tsync_int = readl(priv->ioaddr + GMAC_INT_STATUS) & GMAC_INT_TSIE;
 
 	if (!tsync_int)
 		return;
@@ -235,18 +224,25 @@ static void timestamp_interrupt(struct stmmac_priv *priv)
 	/* Read timestamp status to clear interrupt from either external
 	 * timestamp or start/end of PPS.
 	 */
-	ts_status = readl(priv->ioaddr + GMAC_TIMESTAMP_STATUS);
+	if (priv->plat->has_xgmac)
+		ts_status = readl(priv->ioaddr + XGMAC_TIMESTAMP_STATUS);
+	else
+		ts_status = readl(priv->ioaddr + GMAC_TIMESTAMP_STATUS);
 
-	if (!(priv->plat->flags & STMMAC_FLAG_EXT_SNAPSHOT_EN))
+	if (!priv->plat->ext_snapshot_en)
 		return;
 
-	num_snapshot = (ts_status & GMAC_TIMESTAMP_ATSNS_MASK) >>
-		       GMAC_TIMESTAMP_ATSNS_SHIFT;
+	if (priv->plat->has_xgmac)
+		num_snapshot = (ts_status & XGMAC_TIMESTAMP_ATSNS_MASK) >>
+				XGMAC_TIMESTAMP_ATSNS_SHIFT;
+	else
+		num_snapshot = (ts_status & GMAC_TIMESTAMP_ATSNS_MASK) >>
+				GMAC_TIMESTAMP_ATSNS_SHIFT;
 
 	for (i = 0; i < num_snapshot; i++) {
-		read_lock_irqsave(&priv->ptp_lock, flags);
+		spin_lock_irqsave(&priv->ptp_lock, flags);
 		get_ptptime(priv->ptpaddr, &ptp_time);
-		read_unlock_irqrestore(&priv->ptp_lock, flags);
+		spin_unlock_irqrestore(&priv->ptp_lock, flags);
 		event.type = PTP_CLOCK_EXTTS;
 		event.index = 0;
 		event.timestamp = ptp_time;
@@ -263,5 +259,4 @@ const struct stmmac_hwtimestamp stmmac_ptp = {
 	.get_systime = get_systime,
 	.get_ptptime = get_ptptime,
 	.timestamp_interrupt = timestamp_interrupt,
-	.hwtstamp_correct_latency = hwtstamp_correct_latency,
 };
