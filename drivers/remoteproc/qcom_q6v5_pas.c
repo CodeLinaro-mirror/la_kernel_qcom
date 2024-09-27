@@ -45,7 +45,7 @@
 #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
 #define RPROC_HANDOVER_POLL_DELAY_MS	1
 
-#define MAX_ASSIGN_COUNT 2
+#define MAX_ASSIGN_COUNT 3
 
 #define to_rproc(d) container_of(d, struct rproc, dev)
 
@@ -1544,6 +1544,25 @@ static const struct adsp_data sdm845_adsp_resource_init = {
 		.ssctl_id = 0x14,
 };
 
+static const struct adsp_data sdxpinn_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
+	.region_assign_idx = 3,
+	.region_assign_count = 3,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+};
+
 static const struct adsp_data sm6350_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -2160,6 +2179,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,sdm845-cdsp-pas", .data = &sdm845_cdsp_resource_init},
 	{ .compatible = "qcom,sdm845-slpi-pas", .data = &sdm845_slpi_resource_init},
 	{ .compatible = "qcom,sdx55-mpss-pas", .data = &sdx55_mpss_resource},
+	{ .compatible = "qcom,sdxpinn-modem-pas", .data = &sdxpinn_mpss_resource},
 	{ .compatible = "qcom,sm6115-adsp-pas", .data = &adsp_resource_init},
 	{ .compatible = "qcom,sm6115-cdsp-pas", .data = &cdsp_resource_init},
 	{ .compatible = "qcom,sm6115-mpss-pas", .data = &sc8180x_mpss_resource},
