@@ -253,6 +253,7 @@
 #define QCOM_ID_QRU1000			539
 #define QCOM_ID_QDU1000			545
 #define QCOM_ID_X1E80100		555
+#define QCOM_ID_SDXKOVA                 556
 #define QCOM_ID_PINEAPPLE		557
 #define QCOM_ID_SM4450			568
 #define QCOM_ID_RAVELIN			568
