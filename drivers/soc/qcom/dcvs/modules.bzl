@@ -193,3 +193,20 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom-scm",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/llcc_occ",
+        out = "llcc_occ.ko",
+        config = "CONFIG_QCOM_LLCC_OCCUPANCY",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/llcc_occ.c",
+            "drivers/soc/qcom/dcvs/bus_prof.h",
+            "drivers/soc/qcom/dcvs/trace-bus-prof.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/soc/qcom/dcvs/trace-bus-prof",
+        ],
+    )
