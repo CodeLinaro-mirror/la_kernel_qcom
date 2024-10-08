@@ -1963,6 +1963,7 @@ static void ip6gre_tap_setup(struct net_device *dev)
 
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 	dev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
+	dev->priv_flags_ext |= IFF_EXT_GRE_V6_TAP;
 	netif_keep_dst(dev);
 }
 
