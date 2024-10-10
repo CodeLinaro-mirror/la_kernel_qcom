@@ -42,6 +42,7 @@ obj-$(CONFIG_PFCP) += pfcp.o
 obj-$(CONFIG_NET_VRF) += vrf.o
 obj-$(CONFIG_VSOCKMON) += vsockmon.o
 obj-$(CONFIG_MHI_NET) += mhi_net.o
+obj-$(CONFIG_MHI_EP_NET) += mhi_ep_net.o
 
 #
 # Networking Drivers
