@@ -25,6 +25,22 @@ load(":image_opts.bzl", "boot_image_opts")
 load(":target_variants.bzl", "le_variants")
 load(":allyes_images.bzl", "gen_allyes_files")
 
+def define_make_le_dtb_img(target, dtb_list, page_size):
+    compiled_dtbs = ["//msm-kernel:{}/{}".format(target, t) for t in dtb_list]
+    dtb_cmd = "compiled_dtb_list=\"{}\"\n".format(" ".join(["$(location {})".format(d) for d in compiled_dtbs]))
+    dtb_cmd += """
+      $(location //prebuilts/kernel-build-tools:linux-x86/bin/mkdtboimg) \\
+        create "$@" --page_size={page_size} $${{compiled_dtb_list}}
+    """.format(page_size = page_size)
+
+    native.genrule(
+        name = "{}_le_dtb_img".format(target),
+        srcs = compiled_dtbs,
+        outs = ["{}-dtb.img".format(target)],
+        tools = ["//prebuilts/kernel-build-tools:linux-x86/bin/mkdtboimg"],
+        cmd_bash = dtb_cmd,
+    )
+
 def _define_build_config(
         msm_target,
         target,
@@ -183,6 +199,7 @@ def _define_kernel_dist(target, msm_target, variant):
         ":{}_images".format(target),
         ":{}_merged_kernel_uapi_headers".format(target),
         ":{}_build_config".format(target),
+        ":{}_le_dtb_img".format(target),
         ":{}_headers".format(target),
         ":signing_key",
         ":verity_key",
@@ -286,5 +303,7 @@ def define_msm_le(
 
     if "allyes" in target:
         gen_allyes_files(le_target, target)
+
+    define_make_le_dtb_img(target, dtb_list, boot_image_opts.page_size)
 
     define_extras(target, flavor = "le")
