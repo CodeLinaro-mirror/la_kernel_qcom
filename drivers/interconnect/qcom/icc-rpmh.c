@@ -108,7 +108,7 @@ int qcom_icc_set(struct icc_node *src, struct icc_node *dst)
 	struct qcom_icc_provider *qp;
 	struct icc_node *node;
 	struct qcom_icc_node *qn;
-	u64 clk_rate;
+	u64 clk_rate, avg_bw, peak_bw;
 	int i, ret;
 
 	if (!src)
@@ -121,10 +121,14 @@ int qcom_icc_set(struct icc_node *src, struct icc_node *dst)
 
 	if (qn->bw_scale_numerator && qn->bw_scale_denominator) {
 		node->avg_bw *= qn->bw_scale_numerator;
-		do_div(node->avg_bw, qn->bw_scale_denominator);
+		avg_bw = node->avg_bw;
+		do_div(avg_bw, qn->bw_scale_denominator);
+		node->avg_bw = avg_bw;
 
 		node->peak_bw *= qn->bw_scale_numerator;
-		do_div(node->peak_bw, qn->bw_scale_denominator);
+		peak_bw = node->peak_bw;
+		do_div(peak_bw, qn->bw_scale_denominator);
+		node->peak_bw = peak_bw;
 	}
 
 	if (qn->clk) {
@@ -132,7 +136,7 @@ int qcom_icc_set(struct icc_node *src, struct icc_node *dst)
 		 * Multiply by 1000 to convert the unit of bandwidth from KBps
 		 * to Bps, then divide by the bandwidth to get the clk rate in Hz.
 		 */
-		clk_rate = (u64)max(node->avg_bw, node->peak_bw) * 1000 / qn->buswidth;
+		clk_rate = (u64)(max(node->avg_bw, node->peak_bw) * 1000) / qn->buswidth;
 		clk_rate = clk_rate > U32_MAX ? U32_MAX : clk_rate;
 
 		if (clk_rate > 0) {
