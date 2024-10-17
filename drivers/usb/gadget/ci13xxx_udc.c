@@ -1631,7 +1631,7 @@ static int ci13xxx_wakeup(struct usb_gadget *_gadget)
 	trace();
 
 	spin_lock_irqsave(udc->lock, flags);
-	if (!udc->gadget.remote_wakeup) {
+	if (!udc->remote_wakeup) {
 		ret = -EOPNOTSUPP;
 		dbg_trace("remote wakeup feature is not enabled\n");
 		goto out;
@@ -1673,7 +1673,7 @@ static void usb_do_remote_wakeup(struct work_struct *w)
 	 * if wakeup conditions are still met.
 	 */
 	spin_lock_irqsave(udc->lock, flags);
-	do_wake = udc->suspended && udc->gadget.remote_wakeup;
+	do_wake = udc->suspended && udc->remote_wakeup;
 	spin_unlock_irqrestore(udc->lock, flags);
 
 	if (do_wake)
@@ -1928,23 +1928,6 @@ static int _hardware_enqueue(struct ci13xxx_ep *mEp, struct ci13xxx_req *mReq)
 			mReq->ptr->token  |= TD_IOC;
 	}
 
-	/* MSM Specific: updating the request as required for
-	 * SPS mode. Enable MSM DMA engine according
-	 * to the UDC private data in the request.
-	 */
-	if (CI13XX_REQ_VENDOR_ID(mReq->req.udc_priv) == MSM_VENDOR_ID) {
-		if (mReq->req.udc_priv & MSM_SPS_MODE) {
-			mReq->ptr->token = TD_STATUS_ACTIVE;
-			if (mReq->req.udc_priv & MSM_IS_FINITE_TRANSFER)
-				mReq->ptr->next = TD_TERMINATE;
-			else
-				mReq->ptr->next = MSM_ETD_TYPE | mReq->dma;
-			if (!mReq->req.no_interrupt)
-				mReq->ptr->token |= MSM_ETD_IOC;
-		}
-		mReq->req.dma = 0;
-	}
-
 	mReq->ptr->page[0]  = mReq->req.dma;
 	for (i = 1; i < 5; i++)
 		mReq->ptr->page[i] = (mReq->req.dma + i * CI13XXX_PAGE_SIZE) &
@@ -1954,7 +1937,7 @@ static int _hardware_enqueue(struct ci13xxx_ep *mEp, struct ci13xxx_req *mReq)
 
 	/* Remote Wakeup */
 	if (udc->suspended) {
-		if (!udc->gadget.remote_wakeup) {
+		if (!udc->remote_wakeup) {
 			mReq->req.status = -EAGAIN;
 
 			dev_dbg(mEp->device, "%s: queue failed (suspend).",
@@ -2037,39 +2020,6 @@ static int _hardware_enqueue(struct ci13xxx_ep *mEp, struct ci13xxx_req *mReq)
 	/*  QH configuration */
 	mEp->qh.ptr->td.next   = mReq->dma;    /* TERMINATE = 0 */
 
-	if (CI13XX_REQ_VENDOR_ID(mReq->req.udc_priv) == MSM_VENDOR_ID) {
-		if (mReq->req.udc_priv & MSM_SPS_MODE) {
-			mEp->qh.ptr->td.next   |= MSM_ETD_TYPE;
-			i = hw_cread(CAP_ENDPTPIPEID +
-						 mEp->num * sizeof(u32), ~0);
-			/* Read current value of this EPs pipe id */
-			i = (mEp->dir == TX) ?
-				((i >> MSM_TX_PIPE_ID_OFS) & MSM_PIPE_ID_MASK) :
-					(i & MSM_PIPE_ID_MASK);
-			/*
-			 * If requested pipe id is different from current,
-			 * then write it
-			 */
-			if (i != (mReq->req.udc_priv & MSM_PIPE_ID_MASK)) {
-				if (mEp->dir == TX)
-					hw_cwrite(
-						CAP_ENDPTPIPEID +
-							mEp->num * sizeof(u32),
-						MSM_PIPE_ID_MASK <<
-							MSM_TX_PIPE_ID_OFS,
-						(mReq->req.udc_priv &
-						 MSM_PIPE_ID_MASK)
-							<< MSM_TX_PIPE_ID_OFS);
-				else
-					hw_cwrite(
-						CAP_ENDPTPIPEID +
-							mEp->num * sizeof(u32),
-						MSM_PIPE_ID_MASK,
-						mReq->req.udc_priv &
-							MSM_PIPE_ID_MASK);
-			}
-		}
-	}
 
 	mEp->qh.ptr->td.token &= ~TD_STATUS;   /* clear status */
 	mEp->qh.ptr->cap |=  QH_ZLT;
@@ -2107,10 +2057,6 @@ static int _hardware_dequeue(struct ci13xxx_ep *mEp, struct ci13xxx_req *mReq)
 	if ((TD_STATUS_ACTIVE & mReq->ptr->token) != 0)
 		return -EBUSY;
 
-	if (CI13XX_REQ_VENDOR_ID(mReq->req.udc_priv) == MSM_VENDOR_ID)
-		if ((mReq->req.udc_priv & MSM_SPS_MODE) &&
-			(mReq->req.udc_priv & MSM_IS_FINITE_TRANSFER))
-			return -EBUSY;
 	if (mReq->zptr) {
 		if ((TD_STATUS_ACTIVE & mReq->zptr->token) != 0)
 			return -EBUSY;
@@ -2244,22 +2190,6 @@ static void release_ep_request(struct ci13xxx_ep  *mEp,
 {
 	struct ci13xxx_ep *mEpTemp = mEp;
 
-	unsigned int val;
-
-	/* MSM Specific: Clear end point specific register */
-	if (CI13XX_REQ_VENDOR_ID(mReq->req.udc_priv) == MSM_VENDOR_ID) {
-		if (mReq->req.udc_priv & MSM_SPS_MODE) {
-			val = hw_cread(CAP_ENDPTPIPEID +
-				mEp->num * sizeof(u32),
-				~0);
-
-			if (val != MSM_EP_PIPE_ID_RESET_VAL)
-				hw_cwrite(
-					CAP_ENDPTPIPEID +
-					 mEp->num * sizeof(u32),
-					~0, MSM_EP_PIPE_ID_RESET_VAL);
-		}
-	}
 	mReq->req.status = -ESHUTDOWN;
 
 	if (mReq->map) {
@@ -2364,7 +2294,7 @@ static int _gadget_stop_activity(struct usb_gadget *gadget)
 
 	spin_lock_irqsave(udc->lock, flags);
 	udc->gadget.speed = USB_SPEED_UNKNOWN;
-	udc->gadget.remote_wakeup = 0;
+	udc->remote_wakeup = 0;
 	udc->suspended = 0;
 	udc->configured = 0;
 	spin_unlock_irqrestore(udc->lock, flags);
@@ -2534,7 +2464,7 @@ __acquires(mEp->lock)
 
 	if ((setup->bRequestType & USB_RECIP_MASK) == USB_RECIP_DEVICE) {
 		/* Assume that device is bus powered for now. */
-		*((u16 *)req->buf) = _udc->gadget.remote_wakeup << 1;
+		*((u16 *)req->buf) = _udc->remote_wakeup << 1;
 		retval = 0;
 	} else if ((setup->bRequestType & USB_RECIP_MASK) ==
 							USB_RECIP_ENDPOINT) {
@@ -2803,7 +2733,7 @@ __acquires(udc->lock)
 					USB_DEVICE_REMOTE_WAKEUP) {
 				if (req.wLength != 0)
 					break;
-				udc->gadget.remote_wakeup = 0;
+				udc->remote_wakeup = 0;
 				err = isr_setup_status_phase(udc);
 			} else {
 				goto delegate;
@@ -2856,7 +2786,7 @@ __acquires(udc->lock)
 					break;
 				switch (le16_to_cpu(req.wValue)) {
 				case USB_DEVICE_REMOTE_WAKEUP:
-					udc->gadget.remote_wakeup = 1;
+					udc->remote_wakeup = 1;
 					err = isr_setup_status_phase(udc);
 					break;
 				case USB_DEVICE_TEST_MODE:
@@ -3130,11 +3060,6 @@ static int ep_queue(struct usb_ep *ep, struct usb_request *req,
 		}
 	}
 
-	if (ep->endless && udc->gadget.speed == USB_SPEED_FULL) {
-		err("Queueing endless req is not supported for FS");
-		retval = -EINVAL;
-		goto done;
-	}
 
 	/* first nuke then test link, e.g. previous status has not sent */
 	if (!list_empty(&mReq->queue)) {
@@ -3179,7 +3104,7 @@ static int ep_queue(struct usb_ep *ep, struct usb_request *req,
 
 	if (udc->suspended) {
 		/* Remote Wakeup */
-		if (!udc->gadget.remote_wakeup) {
+		if (!udc->remote_wakeup) {
 
 			dev_dbg(mEp->device, "%s: queue failed (suspend).",
 					__func__);
@@ -3307,12 +3232,6 @@ static int ep_dequeue(struct usb_ep *ep, struct usb_request *req)
 	return 0;
 }
 
-static int is_sps_req(struct ci13xxx_req *mReq)
-{
-	return (CI13XX_REQ_VENDOR_ID(mReq->req.udc_priv) == MSM_VENDOR_ID &&
-			mReq->req.udc_priv & MSM_SPS_MODE);
-}
-
 /**
  * ep_set_halt: sets the endpoint halt feature
  *
@@ -3341,9 +3260,7 @@ static int ep_set_halt(struct usb_ep *ep, int value)
 #ifndef STALL_IN
 	/* g_file_storage MS compliant but g_zero fails chapter 9 compliance */
 	if (value && mEp->type == USB_ENDPOINT_XFER_BULK && mEp->dir == TX &&
-		!list_empty(&mEp->qh.queue) &&
-		!is_sps_req(list_entry(mEp->qh.queue.next, struct ci13xxx_req,
-							   queue))){
+		!list_empty(&mEp->qh.queue)) {
 		spin_unlock_irqrestore(mEp->lock, flags);
 		return -EAGAIN;
 	}
@@ -3472,14 +3389,8 @@ static int ci13xxx_vbus_session(struct usb_gadget *_gadget, int is_active)
 		if (udc->udc_driver->notify_event)
 			udc->udc_driver->notify_event(udc,
 				CI13XXX_CONTROLLER_CONNECT_EVENT);
-		/* Enable BAM (if needed) before starting controller */
-		if (udc->softconnect) {
-			dbg_event(0xFF, "BAM EN2",
-				_gadget->bam2bam_func_enabled);
-			msm_usb_bam_enable(CI_CTRL,
-				_gadget->bam2bam_func_enabled);
+		if (udc->softconnect)
 			hw_device_state(udc->ep0out.qh.dma);
-		}
 	} else {
 		hw_device_state(0);
 		_gadget_stop_activity(&udc->gadget);
@@ -3532,11 +3443,6 @@ static int ci13xxx_pullup(struct usb_gadget *_gadget, int is_active)
 
 	pm_runtime_get_sync(&_gadget->dev);
 
-	/* Enable BAM (if needed) before starting controller */
-	if (is_active) {
-		dbg_event(0xFF, "BAM EN1", _gadget->bam2bam_func_enabled);
-		msm_usb_bam_enable(CI_CTRL, _gadget->bam2bam_func_enabled);
-	}
 
 	spin_lock_irqsave(udc->lock, flags);
 	if (!udc->vbus_active) {
@@ -3834,7 +3740,6 @@ static int udc_probe(struct ci13xxx_udc_driver *driver, struct device *dev,
 	udc->gadget.max_speed    = USB_SPEED_HIGH;
 	udc->gadget.is_otg       = 0;
 	udc->gadget.name         = driver->name;
-	udc->gadget.is_chipidea  = true;
 	udc->gadget.dev.dma_mask = &ci13xxx_dma_mask;
 	udc->gadget.dev.coherent_dma_mask = ci13xxx_dma_mask;
 

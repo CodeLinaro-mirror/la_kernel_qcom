@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2010-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -146,7 +146,7 @@ static void ci13xxx_msm_reset(void)
 	temp &= ~GENCONFIG_ULPI_SERIAL_EN;
 	writel_relaxed(temp, USB_GENCONFIG);
 
-	if (udc->gadget.l1_supported)
+	if (udc->l1_supported)
 		ci13xxx_msm_set_l1(udc);
 
 	if (phy && (phy->flags & ENABLE_SECONDARY_PHY)) {
@@ -386,7 +386,7 @@ static int ci13xxx_msm_probe(struct platform_device *pdev)
 		goto iounmap;
 	}
 
-	_udc->gadget.l1_supported = is_l1_supported;
+	_udc->l1_supported = is_l1_supported;
 
 	_udc_ctxt.irq = platform_get_irq(pdev, 0);
 	if (_udc_ctxt.irq < 0) {
