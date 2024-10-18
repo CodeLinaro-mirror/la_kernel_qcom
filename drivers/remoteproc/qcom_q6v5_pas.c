@@ -1551,6 +1551,7 @@ static const struct adsp_data sdxpinn_mpss_resource = {
 	.dtb_firmware_name = "modem_dtb.mdt",
 	.dtb_pas_id = 0x26,
 	.minidump_id = 3,
+	.decrypt_shutdown = true,
 	.uses_elf64 = true,
 	.auto_boot = false,
 	.load_state = "modem",
