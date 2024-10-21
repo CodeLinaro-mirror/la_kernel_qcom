@@ -39,3 +39,9 @@ subdir-y += unisoc
 subdir-y += vt8500
 subdir-y += xen
 subdir-y += xilinx
+
+dtstree := $(srctree)/$(src)
+vendor := $(dtstree)/vendor
+ifneq "$(wildcard $(vendor)/Makefile)" ""
+	    subdir-y += vendor
+endif
