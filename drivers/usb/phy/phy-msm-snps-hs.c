@@ -15,6 +15,7 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/power_supply.h>
 #include <linux/regulator/consumer.h>
 #include <linux/regulator/driver.h>
@@ -146,10 +147,92 @@ struct msm_hsphy {
 	u8			param_ovrd2;
 	u8			param_ovrd3;
 	const struct hs_phy_priv_data *phy_priv_data;
+	bool			fw_managed_pwr;
+	struct device **pd_devs;
+	int pd_count;
 };
+
+static void msm_hsphy_modeled_domain_detach(struct msm_hsphy *hsphy)
+{
+	int i;
+
+	if (hsphy->pd_count <= 1)
+		return;
+
+	for (i = hsphy->pd_count - 1; i >= 0; i--) {
+		if (!IS_ERR_OR_NULL(hsphy->pd_devs[i]))
+			dev_pm_domain_detach(hsphy->pd_devs[i], true);
+	}
+}
+
+static int msm_hsphy_modeled_domain_attach(struct msm_hsphy *hsphy)
+{
+        struct device *dev = hsphy->phy.dev;
+	int i;
+        
+	hsphy->pd_count = of_count_phandle_with_args(
+		dev->of_node, "power-domains", NULL);
+	if (hsphy->pd_count <= 1)
+		return -1;
+
+	hsphy->pd_devs = devm_kcalloc(dev, hsphy->pd_count,
+					  sizeof(*hsphy->pd_devs),
+					  GFP_KERNEL);
+
+	if (!hsphy->pd_devs)
+		return -ENOMEM;
+
+	for (i = 0; i < hsphy->pd_count; i++) {
+		hsphy->pd_devs[i] = dev_pm_domain_attach_by_id(dev, i);
+		if (IS_ERR(hsphy->pd_devs[i])) {
+			msm_hsphy_modeled_domain_detach(hsphy);
+			return PTR_ERR(hsphy->pd_devs[i]);
+		}
+	}
+	return 0;
+}
+
+/* d3_to_d0 transition by turning on all the suppliers */
+static int msm_hsphy_modeled_d3_to_d0(struct msm_hsphy *hsphy)
+{
+       int ret = 0;
+
+       if (!hsphy->fw_managed_pwr)
+               return 0;
+
+       ret = pm_runtime_resume_and_get(hsphy->pd_devs[0]);
+       if (ret)
+               return ret;
+
+       ret = pm_runtime_resume_and_get(hsphy->pd_devs[1]);
+
+       return ret;
+}
+
+/* d0_to_d3 transition by turning off all the suppliers */
+static void msm_hsphy_modeled_d0_to_d3(struct msm_hsphy *hsphy)
+{
+       if (!hsphy->fw_managed_pwr)
+               return;
+
+       pm_runtime_put_sync(hsphy->pd_devs[0]);
+       pm_runtime_put_sync(hsphy->pd_devs[1]);
+}
+
+/* d0_to_d1 transition by turning off all the suppliers */
+static void msm_hsphy_modeled_d0_to_d1(struct msm_hsphy *hsphy)
+{
+       if (!hsphy->fw_managed_pwr)
+               return;
+
+       pm_runtime_put_sync(hsphy->pd_devs[0]);
+}
 
 static void msm_hsphy_enable_clocks(struct msm_hsphy *phy, bool on)
 {
+       if (phy->fw_managed_pwr)
+               return;
+
 	dev_dbg(phy->phy.dev, "%s(): clocks_enabled:%d on:%d\n",
 			__func__, phy->clocks_enabled, on);
 
@@ -182,6 +265,9 @@ static void msm_hsphy_enable_clocks(struct msm_hsphy *phy, bool on)
 static int vdd_phy_enable_disable(struct msm_hsphy *phy, bool on)
 {
 	int ret = 0;
+
+       if (phy->fw_managed_pwr)
+               return ret;
 
 	if (!on)
 		goto disable_vdd;
@@ -239,6 +325,9 @@ static int vdda18_phy_enable_disable(struct msm_hsphy *phy, bool on)
 {
 	int ret = 0;
 
+	if (phy->fw_managed_pwr)
+               return ret;
+
 	if (!on)
 		goto disable_vdda18;
 
@@ -295,6 +384,9 @@ err_vdda18:
 static int vdda33_phy_enable_disable(struct msm_hsphy *phy, bool on)
 {
 	int ret = 0;
+
+       if (phy->fw_managed_pwr)
+               return ret;
 
 	if (!on) {
 		if (phy->refgen)
@@ -395,6 +487,9 @@ static int msm_hsphy_enable_power(struct msm_hsphy *phy, bool on)
 {
 	int ret = 0;
 
+       if (phy->fw_managed_pwr)
+               return ret;
+
 	dev_dbg(phy->phy.dev, "%s turn %s regulators. power_enabled:%d\n",
 			__func__, on ? "on" : "off", phy->power_enabled);
 
@@ -451,6 +546,8 @@ static void msm_hsphy_reset(struct msm_hsphy *phy)
 {
 	int ret;
 
+       if (phy->fw_managed_pwr)
+               return;
 	ret = reset_control_assert(phy->phy_reset);
 	if (ret)
 		dev_err(phy->phy.dev, "%s: phy_reset assert failed\n",
@@ -495,12 +592,15 @@ static int msm_hsphy_init(struct usb_phy *uphy)
 				qcom_scm_io_writel(phy->eud_reg, 0x0);
 				phy->re_enable_eud = true;
 			} else {
+				msm_hsphy_modeled_d3_to_d0(phy);
 				msm_hsphy_enable_power(phy, true);
 				msm_hsphy_enable_clocks(phy, true);
 				return 0;
 			}
 		}
 	}
+
+	msm_hsphy_modeled_d3_to_d0(phy);
 
 	ret = msm_hsphy_enable_power(phy, true);
 	if (ret)
@@ -660,6 +760,7 @@ suspend:
 					USB2_PHY_USB_PHY_HS_PHY_CTRL2,
 					USB2_AUTO_RESUME, 0);
 			}
+			msm_hsphy_modeled_d0_to_d1(phy);
 			msm_hsphy_enable_clocks(phy, false);
 		} else {/* Cable disconnect */
 			mutex_lock(&phy->phy_lock);
@@ -678,6 +779,7 @@ suspend:
 							USB2_PHY_USB_PHY_PWRDOWN_CTRL,
 							PWRDOWN_B, 0);
 					}
+					msm_hsphy_modeled_d0_to_d3(phy);
 					msm_hsphy_enable_clocks(phy, false);
 					msm_hsphy_enable_power(phy, false);
 				}
@@ -688,6 +790,7 @@ suspend:
 		}
 		phy->suspended = true;
 	} else { /* Bus resume and cable connect */
+		msm_hsphy_modeled_d3_to_d0(phy);
 		msm_hsphy_enable_power(phy, true);
 		msm_hsphy_enable_clocks(phy, true);
 		phy->suspended = false;
@@ -770,6 +873,7 @@ static int msm_hsphy_dpdm_regulator_enable(struct regulator_dev *rdev)
 
 	mutex_lock(&phy->phy_lock);
 	if (!phy->dpdm_enable) {
+		msm_hsphy_modeled_d3_to_d0(phy);
 		ret = msm_hsphy_enable_power(phy, true);
 		if (ret) {
 			mutex_unlock(&phy->phy_lock);
@@ -811,6 +915,7 @@ static int msm_hsphy_dpdm_regulator_disable(struct regulator_dev *rdev)
 	mutex_lock(&phy->phy_lock);
 	if (phy->dpdm_enable) {
 		if (!phy->cable_connected) {
+			msm_hsphy_modeled_d0_to_d3(phy);
 			msm_hsphy_enable_clocks(phy, false);
 			ret = msm_hsphy_enable_power(phy, false);
 			if (ret < 0) {
@@ -919,10 +1024,11 @@ static int usb2_get_regulators(struct msm_hsphy *phy)
 
 static int msm_hsphy_probe(struct platform_device *pdev)
 {
-	struct msm_hsphy *phy;
+	struct device_node *np = pdev->dev.of_node;
 	struct device *dev = &pdev->dev;
-	struct resource *res;
 	const struct hs_phy_priv_data *driver_data;
+	struct msm_hsphy *phy;
+	struct resource *res;
 	int ret = 0;
 
 	phy = devm_kzalloc(dev, sizeof(*phy), GFP_KERNEL);
@@ -978,36 +1084,47 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 		phy->eud_reg = res->start;
 	}
 
-	/* ref_clk_src is needed irrespective of SE_CLK or DIFF_CLK usage */
-	phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
-	if (IS_ERR(phy->ref_clk_src)) {
-		dev_dbg(dev, "clk get failed for ref_clk_src\n");
-		ret = PTR_ERR(phy->ref_clk_src);
-		return ret;
-	}
-
-	phy->ref_clk = devm_clk_get_optional(dev, "ref_clk");
-	if (IS_ERR(phy->ref_clk)) {
-		dev_dbg(dev, "clk get failed for ref_clk\n");
-		ret = PTR_ERR(phy->ref_clk);
-		return ret;
-	}
-
-	if (of_property_match_string(pdev->dev.of_node,
-				"clock-names", "cfg_ahb_clk") >= 0) {
-		phy->cfg_ahb_clk = devm_clk_get(dev, "cfg_ahb_clk");
-		if (IS_ERR(phy->cfg_ahb_clk)) {
-			ret = PTR_ERR(phy->cfg_ahb_clk);
-			if (ret != -EPROBE_DEFER)
-				dev_err(dev,
-				"clk get failed for cfg_ahb_clk ret %d\n", ret);
+	if (of_device_is_compatible(np, "qcom,usb-snps-modeled")) {
+		ret =  msm_hsphy_modeled_domain_attach(phy);
+		if (ret) {
+			dev_err(dev, "Failed to attach modeled domains. Bail out\n");
 			return ret;
 		}
-	}
+		phy->fw_managed_pwr = true;
 
-	phy->phy_reset = devm_reset_control_get(dev, "phy_reset");
-	if (IS_ERR(phy->phy_reset))
-		return PTR_ERR(phy->phy_reset);
+	} else {
+
+		/* ref_clk_src is needed irrespective of SE_CLK or DIFF_CLK usage */
+		phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
+		if (IS_ERR(phy->ref_clk_src)) {
+			dev_dbg(dev, "clk get failed for ref_clk_src\n");
+			ret = PTR_ERR(phy->ref_clk_src);
+			return ret;
+		}
+
+		phy->ref_clk = devm_clk_get_optional(dev, "ref_clk");
+		if (IS_ERR(phy->ref_clk)) {
+			dev_dbg(dev, "clk get failed for ref_clk\n");
+			ret = PTR_ERR(phy->ref_clk);
+			return ret;
+		}
+
+		if (of_property_match_string(pdev->dev.of_node,
+					"clock-names", "cfg_ahb_clk") >= 0) {
+			phy->cfg_ahb_clk = devm_clk_get(dev, "cfg_ahb_clk");
+			if (IS_ERR(phy->cfg_ahb_clk)) {
+				ret = PTR_ERR(phy->cfg_ahb_clk);
+				if (ret != -EPROBE_DEFER)
+					dev_err(dev,
+					"clk get failed for cfg_ahb_clk ret %d\n", ret);
+				return ret;
+			}
+		}
+
+		phy->phy_reset = devm_reset_control_get(dev, "phy_reset");
+		if (IS_ERR(phy->phy_reset))
+			return PTR_ERR(phy->phy_reset);
+	}
 
 	phy->param_override_seq_cnt = of_property_count_elems_of_size(
 					dev->of_node,
@@ -1037,23 +1154,26 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 		}
 	}
 
-	ret = of_property_read_u32_array(dev->of_node, "qcom,vdd-voltage-level",
-					 (u32 *) phy->vdd_levels,
-					 ARRAY_SIZE(phy->vdd_levels));
-	if (ret) {
-		dev_err(dev, "error reading qcom,vdd-voltage-level property\n");
-		goto err_ret;
+
+       if (!phy->fw_managed_pwr) {
+		ret = of_property_read_u32_array(dev->of_node, "qcom,vdd-voltage-level",
+						 (u32 *) phy->vdd_levels,
+						 ARRAY_SIZE(phy->vdd_levels));
+		if (ret) {
+			dev_err(dev, "error reading qcom,vdd-voltage-level property\n");
+			goto err_ret;
+		}
+
+		ret = of_property_read_u32_array(dev->of_node, "qcom,refgen-voltage-level",
+						(u32 *) phy->refgen_levels,
+						ARRAY_SIZE(phy->refgen_levels));
+		if (ret)
+			dev_err(dev, "error reading qcom,refgen-voltage-level property\n");
+
+		ret = usb2_get_regulators(phy);
+		if (ret)
+			return ret;
 	}
-
-	ret = of_property_read_u32_array(dev->of_node, "qcom,refgen-voltage-level",
-					(u32 *) phy->refgen_levels,
-					ARRAY_SIZE(phy->refgen_levels));
-	if (ret)
-		dev_err(dev, "error reading qcom,refgen-voltage-level property\n");
-
-	ret = usb2_get_regulators(phy);
-	if (ret)
-		return ret;
 
 	mutex_init(&phy->phy_lock);
 	platform_set_drvdata(pdev, phy);
@@ -1069,10 +1189,12 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = msm_hsphy_regulator_init(phy);
-	if (ret) {
-		usb_remove_phy(&phy->phy);
-		return ret;
+       if (!phy->fw_managed_pwr) {
+		ret = msm_hsphy_regulator_init(phy);
+		if (ret) {
+			usb_remove_phy(&phy->phy);
+			return ret;
+		}
 	}
 
 	INIT_WORK(&phy->vbus_draw_work, msm_hsphy_vbus_draw_work);
@@ -1084,6 +1206,8 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 	 * keep LDOs on here.
 	 */
 	if (phy->eud_enable_reg && readl_relaxed(phy->eud_enable_reg)) {
+
+		msm_hsphy_modeled_d3_to_d0(phy);
 		msm_hsphy_enable_power(phy, true);
 		msm_hsphy_enable_clocks(phy, true);
 	}
@@ -1109,8 +1233,10 @@ static int msm_hsphy_remove(struct platform_device *pdev)
 	usb_remove_phy(&phy->phy);
 	clk_disable_unprepare(phy->ref_clk_src);
 
+	msm_hsphy_modeled_d0_to_d3(phy);
 	msm_hsphy_enable_clocks(phy, false);
 	msm_hsphy_enable_power(phy, false);
+	msm_hsphy_modeled_domain_detach(phy);
 	return 0;
 }
 
@@ -1125,6 +1251,9 @@ static const struct of_device_id msm_usb_id_table[] = {
 	{
 		.compatible = "qcom,usb-hsphy-snps-femto-lemans",
 		.data = &priv_data_lemans,
+	},
+	{
+		.compatible = "qcom,usb-snps-modeled",
 	},
 	{ },
 };
