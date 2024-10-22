@@ -5,10 +5,12 @@ la_targets = [
     "autogvm",
     "blair",
     "gen3auto",
+    "neo-la",
     "niobe",
     "pineapple",
     "pitti",
     "sdmsteppeauto",
+    "seraph",
 ]
 
 la_variants = [
@@ -25,6 +27,7 @@ lxc_variants = [
 
 lxc_targets = [
     # keep sorted
+    "autoghgvm",
     "autogvm",
     "gen4auto",
 ]
