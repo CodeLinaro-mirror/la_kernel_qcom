@@ -14,14 +14,15 @@
 
 TRACE_EVENT(lpm_gov_select,
 
-	TP_PROTO(int idx, s64 qos, u64 sleep, u64 reason),
+	TP_PROTO(int idx, s64 qos, u64 sleep, u64 bias_ns, u64 reason),
 
-	TP_ARGS(idx, qos, sleep, reason),
+	TP_ARGS(idx, qos, sleep, bias_ns, reason),
 
 	TP_STRUCT__entry(
 			 __field(int, idx)
 			 __field(s64, qos)
 			 __field(u64, sleep)
+			 __field(u64, bias_ns)
 			 __field(u64, reason)
 	),
 
@@ -29,11 +30,13 @@ TRACE_EVENT(lpm_gov_select,
 		       __entry->idx = idx;
 		       __entry->qos = qos;
 		       __entry->sleep = sleep;
+		       __entry->bias_ns = bias_ns;
 		       __entry->reason = reason;
 	),
 
-	TP_printk("state:%d qos-us:%lld sleep-us:%llu reason:%#llx",
-		  __entry->idx, __entry->qos, __entry->sleep, __entry->reason)
+	TP_printk("state:%d qos-us:%lld sleep-us:%llu bias_ns:%llu reason:%#llx",
+		  __entry->idx, __entry->qos, __entry->sleep, __entry->bias_ns,
+		  __entry->reason)
 );
 
 TRACE_EVENT(gov_pred_select,
