@@ -62,13 +62,21 @@ static inline bool check_cpu_isactive(int cpu)
 
 static bool lpm_disallowed(s64 sleep_ns, int cpu)
 {
+	struct lpm_cpu *cpu_gov = this_cpu_ptr(&lpm_cpu_data);
+	unsigned long flags;
 #if IS_ENABLED(CONFIG_SCHED_WALT)
-	struct lpm_cpu *cpu_gov = per_cpu_ptr(&lpm_cpu_data, cpu);
 	uint64_t bias_time = 0;
 #endif
 
 	if (suspend_in_progress)
 		return true;
+
+	spin_lock_irqsave(&cpu_gov->lock, flags);
+	if (cpu_gov->ipi_pending) {
+		spin_unlock_irqrestore(&cpu_gov->lock, flags);
+		return true;
+	}
+	spin_unlock_irqrestore(&cpu_gov->lock, flags);
 
 	if (!check_cpu_isactive(cpu))
 		return false;
@@ -366,10 +374,19 @@ static void update_cpu_history(struct lpm_cpu *cpu_gov)
 	    idx > cpu_gov->drv->state_count - 1)
 		return;
 
+	if (cpu_gov->dev->last_residency_ns == 0) {
+		histtimer_cancel();
+		biastimer_cancel();
+		return;
+	}
+
 	target = &cpu_gov->drv->states[idx];
 
 	if (measured_us > target->exit_latency)
 		measured_us -= target->exit_latency;
+
+	if (cpu_gov->htmr_wkup && cpu_gov->pred_type == LPM_PRED_IPI_PATTERN)
+		cpu_gov->htmr_wkup = false;
 
 	if (cpu_gov->htmr_wkup) {
 		if (!lpm_history->samples_idx)
@@ -384,7 +401,6 @@ static void update_cpu_history(struct lpm_cpu *cpu_gov)
 		lpm_history->resi[lpm_history->samples_idx] = measured_us;
 
 	lpm_history->mode[lpm_history->samples_idx] = idx;
-	cpu_gov->pred_type = LPM_PRED_RESET;
 
 	trace_gov_pred_hist(idx, lpm_history->resi[lpm_history->samples_idx],
 			    tmr);
@@ -593,6 +609,7 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	ktime_t delta_tick;
 	u64 reason = 0;
 	uint64_t duration_ns, htime = 0;
+	unsigned long flags;
 	int i = 0;
 
 	if (!cpu_gov)
@@ -607,6 +624,7 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	cpu_gov->now = ktime_get();
 	duration_ns = tick_nohz_get_sleep_length(&delta_tick);
 	update_cpu_history(cpu_gov);
+	cpu_gov->pred_type = LPM_PRED_RESET;
 
 	if (lpm_disallowed(duration_ns, dev->cpu))
 		goto done;
@@ -661,6 +679,14 @@ done:
 		reason |= UPDATE_REASON(i, LPM_SELECT_STATE_SCHED_BIAS);
 	}
 
+	spin_lock_irqsave(&cpu_gov->lock, flags);
+	if (cpu_gov->ipi_pending) {
+		i = 0;
+		*stop_tick = false;
+		reason = UPDATE_REASON(i, LPM_SELECT_STATE_IPI_PENDING);
+	}
+	spin_unlock_irqrestore(&cpu_gov->lock, flags);
+
 	trace_lpm_gov_select(i, latency_req, duration_ns, cpu_gov->bias, reason);
 	trace_gov_pred_select(cpu_gov->pred_type, cpu_gov->predicted, htime);
 
@@ -692,18 +718,23 @@ static void lpm_idle_enter(void *unused, int *state, struct cpuidle_device *dev)
 	u64 reason = 0;
 	unsigned long flags;
 
-	if (*state == 0)
-		return;
-
 	if (!cpu_gov->enable)
 		return;
 
-	/* Restrict to WFI state if there is an IPI pending on current CPU */
+	/* Bailout from CPUidle if there is an IPI pending on current CPU */
 	spin_lock_irqsave(&cpu_gov->lock, flags);
 	if (cpu_gov->ipi_pending) {
 		reason = UPDATE_REASON(*state, LPM_SELECT_STATE_IPI_PENDING);
-		*state = 0;
 		trace_lpm_gov_select(*state, 0xdeaffeed, 0xdeaffeed, cpu_gov->bias, reason);
+		*state = -1;
+		dev->last_residency_ns = 0;
+		trace_lpm_gov_select(*state, 0xdeaffeed, 0xdeaffeed, cpu_gov->bias, reason);
+		spin_unlock_irqrestore(&cpu_gov->lock, flags);
+
+		histtimer_cancel();
+		biastimer_cancel();
+		local_irq_enable();
+		return;
 	}
 	spin_unlock_irqrestore(&cpu_gov->lock, flags);
 }
