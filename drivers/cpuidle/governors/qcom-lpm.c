@@ -72,7 +72,7 @@ static inline bool check_cpu_isactive(int cpu)
 	return cpu_active(cpu);
 }
 
-static bool lpm_disallowed(s64 sleep_ns, int cpu)
+static bool lpm_disallowed(int cpu)
 {
 	struct lpm_cpu *cpu_gov = this_cpu_ptr(&lpm_cpu_data);
 	unsigned long flags;
@@ -93,7 +93,7 @@ static bool lpm_disallowed(s64 sleep_ns, int cpu)
 	if (!check_cpu_isactive(cpu))
 		return false;
 
-	if ((sleep_disabled || sleep_ns < 0))
+	if (sleep_disabled)
 		return true;
 
 #if IS_ENABLED(CONFIG_SCHED_WALT)
@@ -617,10 +617,10 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		      bool *stop_tick)
 {
 	struct lpm_cpu *cpu_gov = this_cpu_ptr(&lpm_cpu_data);
-	s64 latency_req = get_cpus_qos(cpumask_of(dev->cpu));
+	s64 latency_req = PM_QOS_CPU_LATENCY_DEFAULT_VALUE;
 	ktime_t delta_tick;
-	u64 reason = 0;
-	uint64_t duration_ns, htime = 0;
+	u64 reason = 0, htime = 0;
+	s64 duration_ns = 0;
 	unsigned long flags;
 	int i = 0;
 
@@ -630,16 +630,17 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	if (cpu_gov->cpu_off_invoked)
 		return 0;
 
+	update_cpu_history(cpu_gov);
+
+	if (lpm_disallowed(dev->cpu))
+		goto done;
+
+	latency_req = get_cpus_qos(cpumask_of(dev->cpu));
 	do_div(latency_req, NSEC_PER_USEC);
 	cpu_gov->predicted = 0;
 	cpu_gov->predict_started = false;
 	cpu_gov->now = ktime_get();
-	duration_ns = tick_nohz_get_sleep_length(&delta_tick);
-	update_cpu_history(cpu_gov);
 	cpu_gov->pred_type = LPM_PRED_RESET;
-
-	if (lpm_disallowed(duration_ns, dev->cpu))
-		goto done;
 
 	for (i = drv->state_count - 1; i > 0; i--) {
 		struct cpuidle_state *s = &drv->states[i];
@@ -654,13 +655,13 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 			continue;
 		}
 
-		if (s->target_residency_ns > duration_ns) {
-			reason |= UPDATE_REASON(i,
-					LPM_SELECT_STATE_RESIDENCY_UNMET);
-			continue;
-		}
-
 		if (check_cpu_isactive(dev->cpu) && !cpu_gov->predict_started) {
+			duration_ns = tick_nohz_get_sleep_length(&delta_tick);
+			if (duration_ns <= 0 || s->target_residency_ns > duration_ns) {
+				reason |= UPDATE_REASON(i,
+						LPM_SELECT_STATE_RESIDENCY_UNMET);
+				continue;
+			}
 			cpu_predict(cpu_gov, duration_ns);
 			cpu_gov->predict_started = true;
 		}
