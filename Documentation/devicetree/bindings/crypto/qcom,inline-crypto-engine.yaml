@@ -13,6 +13,7 @@ properties:
   compatible:
     items:
       - enum:
+          - qcom,sa8255p-inline-crypto-engine
           - qcom,sa8775p-inline-crypto-engine
           - qcom,sc7180-inline-crypto-engine
           - qcom,sc7280-inline-crypto-engine
@@ -27,10 +28,18 @@ properties:
   clocks:
     maxItems: 1
 
+  qcom,ice-skip-clk:
+    type: boolean
+    description:
+      Skip to get GCC_UFS_PHY_ICE_CORE_CLK in ICE driver. This
+      dictates if ICE driver request this clock on/off.
+
 required:
   - compatible
   - reg
-  - clocks
+  - oneof:
+    - clocks
+    - qcom,ice-skip-clk
 
 additionalProperties: false
 
@@ -43,5 +52,13 @@ examples:
                    "qcom,inline-crypto-engine";
       reg = <0x01d88000 0x8000>;
       clocks = <&gcc GCC_UFS_PHY_ICE_CORE_CLK>;
+    };
+
+  - |
+    crypto@1d88000 {
+      compatible = "qcom,sa8255p-inline-crypto-engine",
+                   "qcom,inline-crypto-engine",
+      reg = <0x01d88000 0x8000>;
+      qcom,ice-skip-clk;
     };
 ...
