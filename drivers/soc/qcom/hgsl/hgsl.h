@@ -27,6 +27,16 @@
 
 #define HGSL_CONTEXT_NUM 256
 
+#define HGSL_MAX_IOC_SIZE (128)
+#define HGSL_IOCTL_FUNC(_cmd, _func) \
+	[_IOC_NR((_cmd))] = \
+		{ .cmd = (_cmd), .func = (_func) }
+
+struct hgsl_ioctl {
+	unsigned int cmd;
+	int (*func)(struct file *filep, void *data);
+};
+
 struct qcom_hgsl;
 struct hgsl_hsync_timeline;
 
@@ -182,8 +192,8 @@ struct hgsl_priv {
 	struct list_head node;
 	struct hgsl_hyp_priv_t hyp_priv;
 	struct mutex lock;
-	struct list_head mem_mapped;
-	struct list_head mem_allocated;
+	struct rb_root mem_mapped;
+	struct rb_root mem_allocated;
 	int open_count;
 
 	atomic64_t total_mem_size;
@@ -218,6 +228,12 @@ static inline bool hgsl_ts_ge(uint64_t a, uint64_t b, bool is64)
 		return hgsl_ts64_ge(a, b);
 	else
 		return hgsl_ts32_ge((uint32_t)a, (uint32_t)b);
+}
+
+static inline bool hgsl_mem_rb_empty(struct hgsl_priv *priv)
+{
+	return (RB_EMPTY_ROOT(&priv->mem_mapped) &&
+		RB_EMPTY_ROOT(&priv->mem_allocated));
 }
 
 /**
