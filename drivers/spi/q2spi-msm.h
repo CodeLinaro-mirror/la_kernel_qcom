@@ -133,6 +133,18 @@
 #define SE_SPI_RX_TRANS_LEN		0x270
 #define TRANS_LEN_MSK			GENMASK(23, 0)
 
+/* GENI General Purpose Interrupt Status */
+#define M_GP_IRQ_ERR_START_BIT		5
+#define M_GP_IRQ_MASK			GENMASK(12, 5)
+#define Q2SPI_PWR_ON_NACK		BIT(0)
+#define Q2SPI_HDR_FAIL			BIT(1)
+#define Q2SPI_HCR_FAIL			BIT(2)
+#define Q2SPI_CHECKSUM_FAIL		BIT(3)
+#define Q2SPI_START_SEQ_TIMEOUT		BIT(4)
+#define Q2SPI_STOP_SEQ_TIMEOUT		BIT(5)
+#define Q2SPI_WAIT_PHASE_TIMEOUT	BIT(6)
+#define Q2SPI_CLIENT_EN_NOT_DETECTED	BIT(7)
+
 /* HRF FLOW Info */
 #define HRF_ENTRY_OPCODE		3
 #define HRF_ENTRY_TYPE			3
@@ -195,6 +207,26 @@ if (q2spi_ptr) { \
 } \
 } while (0)
 
+#define Q2SPI_DBG_1(q2spi_ptr, x...) do { \
+if (q2spi_ptr) { \
+	if (q2spi_ptr->q2spi_log_lvl >= LOG_DBG_LEVEL1) {\
+		GENI_SE_DBG(q2spi_ptr->ipc, false, q2spi_ptr->dev, x); \
+		if (q2spi_ptr->dev) \
+			q2spi_trace_log(q2spi_ptr->dev, x); \
+	} \
+} \
+} while (0)
+
+#define Q2SPI_DBG_2(q2spi_ptr, x...) do { \
+if (q2spi_ptr) { \
+	if (q2spi_ptr->q2spi_log_lvl >= LOG_DBG_LEVEL2) {\
+		GENI_SE_DBG(q2spi_ptr->ipc, false, q2spi_ptr->dev, x); \
+		if (q2spi_ptr->dev) \
+			q2spi_trace_log(q2spi_ptr->dev, x); \
+	} \
+} \
+} while (0)
+
 #define Q2SPI_DEBUG(q2spi_ptr, x...) do { \
 if (q2spi_ptr) { \
 	GENI_SE_DBG(q2spi_ptr->ipc, false, q2spi_ptr->dev, x); \
@@ -241,6 +273,12 @@ enum q2spi_cr_hdr_type {
 	CR_HDR_BULK = 1,
 	CR_HDR_VAR3 = 2,
 	CR_HDR_EXT  = 3,
+};
+
+enum DEBUG_LOG_LVL {
+	LOG_DBG_LEVEL0 = 0,  /* Indicates lowest level debug log level, default log level */
+	LOG_DBG_LEVEL1 = 1,
+	LOG_DBG_LEVEL2 = 2,
 };
 
 struct q2spi_mc_hrf_entry {
@@ -516,6 +554,9 @@ struct q2spi_dma_transfer {
  * @q2spi_cr_txn_err: reflects Q2SPI_CR_TRANSACTION_ERROR in CR body
  * @q2spi_sleep_cmd_enable: reflects start sending the sleep command to slave
  * @q2spi_cr_hdr_err: reflects CR Header incorrect in CR Header
+ * @is_start_seq_fail: start sequence fail due to slave not responding
+ * @wait_comp_start_fail: completion for transfer callback during start sequence failure
+ * @q2spi_log_lvl: reflects log level in q2spi driver
  */
 struct q2spi_geni {
 	struct device *wrapper_dev;
@@ -622,6 +663,9 @@ struct q2spi_geni {
 	bool q2spi_cr_txn_err;
 	bool q2spi_sleep_cmd_enable;
 	bool q2spi_cr_hdr_err;
+	bool is_start_seq_fail;
+	struct completion wait_comp_start_fail;
+	u32 q2spi_log_lvl;
 };
 
 /**
