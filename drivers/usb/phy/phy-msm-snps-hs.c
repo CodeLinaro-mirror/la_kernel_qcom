@@ -169,7 +169,7 @@ static int msm_hsphy_modeled_domain_attach(struct msm_hsphy *hsphy)
 {
         struct device *dev = hsphy->phy.dev;
 	int i;
-        
+
 	hsphy->pd_count = of_count_phandle_with_args(
 		dev->of_node, "power-domains", NULL);
 	if (hsphy->pd_count <= 1)
@@ -713,6 +713,8 @@ static int msm_hsphy_init(struct usb_phy *uphy)
 	msm_usb_write_readback(phy->base, USB2_PHY_USB_PHY_CFG0,
 				UTMI_PHY_CMN_CTRL_OVERRIDE_EN, 0);
 
+	msm_usb_write_readback(phy->base, USB2_PHY_USB_PHY_PWRDOWN_CTRL,
+						PWRDOWN_B, 1);
 	return 0;
 }
 
