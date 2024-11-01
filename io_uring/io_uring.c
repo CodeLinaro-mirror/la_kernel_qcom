@@ -2370,14 +2370,6 @@ int io_run_task_work_sig(struct io_ring_ctx *ctx)
 	return 0;
 }
 
-static bool current_pending_io(void)
-{
-	struct io_uring_task *tctx = current->io_uring;
-
-	if (!tctx)
-		return false;
-	return percpu_counter_read_positive(&tctx->inflight);
-}
 
 static enum hrtimer_restart io_cqring_timer_wakeup(struct hrtimer *timer)
 {
@@ -2466,18 +2458,10 @@ static int __io_cqring_wait_schedule(struct io_ring_ctx *ctx,
 {
 	int ret = 0;
 
-	/*
-	 * Mark us as being in io_wait if we have pending requests, so cpufreq
-	 * can take into account that the task is waiting for IO - turns out
-	 * to be important for low QD IO.
-	 */
-	if (current_pending_io())
-		current->in_iowait = 1;
 	if (iowq->timeout != KTIME_MAX || iowq->min_timeout)
 		ret = io_cqring_schedule_timeout(iowq, ctx->clockid, start_time);
 	else
 		schedule();
-	current->in_iowait = 0;
 	return ret;
 }
 
