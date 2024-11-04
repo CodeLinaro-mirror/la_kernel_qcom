@@ -71,6 +71,7 @@ properties:
         - qcom,sa7255p-ethqos
         - qcom,sa8255p-ethqos
         - qcom,sa8775p-ethqos
+        - qcom,sa8797p-ethqos
         - qcom,sc8280xp-ethqos
         - qcom,sm8150-ethqos
         - renesas,r9a06g032-gmac
@@ -625,6 +626,7 @@ allOf:
                 - qcom,sa7255p-ethqos
                 - qcom,sa8255p-ethqos
                 - qcom,sa8775p-ethqos
+                - qcom,sa8797p-ethqos
                 - qcom,sc8280xp-ethqos
                 - qcom,sm8150-ethqos
                 - snps,dwmac-4.00
@@ -647,6 +649,7 @@ allOf:
             contains:
               enum:
                 - qcom,sa8255p-ethqos
+                - qcom,sa8797p-ethqos
     then:
       properties:
         power-domains:
