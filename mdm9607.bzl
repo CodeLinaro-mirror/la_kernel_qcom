@@ -1,12 +1,11 @@
-load(":image_opts.bzl", "boot_image_opts")
-load(":msm_kernel_le.bzl", "define_msm_le")
 load(":target_variants.bzl", "le_32_variants")
+load(":msm_kernel_le.bzl", "define_msm_le")
+load(":image_opts.bzl", "boot_image_opts")
 
 target_name = "mdm9607"
 
 def define_mdm9607():
     _mdm9607_le_in_tree_modules = [
-        "drivers/misc/bootmarker_proxy.ko",
         "drivers/net/phy/at803x.ko",
         "drivers/net/phy/qca8337.ko",
         "drivers/net/ethernet/qualcomm/emac/qcom-emac.ko",
