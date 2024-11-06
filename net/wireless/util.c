@@ -2658,10 +2658,13 @@ void cfg80211_remove_link(struct wireless_dev *wdev, unsigned int link_id)
 		/* per-link not relevant */
 		break;
 	}
-
-	wdev->valid_links &= ~BIT(link_id);
+	if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+		wdev->valid_links &= ~BIT(link_id);
 
 	rdev_del_intf_link(rdev, wdev, link_id);
+
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+		wdev->valid_links &= ~BIT(link_id);
 
 	eth_zero_addr(wdev->links[link_id].addr);
 }
