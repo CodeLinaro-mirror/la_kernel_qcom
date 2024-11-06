@@ -714,6 +714,9 @@ static inline void wiphy_read_of_freq_limits(struct wiphy *wiphy)
  *	belonging to that MU-MIMO groupID; %NULL if not changed
  * @vht_mumimo_follow_addr: MU-MIMO follow address, used for monitoring
  *	MU-MIMO packets going to the specified station; %NULL if not changed
+ * @radio_iface: Radio iface name
+ * @mld_macaddr: MLO address to use for this virtual interface.
+ * @mld_iface_name: MLO interface name to use for this virtual interface.
  */
 struct vif_params {
 	u32 flags;
@@ -721,6 +724,9 @@ struct vif_params {
 	u8 macaddr[ETH_ALEN];
 	const u8 *vht_mumimo_groups;
 	const u8 *vht_mumimo_follow_addr;
+	char *radio_iface;
+	u8 mld_macaddr[ETH_ALEN];
+	char *mld_iface_name;
 };
 
 /**

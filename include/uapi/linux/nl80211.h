@@ -2844,6 +2844,9 @@ enum nl80211_commands {
  *      mapping is as defined in section 9.4.2.314 (TID-To-Link Mapping element)
  *      in Draft P802.11be_D4.0.
  *
+ * @NL80211_ATTR_RADIO_IFACE: radio interface name of vif
+ * @NL80211_ATTR_MLD_IFACE_NAME: mld interface name
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3386,6 +3389,8 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_MLO_TTLM_DLINK,
 	NL80211_ATTR_MLO_TTLM_ULINK,
+	NL80211_ATTR_RADIO_IFACE,
+	NL80211_ATTR_MLD_IFACE_NAME,
 
 	/* add attributes here, update the policy in nl80211.c */
 
