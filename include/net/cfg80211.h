@@ -8312,6 +8312,7 @@ static inline bool cfg80211_rx_mgmt(struct wireless_dev *wdev, int freq,
  * @buf: Management frame (header + body)
  * @len: length of the frame data
  * @ack: Whether frame was acknowledged
+ * @link_id: mlo link id
  */
 struct cfg80211_tx_status {
 	u64 cookie;
@@ -8320,6 +8321,7 @@ struct cfg80211_tx_status {
 	const u8 *buf;
 	size_t len;
 	bool ack;
+	int link_id;
 };
 
 /**
@@ -8348,6 +8350,7 @@ void cfg80211_mgmt_tx_status_ext(struct wireless_dev *wdev,
  * transmitted with cfg80211_ops::mgmt_tx() to report the TX status of the
  * transmission attempt.
  */
+#ifndef CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 static inline void cfg80211_mgmt_tx_status(struct wireless_dev *wdev,
 					   u64 cookie, const u8 *buf,
 					   size_t len, bool ack, gfp_t gfp)
@@ -8361,6 +8364,23 @@ static inline void cfg80211_mgmt_tx_status(struct wireless_dev *wdev,
 
 	cfg80211_mgmt_tx_status_ext(wdev, &status, gfp);
 }
+#else
+static inline void cfg80211_mgmt_tx_status(struct wireless_dev *wdev,
+					   u64 cookie, const u8 *buf,
+					   size_t len, bool ack, int link_id,
+					   gfp_t gfp)
+{
+	struct cfg80211_tx_status status = {
+		.cookie = cookie,
+		.buf = buf,
+		.len = len,
+		.ack = ack,
+		.link_id = link_id
+	};
+
+	cfg80211_mgmt_tx_status_ext(wdev, &status, gfp);
+}
+#endif
 
 /**
  * cfg80211_control_port_tx_status - notification of TX status for control
