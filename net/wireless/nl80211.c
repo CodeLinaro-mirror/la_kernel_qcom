@@ -12666,10 +12666,13 @@ static int nl80211_tx_mgmt(struct sk_buff *skb, struct genl_info *info)
 	 * the valid links for the _station_ anyway, so that's up
 	 * to the driver.
 	 */
-	if (params.link_id >= 0 &&
-	    !(wdev->valid_links & BIT(params.link_id))) {
-		wdev_unlock(wdev);
-		return -EINVAL;
+	if ((!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT)) ||
+	    wdev->iftype != NL80211_IFTYPE_STATION) {
+		if (params.link_id >= 0 &&
+		    !(wdev->valid_links & BIT(params.link_id))) {
+			wdev_unlock(wdev);
+			return -EINVAL;
+		}
 	}
 	wdev_unlock(wdev);
 
