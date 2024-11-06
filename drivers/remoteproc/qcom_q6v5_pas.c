@@ -1445,7 +1445,6 @@ static int adsp_probe(struct platform_device *pdev)
 	}
 
 	qcom_q6v5_register_ssr_subdev(&adsp->q6v5, &adsp->ssr_subdev.subdev);
-
 	qcom_add_glink_subdev(rproc, &adsp->glink_subdev, desc->ssr_name);
 	qcom_add_smd_subdev(rproc, &adsp->smd_subdev);
 	adsp->sysmon = qcom_add_sysmon_subdev(rproc,
@@ -1918,6 +1917,19 @@ static const struct adsp_data sm8550_mpss_resource = {
 	.region_assign_idx = 2,
 };
 
+static const struct adsp_data sa510_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.auto_boot = false,
+};
+
 static const struct adsp_data sun_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -2208,6 +2220,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,pineapple-adsp-pas", .data = &pineapple_adsp_resource},
 	{ .compatible = "qcom,pineapple-cdsp-pas", .data = &pineapple_cdsp_resource},
 	{ .compatible = "qcom,pineapple-modem-pas", .data = &pineapple_mpss_resource},
+	{ .compatible = "qcom,sa510-modem-pas", .data = &sa510_mpss_resource},
 	{ .compatible = "qcom,sun-adsp-pas", .data = &sun_adsp_resource},
 	{ .compatible = "qcom,sun-cdsp-pas", .data = &sun_cdsp_resource},
 	{ .compatible = "qcom,sun-modem-pas", .data = &sun_mpss_resource},

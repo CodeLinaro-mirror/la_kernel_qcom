@@ -140,10 +140,17 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+#ifdef CONFIG_ARM
+	dev_err(q6v5->dev, "rproc crash at cycle:%lu, recovery state: %s\n",
+		get_cycles(),
+		q6v5->rproc->recovery_disabled ? "disabled and lead to device crash" :
+		"enabled and kick recovery process");
+#else
 	dev_err(q6v5->dev, "rproc crash at cycle:%llu, recovery state: %s\n",
 		get_cycles(),
 		q6v5->rproc->recovery_disabled ? "disabled and lead to device crash" :
 		"enabled and kick recovery process");
+#endif
 
 	q6v5->crash_seq = q6v5->seq;
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, q6v5->crash_reason, &len);
@@ -181,10 +188,17 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	if (!q6v5->running)
 		return IRQ_HANDLED;
 
+#ifdef CONFIG_ARM
+	dev_err(q6v5->dev, "rproc crash at cycle:%lu, recovery state: %s\n",
+		get_cycles(),
+		q6v5->rproc->recovery_disabled ? "disabled and lead to device crash" :
+		"enabled and kick recovery process");
+#else
 	dev_err(q6v5->dev, "rproc crash at cycle:%llu, recovery state: %s\n",
 		get_cycles(),
 		q6v5->rproc->recovery_disabled ? "disabled and lead to device crash" :
 		"enabled and kick recovery process");
+#endif
 
 	q6v5->crash_seq = q6v5->seq;
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, q6v5->crash_reason, &len);
