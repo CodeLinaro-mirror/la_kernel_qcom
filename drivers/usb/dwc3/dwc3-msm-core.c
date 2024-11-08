@@ -3042,52 +3042,6 @@ EXPORT_SYMBOL(msm_ep_set_mode);
 
 static void dwc3_resume_work(struct work_struct *w);
 
-static void dwc3_restart_usb_work(struct work_struct *w)
-{
-	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
-						restart_usb_work);
-	unsigned int timeout = 50;
-
-	if (atomic_read(&mdwc->in_lpm) || mdwc->dr_mode != USB_DR_MODE_OTG) {
-		dev_dbg(mdwc->dev, "%s failed!!!\n", __func__);
-		return;
-	}
-
-	/* guard against concurrent VBUS handling */
-	mdwc->in_restart = true;
-
-	if (!mdwc->vbus_active) {
-		dev_dbg(mdwc->dev, "%s bailing out in disconnect\n", __func__);
-		mdwc->err_evt_seen = false;
-		mdwc->in_restart = false;
-		return;
-	}
-
-	dbg_event(0xFF, "RestartUSB", 0);
-	/* Reset active USB connection */
-	dwc3_resume_work(&mdwc->resume_work);
-
-	/* Make sure disconnect is processed before sending connect */
-	while (--timeout && !pm_runtime_suspended(mdwc->dev))
-		msleep(20);
-
-	if (!timeout) {
-		dev_dbg(mdwc->dev,
-			"Not in LPM after disconnect, forcing suspend...\n");
-		dbg_event(0xFF, "ReStart:RT SUSP",
-			atomic_read(&mdwc->dev->power.usage_count));
-		pm_runtime_suspend(mdwc->dev);
-	}
-
-	mdwc->in_restart = false;
-	/* Force reconnect only if cable is still connected */
-	if (mdwc->vbus_active)
-		dwc3_resume_work(&mdwc->resume_work);
-
-	mdwc->err_evt_seen = false;
-	flush_work(&mdwc->sm_work);
-}
-
 /*
  * Config Global Distributed Switch Controller (GDSC)
  * to support controller power collapse
@@ -3125,6 +3079,7 @@ static int dwc3_msm_link_clk_reset(struct dwc3_msm *mdwc, bool assert)
 
 	if (assert) {
 		disable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
+		disable_irq_wake(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 		/* Using asynchronous block reset to the hardware */
 		dev_dbg(mdwc->dev, "block_reset ASSERT\n");
 		clk_disable_unprepare(mdwc->utmi_clk);
@@ -3144,6 +3099,7 @@ static int dwc3_msm_link_clk_reset(struct dwc3_msm *mdwc, bool assert)
 		clk_prepare_enable(mdwc->core_clk);
 		clk_prepare_enable(mdwc->sleep_clk);
 		clk_prepare_enable(mdwc->utmi_clk);
+		enable_irq_wake(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 		enable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 	}
 
@@ -4205,6 +4161,7 @@ static void dwc3_msm_suspend_phy(struct dwc3_msm *mdwc)
 
 	if (mdwc->lpm_flags & MDWC3_USE_PWR_EVENT_IRQ_FOR_WAKEUP) {
 		dwc3_msm_set_pwr_events(mdwc, true);
+		enable_irq_wake(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 		enable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 	}
 }
@@ -4223,7 +4180,8 @@ static void dwc3_msm_interrupt_enable(struct dwc3_msm *mdwc, bool enable)
 	}
 }
 
-static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
+static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
+		bool enable_wakeup)
 {
 	int ret;
 	struct dwc3 *dwc = NULL;
@@ -4346,11 +4304,13 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 	 * case of platforms with mpm interrupts and snps phy, enable
 	 * dpse hsphy irq and dmse hsphy irq as done for pdc interrupts.
 	 */
-	dwc3_msm_interrupt_enable(mdwc, true);
+	dwc3_msm_interrupt_enable(mdwc, enable_wakeup);
 
 	if (mdwc->use_pwr_event_for_wakeup &&
-			!(mdwc->lpm_flags & MDWC3_SS_PHY_SUSPEND))
+			!(mdwc->lpm_flags & MDWC3_SS_PHY_SUSPEND)) {
+		enable_irq_wake(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 		enable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
+	}
 
 	dev_info(mdwc->dev, "DWC3 in low power mode\n");
 	dbg_event(0xFF, "Ctl Sus", atomic_read(&mdwc->in_lpm));
@@ -4477,6 +4437,7 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	atomic_set(&mdwc->in_lpm, 0);
 
 	/* enable power evt irq for IN P3 detection */
+	enable_irq_wake(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 	enable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 
 	/* Disable HSPHY auto suspend and utmi sleep assert */
@@ -5766,6 +5727,102 @@ exit:
 }
 EXPORT_SYMBOL(dwc3_msm_set_dp_mode);
 
+static int dwc3_msm_restart_usb_host(struct dwc3_msm *mdwc)
+{
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	struct usb_hcd *hcd = platform_get_drvdata(dwc->xhci);
+	int ret = 0;
+
+	if (!test_bit(HCD_FLAG_DEAD, &hcd->flags))
+		return 0;
+
+	mutex_lock(&mdwc->role_switch_mutex);
+
+	/* Check if USB cable disconnected */
+	if (mdwc->id_state == DWC3_ID_FLOAT)
+		goto exit;
+
+	/* stop USB host mode */
+	ret = dwc3_start_stop_host(mdwc, false);
+	if (ret)
+		goto exit;
+
+	dwc3_start_stop_host(mdwc, true);
+
+exit:
+	mutex_unlock(&mdwc->role_switch_mutex);
+
+	return ret;
+}
+
+static int dwc3_msm_restart_usb_gadget(struct dwc3_msm *mdwc)
+{
+	unsigned int timeout = 50;
+
+	/* guard against concurrent VBUS handling */
+	mdwc->in_restart = true;
+
+	if (!mdwc->vbus_active) {
+		dev_dbg(mdwc->dev, "%s bailing out in disconnect\n", __func__);
+		mdwc->err_evt_seen = false;
+		mdwc->in_restart = false;
+		return 0;
+	}
+
+	dbg_event(0xFF, "RestartUSB", 0);
+	/* Reset active USB connection */
+	dwc3_resume_work(&mdwc->resume_work);
+
+	/* Make sure disconnect is processed before sending connect */
+	while (--timeout && !pm_runtime_suspended(mdwc->dev))
+		msleep(20);
+
+	if (!timeout) {
+		dev_dbg(mdwc->dev,
+			"Not in LPM after disconnect, forcing suspend...\n");
+		dbg_event(0xFF, "ReStart:RT SUSP",
+			atomic_read(&mdwc->dev->power.usage_count));
+		pm_runtime_suspend(mdwc->dev);
+	}
+
+	mdwc->in_restart = false;
+	/* Force reconnect only if cable is still connected */
+	if (mdwc->vbus_active)
+		dwc3_resume_work(&mdwc->resume_work);
+
+	mdwc->err_evt_seen = false;
+	flush_work(&mdwc->sm_work);
+
+	return 0;
+}
+
+static void dwc3_restart_usb_work(struct work_struct *w)
+{
+	struct dwc3_msm *mdwc = container_of(w, struct dwc3_msm,
+						restart_usb_work);
+	enum usb_role role;
+
+	if (atomic_read(&mdwc->in_lpm)) {
+		dev_dbg(mdwc->dev, "%s failed!!!\n", __func__);
+		return;
+	}
+
+	mutex_lock(&mdwc->role_switch_mutex);
+	role = dwc3_msm_get_role(mdwc);
+	mutex_unlock(&mdwc->role_switch_mutex);
+
+	switch (role) {
+	case USB_ROLE_HOST:
+		dwc3_msm_restart_usb_host(mdwc);
+		break;
+	case USB_ROLE_DEVICE:
+		dwc3_msm_restart_usb_gadget(mdwc);
+		break;
+	default:
+		dev_err(mdwc->dev, "incorrect role during restart\n");
+	}
+}
+
 static int qos_rec_irq_read(struct seq_file *s, void *p)
 {
 	struct dwc3_msm *mdwc = s->private;
@@ -6216,6 +6273,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret = 0, i;
 	u32 val;
+	bool disable_wakeup;
 
 	mdwc = devm_kzalloc(&pdev->dev, sizeof(*mdwc), GFP_KERNEL);
 	if (!mdwc)
@@ -6390,7 +6448,10 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	atomic_set(&mdwc->in_lpm, 1);
 	pm_runtime_set_autosuspend_delay(mdwc->dev, 1000);
 	pm_runtime_use_autosuspend(mdwc->dev);
-	device_init_wakeup(mdwc->dev, 1);
+
+	disable_wakeup =
+		device_property_read_bool(mdwc->dev, "qcom,disable-wakeup");
+	device_init_wakeup(mdwc->dev, !disable_wakeup);
 
 	if (of_property_read_bool(node, "qcom,disable-dev-mode-pm"))
 		pm_runtime_get_noresume(mdwc->dev);
@@ -6698,11 +6759,11 @@ static int dwc3_msm_host_notifier(struct notifier_block *nb,
 {
 	struct dwc3_msm *mdwc = container_of(nb, struct dwc3_msm, host_nb);
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	struct usb_hcd *hcd = platform_get_drvdata(dwc->xhci);
 	struct usb_device *udev = ptr;
 
 	if (event == USB_BUS_ADD && mdwc->enable_host_slow_suspend) {
 		struct usb_bus *ubus = ptr;
-		struct usb_hcd *hcd = bus_to_hcd(ubus);
 		struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 
 		if (usb_hcd_is_primary_hcd(hcd)) {
@@ -6768,6 +6829,9 @@ static int dwc3_msm_host_notifier(struct notifier_block *nb,
 
 			if (mdwc->wcd_usbss)
 				wcd_usbss_dpdm_switch_update(true, true);
+
+			if (hcd && test_bit(HCD_FLAG_DEAD, &hcd->flags))
+				schedule_work(&mdwc->restart_usb_work);
 		}
 	} else if (!udev->parent) {
 		/* USB root hub device */
@@ -7465,9 +7529,16 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 	 * Power collapse the core. Hence call dwc3_msm_suspend with
 	 * 'force_power_collapse' set to 'true'.
 	 */
-	ret = dwc3_msm_suspend(mdwc, true);
+	ret = dwc3_msm_suspend(mdwc, true, device_may_wakeup(dev));
 	if (!ret)
 		atomic_set(&mdwc->pm_suspended, 1);
+
+	/*
+	 * Disable IRQs if not wakeup capable. Wakeup IRQs may sometimes
+	 * be enabled as part of a runtime suspend.
+	 */
+	if (!device_may_wakeup(dev))
+		dwc3_msm_interrupt_enable(mdwc, false);
 
 	return ret;
 }
@@ -7616,7 +7687,7 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 	if (dwc)
 		device_init_wakeup(dwc->dev, false);
 
-	return dwc3_msm_suspend(mdwc, false);
+	return dwc3_msm_suspend(mdwc, false, true);
 }
 
 static int dwc3_msm_runtime_resume(struct device *dev)
