@@ -683,7 +683,7 @@ int8_t smi230_gyro_read_fifo_data(struct smi230_fifo_frame *fifo,
  * @retval SMI230_E_NULL_PTR - Error: Null pointer error
  */
 int8_t smi230_gyro_extract_fifo(struct smi230_sensor_data *gyro_data,
-				uint8_t *fifo_length,
+				uint16_t *fifo_length,
 				struct smi230_fifo_frame *fifo,
 				const struct smi230_dev *dev);
 
