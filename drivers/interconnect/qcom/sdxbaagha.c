@@ -630,6 +630,8 @@ static struct qcom_icc_node qup0_core_slave = {
 	.id = SLAVE_QUP_CORE_0,
 	.channels = 1,
 	.buswidth = 4,
+	.init_avg = INT_MAX,
+	.init_peak = INT_MAX,
 	.noc_ops = &qcom_qnoc4_ops,
 	.num_links = 0,
 };
@@ -1107,8 +1109,6 @@ static struct qcom_icc_bcm bcm_mc0 = {
 static struct qcom_icc_bcm bcm_qup0 = {
 	.name = "QUP0",
 	.voter_idx = 0,
-	.init_peak = INT_MAX,
-	.init_avg = INT_MAX,
 	.vote_scale = 1,
 	.num_nodes = 1,
 	.nodes = { &qup0_core_slave },
