@@ -257,6 +257,9 @@ int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
 #define QCOM_SCM_SVC_GPU			0x28
 #define QCOM_SCM_SVC_GPU_INIT_REGS		0x01
 
+#define QCOM_SCM_GET_LLCC_MISSRATE_STATS_ID	0x14
+#define QCOM_SCM_SVC_MISSRATE			0x06
+
 /* common error codes */
 #define QCOM_SCM_V2_EBUSY	-12
 #define QCOM_SCM_ENOMEM		-5

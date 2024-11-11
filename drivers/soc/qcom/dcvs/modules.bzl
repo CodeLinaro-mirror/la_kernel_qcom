@@ -160,3 +160,36 @@ def register_modules(registry):
             "drivers/soc/qcom/dcvs/qcom_scmi_client.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/llcc_miss",
+        out = "llcc_miss.ko",
+        config = "CONFIG_QCOM_LLCC_MISS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/llcc_miss.c",
+            "drivers/soc/qcom/dcvs/bus_prof.h",
+            "drivers/soc/qcom/dcvs/trace-bus-prof.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/soc/qcom/dcvs/trace-bus-prof",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/trace-bus-prof",
+        out = "trace-bus-prof.ko",
+        config = "CONFIG_QCOM_BUS_PROF",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/bus_prof.h",
+            "drivers/soc/qcom/dcvs/trace-bus-prof.c",
+            "drivers/soc/qcom/dcvs/trace-bus-prof.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
