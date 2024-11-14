@@ -93,7 +93,7 @@ static int dwmac4_wrback_get_rx_status_err(void *data,
 		return discard_frame;
 
 	if (unlikely(!(rdes3 & RDES3_PACKET_LEN_TYPE_MASK))) {
-		pr_info("rdes3 = 0xX\n", rdes3);
+		pr_info("rdes3 = 0x%x\n", rdes3);
 		ret = llc_snap;
 	}
 

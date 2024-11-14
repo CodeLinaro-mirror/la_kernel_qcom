@@ -314,7 +314,7 @@ static ssize_t pps_fops_read(struct file *filp, char __user *buf,
 						  temp_buf, len);
 		kfree(temp_buf);
 		if (ethqos)
-			ETHQOSERR("poll pps2intr info=%d sent by kernel\n",
+			ETHQOSERR("poll pps2intr info=%lu sent by kernel\n",
 				  ethqos->avb_class_a_intr_cnt);
 	} else if (info->channel_no == AVB_CLASS_B_CHANNEL_NUM) {
 		avb_class_b_msg_wq_flag = false;
@@ -437,7 +437,7 @@ int create_pps_interrupt_device_node(dev_t *pps_dev_t,
 		goto cdev1_add_fail;
 	}
 
-	*pps_class = class_create(THIS_MODULE, pps_dev_node_name);
+	*pps_class = class_create(pps_dev_node_name);
 	if (!*pps_class) {
 		ret = -ENODEV;
 		ETHQOSERR("failed to create class\n");

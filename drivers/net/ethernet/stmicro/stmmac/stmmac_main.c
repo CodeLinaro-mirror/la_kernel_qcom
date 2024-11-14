@@ -1150,9 +1150,6 @@ static void stmmac_validate(struct phylink_config *config,
 
 	if (priv->phydev && !priv->phydev->autoneg && !priv->plat->early_eth) {
 		linkmode_copy(state->advertising, priv->adv_old);
-		/* If PCS is supported, check which modes it supports. */
-		if (priv->hw->xpcs)
-			xpcs_validate(priv->hw->xpcs, supported, state);
 		if (priv->hw->qxpcs)
 			qcom_xpcs_validate(priv->hw->qxpcs, supported, state);
 
@@ -1252,9 +1249,6 @@ static void stmmac_validate(struct phylink_config *config,
 		priv->early_eth_config_set = 1;
 	}
 
-	/* If PCS is supported, check which modes it supports. */
-	if (priv->hw->xpcs)
-		xpcs_validate(priv->hw->xpcs, supported, state);
 	if (priv->hw->qxpcs)
 		qcom_xpcs_validate(priv->hw->qxpcs, supported, state);
 }
@@ -4230,7 +4224,7 @@ void stmmac_mac2mac_adjust_link(int speed, struct stmmac_priv *priv)
 	writel_relaxed(ctrl, priv->ioaddr + MAC_CTRL_REG);
 }
 
-stmmac_check_l4_proto_info(struct l4_filter_info  *l4_filter)
+bool stmmac_check_l4_proto_info(struct l4_filter_info  *l4_filter)
 {
 	/*no l4 filter installed*/
 	if (l4_filter->l4_proto_number == 0)
@@ -4681,7 +4675,7 @@ static int stmmac_open(struct net_device *dev)
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
 	if (priv->plat->enable_power_saving) {
 		ret = priv->plat->enable_power_saving(priv->dev, true);
-		netdev_info(priv->dev, "%s enable power saving", __func__, ret);
+		netdev_info(priv->dev, "%s enable power saving, ret: %d", __func__, ret);
 	}
 #endif
 	return 0;
@@ -4705,7 +4699,8 @@ init_phy_error:
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
 	if (priv->plat->enable_power_saving) {
 		ret = priv->plat->enable_power_saving(priv->dev, true);
-		netdev_info(priv->dev, "%s enable power saving for error case", __func__, ret);
+		netdev_info(priv->dev, "%s enable power saving for error case, ret: %d", __func__,
+			    ret);
 	}
 #endif
 
@@ -5733,7 +5728,7 @@ static int __stmmac_xdp_run_prog(struct stmmac_priv *priv,
 			res = STMMAC_XDP_REDIRECT;
 		break;
 	default:
-		bpf_warn_invalid_xdp_action(act);
+		bpf_warn_invalid_xdp_action(priv->dev, prog, act);
 		fallthrough;
 	case XDP_ABORTED:
 		trace_xdp_exception(priv->dev, prog, act);
@@ -6340,7 +6335,7 @@ read_again:
 					priv->dma_buf_sz);
 
 			/* Data payload appended into SKB */
-			page_pool_release_page(rx_q->page_pool, buf->page);
+			skb_mark_for_recycle(skb);
 			buf->page = NULL;
 		}
 
@@ -6352,7 +6347,7 @@ read_again:
 					priv->dma_buf_sz);
 
 			/* Data payload appended into SKB */
-			page_pool_release_page(rx_q->page_pool, buf->sec_page);
+			skb_mark_for_recycle(skb);
 			buf->sec_page = NULL;
 		}
 
@@ -7971,19 +7966,16 @@ static void stmmac_napi_add(struct net_device *dev)
 		spin_lock_init(&ch->lock);
 
 		if (queue < priv->plat->rx_queues_to_use) {
-			netif_napi_add(dev, &ch->rx_napi, stmmac_napi_poll_rx,
-				       NAPI_POLL_WEIGHT);
+			netif_napi_add(dev, &ch->rx_napi, stmmac_napi_poll_rx);
 		}
 		if (queue < priv->plat->tx_queues_to_use) {
-			netif_tx_napi_add(dev, &ch->tx_napi,
-					  stmmac_napi_poll_tx,
-					  NAPI_POLL_WEIGHT);
+			netif_napi_add_tx(dev, &ch->tx_napi,
+					  stmmac_napi_poll_tx);
 		}
 		if (queue < priv->plat->rx_queues_to_use &&
 		    queue < priv->plat->tx_queues_to_use) {
 			netif_napi_add(dev, &ch->rxtx_napi,
-				       stmmac_napi_poll_rxtx,
-				       NAPI_POLL_WEIGHT);
+				       stmmac_napi_poll_rxtx);
 		}
 	}
 }
@@ -8165,7 +8157,7 @@ int stmmac_dvr_probe(struct device *device,
 		priv->tx_irq[i] = res->tx_irq[i];
 
 	if (!is_zero_ether_addr(res->mac))
-		memcpy(priv->dev->dev_addr, res->mac, ETH_ALEN);
+		eth_hw_addr_set(priv->dev, res->mac);
 
 	dev_set_drvdata(device, priv->dev);
 

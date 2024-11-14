@@ -7,9 +7,13 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/of_net.h>
 #include <linux/platform_device.h>
 #include <linux/phy.h>
+#include <linux/phy/phy.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pinctrl/consumer.h>
+#include <linux/pinctrl/devinfo.h>
 #include <linux/of_gpio.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
@@ -18,8 +22,7 @@
 #include <linux/slab.h>
 #include <linux/poll.h>
 #include <linux/debugfs.h>
-#include <linux/dma-iommu.h>
-#include <linux/qcom_scm.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/iommu.h>
 #include <linux/micrel_phy.h>
 #include <linux/tcp.h>
@@ -34,8 +37,9 @@
 #include <linux/panic_notifier.h>
 #include <net/inet_common.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
-#include <linux/gunyah/gh_vm.h>
 #include <linux/gunyah/gh_rm_drv.h>
+#include <linux/interconnect.h>
+#include <linux/of_platform.h>
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
@@ -3870,7 +3874,7 @@ static ssize_t ethqos_test_mac_recovery(struct file *file,
 	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
 
 	if (sizeof(in_buf) < count) {
-		ETHQOSERR("emac string is too long - count=%u\n", count);
+		ETHQOSERR("emac string is too long - count=%zu\n", count);
 		return -EFAULT;
 	}
 
@@ -4202,7 +4206,7 @@ static int create_debufs_for_sgmii_usxgmii(struct qcom_ethqos *ethqos)
 					   ethqos->debugfs_dir, ethqos,
 					   &fops_mac_pcs_read);
 	if (!mac_pcs_dump || IS_ERR(mac_pcs_dump)) {
-		ETHQOSERR("Cannot create debugfs mac_pcs_dump %x\n",
+		ETHQOSERR("Cannot create debugfs mac_pcs_dump %p\n",
 			  mac_pcs_dump);
 		goto fail;
 	}
@@ -4211,7 +4215,7 @@ static int create_debufs_for_sgmii_usxgmii(struct qcom_ethqos *ethqos)
 					    ethqos->debugfs_dir, ethqos,
 					    &fops_mac_pcs_write);
 	if (!mac_pcs_write || IS_ERR(mac_pcs_write)) {
-		ETHQOSERR("Cannot create debugfs mac_pcs_write %x\n",
+		ETHQOSERR("Cannot create debugfs mac_pcs_write %p\n",
 			  mac_pcs_write);
 		goto fail;
 	}
@@ -4220,7 +4224,7 @@ static int create_debufs_for_sgmii_usxgmii(struct qcom_ethqos *ethqos)
 					       ethqos->debugfs_dir, ethqos,
 					       &fops_mac_serdes_write);
 	if (!mac_serdes_write || IS_ERR(mac_serdes_write)) {
-		ETHQOSERR("Cannot create debugfs mac_pcs_write %x\n",
+		ETHQOSERR("Cannot create debugfs mac_pcs_write %p\n",
 			  mac_serdes_write);
 		goto fail;
 	}
@@ -4229,7 +4233,7 @@ static int create_debufs_for_sgmii_usxgmii(struct qcom_ethqos *ethqos)
 					      ethqos->debugfs_dir, ethqos,
 					      &fops_mac_serdes_dump);
 	if (!mac_serdes_dump || IS_ERR(mac_serdes_dump)) {
-		ETHQOSERR("Cannot create debugfs mac_serdes_dump %x\n",
+		ETHQOSERR("Cannot create debugfs mac_serdes_dump %p\n",
 			  mac_serdes_dump);
 		goto fail;
 	}
@@ -4273,7 +4277,7 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 	mac_dump = debugfs_create_file("mac_reg_read", (0400),
 				       ethqos->debugfs_dir, ethqos, &fops_mac_read);
 	if (!mac_dump || IS_ERR(mac_dump)) {
-		ETHQOSERR("Cannot create debugfs mac_dump %x\n",
+		ETHQOSERR("Cannot create debugfs mac_dump %p\n",
 			  mac_dump);
 		goto fail;
 	}
@@ -4281,7 +4285,7 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 	mac_iomacro_dump = debugfs_create_file("iomacro_reg_read", (0400),
 					       ethqos->debugfs_dir, ethqos, &fops_mac_iomacro_read);
 	if (!mac_iomacro_dump || IS_ERR(mac_iomacro_dump)) {
-		ETHQOSERR("Cannot create debugfs mac_iomacro_dump %x\n",
+		ETHQOSERR("Cannot create debugfs mac_iomacro_dump %p\n",
 			  mac_iomacro_dump);
 		goto fail;
 	}
@@ -4289,14 +4293,14 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 	mac_write = debugfs_create_file("mac_reg_write", (0220),
 					ethqos->debugfs_dir, ethqos, &fops_mac_write);
 	if (!mac_write || IS_ERR(mac_write)) {
-		ETHQOSERR("Cannot create debugfs mac_write %x\n",
+		ETHQOSERR("Cannot create debugfs mac_write %p\n",
 			  mac_write);
 		goto fail;
 	}
 	phy_reg_read = debugfs_create_file("phy_reg_read", (0660),
 					   ethqos->debugfs_dir, ethqos, &fops_phy_reg_read);
 	if (!phy_reg_read || IS_ERR(phy_reg_read)) {
-		ETHQOSERR("Cannot create debugfs phy_reg_read %x\n",
+		ETHQOSERR("Cannot create debugfs phy_reg_read %p\n",
 			  mac_write);
 		goto fail;
 	}
@@ -4304,7 +4308,7 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 	phyreg_write = debugfs_create_file("phy_reg_write", (0220),
 					   ethqos->debugfs_dir, ethqos, &fops_phy_reg_write);
 	if (!phyreg_write || IS_ERR(phyreg_write)) {
-		ETHQOSERR("Cannot create debugfs phy_reg_write %x\n",
+		ETHQOSERR("Cannot create debugfs phy_reg_write %p\n",
 			  phyreg_write);
 		goto fail;
 	}
@@ -4331,7 +4335,7 @@ static int ethqos_create_debugfs(struct qcom_ethqos        *ethqos)
 						ethqos->debugfs_dir, ethqos,
 						&fops_enforce_speed);
 	if (!enforce_max_speed || IS_ERR(enforce_max_speed)) {
-		ETHQOSERR("Can't create enforce_max_speed %d\n",
+		ETHQOSERR("Can't create enforce_max_speed %ld\n",
 			  (long)enforce_max_speed);
 		goto fail;
 	}
@@ -5207,7 +5211,7 @@ static int ethqos_update_mdio_drv_strength(struct qcom_ethqos *ethqos,
 
 	tlmm_central_base = resource->start;
 	tlmm_central_size = resource_size(resource);
-	ETHQOSDBG("tlmm_central_base = 0x%x, size = 0x%x\n",
+	ETHQOSDBG("tlmm_central_base = 0x%lx, size = 0x%lx\n",
 		  tlmm_central_base, tlmm_central_size);
 
 	tlmm_central_base_addr = ioremap(tlmm_central_base,
@@ -5590,7 +5594,7 @@ static void read_mac_addr_from_fuse_reg(struct device_node *np)
 				continue;
 
 			mac_addr = readq(mac_efuse_addr);
-			ETHQOSINFO("Mac address read: %llx\n", mac_addr);
+			ETHQOSINFO("Mac address read: %lx\n", mac_addr);
 
 			/* create byte array out of value read from efuse */
 			for (i = 0; i < ETH_ALEN ; i++) {
@@ -5945,7 +5949,7 @@ static ssize_t ethqos_mac_recovery_enable(struct file *file,
 	struct qcom_ethqos *ethqos = pethqos[0];
 
 	if (sizeof(in_buf) < count) {
-		ETHQOSERR("emac string is too long - count=%u\n", count);
+		ETHQOSERR("emac string is too long - count=%zu\n", count);
 		return -EFAULT;
 	}
 
@@ -6109,7 +6113,7 @@ static int ethqos_create_emac_rec_device_node(dev_t *emac_dev_t,
 		goto cdev1_add_fail;
 	}
 
-	*emac_class = class_create(THIS_MODULE, emac_dev_node_name);
+	*emac_class = class_create(emac_dev_node_name);
 	if (!*emac_class) {
 		ret = -ENODEV;
 		ETHQOSERR("failed to create class\n");
@@ -6160,7 +6164,7 @@ static int qcom_ethqos_panic_notifier(struct notifier_block *nb,
 		}
 	}
 
-	pr_info("EMAC register dump complete: Dumped %u registers\n", k);
+	pr_info("EMAC register dump complete: Dumped %zu registers\n", k);
 
 	pr_info("qcom-ethqos: ethqos 0x%p\n", ethqos);
 
@@ -6199,7 +6203,7 @@ static ssize_t ethqos_write_dev_emac(struct file *file,
 	priv = qcom_ethqos_get_priv(ethqos);
 
 	if (sizeof(in_buf) < count) {
-		ETHQOSERR("emac string is too long - count=%u\n", count);
+		ETHQOSERR("emac string is too long - count=%zu\n", count);
 		return -EFAULT;
 	}
 
@@ -6348,7 +6352,7 @@ static int ethqos_create_emac_device_node(dev_t *emac_dev_t,
 		goto cdev1_add_fail;
 	}
 
-	*emac_class = class_create(THIS_MODULE, emac_dev_node_name);
+	*emac_class = class_create(emac_dev_node_name);
 	if (!*emac_class) {
 		ret = -ENODEV;
 		ETHQOSERR("failed to create class\n");
@@ -6499,7 +6503,7 @@ static int qcom_ethqos_register_panic_notifier(struct qcom_ethqos *ethqos)
 
 	for (i = 0; i < ARRAY_SIZE(mac_reg_sizes); i++) {
 		if (mac_reg_sizes[i] % MAC_REG_SIZE) {
-			ETHQOSERR("Invalid register size in mac_reg_sizes found at index %u: %u\n",
+			ETHQOSERR("Invalid register size in mac_reg_sizes found at index %zu: %u\n",
 				  i, mac_reg_sizes[i]);
 			return -EINVAL;
 		}
@@ -7657,7 +7661,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_SCM)
 		if (plat_dat->has_xgmac &&
 		    (0x31 == (readl(stmmac_res.addr + GMAC4_VERSION) & GENMASK(7, 0)))) {
-			ETHQOSINFO("has_xgmac = %d GMAC4_version_id = 0x%x\n",
+			ETHQOSINFO("has_xgmac = %d GMAC4_version_id = 0x%lx\n",
 				   plat_dat->has_xgmac,
 				   (readl(stmmac_res.addr + GMAC4_VERSION) & GENMASK(7, 0)));
 			ethqos->emac_ver = EMAC_HW_v4_0_0;
@@ -7806,7 +7810,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	 */
 	if (pparams.is_valid_mac_addr) {
 		ether_addr_copy(dev_addr, pparams.mac_addr);
-		memcpy(priv->dev->dev_addr, dev_addr, ETH_ALEN);
+		eth_hw_addr_set(priv->dev, dev_addr);
 	}
 
 	if (of_property_read_bool(np, "avb-vlan-id"))
