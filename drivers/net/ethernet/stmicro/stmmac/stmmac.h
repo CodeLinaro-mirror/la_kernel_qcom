@@ -22,7 +22,7 @@
 #include <linux/ptp_clock_kernel.h>
 #include <linux/net_tstamp.h>
 #include <linux/reset.h>
-#include <net/page_pool.h>
+#include <net/page_pool/helpers.h>
 #ifdef CONFIG_MSM_BOOT_TIME_MARKER
 #include <soc/qcom/boot_stats.h>
 #endif
@@ -31,6 +31,9 @@
 #include <linux/if_arp.h>
 #include <linux/icmp.h>
 #include <linux/gunyah/gh_rm_drv.h>
+#include <net/page_pool/types.h>
+#include <net/xdp.h>
+#include <uapi/linux/bpf.h>
 
 struct stmmac_resources {
 	void __iomem *addr;

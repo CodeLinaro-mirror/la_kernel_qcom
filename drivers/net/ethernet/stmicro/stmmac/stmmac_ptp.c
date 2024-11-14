@@ -19,7 +19,7 @@
  *
  * Description: this function will adjust the frequency of hardware clock.
  */
-static int stmmac_adjust_freq(struct ptp_clock_info *ptp, s32 ppb)
+static int stmmac_adjust_freq(struct ptp_clock_info *ptp, long ppb)
 {
 	struct stmmac_priv *priv =
 	    container_of(ptp, struct stmmac_priv, ptp_clock_ops);
@@ -282,7 +282,7 @@ static struct ptp_clock_info stmmac_ptp_clock_ops = {
 	.n_per_out = 0, /* will be overwritten in stmmac_ptp_register */
 	.n_pins = 0,
 	.pps = 0,
-	.adjfreq = stmmac_adjust_freq,
+	.adjfine = stmmac_adjust_freq,
 	.adjtime = stmmac_adjust_time,
 	.gettime64 = stmmac_get_time,
 	.settime64 = stmmac_set_time,

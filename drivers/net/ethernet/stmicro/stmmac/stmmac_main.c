@@ -40,6 +40,7 @@
 #include <linux/pcs-xpcs-qcom.h>
 #include <linux/udp.h>
 #include <linux/bpf_trace.h>
+#include <net/page_pool/helpers.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
 #include "stmmac_ptp.h"
@@ -1072,6 +1073,20 @@ static void stmmac_mac_flow_ctrl(struct stmmac_priv *priv, u32 duplex)
 			priv->pause, tx_cnt);
 }
 
+static struct phylink_pcs *stmmac_mac_select_pcs(struct phylink_config *config,
+						 phy_interface_t interface)
+{
+	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
+
+	if (priv->hw->xpcs)
+		return &priv->hw->xpcs->pcs;
+
+	if (priv->hw->lynx_pcs)
+		return priv->hw->lynx_pcs;
+
+	return NULL;
+}
+
 void stmmac_set_speed100(struct stmmac_priv *priv)
 {
 	u16 bmcr_val, ctrl1000_val, adv_val, autoneg_10G_ctrl, pma_ctrl;
@@ -1513,6 +1528,7 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 static const struct phylink_mac_ops stmmac_phylink_mac_ops = {
 	.validate = stmmac_validate,
+	.mac_select_pcs = stmmac_mac_select_pcs,
 	.mac_config = stmmac_mac_config,
 	.mac_link_down = stmmac_mac_link_down,
 	.mac_link_up = stmmac_mac_link_up,
@@ -1647,22 +1663,44 @@ static void stmmac_get_fixed_state(struct phylink_config *config,
 
 int stmmac_phy_setup(struct stmmac_priv *priv)
 {
-	struct stmmac_mdio_bus_data *mdio_bus_data = priv->plat->mdio_bus_data;
-	struct fwnode_handle *fwnode = of_fwnode_handle(priv->plat->phylink_node);
+	struct stmmac_mdio_bus_data *mdio_bus_data;
 	int mode = priv->plat->phy_interface;
+	struct fwnode_handle *fwnode;
 	struct phylink *phylink;
+	int max_speed;
 
 	priv->phylink_config.dev = &priv->dev->dev;
 	priv->phylink_config.type = PHYLINK_NETDEV;
-	priv->phylink_config.pcs_poll = true;
+	priv->phylink_config.mac_managed_pm = true;
 
 	if (priv->plat->plat_wait_for_emac_rx_clk_en)
 		priv->phylink_config.get_fixed_state = stmmac_get_fixed_state;
 
-	if (priv->plat->mdio_bus_data)
+	mdio_bus_data = priv->plat->mdio_bus_data;
+	if (mdio_bus_data)
 		priv->phylink_config.ovr_an_inband =
 			mdio_bus_data->xpcs_an_inband;
 
+	/*Set the platform/firmware specified interface mode. Note, phylink
+	 * deals with the PHY interface mode, not the MAC interface mode.
+	 */
+	__set_bit(mode, priv->phylink_config.supported_interfaces);
+
+	/* If we have an xpcs, it defines which PHY interfaces are supported. */
+	if (priv->hw->xpcs)
+		xpcs_get_interfaces(priv->hw->xpcs,
+				    priv->phylink_config.supported_interfaces);
+
+	/* Get the MAC specific capabilities */
+	stmmac_mac_phylink_get_caps(priv);
+
+	priv->phylink_config.mac_capabilities = priv->hw->link.caps;
+
+	max_speed = priv->plat->max_speed;
+	if (max_speed)
+		phylink_limit_mac_speed(&priv->phylink_config, max_speed);
+
+	fwnode = priv->plat->port_node;
 	if (!fwnode)
 		fwnode = dev_fwnode(priv->device);
 
@@ -1670,9 +1708,6 @@ int stmmac_phy_setup(struct stmmac_priv *priv)
 				 mode, &stmmac_phylink_mac_ops);
 	if (IS_ERR(phylink))
 		return PTR_ERR(phylink);
-
-	if (priv->hw->xpcs)
-		phylink_set_pcs(phylink, &priv->hw->xpcs->pcs);
 
 	priv->phylink = phylink;
 	return 0;
@@ -3335,9 +3370,13 @@ static int stmmac_get_hw_features(struct stmmac_priv *priv)
  */
 static void stmmac_check_ether_addr(struct stmmac_priv *priv)
 {
+	u8 addr[ETH_ALEN];
+
 	if (!is_valid_ether_addr(priv->dev->dev_addr)) {
-		stmmac_get_umac_addr(priv, priv->hw, priv->dev->dev_addr, 0);
-		if (!is_valid_ether_addr(priv->dev->dev_addr))
+		stmmac_get_umac_addr(priv, priv->hw, addr, 0);
+		if (is_valid_ether_addr(addr))
+			eth_hw_addr_set(priv->dev, addr);
+		else
 			eth_hw_addr_random(priv->dev);
 		dev_info(priv->device, "device MAC address %pM\n",
 			 priv->dev->dev_addr);
