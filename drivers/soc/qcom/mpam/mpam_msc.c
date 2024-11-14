@@ -362,6 +362,7 @@ static struct platform_driver mpam_msc_driver = {
 	.driver = {
 		.name = "mpam-msc",
 		.of_match_table = mpam_msc_table,
+		.suppress_bind_attrs = true,
 	},
 	.probe = mpam_msc_probe,
 	.remove = mpam_msc_remove,

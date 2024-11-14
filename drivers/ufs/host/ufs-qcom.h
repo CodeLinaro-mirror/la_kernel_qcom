@@ -279,10 +279,10 @@ static inline void ufs_qcom_assert_reset(struct ufs_hba *hba)
 		    REG_UFS_CFG1);
 
 	/*
-	 * Make sure assertion of ufs phy reset is written to
-	 * register before returning
+	 * Dummy read to ensure the write takes effect before doing any sort
+	 * of delay
 	 */
-	mb();
+	ufshcd_readl(hba, REG_UFS_CFG1);
 }
 
 static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
@@ -291,10 +291,10 @@ static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
 		    REG_UFS_CFG1);
 
 	/*
-	 * Make sure de-assertion of ufs phy reset is written to
-	 * register before returning
+	 * Dummy read to ensure the write takes effect before doing any sort
+	 * of delay
 	 */
-	mb();
+	ufshcd_readl(hba, REG_UFS_CFG1);
 }
 
 struct ufs_qcom_bus_vote {
@@ -562,10 +562,11 @@ struct ufs_qcom_host {
 	bool disable_lpm;
 
 	bool vdd_hba_pc;
+	bool ufs_gen_type;
 	struct notifier_block vdd_hba_reg_nb;
 
 	struct ufs_vreg *vddp_ref_clk;
-	struct ufs_vreg *vccq_parent;
+	struct ufs_vreg *parent_vreg;
 	struct ufs_vreg *vccq_proxy_client;
 	bool work_pending;
 	bool bypass_g4_cfgready;
@@ -581,8 +582,8 @@ struct ufs_qcom_host {
 	atomic_t scale_up;
 	atomic_t clks_on;
 	unsigned long load_delay_ms;
-#define NUM_REQS_HIGH_THRESH 64
-#define NUM_REQS_LOW_THRESH 32
+#define NUM_REQS_HIGH_THRESH 128
+#define NUM_REQS_LOW_THRESH 64
 	atomic_t num_reqs_threshold;
 	bool cur_freq_vote;
 	struct delayed_work fwork;
@@ -600,6 +601,7 @@ struct ufs_qcom_host {
 	atomic_t therm_mitigation;
 	cpumask_t perf_mask;
 	cpumask_t def_mask;
+	cpumask_t esi_mask;
 	u32 *esi_affinity_mask;
 	bool disable_wb_support;
 	struct ufs_qcom_ber_hist ber_hist[UFS_QCOM_BER_MODE_MAX];
@@ -616,6 +618,9 @@ struct ufs_qcom_host {
 	unsigned long active_cmds;
 	u32 hs_gear;
 	u32 max_cpus;
+	unsigned int boost_monitor_timer;
+	u32 min_boost_thres;
+	u32 max_boost_thres;
 };
 
 static inline u32

@@ -45,7 +45,7 @@
 #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
 #define RPROC_HANDOVER_POLL_DELAY_MS	1
 
-#define MAX_ASSIGN_COUNT 2
+#define MAX_ASSIGN_COUNT 3
 
 #define to_rproc(d) container_of(d, struct rproc, dev)
 
@@ -162,6 +162,8 @@ struct qcom_adsp {
 	void *tcsr_addr;
 	void *spare_reg_addr;
 	bool check_status;
+	bool rproc_ddr_set_icc_low_svs;
+	unsigned int rproc_ddr_lowsvs_icc_bw;
 };
 
 static ssize_t txn_id_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -805,6 +807,55 @@ static bool rproc_poll_handover(struct qcom_adsp *adsp)
 
 	return adsp->q6v5.handover_issued;
 }
+
+static int bus_bw_init(struct qcom_adsp *adsp)
+{
+	int ret = 0;
+	bool rproc_ddr_set_icc_low_svs;
+	unsigned int rproc_ddr_lowsvs_icc_bw;
+
+	rproc_ddr_set_icc_low_svs = of_property_read_bool(adsp->dev->of_node,
+				     "rproc-ddr-set-icc-low-svs");
+
+	if (rproc_ddr_set_icc_low_svs) {
+		adsp->rproc_ddr_set_icc_low_svs = rproc_ddr_set_icc_low_svs;
+		ret = of_property_read_u32(adsp->dev->of_node,
+				"rproc-ddr-lowsvs-icc-bw", &rproc_ddr_lowsvs_icc_bw);
+		if (!rproc_ddr_lowsvs_icc_bw) {
+			dev_err(adsp->dev, "Low SVS ICC Bw is not available.\n");
+			return ret;
+		}
+		adsp->rproc_ddr_lowsvs_icc_bw = rproc_ddr_lowsvs_icc_bw;
+		dev_info(adsp->dev, "LowSVS Bus BW: %d\n", rproc_ddr_lowsvs_icc_bw);
+	} else {
+		adsp->rproc_ddr_set_icc_low_svs = false;
+		dev_info(adsp->dev, "Low SVS vote for ICC is not set.\n");
+	}
+
+	return ret;
+}
+
+static int set_icc_bw(struct qcom_adsp *adsp, bool enable)
+{
+	int ret;
+	u32 avg_bw, peak_bw;
+
+	avg_bw = enable
+			? adsp->rproc_ddr_set_icc_low_svs
+				? adsp->rproc_ddr_lowsvs_icc_bw
+				: UINT_MAX
+			: 0;
+	peak_bw = enable
+			? adsp->rproc_ddr_set_icc_low_svs
+				? adsp->rproc_ddr_lowsvs_icc_bw
+				: UINT_MAX
+			: 0;
+
+	ret = icc_set_bw(adsp->q6v5.path, avg_bw, peak_bw);
+
+	return ret;
+}
+
 /*
  * rproc_set_state: Request the SOCCP to change state
  *
@@ -854,7 +905,7 @@ int rproc_set_state(struct rproc *rproc, bool state)
 			goto soccp_out;
 		}
 
-		ret = icc_set_bw(adsp->q6v5.path, UINT_MAX, UINT_MAX);
+		ret = set_icc_bw(adsp, true);
 		if (ret < 0) {
 			dev_err(adsp->q6v5.dev, "failed to set bandwidth request\n");
 			goto soccp_out;
@@ -923,7 +974,7 @@ int rproc_set_state(struct rproc *rproc, bool state)
 				goto soccp_out;
 			}
 
-			ret = icc_set_bw(adsp->q6v5.path, 0, 0);
+			ret = set_icc_bw(adsp, false);
 			if (ret < 0) {
 				dev_err(adsp->q6v5.dev, "failed to set bandwidth request\n");
 				goto soccp_out;
@@ -1410,6 +1461,10 @@ static int adsp_probe(struct platform_device *pdev)
 	if (ret)
 		goto free_rproc;
 
+	ret = bus_bw_init(adsp);
+	if (ret)
+		goto free_rproc;
+
 	ret = adsp_pds_attach(&pdev->dev, adsp->proxy_pds,
 			      desc->proxy_pd_names);
 	if (ret < 0)
@@ -1542,6 +1597,26 @@ static const struct adsp_data sdm845_adsp_resource_init = {
 		.ssr_name = "lpass",
 		.sysmon_name = "adsp",
 		.ssctl_id = 0x14,
+};
+
+static const struct adsp_data sdxpinn_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
+	.region_assign_idx = 3,
+	.region_assign_count = 3,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
 };
 
 static const struct adsp_data sm6350_adsp_resource = {
@@ -1966,6 +2041,124 @@ static const struct adsp_data sun_soccp_resource = {
 	.auto_boot = true,
 };
 
+static const struct adsp_data tuna_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
+};
+
+static const struct adsp_data tuna_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.region_assign_idx = 2,
+	.region_assign_count = 1,
+	.region_assign_shared = true,
+	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
+	.auto_boot = false,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
+};
+
+static const struct adsp_data tuna_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.region_assign_idx = 3,
+	.region_assign_count = 1,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.dma_phys_below_32b = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data kera_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
+};
+
+static const struct adsp_data kera_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.region_assign_idx = 2,
+	.region_assign_count = 1,
+	.region_assign_shared = true,
+	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
+	.auto_boot = false,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
+};
+
+static const struct adsp_data kera_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.region_assign_idx = 3,
+	.region_assign_count = 2,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.dma_phys_below_32b = true,
+	.both_dumps = true,
+};
+
 static const struct adsp_data pineapple_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -2136,6 +2329,28 @@ static const struct adsp_data monaco_modem_resource = {
 	.ssctl_id = 0x12,
 };
 
+static const struct adsp_data tuna_wpss_resource = {
+	.crash_reason_smem = 626,
+	.firmware_name = "wpss.mdt",
+	.pas_id = 6,
+	.minidump_id = 4,
+	.uses_elf64 = true,
+	.ssr_name = "wpss",
+	.sysmon_name = "wpss",
+	.ssctl_id = 0x19,
+};
+
+static const struct adsp_data kera_wpss_resource = {
+	.crash_reason_smem = 626,
+	.firmware_name = "wpss.mdt",
+	.pas_id = 6,
+	.minidump_id = 4,
+	.uses_elf64 = true,
+	.ssr_name = "wpss",
+	.sysmon_name = "wpss",
+	.ssctl_id = 0x19,
+};
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -2160,6 +2375,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,sdm845-cdsp-pas", .data = &sdm845_cdsp_resource_init},
 	{ .compatible = "qcom,sdm845-slpi-pas", .data = &sdm845_slpi_resource_init},
 	{ .compatible = "qcom,sdx55-mpss-pas", .data = &sdx55_mpss_resource},
+	{ .compatible = "qcom,sdxpinn-modem-pas", .data = &sdxpinn_mpss_resource},
 	{ .compatible = "qcom,sm6115-adsp-pas", .data = &adsp_resource_init},
 	{ .compatible = "qcom,sm6115-cdsp-pas", .data = &cdsp_resource_init},
 	{ .compatible = "qcom,sm6115-mpss-pas", .data = &sc8180x_mpss_resource},
@@ -2191,6 +2407,12 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,sun-cdsp-pas", .data = &sun_cdsp_resource},
 	{ .compatible = "qcom,sun-modem-pas", .data = &sun_mpss_resource},
 	{ .compatible = "qcom,sun-soccp-pas", .data = &sun_soccp_resource},
+	{ .compatible = "qcom,tuna-adsp-pas", .data = &tuna_adsp_resource},
+	{ .compatible = "qcom,tuna-cdsp-pas", .data = &tuna_cdsp_resource},
+	{ .compatible = "qcom,tuna-modem-pas", .data = &tuna_mpss_resource},
+	{ .compatible = "qcom,kera-adsp-pas", .data = &kera_adsp_resource},
+	{ .compatible = "qcom,kera-cdsp-pas", .data = &kera_cdsp_resource},
+	{ .compatible = "qcom,kera-modem-pas", .data = &kera_mpss_resource},
 	{ .compatible = "qcom,parrot-adsp-pas", .data = &parrot_adsp_resource},
 	{ .compatible = "qcom,parrot-cdsp-pas", .data = &parrot_cdsp_resource},
 	{ .compatible = "qcom,parrot-modem-pas", .data = &parrot_mpss_resource},
@@ -2200,6 +2422,8 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,ravelin-wpss-pas", .data = &ravelin_wpss_resource},
 	{ .compatible = "qcom,monaco-adsp-pas", .data = &monaco_adsp_resource},
 	{ .compatible = "qcom,monaco-modem-pas", .data = &monaco_modem_resource},
+	{ .compatible = "qcom,tuna-wpss-pas", .data = &tuna_wpss_resource},
+	{ .compatible = "qcom,kera-wpss-pas", .data = &kera_wpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

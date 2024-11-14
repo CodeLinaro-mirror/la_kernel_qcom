@@ -1302,6 +1302,7 @@ static const struct freq_tbl ftbl_cam_cc_qdss_debug_clk_src[] = {
 	F(40000000, P_CAM_CC_PLL6_OUT_ODD, 8, 0, 0),
 	F(60000000, P_CAM_CC_PLL6_OUT_EVEN, 8, 0, 0),
 	F(120000000, P_CAM_CC_PLL0_OUT_EVEN, 5, 0, 0),
+	F(200000000, P_CAM_CC_PLL0_OUT_MAIN, 6, 0, 0),
 	F(240000000, P_CAM_CC_PLL0_OUT_MAIN, 5, 0, 0),
 	{ }
 };
@@ -1328,7 +1329,8 @@ static struct clk_rcg2 cam_cc_qdss_debug_clk_src = {
 			[VDD_LOWER_D1] = 40000000,
 			[VDD_LOWER] = 60000000,
 			[VDD_LOW] = 120000000,
-			[VDD_LOW_L1] = 240000000},
+			[VDD_LOW_L1] = 200000000,
+			[VDD_NOMINAL] = 240000000},
 	},
 };
 

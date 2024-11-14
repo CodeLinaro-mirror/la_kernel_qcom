@@ -214,7 +214,7 @@ struct etr_buf {
  * @usb_data:	usb data for ETR.
  * @stop_on_flush: flag of stop_on_flush for ETR.
  * @delayed:	parameter for delayed probe.
- * @dclk:	optional clock to be dynamically enabled when this device is enabled.
+ * @atclk:	optional clock for the core parts of the TMC.
  */
 struct tmc_drvdata {
 	void __iomem		*base;
@@ -249,7 +249,7 @@ struct tmc_drvdata {
 	struct tmc_usb_data	*usb_data;
 	bool			stop_on_flush;
 	struct delay_probe_arg	*delayed;
-	struct clk		*dclk;
+	struct clk		*atclk;
 	struct pm_config	pm_config;
 	struct list_head	link;
 };

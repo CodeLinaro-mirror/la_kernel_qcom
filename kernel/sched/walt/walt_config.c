@@ -11,6 +11,7 @@ unsigned long __read_mostly soc_flags;
 unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
 cpumask_t asym_cap_sibling_cpus;
 cpumask_t pipeline_sync_cpus;
+cpumask_t storage_boost_cpus;
 int oscillate_period_ns;
 int soc_sched_lib_name_capacity;
 #define PIPELINE_BUSY_THRESH_8MS_WINDOW 7
@@ -49,6 +50,7 @@ void walt_config(void)
 	sysctl_max_freq_partial_halt = FREQ_QOS_MAX_DEFAULT_VALUE;
 	asym_cap_sibling_cpus = CPU_MASK_NONE;
 	pipeline_sync_cpus = CPU_MASK_NONE;
+	storage_boost_cpus = CPU_MASK_NONE;
 	for_each_possible_cpu(cpu) {
 		for (i = 0; i < LEGACY_SMART_FREQ; i++) {
 			if (i)
@@ -101,11 +103,17 @@ void walt_config(void)
 	soc_feat_set(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 	soc_feat_set(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 	soc_feat_set(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+
+	sysctl_pipeline_special_task_util_thres = 100;
+	sysctl_pipeline_non_special_task_util_thres = 200;
+	sysctl_pipeline_pin_thres_low_pct = 50;
+	sysctl_pipeline_pin_thres_high_pct = 60;
+
 	/* return if socinfo is not available */
 	if (!name)
 		return;
 
-	if (!strcmp(name, "SUN")) {
+	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP")) {
 		sysctl_sched_suppress_region2		= 1;
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
@@ -119,6 +127,7 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_EXPERIMENT3);
 		/*G + P*/
 		cpumask_copy(&pipeline_sync_cpus, cpu_possible_mask);
+		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
 		soc_sched_lib_name_capacity = 2;
 		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 
@@ -170,6 +179,9 @@ void walt_config(void)
 		cpumask_or(&asym_cap_sibling_cpus,
 			&asym_cap_sibling_cpus, &cpu_array[0][2]);
 
+		/* T + G + P */
+		cpumask_andnot(&storage_boost_cpus, cpu_possible_mask, &cpu_array[0][0]);
+
 		/*
 		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.
 		 * However, it is possible that a single CPU is not present. As prime is the
@@ -195,6 +207,41 @@ void walt_config(void)
 		load_sync_util_thres[3][2]	= sysctl_cluster32_load_sync[0];
 		load_sync_low_pct[3][2]		= sysctl_cluster32_load_sync[1];
 		load_sync_high_pct[3][2]	= sysctl_cluster32_load_sync[2];
+	} else if (!strcmp(name, "TUNA")) {
+		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
+		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
+
+		/*
+		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.
+		 * However, it is possible that a single CPU is not present. As prime is the
+		 * only cluster with only one CPU, guard this setting by ensuring 4 clusters
+		 * are present.
+		 */
+		if (num_sched_clusters == 4) {
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][2]);
+			cpumask_or(&pipeline_sync_cpus,
+				&pipeline_sync_cpus, &cpu_array[0][3]);
+			sysctl_cluster23_load_sync[0]	= 350;
+			sysctl_cluster23_load_sync[1]	= 100;
+			sysctl_cluster23_load_sync[2]	= 100;
+			sysctl_cluster32_load_sync[0]	= 512;
+			sysctl_cluster32_load_sync[1]	= 90;
+			sysctl_cluster32_load_sync[2]	= 90;
+			load_sync_util_thres[2][3]	= sysctl_cluster23_load_sync[0];
+			load_sync_low_pct[2][3]		= sysctl_cluster23_load_sync[1];
+			load_sync_high_pct[2][3]	= sysctl_cluster23_load_sync[2];
+			load_sync_util_thres[3][2]	= sysctl_cluster32_load_sync[0];
+			load_sync_low_pct[3][2]		= sysctl_cluster32_load_sync[1];
+			load_sync_high_pct[3][2]	= sysctl_cluster32_load_sync[2];
+
+			/* T + G */
+			cpumask_or(&asym_cap_sibling_cpus,
+					&asym_cap_sibling_cpus, &cpu_array[0][1]);
+			cpumask_or(&asym_cap_sibling_cpus,
+					&asym_cap_sibling_cpus, &cpu_array[0][2]);
+		}
+
 	}
 
 	smart_freq_init(name);

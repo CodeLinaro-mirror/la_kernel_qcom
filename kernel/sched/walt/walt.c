@@ -52,6 +52,10 @@ cpumask_t walt_cpus_taken_mask = { CPU_BITS_NONE };
 DEFINE_SPINLOCK(cpus_taken_lock);
 DEFINE_PER_CPU(int, cpus_taken_refcount);
 
+cpumask_t walt_enforce_high_irq_cpu_mask = { CPU_BITS_NONE };
+DEFINE_SPINLOCK(enforce_high_irq_cpu_lock);
+DEFINE_PER_CPU(int, enforce_high_irq_cpus_refcount);
+
 DEFINE_PER_CPU(struct walt_rq, walt_rq);
 unsigned int sysctl_sched_user_hint;
 static u64 sched_clock_last;
@@ -4390,6 +4394,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 	bool is_migration = false, is_asym_migration = false, is_pipeline_sync_migration = false;
 	u32 wakeup_ctr_sum = 0;
 	struct walt_sched_cluster *cluster;
+	bool need_assign_heavy = false;
 
 	if (irq_work == &walt_migration_irq_work)
 		is_migration = true;
@@ -4436,6 +4441,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 			per_cpu(wakeup_ctr, cpu) = 0;
 
 			walt_core_utilization(cpu);
+			set_cpu_flag(cpu, CPU_FIRST_ENQ_IN_WINDOW, 0);
 		}
 
 		check_obet();
@@ -4446,8 +4452,9 @@ static void walt_irq_work(struct irq_work *irq_work)
 
 	if (!is_migration) {
 		wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
-		pipeline_check(wrq);
+		need_assign_heavy = pipeline_check(wrq);
 		core_ctl_check(wrq->window_start, wakeup_ctr_sum);
+		pipeline_rearrange(wrq, need_assign_heavy);
 		for_each_sched_cluster(cluster) {
 			update_smart_freq_legacy_reason_hyst_time(cluster);
 		}
@@ -4804,7 +4811,8 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 
 	if ((flags & ENQUEUE_WAKEUP) && walt_flag_test(p, WALT_TRAILBLAZER_BIT)) {
 		waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER_BIT);
-	} else if ((flags & ENQUEUE_WAKEUP) && do_pl_notif(rq)) {
+	} else if (((flags & ENQUEUE_WAKEUP) ||
+			!is_cpu_flag_set(cpu_of(rq), CPU_FIRST_ENQ_IN_WINDOW)) && do_pl_notif(rq)) {
 		waltgov_run_callback(rq, WALT_CPUFREQ_PL_BIT);
 	} else if (walt_feat(WALT_FEAT_UCLAMP_FREQ_BIT)) {
 		unsigned long min, max;
@@ -4819,6 +4827,7 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 		}
 	}
 
+	set_cpu_flag(cpu_of(rq), CPU_FIRST_ENQ_IN_WINDOW, 1);
 	if (num_sched_clusters >= 2) {
 		mid_cluster_cpu = cpumask_first(
 				&cpu_array[0][num_sched_clusters - 2]);
@@ -5250,6 +5259,7 @@ static void rebuild_sd_workfn(struct work_struct *work)
 }
 
 u8 contiguous_yielding_windows;
+DEFINE_PER_CPU(unsigned int, walt_yield_to_sleep);
 static void walt_do_sched_yield_before(void *unused, long *skip)
 {
 	struct walt_task_struct *wts = (struct walt_task_struct *)current->android_vendor_data1;
@@ -5281,6 +5291,7 @@ static void walt_do_sched_yield_before(void *unused, long *skip)
 				wts->yield_state |= YIELD_INDUCED_SLEEP;
 				total_sleep_cnt++;
 				*skip = true;
+				per_cpu(walt_yield_to_sleep, raw_smp_processor_id())++;
 				usleep_range_state(YIELD_SLEEP_TIME_USEC, YIELD_SLEEP_TIME_USEC,
 							TASK_INTERRUPTIBLE);
 			}
@@ -5290,6 +5301,7 @@ static void walt_do_sched_yield_before(void *unused, long *skip)
 	}
 }
 
+unsigned int walt_sched_yield_counter;
 static void walt_do_sched_yield(void *unused, struct rq *rq)
 {
 	struct task_struct *curr = rq->curr;
@@ -5305,6 +5317,8 @@ static void walt_do_sched_yield(void *unused, struct rq *rq)
 
 	if (per_cpu(rt_task_arrival_time, cpu_of(rq)))
 		per_cpu(rt_task_arrival_time, cpu_of(rq)) = 0;
+
+	walt_sched_yield_counter++;
 }
 
 int walt_set_cpus_taken(struct cpumask *set)
@@ -5350,6 +5364,50 @@ cpumask_t walt_get_cpus_taken(void)
 	return walt_cpus_taken_mask;
 }
 EXPORT_SYMBOL_GPL(walt_get_cpus_taken);
+
+int walt_set_enforce_high_irq_cpus(struct cpumask *set)
+{
+	unsigned long flags;
+	int cpu;
+
+	if (unlikely(walt_disabled))
+		return -EAGAIN;
+
+	spin_lock_irqsave(&enforce_high_irq_cpu_lock, flags);
+	for_each_cpu(cpu, set) {
+		per_cpu(enforce_high_irq_cpus_refcount, cpu)++;
+	}
+	cpumask_or(&walt_enforce_high_irq_cpu_mask, &walt_enforce_high_irq_cpu_mask, set);
+	spin_unlock_irqrestore(&enforce_high_irq_cpu_lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(walt_set_enforce_high_irq_cpus);
+
+int walt_unset_enforce_high_irq_cpus(struct cpumask *unset)
+{
+	unsigned long flags;
+	int cpu;
+
+	if (unlikely(walt_disabled))
+		return -EAGAIN;
+
+	spin_lock_irqsave(&enforce_high_irq_cpu_lock, flags);
+	for_each_cpu(cpu, unset) {
+		if (per_cpu(enforce_high_irq_cpus_refcount, cpu) >= 1)
+			per_cpu(enforce_high_irq_cpus_refcount, cpu)--;
+		if (!per_cpu(enforce_high_irq_cpus_refcount, cpu))
+			cpumask_clear_cpu(cpu, &walt_enforce_high_irq_cpu_mask);
+	}
+	spin_unlock_irqrestore(&enforce_high_irq_cpu_lock, flags);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(walt_unset_enforce_high_irq_cpus);
+
+cpumask_t walt_get_enforce_high_irq_cpus(void)
+{
+	return walt_enforce_high_irq_cpu_mask;
+}
+EXPORT_SYMBOL_GPL(walt_get_enforce_high_irq_cpus);
 
 int walt_get_cpus_in_state1(struct cpumask *cpus)
 {

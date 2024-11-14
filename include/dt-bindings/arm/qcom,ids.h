@@ -232,6 +232,7 @@
 #define QCOM_ID_SM8450_2		480
 #define QCOM_ID_SM8450_3		482
 #define QCOM_ID_MONACO			486
+#define QCOM_ID_MONACOP			517
 #define QCOM_ID_SC7280			487
 #define QCOM_ID_SC7180P			495
 #define QCOM_ID_IPQ5000			503
@@ -278,7 +279,9 @@
 #define QCOM_ID_SG_RAVELIN		653
 #define QCOM_ID_SG_RAVELINP		654
 #define QCOM_ID_TUNA			655
+#define QCOM_ID_TUNA7			681
 #define QCOM_ID_KERA			659
+#define QCOM_ID_KERAP			686
 #define QCOM_ID_PARROTPRO		663
 
 /*

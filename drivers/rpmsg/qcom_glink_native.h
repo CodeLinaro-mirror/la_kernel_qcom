@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2016-2017, Linaro Ltd
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_GLINK_NATIVE_H__
@@ -14,6 +15,7 @@
 #define GLINK_FEATURE_TRACER_PKT	BIT(2)
 #define GLINK_FEATURE_ZERO_COPY		BIT(3)
 #define GLINK_FEATURE_ZERO_COPY_POOLS	BIT(4)
+#define GLINK_FEATURE_SHORT_CMD         BIT(8)
 
 /**
  * rpmsg rx callback return definitions

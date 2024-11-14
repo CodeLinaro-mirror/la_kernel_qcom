@@ -46,6 +46,13 @@ static int tsens_set_trip_temp(struct thermal_zone_device *tz, int low_temp, int
 	return 0;
 }
 
+/* WA to add writable trip_temp_*_hyst sysfs node till core has proper fix */
+static int tsens_set_trip_hyst(
+		struct thermal_zone_device *tz, int trip, int hysteresis)
+{
+	return 0;
+};
+
 static int tsens_tz_change_mode(struct thermal_zone_device *tz, enum thermal_device_mode mode)
 {
 	struct tsens_sensor *s = tz->devdata;
@@ -116,6 +123,7 @@ MODULE_DEVICE_TABLE(of, tsens_table);
 static struct thermal_zone_device_ops tsens_tm_thermal_zone_ops = {
 	.get_temp = tsens_get_temp,
 	.set_trips = tsens_set_trip_temp,
+	.set_trip_hyst = tsens_set_trip_hyst,
 	.change_mode = tsens_tz_change_mode,
 };
 

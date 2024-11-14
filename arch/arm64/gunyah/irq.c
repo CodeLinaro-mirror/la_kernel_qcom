@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -11,6 +11,8 @@
 
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <linux/gunyah/gh_rm_drv.h>
+
+#include <asm/gunyah.h>
 
 #define GIC_V3_SPI_MAX		1019
 
@@ -31,16 +33,16 @@ static DEFINE_IDR(gh_rm_free_virq_idr);
 int gh_get_irq(u32 virq, u32 type, struct fwnode_handle *fw_handle)
 {
 	struct irq_fwspec fwspec = {};
+	int ret;
 
-	if (virq < IRQ_OFFSET || virq >= GIC_V3_SPI_MAX) {
-		pr_warn("%s: expecting an SPI from RM, but got GIC IRQ %d\n",
-			__func__, virq);
+	ret = arch_gunyah_fill_irq_fwspec_params(virq, &fwspec);
+	if (ret) {
+		pr_err("Failed to translate interrupt: type: %d virq: %d: ret: %d\n",
+		       type, virq, ret);
+		return ret;
 	}
 
 	fwspec.fwnode = fw_handle;
-	fwspec.param_count = 3;
-	fwspec.param[0] = GIC_SPI;
-	fwspec.param[1] = virq - IRQ_OFFSET;
 	fwspec.param[2] = type;
 
 	return irq_create_fwspec_mapping(&fwspec);

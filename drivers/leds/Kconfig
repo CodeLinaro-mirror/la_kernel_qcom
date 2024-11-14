@@ -118,6 +118,16 @@ config LEDS_AW2013
 	  To compile this driver as a module, choose M here: the module
 	  will be called leds-aw2013.
 
+config LEDS_AW2016
+	tristate "LED Support for AW2016"
+	depends on LEDS_CLASS && I2C
+	help
+	  this option enables support for the AW2016 RGB LED connected
+	  through I2C. Say Y to enable support for the AW2016 LED.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called leds-aw2016.
+
 config LEDS_BCM6328
 	tristate "LED Support for Broadcom BCM6328"
 	depends on LEDS_CLASS

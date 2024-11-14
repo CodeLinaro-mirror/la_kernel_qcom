@@ -22,6 +22,7 @@ static const struct msm_pinctrl_soc_data ravelin_tlmm = {
 	.ngpios = 137,
 	.wakeirq_map = ravelin_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(ravelin_pdc_map),
+	.egpio_func = 11,
 };
 
 static const struct msm_pinctrl_soc_data ravelin_vm_tlmm = {
@@ -32,6 +33,7 @@ static const struct msm_pinctrl_soc_data ravelin_vm_tlmm = {
 	.groups = ravelin_groups,
 	.ngroups = ARRAY_SIZE(ravelin_groups),
 	.ngpios = 137,
+	.egpio_func = 11,
 };
 
 static int ravelin_tlmm_probe(struct platform_device *pdev)

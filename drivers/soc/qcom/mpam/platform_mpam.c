@@ -353,6 +353,7 @@ static struct platform_driver platform_mpam_driver = {
 	.driver = {
 		.name = "platform-mpam",
 		.of_match_table = platform_mpam_table,
+		.suppress_bind_attrs = true,
 	},
 	.probe = platform_mpam_probe,
 	.remove = platform_mpam_remove,

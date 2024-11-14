@@ -161,6 +161,7 @@ extern int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 #define QCOM_SCM_DCVS_INIT_V2			0x0b
 #define QCOM_SCM_DCVS_INIT_CA_V2		0x0c
 #define QCOM_SCM_DCVS_UPDATE_CA_V2		0x0d
+#define QCOM_SCM_DCVS_TUNING			0x0e
 
 #define QCOM_SCM_SVC_OCMEM		0x0f
 #define QCOM_SCM_OCMEM_LOCK_CMD		0x01
@@ -203,6 +204,7 @@ extern int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 /* OEM Services and Function IDs */
 #define QCOM_SCM_SVC_OEM_POWER			0x09
 #define QCOM_SCM_OEM_POWER_REBOOT		0x22
+#define QCOM_SCM_OEM_POWER_CUSTOM_REBOOT	0x23
 
 /* GPU Service IDs */
 #define QCOM_SCM_SVC_GPU		0x28

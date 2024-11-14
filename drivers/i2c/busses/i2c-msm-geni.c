@@ -215,6 +215,7 @@ struct geni_i2c_dev {
 	u32 dbg_num;
 	struct dbg_buf_ctxt *dbg_buf_ptr;
 	bool is_le_vm;
+	bool is_gsi_cmd;
 	bool pm_ctrl_client;
 	bool req_chan;
 	bool first_xfer_done; /* for le-vm doing lock/unlock, after first xfer initiated. */
@@ -227,6 +228,7 @@ struct geni_i2c_dev {
 	atomic_t is_xfer_in_progress; /* Used to maintain xfer inprogress status */
 	bool bus_recovery_enable; /* To be enabled by client if needed */
 	bool i2c_test_dev; /* Set this DT flag to enable test bus dump for an SE */
+	bool old_i2c_freq; /* Configure the I2C bus speed using the older counter settings. */
 };
 
 static struct geni_i2c_dev *gi2c_dev_dbg[MAX_SE];
@@ -268,9 +270,15 @@ struct geni_i2c_clk_fld {
 	u8	t_cycle;
 };
 
+static struct geni_i2c_clk_fld geni_i2c_old_clk_map[] = {
+	{KHz(100), 7, 10, 11, 26},
+	{KHz(400), 2,  7, 10, 24},
+	{KHz(1000), 1, 2,  8, 18},
+};
+
 static struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
 	{KHz(100), 7, 10, 11, 26},
-	{KHz(400), 2,  3, 11, 22},
+	{KHz(400), 2,  5, 11, 22},
 	{KHz(1000), 1, 2,  8, 18},
 };
 
@@ -286,10 +294,17 @@ static int geni_i2c_clk_map_idx(struct geni_i2c_dev *gi2c)
 	int ret = 0;
 	bool clk_map_present = false;
 	struct geni_i2c_clk_fld *itr;
+	size_t clk_map_size;
 
-	itr = (gi2c->is_i2c_rtl_based) ? geni_i2c_hub_clk_map : geni_i2c_clk_map;
+	if (gi2c->old_i2c_freq)
+		itr = geni_i2c_old_clk_map;
+	else
+		itr = gi2c->is_i2c_rtl_based ? geni_i2c_hub_clk_map : geni_i2c_clk_map;
 
-	for (i = 0; i < ARRAY_SIZE(geni_i2c_clk_map); i++, itr++) {
+	clk_map_size = gi2c->old_i2c_freq ? ARRAY_SIZE(geni_i2c_old_clk_map) :
+				ARRAY_SIZE(geni_i2c_clk_map);
+
+	for (i = 0; i < clk_map_size; i++, itr++) {
 		if (itr->clk_freq_out == gi2c->clk_freq_out) {
 			clk_map_present = true;
 			break;
@@ -485,14 +500,28 @@ static ssize_t capture_kpi_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(capture_kpi);
 
+struct geni_i2c_clk_fld *geni_i2c_get_itr_value(struct geni_i2c_dev *gi2c)
+{
+	struct geni_i2c_clk_fld *itr;
+
+	if (!gi2c)
+		return NULL;
+
+	if (gi2c->is_i2c_rtl_based)
+		itr = geni_i2c_hub_clk_map + gi2c->clk_fld_idx;
+	else if (gi2c->old_i2c_freq)
+		itr = geni_i2c_old_clk_map + gi2c->clk_fld_idx;
+	else
+		itr = geni_i2c_clk_map + gi2c->clk_fld_idx;
+
+	return itr;
+}
+
 static inline void qcom_geni_i2c_conf(struct geni_i2c_dev *gi2c, int dfs)
 {
 	struct geni_i2c_clk_fld *itr;
 
-	if (gi2c->is_i2c_rtl_based)
-		itr = geni_i2c_hub_clk_map + gi2c->clk_fld_idx;
-	else
-		itr = geni_i2c_clk_map + gi2c->clk_fld_idx;
+	itr = geni_i2c_get_itr_value(gi2c);
 
 	/* do not configure the dfs index for i2c hub master */
 	if (!gi2c->is_i2c_hub)
@@ -517,10 +546,7 @@ static inline void qcom_geni_i2c_calc_timeout(struct geni_i2c_dev *gi2c)
 	size_t bit_usec = 0;
 	size_t xfer_max_usec = 0;
 
-	if (gi2c->is_i2c_rtl_based)
-		clk_itr = geni_i2c_hub_clk_map + gi2c->clk_fld_idx;
-	else
-		clk_itr = geni_i2c_clk_map + gi2c->clk_fld_idx;
+	clk_itr = geni_i2c_get_itr_value(gi2c);
 
 	bit_usec = (bit_cnt * USEC_PER_SEC) / clk_itr->clk_freq_out;
 	xfer_max_usec = (bit_usec * I2C_TIMEOUT_SAFETY_COEFFICIENT) +
@@ -1184,7 +1210,10 @@ static void gi2c_gsi_tx_cb(void *ptr)
 	}
 
 	gi2c = tx_cb->userdata;
-	gi2c_gsi_cb_err(tx_cb, "TX");
+
+	/* For gsi lock/unlock commands, no need to check bus related error */
+	if (!gi2c->is_gsi_cmd)
+		gi2c_gsi_cb_err(tx_cb, "TX");
 
 	atomic_inc(&gi2c->gsi_tx.irq_cnt);
 	I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
@@ -1307,10 +1336,7 @@ static struct msm_gpi_tre *setup_cfg0_tre(struct geni_i2c_dev *gi2c)
 	if (gi2c->gsi_tx.is_multi_descriptor)
 		gsi_bei = true;
 
-	if (gi2c->is_i2c_rtl_based)
-		itr = geni_i2c_hub_clk_map + gi2c->clk_fld_idx;
-	else
-		itr = geni_i2c_clk_map + gi2c->clk_fld_idx;
+	itr = geni_i2c_get_itr_value(gi2c);
 
 	/* config0 */
 	cfg0_t->dword[0] = MSM_GPI_I2C_CONFIG0_TRE_DWORD0(I2C_PACK_EN,
@@ -1527,6 +1553,7 @@ static int geni_i2c_lock_bus(struct geni_i2c_dev *gi2c)
 		goto geni_i2c_err_lock_bus;
 	}
 
+	gi2c->is_gsi_cmd = true;
 	reinit_completion(&gi2c->xfer);
 	/* Issue TX */
 	tx_cookie = dmaengine_submit(gi2c->tx_desc);
@@ -1548,6 +1575,7 @@ static int geni_i2c_lock_bus(struct geni_i2c_dev *gi2c)
 		gi2c->err = -ETIMEDOUT;
 		goto geni_i2c_err_lock_bus;
 	}
+	gi2c->is_gsi_cmd = false;
 	return 0;
 
 geni_i2c_err_lock_bus:
@@ -1555,6 +1583,7 @@ geni_i2c_err_lock_bus:
 		dmaengine_terminate_all(gi2c->tx_c);
 		gi2c->cfg_sent = 0;
 	}
+	gi2c->is_gsi_cmd = false;
 	geni_capture_stop_time(&gi2c->i2c_rsc, gi2c->ipc_log_kpi, __func__,
 			       gi2c->i2c_kpi, start_time, 0, 0);
 	return gi2c->err;
@@ -1589,6 +1618,7 @@ static void geni_i2c_unlock_bus(struct geni_i2c_dev *gi2c)
 		goto geni_i2c_err_unlock_bus;
 	}
 
+	gi2c->is_gsi_cmd = true;
 	reinit_completion(&gi2c->xfer);
 	/* Issue TX */
 	tx_cookie = dmaengine_submit(gi2c->tx_desc);
@@ -1617,6 +1647,7 @@ geni_i2c_err_unlock_bus:
 		gi2c->cfg_sent = 0;
 		gi2c->err = 0;
 	}
+	gi2c->is_gsi_cmd = false;
 	geni_capture_stop_time(&gi2c->i2c_rsc, gi2c->ipc_log_kpi, __func__,
 			       gi2c->i2c_kpi, start_time, 0, 0);
 }
@@ -2725,6 +2756,9 @@ static int geni_i2c_probe(struct platform_device *pdev)
 
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,leica-used-i2c"))
 		gi2c->skip_bw_vote = true;
+
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,old-i2c-freq-cfg"))
+		gi2c->old_i2c_freq = true;
 
 	gi2c->i2c_test_dev = false;
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,i2c-test-dev")) {

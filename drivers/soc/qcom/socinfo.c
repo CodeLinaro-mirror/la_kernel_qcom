@@ -62,6 +62,7 @@ enum {
 	HW_PLATFORM_ATP = 33,
 	HW_PLATFORM_IDP = 34,
 	HW_PLATFORM_CRD = 40,
+	HW_PLATFORM_WDP = 36,
 	HW_PLATFORM_INVALID
 };
 
@@ -87,6 +88,7 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_ATP] = "ATP",
 	[HW_PLATFORM_IDP] = "IDP",
 	[HW_PLATFORM_CRD] = "CRD",
+	[HW_PLATFORM_WDP] = "WDP",
 };
 
 enum {
@@ -632,8 +634,11 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(IPQ5302) },
 	{ qcom_board_id(IPQ5300) },
 	{ qcom_board_id(MONACO) },
+	{ qcom_board_id(MONACOP) },
 	{ qcom_board_id(TUNA) },
+	{ qcom_board_id(TUNA7) },
 	{ qcom_board_id(KERA) },
+	{ qcom_board_id(KERAP) },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];

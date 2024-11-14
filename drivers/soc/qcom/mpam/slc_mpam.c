@@ -388,6 +388,7 @@ static struct platform_driver slc_mpam_driver = {
 	.driver = {
 		.name = "mpam-slc",
 		.of_match_table = slc_mpam_table,
+		.suppress_bind_attrs = true,
 	},
 	.probe = slc_mpam_probe,
 	.remove = slc_mpam_remove,

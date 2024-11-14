@@ -312,6 +312,32 @@ err_free_sgt:
 	return ret;
 }
 
+static bool mem_buf_valid_sgt(struct sg_table *sgt)
+{
+#if defined(CONFIG_GUNYAH_LEGACY)
+	int i;
+	size_t size;
+	struct scatterlist *sgl;
+
+	/* Physically contiguous memory only */
+	if (sgt->nents > 1) {
+		pr_err_ratelimited("Operation requires physically contiguous memory\n");
+		return false;
+	}
+
+	/* Due to memory-hotplug */
+	size = 0;
+	for_each_sgtable_sg(sgt, sgl, i)
+		size += sgl->length;
+	if (!IS_ALIGNED(size, SUBSECTION_SIZE)) {
+		pr_err_ratelimited("Operation requires SUBSECTION_SIZE alignemnt, size = %zx\n",
+					size);
+		return false;
+	}
+#endif
+	return true;
+}
+
 int mem_buf_assign_mem_gunyah(u32 op, struct sg_table *sgt,
 			      struct mem_buf_lend_kernel_arg *arg)
 {
@@ -323,6 +349,9 @@ int mem_buf_assign_mem_gunyah(u32 op, struct sg_table *sgt,
 	ret = mem_buf_vm_uses_gunyah(arg->vmids, arg->nr_acl_entries);
 	if (ret <= 0)
 		return ret;
+
+	if (!mem_buf_valid_sgt(sgt))
+		return -EINVAL;
 
 	gh_sgl = mem_buf_sgt_to_gh_sgl_desc(sgt);
 	if (IS_ERR(gh_sgl))

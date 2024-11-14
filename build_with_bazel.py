@@ -316,7 +316,8 @@ class BazelBuilder:
                         f=f.strip()
                         common_f = os.path.join(common_d, f)
                         msm_f = os.path.join(msm_d, f)
-                        os.remove(msm_f)
+                        if os.path.exists(msm_f):
+                            os.remove(msm_f)
                         os.symlink(common_f, msm_f)
                 gki_f.close()
 

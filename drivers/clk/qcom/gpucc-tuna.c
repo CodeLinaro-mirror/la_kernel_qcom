@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,gpucc-tuna.h>
@@ -21,6 +22,7 @@
 #include "clk-regmap.h"
 #include "clk-regmap-divider.h"
 #include "common.h"
+#include "gdsc.h"
 #include "reset.h"
 #include "vdd-level.h"
 
@@ -405,6 +407,71 @@ static struct clk_branch gpu_cc_memnoc_gfx_clk = {
 	},
 };
 
+static struct gdsc gpu_cc_cx_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x8,
+	.pd = {
+		.name = "gpu_cc_cx_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_cx",
+};
+
+static int gdsc_cx_do_nothing(struct generic_pm_domain *domain)
+{
+	return 0;
+}
+
+static struct gdsc gpu_cc_cx_smmu_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x8,
+	.pd = {
+		.name = "gpu_cc_cx_smmu_gdsc",
+		.power_on = gdsc_cx_do_nothing,
+		.power_off = gdsc_cx_do_nothing,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.parent = &gpu_cc_cx_gdsc.pd,
+};
+
+static struct gdsc gpu_cc_cx_gmu_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x8,
+	.pd = {
+		.name = "gpu_cc_cx_gmu_gdsc",
+		.power_on = gdsc_cx_do_nothing,
+		.power_off = gdsc_cx_do_nothing,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.parent = &gpu_cc_cx_gdsc.pd,
+};
+
+static struct gdsc gx_clkctl_gx_gdsc = {
+	.gdscr = 0x0,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "gx_clkctl_gx_gdsc",
+		.power_on = gdsc_gx_do_nothing_enable,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_gx",
+};
+
 static struct clk_regmap *gpu_cc_tuna_clocks[] = {
 	[GPU_CC_AHB_CLK] = &gpu_cc_ahb_clk.clkr,
 	[GPU_CC_CX_ACCU_SHIFT_CLK] = &gpu_cc_cx_accu_shift_clk.clkr,
@@ -426,6 +493,16 @@ static struct clk_regmap *gpu_cc_tuna_clocks[] = {
 	[GPU_CC_PLL0_OUT_EVEN] = &gpu_cc_pll0_out_even.clkr,
 };
 
+static struct gdsc *gpu_cc_tuna_gdscs[] = {
+	[GPU_CC_CX_GDSC] = &gpu_cc_cx_gdsc,
+	[GPU_CC_CX_SMMU_GDSC] = &gpu_cc_cx_smmu_gdsc,
+	[GPU_CC_CX_GMU_GDSC] = &gpu_cc_cx_gmu_gdsc,
+};
+
+static struct gdsc *gx_clkctl_tuna_gdscs[] = {
+	[GX_CLKCTL_GX_GDSC] = &gx_clkctl_gx_gdsc,
+};
+
 static const struct qcom_reset_map gpu_cc_tuna_resets[] = {
 	[GPU_CC_CB_BCR] = { 0x93a0 },
 	[GPU_CC_CX_BCR] = { 0x907c },
@@ -444,6 +521,14 @@ static const struct regmap_config gpu_cc_tuna_regmap_config = {
 	.fast_io = true,
 };
 
+static const struct regmap_config gx_clkctl_regmap_config = {
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+	.max_register = 0x8,
+	.fast_io = true,
+};
+
 static const struct qcom_cc_desc gpu_cc_tuna_desc = {
 	.config = &gpu_cc_tuna_regmap_config,
 	.clks = gpu_cc_tuna_clocks,
@@ -452,6 +537,14 @@ static const struct qcom_cc_desc gpu_cc_tuna_desc = {
 	.num_resets = ARRAY_SIZE(gpu_cc_tuna_resets),
 	.clk_regulators = gpu_cc_tuna_regulators,
 	.num_clk_regulators = ARRAY_SIZE(gpu_cc_tuna_regulators),
+	.gdscs = gpu_cc_tuna_gdscs,
+	.num_gdscs = ARRAY_SIZE(gpu_cc_tuna_gdscs),
+};
+
+static const struct qcom_cc_desc gx_clkctl_tuna_desc = {
+	.config = &gx_clkctl_regmap_config,
+	.gdscs = gx_clkctl_tuna_gdscs,
+	.num_gdscs = ARRAY_SIZE(gx_clkctl_tuna_gdscs),
 };
 
 static const struct of_device_id gpu_cc_tuna_match_table[] = {
@@ -510,14 +603,61 @@ static struct platform_driver gpu_cc_tuna_driver = {
 	},
 };
 
+
+static const struct of_device_id gx_clkctl_tuna_match_table[] = {
+	{ .compatible = "qcom,tuna-gx_clkctl" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, gx_clkctl_tuna_match_table);
+
+static int gx_clkctl_tuna_probe(struct platform_device *pdev)
+{
+
+	struct regmap *regmap;
+	int ret;
+
+	pm_runtime_enable(&pdev->dev);
+
+	ret = pm_runtime_resume_and_get(&pdev->dev);
+	if (ret)
+		return ret;
+
+	regmap = qcom_cc_map(pdev, &gx_clkctl_tuna_desc);
+	if (IS_ERR(regmap)) {
+		pm_runtime_put(&pdev->dev);
+		return PTR_ERR(regmap);
+	}
+
+	ret = qcom_cc_really_probe(pdev, &gx_clkctl_tuna_desc, regmap);
+
+	pm_runtime_put(&pdev->dev);
+
+	return ret;
+}
+
+static struct platform_driver gx_clkctl_tuna_driver = {
+	.probe = gx_clkctl_tuna_probe,
+	.driver = {
+		.name = "gx_clkctl-tuna",
+		.of_match_table = gx_clkctl_tuna_match_table,
+	},
+};
+
 static int __init gpu_cc_tuna_init(void)
 {
-	return platform_driver_register(&gpu_cc_tuna_driver);
+	int ret;
+
+	ret = platform_driver_register(&gpu_cc_tuna_driver);
+	if (ret)
+		return ret;
+
+	return platform_driver_register(&gx_clkctl_tuna_driver);
 }
 subsys_initcall(gpu_cc_tuna_init);
 
 static void __exit gpu_cc_tuna_exit(void)
 {
+	platform_driver_unregister(&gx_clkctl_tuna_driver);
 	platform_driver_unregister(&gpu_cc_tuna_driver);
 }
 module_exit(gpu_cc_tuna_exit);

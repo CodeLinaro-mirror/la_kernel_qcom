@@ -80,6 +80,13 @@ enum qcom_scm_ice_cipher {
 	QCOM_SCM_ICE_CIPHER_AES_256_CBC = 4,
 };
 
+enum qcom_scm_custom_reset_type {
+	QCOM_SCM_RST_NONE,
+	QCOM_SCM_RST_SHUTDOWN_TO_RTC_MODE = 0x80000005,
+	QCOM_SCM_RST_SHUTDOWN_TO_TWM_MODE,
+	QCOM_SCM_RST_MAX
+};
+
 #define QCOM_SCM_PERM_READ       0x4
 #define QCOM_SCM_PERM_WRITE      0x2
 #define QCOM_SCM_PERM_EXEC       0x1
@@ -207,6 +214,7 @@ extern int qcom_scm_kgsl_set_smmu_aperture(
 extern int qcom_scm_kgsl_set_smmu_lpac_aperture(
 				unsigned int num_context_bank);
 extern int qcom_scm_kgsl_init_regs(u32 gpu_req);
+extern int qcom_scm_kgsl_dcvs_tuning(u32 mingap, u32 penalty, u32 numbusy);
 extern int qcom_scm_enable_shm_bridge(void);
 extern int qcom_scm_delete_shm_bridge(u64 handle);
 extern int qcom_scm_create_shm_bridge(u64 pfn_and_ns_perm_flags,
@@ -282,5 +290,7 @@ extern int qcom_scm_lmh_profile_change(u32 profile_id);
 extern bool qcom_scm_lmh_dcvsh_available(void);
 
 extern int qcom_scm_tsens_reinit(int *tsens_ret);
-
+extern int gh_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz, u64 *src,
+			const struct qcom_scm_vmperm *dstvm,
+			unsigned int nr_dst_vmperm);
 #endif

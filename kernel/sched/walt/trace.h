@@ -1007,6 +1007,7 @@ TRACE_EVENT(sched_cpu_util,
 		__field(int,		halted)
 		__field(int,		reserved)
 		__field(int,		high_irq_load)
+		__field(bool,		enforce_high_irq)
 		__field(unsigned int,	nr_rtg_high_prio_tasks)
 		__field(u64,	prs_gprs)
 		__field(unsigned int,	lowest_mask)
@@ -1030,6 +1031,8 @@ TRACE_EVENT(sched_cpu_util,
 		__entry->halted			= (cpu_halted(cpu)<<1) + cpu_partial_halted(cpu);
 		__entry->reserved		= is_reserved(cpu);
 		__entry->high_irq_load		= sched_cpu_high_irqload(cpu);
+		__entry->enforce_high_irq	= cpumask_test_cpu(cpu,
+								&walt_enforce_high_irq_cpu_mask);
 		__entry->nr_rtg_high_prio_tasks	= walt_nr_rtg_high_prio(cpu);
 		__entry->prs_gprs	= wrq->prev_runnable_sum + wrq->grp_time.prev_runnable_sum;
 		if (!lowest_mask)
@@ -1039,13 +1042,13 @@ TRACE_EVENT(sched_cpu_util,
 		__entry->thermal_pressure	= arch_scale_thermal_pressure(cpu);
 	),
 
-	TP_printk("cpu=%d nr_running=%d cpu_util=%ld cpu_util_cum=%ld capacity_curr=%lu capacity=%lu capacity_orig=%lu idle_exit_latency=%u irqload=%llu online=%u, inactive=%u, halted=%u, reserved=%u, high_irq_load=%u nr_rtg_hp=%u prs_gprs=%llu lowest_mask=0x%x thermal_pressure=%lu",
+	TP_printk("cpu=%d nr_running=%d cpu_util=%ld cpu_util_cum=%ld capacity_curr=%lu capacity=%lu capacity_orig=%lu idle_exit_latency=%u irqload=%llu online=%u, inactive=%u, halted=%u, reserved=%u, high_irq_load=%u enforce_high_irq_load=%d nr_rtg_hp=%u prs_gprs=%llu lowest_mask=0x%x thermal_pressure=%lu",
 		__entry->cpu, __entry->nr_running, __entry->cpu_util,
 		__entry->cpu_util_cum, __entry->capacity_curr,
 		__entry->capacity, __entry->capacity_orig,
 		__entry->idle_exit_latency, __entry->irqload, __entry->online,
 		__entry->inactive, __entry->halted, __entry->reserved, __entry->high_irq_load,
-		__entry->nr_rtg_high_prio_tasks, __entry->prs_gprs,
+		__entry->enforce_high_irq, __entry->nr_rtg_high_prio_tasks, __entry->prs_gprs,
 		__entry->lowest_mask, __entry->thermal_pressure)
 );
 
@@ -1781,9 +1784,10 @@ TRACE_EVENT(sched_update_updown_early_migrate_values,
 
 TRACE_EVENT(sched_pipeline_tasks,
 
-	TP_PROTO(int type, int index, struct walt_task_struct *heavy_wts, int nr, u32 total_util),
+	TP_PROTO(int type, int index, struct walt_task_struct *heavy_wts, int nr, u32 total_util,
+		bool pipeline_pinning),
 
-	TP_ARGS(type, index, heavy_wts, nr, total_util),
+	TP_ARGS(type, index, heavy_wts, nr, total_util, pipeline_pinning),
 
 	TP_STRUCT__entry(
 		__field(int, index)
@@ -1798,6 +1802,7 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__field(int, special_pid)
 		__field(unsigned int, util_thres)
 		__field(u32, total_util)
+		__field(bool, pipeline_pinning)
 	),
 
 	TP_fast_assign(
@@ -1812,14 +1817,16 @@ TRACE_EVENT(sched_pipeline_tasks,
 		__entry->nr		= nr;
 		__entry->special_pid	= pipeline_special_task ? pipeline_special_task->pid : -1;
 		__entry->util_thres	= sysctl_sched_pipeline_util_thres;
-		__entry->total_util	= scale_time_to_util(total_util);
+		__entry->total_util	= total_util;
+		__entry->pipeline_pinning = pipeline_pinning;
 	),
 
-	TP_printk("type=%d index=%d pid=%d comm=%s demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d util_thres=%u total_util=%u",
+	TP_printk("type=%d index=%d pid=%d comm=%s demand=%d coloc_demand=%d pipeline_cpu=%d low_latency=0x%x nr_pipeline=%d special_pid=%d util_thres=%u total_util=%u pipeline_pin=%d",
 			__entry->type, __entry->index, __entry->pid,
 			__entry->comm, __entry->demand_scaled, __entry->coloc_demand,
 			__entry->pipeline_cpu, __entry->low_latency, __entry->nr,
-			__entry->special_pid, __entry->util_thres, __entry->total_util)
+			__entry->special_pid, __entry->util_thres, __entry->total_util,
+			__entry->pipeline_pinning)
 );
 
 TRACE_EVENT(sched_pipeline_swapped,
@@ -1847,7 +1854,8 @@ TRACE_EVENT(sched_pipeline_swapped,
 			__entry->other_pid		= wts_to_ts(other_wts)->pid;
 			__entry->other_pipeline_cpu	= other_wts->pipeline_cpu;
 			__entry->other_demand_scaled	= other_wts->demand_scaled;
-			__entry->other_coloc_demand	= other_wts->coloc_demand;
+			__entry->other_coloc_demand	=
+				scale_time_to_util(other_wts->coloc_demand);
 		} else {
 			memset(__entry->other_comm, '\0', TASK_COMM_LEN);
 			__entry->other_pid		= -1;
@@ -1860,7 +1868,8 @@ TRACE_EVENT(sched_pipeline_swapped,
 			__entry->prime_pid		= wts_to_ts(prime_wts)->pid;
 			__entry->prime_pipeline_cpu	= prime_wts->pipeline_cpu;
 			__entry->prime_demand_scaled	= prime_wts->demand_scaled;
-			__entry->prime_coloc_demand	= prime_wts->coloc_demand;
+			__entry->prime_coloc_demand	=
+				scale_time_to_util(prime_wts->coloc_demand);
 		} else {
 			memset(__entry->prime_comm, '\0', TASK_COMM_LEN);
 			__entry->prime_pid		= -1;
@@ -1870,7 +1879,7 @@ TRACE_EVENT(sched_pipeline_swapped,
 		}
 	),
 
-	TP_printk("other_pid=%d other_comm=(%s) other_demand=%d other_coloc=%d other_new_pipeline_cpu=%d prime_pid=%d prime_comm=(%s) prime_demand=%d prime_coloc=%d prime_new_pipeline_cpu=%d",
+	TP_printk("other_pid=%d other_comm=%s other_demand=%d other_coloc=%d other_new_pipeline_cpu=%d prime_pid=%d prime_comm=%s prime_demand=%d prime_coloc=%d prime_new_pipeline_cpu=%d",
 			__entry->other_pid, __entry->other_comm,
 			__entry->other_demand_scaled, __entry->other_coloc_demand,
 			__entry->other_pipeline_cpu,

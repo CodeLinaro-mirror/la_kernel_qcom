@@ -197,5 +197,7 @@
 #define GCC_VIDEO_BCR						27
 #define GCC_VIDEO_AXI0_CLK_ARES					28
 #define GCC_VIDEO_AXI1_CLK_ARES					29
+#define GCC_EVA_AXI0_CLK_ARES					30
+#define GCC_EVA_AXI0C_CLK_ARES					31
 
 #endif

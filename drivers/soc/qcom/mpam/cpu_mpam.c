@@ -646,6 +646,7 @@ static struct platform_driver cpu_mpam_driver = {
 	.driver = {
 		.name = "cpu-mpam",
 		.of_match_table = cpu_mpam_table,
+		.suppress_bind_attrs = true,
 	},
 	.probe = cpu_mpam_probe,
 	.remove = cpu_mpam_remove,

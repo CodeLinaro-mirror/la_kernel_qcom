@@ -59,7 +59,7 @@
 #define VDDP_REF_CLK_MAX_UV        1200000
 #define VCCQ_DEFAULT_1_2V	1200000
 
-#define UFS_QCOM_LOAD_MON_DLY_MS 30
+#define UFS_QCOM_LOAD_MON_DLY_MS 5
 
 #define	ANDROID_BOOT_DEV_MAX	30
 
@@ -436,6 +436,12 @@ static inline void cancel_dwork_unvote_cpufreq(struct ufs_hba *hba)
 		return;
 
 	cancel_delayed_work_sync(&host->fwork);
+#if IS_ENABLED(CONFIG_SCHED_WALT)
+	if (host->esi_mask.bits[0])
+		walt_unset_enforce_high_irq_cpus(&host->esi_mask);
+	sched_set_boost(STORAGE_BOOST_DISABLE);
+#endif
+
 	if (!host->cur_freq_vote)
 		return;
 	atomic_set(&host->num_reqs_threshold, 0);
@@ -903,9 +909,6 @@ static void ufs_qcom_select_unipro_mode(struct ufs_qcom_host *host)
 		ufshcd_rmwl(host->hba, QUNIPRO_G4_SEL, 0, REG_UFS_CFG0);
 		ufshcd_rmwl(host->hba, HCI_UAWM_OOO_DIS, 0, REG_UFS_CFG0);
 	}
-
-	/* make sure above configuration is applied before we return */
-	mb();
 }
 
 static int ufs_qcom_phy_power_on(struct ufs_hba *hba)
@@ -1104,7 +1107,7 @@ static int ufs_qcom_enable_hw_clk_gating(struct ufs_hba *hba)
 			UNUSED_UNIPRO_CLK_GATED, UFS_AH8_CFG);
 
 	/* Ensure that HW clock gating is enabled before next operations */
-	mb();
+	ufshcd_readl(hba, REG_UFS_CFG2);
 
 	/* Enable Qunipro internal clock gating if supported */
 	if (!ufs_qcom_cap_qunipro_clk_gating(host))
@@ -1292,7 +1295,7 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 		 * make sure above write gets applied before we return from
 		 * this function.
 		 */
-		mb();
+		ufshcd_readl(hba, REG_UFS_SYS1CLK_1US);
 	}
 
 	if (ufs_qcom_cap_qunipro(host))
@@ -1783,10 +1786,20 @@ static void ufs_qcom_toggle_pri_affinity(struct ufs_hba *hba, bool on)
 		return;
 
 #if IS_ENABLED(CONFIG_SCHED_WALT)
-	if (on)
+	if (on) {
+		/*
+		 * Enforcing high irq cpus is needed for high IO load
+		 * condition, Single door bell which doesn't used
+		 * ESI doesn't need it.
+		 */
+		if (host->esi_mask.bits[0])
+			walt_set_enforce_high_irq_cpus(&host->esi_mask);
 		sched_set_boost(STORAGE_BOOST);
-	else
+	} else {
+		if (host->esi_mask.bits[0])
+			walt_unset_enforce_high_irq_cpus(&host->esi_mask);
 		sched_set_boost(STORAGE_BOOST_DISABLE);
+	}
 #endif
 
 	atomic_set(&host->hi_pri_en, on);
@@ -1806,11 +1819,11 @@ static void ufs_qcom_cpufreq_dwork(struct work_struct *work)
 
 	atomic_set(&host->num_reqs_threshold, 0);
 
-	if (cur_thres > NUM_REQS_HIGH_THRESH && !host->cur_freq_vote) {
+	if (cur_thres > host->max_boost_thres && !host->cur_freq_vote) {
 		scale_up = 1;
 		if (host->irq_affinity_support)
 			ufs_qcom_toggle_pri_affinity(host->hba, true);
-	} else if (cur_thres < NUM_REQS_LOW_THRESH && host->cur_freq_vote) {
+	} else if (cur_thres < host->min_boost_thres && host->cur_freq_vote) {
 		scale_up = 0;
 		if (host->irq_affinity_support)
 			ufs_qcom_toggle_pri_affinity(host->hba, false);
@@ -1834,10 +1847,9 @@ static void ufs_qcom_cpufreq_dwork(struct work_struct *work)
 		dev_dbg(host->hba->dev, "cur_freq_vote=%d,freq_val=%u,cth=%lu,cpu=%u\n",
 			host->cur_freq_vote, freq_val, cur_thres, host->cpu_info[i].cpu);
 	}
-
 out:
 	queue_delayed_work(host->ufs_qos->workq, &host->fwork,
-			   msecs_to_jiffies(UFS_QCOM_LOAD_MON_DLY_MS));
+			   msecs_to_jiffies(host->boost_monitor_timer));
 }
 
 static int add_group_qos(struct qos_cpu_group *qcg, enum constraint type)
@@ -1909,8 +1921,8 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 		if (host->vddp_ref_clk && ufs_qcom_is_link_off(hba))
 			err = ufs_qcom_disable_vreg(hba->dev,
 					host->vddp_ref_clk);
-		if (host->vccq_parent && !hba->auto_bkops_enabled)
-			ufs_qcom_disable_vreg(hba->dev, host->vccq_parent);
+		if (host->parent_vreg && !hba->auto_bkops_enabled)
+			ufs_qcom_disable_vreg(hba->dev, host->parent_vreg);
 		if (!err)
 			err = ufs_qcom_unvote_qos_all(hba);
 	}
@@ -1938,7 +1950,6 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	unsigned long flags;
 	int err;
 
 	if (host->vddp_ref_clk && (hba->rpm_lvl > UFS_PM_LVL_3 ||
@@ -1946,27 +1957,13 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		ufs_qcom_enable_vreg(hba->dev,
 				      host->vddp_ref_clk);
 
-	if (host->vccq_parent)
-		ufs_qcom_enable_vreg(hba->dev, host->vccq_parent);
+	if (host->parent_vreg)
+		ufs_qcom_enable_vreg(hba->dev, host->parent_vreg);
 
 	ufs_qcom_ice_resume(host);
 	err = ufs_qcom_enable_lane_clks(host);
 	if (err)
 		return err;
-
-	/*
-	 * For targets with Auto-Hibernate disabled, resume with 5ms
-	 * clock gating delay timer, regardless of the current Gear setting.
-	 * This is to prevent ufs remain active longer than necessary
-	 * coming out of resume. The ufs loading will determine when to
-	 * scale the clocks/gear, and in the next clock scaling event,
-	 * the clock gating delay timer will be set accordingly.
-	 */
-	if (host->hw_ver.major == 0x6) {
-		spin_lock_irqsave(hba->host->host_lock, flags);
-		hba->clk_gating.delay_ms = 5;
-		spin_unlock_irqrestore(hba->host->host_lock, flags);
-	}
 
 	ufs_qcom_log_str(host, "$,%d,%d,%d,%d,%d,%d\n",
 			pm_op, hba->rpm_lvl, hba->spm_lvl, hba->uic_link_state,
@@ -2050,6 +2047,23 @@ store_ufs_to_mem_max_bus_bw(struct device *dev, struct device_attribute *attr,
 	}
 
 	return count;
+}
+
+/**
+ * ufs_qcom_enable_crash_on_err - read from DTS whether crash_on_err
+ * should be enabled during boot.
+ * @hba: per adapter instance
+ */
+static void ufs_qcom_enable_crash_on_err(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
+
+	if (!np)
+		return;
+	host->crash_on_err =
+		of_property_read_bool(np, "qcom,enable-crash-on-err");
 }
 
 static void ufs_qcom_dev_ref_clk_ctrl(struct ufs_qcom_host *host, bool enable)
@@ -2658,6 +2672,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				ufs_qcom_bw_table[MODE_MIN][0][0].cfg_bw);
 
 			err = ufs_qcom_unvote_qos_all(hba);
+			cancel_dwork_unvote_cpufreq(hba);
 			idle_start = ktime_get();
 		} else {
 			err = ufs_qcom_phy_power_on(hba);
@@ -2673,6 +2688,11 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 			for (mode = 0; mode < UFS_QCOM_BER_MODE_MAX; mode++)
 				idle_time[mode] += ktime_to_ms(ktime_sub(ktime_get(),
 									idle_start));
+
+			if (!host->cpufreq_dis && !atomic_read(&host->therm_mitigation)) {
+				queue_delayed_work(host->ufs_qos->workq, &host->fwork,
+				msecs_to_jiffies(host->boost_monitor_timer));
+			}
 		}
 		if (!err)
 			atomic_set(&host->clks_on, on);
@@ -2863,8 +2883,7 @@ static void ufs_qcom_qos(struct ufs_hba *hba, int tag)
 	if (!qcg)
 		return;
 
-	if (qcg->perf_core && !host->cpufreq_dis &&
-					!!atomic_read(&host->scale_up))
+	if (qcg->perf_core && !host->cpufreq_dis)
 		atomic_inc(&host->num_reqs_threshold);
 
 	if (qcg->voted) {
@@ -2999,7 +3018,7 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	struct device_node *group_node;
 	struct ufs_qcom_qos_req *qr;
 	struct qos_cpu_group *qcg;
-	int i, err, mask = 0;
+	int i, err, mask;
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	host->cpufreq_dis = true;
@@ -3016,6 +3035,11 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 		return;
 	}
 
+	if (!of_get_available_child_count(np)) {
+		dev_err(dev, "QoS groups undefined\n");
+		return;
+	}
+
 	qr = kzalloc(sizeof(*qr), GFP_KERNEL);
 	if (!qr)
 		return;
@@ -3023,12 +3047,7 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	host->ufs_qos = qr;
 	qr->num_groups = of_get_available_child_count(np);
 	dev_dbg(hba->dev, "num-groups: %d\n", qr->num_groups);
-	if (!qr->num_groups) {
-		dev_err(dev, "QoS groups undefined\n");
-		kfree(qr);
-		host->ufs_qos = NULL;
-		return;
-	}
+
 	qcg = kzalloc(sizeof(*qcg) * qr->num_groups, GFP_KERNEL);
 	if (!qcg) {
 		kfree(qr);
@@ -3037,10 +3056,12 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 	}
 	qr->qcg = qcg;
 	for_each_available_child_of_node(np, group_node) {
+		mask = 0;
 		of_property_read_u32(group_node, "mask", &mask);
 		qcg->mask.bits[0] = mask;
-		if (!cpumask_subset(&qcg->mask, cpu_possible_mask)) {
-			dev_err(dev, "Invalid group mask\n");
+		if (!mask || !cpumask_subset(&qcg->mask, cpu_possible_mask)) {
+			dev_err(dev, "Invalid group mask 0x%x\n", mask);
+			host->cpufreq_dis = true;
 			goto out_err;
 		}
 
@@ -3091,7 +3112,7 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	struct device *dev = hba->dev;
 	struct device_node *np = dev->of_node;
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	int mask = 0;
+	int mask = 0, i;
 	int num_cqs = 0;
 
 	/*
@@ -3104,41 +3125,58 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	if (ufs_qcom_partial_cpu_found(host))
 		return;
 
-	if (np) {
-		of_property_read_u32(np, "qcom,prime-mask", &mask);
-		host->perf_mask.bits[0] = mask;
-		if (!cpumask_subset(&host->perf_mask, cpu_possible_mask)) {
-			dev_err(dev, "Invalid group prime mask\n");
-			host->perf_mask.bits[0] = UFS_QCOM_IRQ_PRIME_MASK;
-		}
-		mask = 0;
-		of_property_read_u32(np, "qcom,silver-mask", &mask);
-		host->def_mask.bits[0] = mask;
-		if (!cpumask_subset(&host->def_mask, cpu_possible_mask)) {
-			dev_err(dev, "Invalid group silver mask\n");
-			host->def_mask.bits[0] = UFS_QCOM_IRQ_SLVR_MASK;
-		}
-		mask = 0;
-		if (of_find_property(dev->of_node, "qcom,esi-affinity-mask", &mask)) {
-			num_cqs = mask/sizeof(*host->esi_affinity_mask);
-			host->esi_affinity_mask = devm_kcalloc(hba->dev, num_cqs,
-								sizeof(*host->esi_affinity_mask),
-								GFP_KERNEL);
-			if (!host->esi_affinity_mask)
-				return;
+	if (!np)
+		return;
 
-			mask = of_property_read_variable_u32_array(np, "qcom,esi-affinity-mask",
-					host->esi_affinity_mask, 0, num_cqs);
-
-			if (mask < 0) {
-				dev_info(dev, "Not found esi-affinity-mask property values\n");
-				return;
-			}
-		}
+	of_property_read_u32(np, "qcom,prime-mask", &mask);
+	host->perf_mask.bits[0] = mask;
+	if (!cpumask_subset(&host->perf_mask, cpu_possible_mask)) {
+		dev_err(dev, "Invalid group prime mask 0x%x\n", mask);
+		host->perf_mask.bits[0] = UFS_QCOM_IRQ_PRIME_MASK;
 	}
+	mask = 0;
+	of_property_read_u32(np, "qcom,silver-mask", &mask);
+	host->def_mask.bits[0] = mask;
+	if (!cpumask_subset(&host->def_mask, cpu_possible_mask)) {
+		dev_err(dev, "Invalid group silver mask 0x%x\n", mask);
+		host->def_mask.bits[0] = UFS_QCOM_IRQ_SLVR_MASK;
+	}
+
 	/* If device includes perf mask, enable dynamic irq affinity feature */
 	if (host->perf_mask.bits[0])
 		host->irq_affinity_support = true;
+
+	mask = 0;
+	if (of_find_property(dev->of_node, "qcom,esi-affinity-mask", &mask)) {
+		num_cqs = mask/sizeof(*host->esi_affinity_mask);
+		host->esi_affinity_mask = devm_kcalloc(hba->dev, num_cqs,
+							sizeof(*host->esi_affinity_mask),
+							GFP_KERNEL);
+		if (!host->esi_affinity_mask)
+			return;
+
+		mask = of_property_read_variable_u32_array(np, "qcom,esi-affinity-mask",
+				host->esi_affinity_mask, 0, num_cqs);
+
+		if (mask < 0) {
+			dev_info(dev, "Not found esi-affinity-mask property values\n");
+			return;
+		}
+	}
+
+	/* Populate esi mask */
+	for (i = 0; i < num_cqs; i++)
+		cpumask_set_cpu(host->esi_affinity_mask[i], &host->esi_mask);
+}
+
+/* ufs_qcom_storage_boost_param_init - Init Storage boost param */
+static void ufs_qcom_storage_boost_param_init(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	host->boost_monitor_timer = UFS_QCOM_LOAD_MON_DLY_MS;
+	host->min_boost_thres = NUM_REQS_LOW_THRESH;
+	host->max_boost_thres = NUM_REQS_HIGH_THRESH;
 }
 
 static void ufs_qcom_parse_pm_level(struct ufs_hba *hba)
@@ -3643,6 +3681,8 @@ static void ufs_qcom_read_nvmem_cell(struct ufs_qcom_host *host)
 	else
 		host->host_pwr_cap.phy_submode = *data;
 
+	host->ufs_gen_type = host->host_pwr_cap.phy_submode;
+
 	if (host->host_pwr_cap.phy_submode) {
 		dev_info(host->hba->dev, "(%s) UFS device is 3.x, phy_submode = %d\n",
 				__func__, host->host_pwr_cap.phy_submode);
@@ -3661,6 +3701,39 @@ static void ufs_qcom_read_nvmem_cell(struct ufs_qcom_host *host)
 
 cell_put:
 	nvmem_cell_put(nvmem_cell);
+}
+
+/**
+ * ufs_qcom_setup_vreg_to_enable - Determine and set the appropriate voltage
+ * regulator to enable.
+ * @host: UFS host structure containing the regulator information.
+ *
+ * Return: Pointer to the selected voltage regulator, or NULL if no
+ * appropriate regulator is found.
+ */
+static struct ufs_vreg *ufs_qcom_setup_vreg_to_enable(struct ufs_qcom_host *host)
+{
+	struct ufs_vreg *vccq_parent = NULL;
+	struct ufs_vreg *vccq2_parent = NULL;
+	int err;
+
+	err = ufs_qcom_parse_reg_info(host, "qcom,vccq-parent", &vccq_parent);
+
+	err = ufs_qcom_parse_reg_info(host, "qcom,vccq2-parent", &vccq2_parent);
+
+	/* Detect ufs VCCQ or VCCQ2 parent vreg to vote on */
+	if (vccq_parent && vccq2_parent) {
+		host->parent_vreg = host->ufs_gen_type ?
+					vccq_parent : vccq2_parent;
+	} else {
+		host->parent_vreg = vccq_parent ? vccq_parent : vccq2_parent;
+		if (!host->parent_vreg) {
+			dev_info(host->hba->dev, "vccq or vccq2 parent node is not provided\n");
+			return NULL;
+		}
+	}
+
+	return host->parent_vreg;
 }
 
 /**
@@ -3694,6 +3767,8 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 #if defined(CONFIG_UFS_DBG)
 	host->dbg_en = true;
 #endif
+
+	ufs_qcom_enable_crash_on_err(hba);
 
 	/* Setup the optional reset control of HCI */
 	host->core_reset = devm_reset_control_get_optional(hba->dev, "rst");
@@ -3768,13 +3843,13 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		}
 	}
 
-	err = ufs_qcom_parse_reg_info(host, "qcom,vccq-parent",
-				      &host->vccq_parent);
-	if (host->vccq_parent) {
-		err = ufs_qcom_enable_vreg(dev, host->vccq_parent);
+	ufs_qcom_parse_limits(host);
+	host->parent_vreg = ufs_qcom_setup_vreg_to_enable(host);
+	if (host->parent_vreg) {
+		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
 		if (err) {
-			dev_err(dev, "%s: failed enable vccq-parent err=%d\n",
-				__func__, err);
+			dev_err(dev, "%s: failed to enable %s err=%d\n",
+					__func__, host->parent_vreg->name, err);
 			goto out_disable_vddp;
 		}
 	}
@@ -3789,10 +3864,9 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	err = ufs_qcom_init_lane_clks(host);
 	if (err)
-		goto out_disable_vccq_parent;
+		goto out_disable_parent_vreg;
 
 	ufs_qcom_parse_pm_level(hba);
-	ufs_qcom_parse_limits(host);
 	ufs_qcom_parse_g4_workaround_flag(host);
 	ufs_qcom_parse_lpm(host);
 	if (host->disable_lpm)
@@ -3853,6 +3927,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_qos_init(hba);
 	ufs_qcom_parse_irq_affinity(hba);
 	ufs_qcom_ber_mon_init(hba);
+	ufs_qcom_storage_boost_param_init(hba);
 	host->ufs_ipc_log_ctx = ipc_log_context_create(UFS_QCOM_MAX_LOG_SZ,
 							"ufs-qcom", 0);
 	if (!host->ufs_ipc_log_ctx)
@@ -3878,9 +3953,9 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	return 0;
 
-out_disable_vccq_parent:
-	if (host->vccq_parent)
-		ufs_qcom_disable_vreg(dev, host->vccq_parent);
+out_disable_parent_vreg:
+	if (host->parent_vreg)
+		ufs_qcom_disable_vreg(dev, host->parent_vreg);
 out_disable_vddp:
 	if (host->vddp_ref_clk)
 		ufs_qcom_disable_vreg(dev, host->vddp_ref_clk);
@@ -4085,14 +4160,6 @@ static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba,
 			return err;
 		if (scale_up) {
 			err = ufs_qcom_clk_scale_up_pre_change(hba);
-			if (!host->cpufreq_dis &&
-			    !(atomic_read(&host->therm_mitigation))) {
-				atomic_set(&host->num_reqs_threshold, 0);
-				queue_delayed_work(host->ufs_qos->workq,
-						  &host->fwork,
-					msecs_to_jiffies(
-						UFS_QCOM_LOAD_MON_DLY_MS));
-			}
 		} else {
 			err = ufs_qcom_clk_scale_down_pre_change(hba);
 			cancel_dwork_unvote_cpufreq(hba);
@@ -5504,6 +5571,111 @@ static ssize_t irq_affinity_support_show(struct device *dev,
 
 static DEVICE_ATTR_RW(irq_affinity_support);
 
+static ssize_t boost_min_threshold_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	u32 val;
+	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret) {
+		dev_err(hba->dev, "boost min thres load failed\n");
+		return -EINVAL;
+	}
+
+	if (val >= host->max_boost_thres)
+		return -EINVAL;
+
+	host->min_boost_thres = val;
+	return count;
+}
+
+static ssize_t boost_min_threshold_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", host->min_boost_thres);
+}
+
+static DEVICE_ATTR_RW(boost_min_threshold);
+
+static ssize_t boost_max_threshold_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	u32 val;
+	int ret;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret) {
+		dev_err(hba->dev, "boost max thres load failed\n");
+		return -EINVAL;
+	}
+
+	if (val <= host->min_boost_thres)
+		return -EINVAL;
+
+	host->max_boost_thres = val;
+	return count;
+}
+
+static ssize_t boost_max_threshold_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", host->max_boost_thres);
+}
+
+static DEVICE_ATTR_RW(boost_max_threshold);
+
+static ssize_t boost_monitor_timer_ms_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	int ret;
+	u32 val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EACCES;
+
+	ret = kstrtouint(buf, 0, &val);
+	if (ret) {
+		dev_err(hba->dev, "boost max thres store failed\n");
+		return -EINVAL;
+	}
+
+	host->boost_monitor_timer = val;
+	return count;
+}
+
+static ssize_t boost_monitor_timer_ms_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", host->boost_monitor_timer);
+}
+
+static DEVICE_ATTR_RW(boost_monitor_timer_ms);
+
 static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_power_mode.attr,
@@ -5515,6 +5687,9 @@ static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_hibern8_count.attr,
 	&dev_attr_ber_th_exceeded.attr,
 	&dev_attr_irq_affinity_support.attr,
+	&dev_attr_boost_min_threshold.attr,
+	&dev_attr_boost_max_threshold.attr,
+	&dev_attr_boost_monitor_timer_ms.attr,
 	NULL
 };
 

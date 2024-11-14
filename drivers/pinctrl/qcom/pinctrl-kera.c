@@ -40,7 +40,9 @@
 		.out_bit = 1,			\
 		.intr_enable_bit = 0,		\
 		.intr_status_bit = 0,		\
-		.intr_target_bit = 5,		\
+		.intr_target_bit = 8,		\
+		.intr_wakeup_enable_bit = 7,	\
+		.intr_wakeup_present_bit = 6,	\
 		.intr_target_kpss_val = 3,	\
 		.intr_raw_status_bit = 4,	\
 		.intr_polarity_bit = 1,		\
@@ -513,10 +515,7 @@ enum kera_functions {
 	msm_mux_gpio,
 	msm_mux_SDC2_CLK,
 	msm_mux_SDC2_CMD,
-	msm_mux_SDC2_DATA0,
-	msm_mux_SDC2_DATA1,
-	msm_mux_SDC2_DATA2,
-	msm_mux_SDC2_DATA3,
+	msm_mux_SDC2_DATA,
 	msm_mux_aoss_cti,
 	msm_mux_atest_char0,
 	msm_mux_atest_char1,
@@ -815,16 +814,10 @@ static const char *const SDC2_CLK_groups[] = {
 static const char *const SDC2_CMD_groups[] = {
 	"gpio51",
 };
-static const char *const SDC2_DATA0_groups[] = {
+static const char *const SDC2_DATA_groups[] = {
 	"gpio38",
-};
-static const char *const SDC2_DATA1_groups[] = {
 	"gpio39",
-};
-static const char *const SDC2_DATA2_groups[] = {
 	"gpio48",
-};
-static const char *const SDC2_DATA3_groups[] = {
 	"gpio49",
 };
 static const char *const aoss_cti_groups[] = {
@@ -1606,10 +1599,7 @@ static const struct pinfunction kera_functions[] = {
 	MSM_PIN_FUNCTION(gpio),
 	MSM_PIN_FUNCTION(SDC2_CLK),
 	MSM_PIN_FUNCTION(SDC2_CMD),
-	MSM_PIN_FUNCTION(SDC2_DATA0),
-	MSM_PIN_FUNCTION(SDC2_DATA1),
-	MSM_PIN_FUNCTION(SDC2_DATA2),
-	MSM_PIN_FUNCTION(SDC2_DATA3),
+	MSM_PIN_FUNCTION(SDC2_DATA),
 	MSM_PIN_FUNCTION(aoss_cti),
 	MSM_PIN_FUNCTION(atest_char0),
 	MSM_PIN_FUNCTION(atest_char1),
@@ -1947,9 +1937,9 @@ static const struct msm_pingroup kera_groups[] = {
 		       NA, NA, NA, NA, 0, -1),
 	[37] = PINGROUP(37, qup1_se4_l1, qup1_se4_l2, ibi_i3c, NA, NA, NA, NA,
 		       NA, NA, NA, NA, 0, -1),
-	[38] = PINGROUP(38, SDC2_DATA0, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+	[38] = PINGROUP(38, SDC2_DATA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 		       0, -1),
-	[39] = PINGROUP(39, SDC2_DATA1, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+	[39] = PINGROUP(39, SDC2_DATA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 		       0, -1),
 	[40] = PINGROUP(40, qup1_se6_l0, qup1_se2_l4, qup1_se6_l3_mira, NA,
 		       qdss_gpio7, gnss_adc1, ddr_pxi1, NA, NA, NA, NA, 0, -1),
@@ -1965,9 +1955,9 @@ static const struct msm_pingroup kera_groups[] = {
 		       NA, NA, NA, 0, -1),
 	[47] = PINGROUP(47, qup1_se3_l3, hdmi_hot_plug, NA, NA, NA, NA, NA, NA,
 		       NA, NA, NA, 0, -1),
-	[48] = PINGROUP(48, SDC2_DATA2, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+	[48] = PINGROUP(48, SDC2_DATA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 		       0, -1),
-	[49] = PINGROUP(49, SDC2_DATA3, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
+	[49] = PINGROUP(49, SDC2_DATA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 		       0, -1),
 	[50] = PINGROUP(50, sdc2_fb_clk, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 		       0, -1),

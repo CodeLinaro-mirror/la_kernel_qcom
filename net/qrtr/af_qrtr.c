@@ -1825,22 +1825,6 @@ static struct sk_buff *qrtr_sock_alloc_skb_send(struct sock *sk,
 	size_t plen;
 
 	plen = (len + 3) & ~3;
-	if (plen > SKB_MAX_ALLOC) {
-		data_len = min_t(size_t,
-				 plen - SKB_MAX_ALLOC,
-				 MAX_SKB_FRAGS * PAGE_SIZE);
-		pdata_len = PAGE_ALIGN(data_len);
-
-		BUILD_BUG_ON(SKB_MAX_ALLOC < PAGE_SIZE);
-	}
-
-	if (plen > PAGE_SIZE) {
-		data_len = min_t(size_t,
-				 plen - PAGE_SIZE, MAX_SKB_FRAGS * PAGE_SIZE);
-		pdata_len = PAGE_ALIGN(data_len);
-
-		BUILD_BUG_ON(SKB_MAX_ALLOC < PAGE_SIZE);
-	}
 
 	/* When PVM (node id is 1) communicating with other edges via RPMSG transport and
 	 * able to handle fragmented data if the size of the packet is more that 16kb.
@@ -1854,6 +1838,15 @@ static struct sk_buff *qrtr_sock_alloc_skb_send(struct sock *sk,
 	 */
 
 	if (is_primary(qrtr_local_nid)) {
+		if (plen > SKB_MAX_ALLOC) {
+			data_len = min_t(size_t,
+					 plen - SKB_MAX_ALLOC,
+					 MAX_SKB_FRAGS * PAGE_SIZE);
+			pdata_len = PAGE_ALIGN(data_len);
+
+			BUILD_BUG_ON(SKB_MAX_ALLOC < PAGE_SIZE);
+		}
+
 		skb = sock_alloc_send_pskb(sk, QRTR_HDR_MAX_SIZE + (plen - data_len),
 					   pdata_len, msg->msg_flags & MSG_DONTWAIT,
 					   rc, PAGE_ALLOC_COSTLY_ORDER);
@@ -1871,6 +1864,14 @@ static struct sk_buff *qrtr_sock_alloc_skb_send(struct sock *sk,
 		skb->data_len = data_len;
 		skb->len = len;
 	} else {
+		if (plen > PAGE_SIZE) {
+			data_len = min_t(size_t,
+					 plen - PAGE_SIZE, MAX_SKB_FRAGS * PAGE_SIZE);
+			pdata_len = PAGE_ALIGN(data_len);
+
+			BUILD_BUG_ON(SKB_MAX_ALLOC < PAGE_SIZE);
+		}
+
 		if (data_len) {
 			skb = sock_alloc_send_pskb(sk, QRTR_HDR_MAX_SIZE,
 						   (plen - data_len) + pdata_len,

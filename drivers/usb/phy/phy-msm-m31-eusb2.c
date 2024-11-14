@@ -147,7 +147,6 @@ struct eusb_phy_tbl {
 static const struct eusb_phy_tbl m31_eusb_phy_tbl[] = {
 	EUSB_PHY_INIT_CFG(USB_PHY_CFG0, BIT(1), 1),
 	EUSB_PHY_INIT_CFG(USB_PHY_UTMI_CTRL5, BIT(1), 1),
-	EUSB_PHY_INIT_CFG(USB_PHY_CFG1, BIT(0), 1),
 	EUSB_PHY_INIT_CFG(USB_PHY_FSEL_SEL, BIT(0), 1),
 };
 
@@ -210,7 +209,6 @@ struct m31_eusb2_phy {
 	bool			power_enabled;
 	bool			suspended;
 	bool			cable_connected;
-	bool			ref_clk_enable;
 
 	struct power_supply	*usb_psy;
 	unsigned int		vbus_draw;
@@ -604,16 +602,6 @@ static int msm_m31_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 		if (phy->cable_connected ||
 			(phy->phy.flags & PHY_HOST_MODE)) {
 			msm_m31_eusb2_phy_clocks(phy, false);
-			/*
-			 * Keep the ref_clk for PHY on to detect resume signalling in bus
-			 * suspend case. As this vote is suppressible, this will allow XO
-			 * shutdown.
-			 */
-			if (phy->ref_clk && !phy->ref_clk_enable) {
-				phy->ref_clk_enable = true;
-				clk_prepare_enable(phy->ref_clk);
-			}
-
 			goto suspend_exit;
 		}
 
@@ -627,11 +615,6 @@ static int msm_m31_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 		/* With EUD spoof disconnect, keep clk and ldos on */
 		if (phy->phy.flags & EUD_SPOOF_DISCONNECT || is_eud_debug_mode_active(phy))
 			goto suspend_exit;
-
-		if (phy->ref_clk && phy->ref_clk_enable) {
-			clk_disable_unprepare(phy->ref_clk);
-			phy->ref_clk_enable = false;
-		}
 
 		msm_m31_eusb2_phy_clocks(phy, false);
 		msm_m31_eusb2_phy_power(phy, false);

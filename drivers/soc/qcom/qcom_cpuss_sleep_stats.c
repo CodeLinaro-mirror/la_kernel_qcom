@@ -358,16 +358,22 @@ error:
 
 static bool check_val(const char __user *in, size_t count)
 {
-	loff_t ppos = 0;
 	char buffer[2] = {0};
 	int ret;
 
-	ret = simple_write_to_buffer(buffer, sizeof(buffer) - 1,
-				     &ppos, in, count - 1);
-	if (ret > 0)
-		return strcmp(buffer, "1") ? false : true;
+	if (count <= 1)
+		return false;
 
-	return false;
+	if (count > sizeof(buffer))
+		count = sizeof(buffer);
+
+	/* returns number of bytes not copied */
+	ret = __arch_copy_from_user(buffer, in, count - 1);
+
+	if (ret == (count - 1))
+		return -EFAULT;
+
+	return strcmp(buffer, "1") ? false : true;
 }
 
 static ssize_t qcom_cpuss_stats_reset_write(struct file *file,

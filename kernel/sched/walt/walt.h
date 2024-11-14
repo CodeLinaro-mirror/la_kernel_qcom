@@ -300,6 +300,7 @@ extern unsigned int sched_capacity_margin_up[WALT_NR_CPUS];
 extern unsigned int sched_capacity_margin_down[WALT_NR_CPUS];
 extern cpumask_t asym_cap_sibling_cpus;
 extern cpumask_t pipeline_sync_cpus;
+extern cpumask_t storage_boost_cpus;
 extern cpumask_t __read_mostly **cpu_array;
 extern int cpu_l2_sibling[WALT_NR_CPUS];
 extern void sched_update_nr_prod(int cpu, int enq);
@@ -905,11 +906,12 @@ static inline u64 sched_irqload(int cpu)
 		return 0;
 }
 
+extern cpumask_t walt_enforce_high_irq_cpu_mask;
 static inline int sched_cpu_high_irqload(int cpu)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 
-	return wrq->high_irqload;
+	return wrq->high_irqload || cpumask_test_cpu(cpu, &walt_enforce_high_irq_cpu_mask);
 }
 
 static inline u64
@@ -1019,14 +1021,12 @@ static inline bool task_fits_capacity(struct task_struct *p,
 	return capacity * 1024 > uclamp_task_util(p) * margin;
 }
 
+extern int pipeline_fits_smaller_cpus(struct task_struct *p);
 static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
 {
 	unsigned long task_boost = per_task_boost(p);
-	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	cpumask_t other_cluster;
-
-	if (wts->pipeline_cpu != -1)
-		return true;
+	int ret = -1;
 
 	/*
 	 * If a task is affined only to cpus of cluster then it cannot be a
@@ -1037,6 +1037,12 @@ static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
 		return true;
 
 	if (is_max_possible_cluster_cpu(dst_cpu))
+		return true;
+
+	ret = pipeline_fits_smaller_cpus(p);
+	if (ret == 0)
+		return false;
+	else if (ret == 1)
 		return true;
 
 	if (is_min_possible_cluster_cpu(dst_cpu)) {
@@ -1125,7 +1131,8 @@ static inline bool walt_get_rtg_status(struct task_struct *p)
 	return ret;
 }
 
-#define CPU_RESERVED 1
+#define CPU_RESERVED			BIT(0)
+#define CPU_FIRST_ENQ_IN_WINDOW		BIT(1)
 static inline int is_reserved(int cpu)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
@@ -1145,6 +1152,23 @@ static inline void clear_reserved(int cpu)
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
 
 	clear_bit(CPU_RESERVED, &wrq->walt_flags);
+}
+
+static inline bool is_cpu_flag_set(int cpu, unsigned int bit)
+{
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+
+	return test_bit(bit, &wrq->walt_flags);
+}
+
+static inline void set_cpu_flag(int cpu, unsigned int bit, bool set)
+{
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
+
+	if (set)
+		set_bit(bit, &wrq->walt_flags);
+	else
+		clear_bit(bit, &wrq->walt_flags);
 }
 
 static inline void walt_irq_work_queue(struct irq_work *work)
@@ -1441,7 +1465,8 @@ static inline void walt_lockdep_assert(int cond, int cpu, struct task_struct *p)
 #define walt_lockdep_assert_rq(rq, p)			\
 	walt_lockdep_assert_held(&rq->__lock, cpu_of(rq), p)
 
-extern void pipeline_check(struct walt_rq *wrq);
+extern bool pipeline_check(struct walt_rq *wrq);
+extern void pipeline_rearrange(struct walt_rq *wrq, bool need_assign_heavy);
 extern bool enable_load_sync(int cpu);
 extern struct walt_related_thread_group *lookup_related_thread_group(unsigned int group_id);
 extern bool prev_is_sbt;
@@ -1449,6 +1474,12 @@ extern unsigned int sysctl_sched_pipeline_special;
 extern struct task_struct *pipeline_special_task;
 extern void remove_special_task(void);
 extern void set_special_task(struct task_struct *pipeline_special_local);
+extern inline unsigned long walt_lb_cpu_util(int cpu);
+extern int stop_walt_lb_active_migration(void *data);
+
+extern void walt_detach_task(struct task_struct *p, struct rq *src_rq, struct rq *dst_rq);
+extern void walt_attach_task(struct task_struct *p, struct rq *rq);
+
 #define MAX_NR_PIPELINE 3
 /* smart freq */
 #define SMART_FREQ_LEGACY_TUPLE_SIZE		3
@@ -1470,6 +1501,9 @@ extern int sched_smart_freq_ipc_handler(struct ctl_table *table, int write,
 
 extern u8 smart_freq_legacy_reason_hyst_ms[LEGACY_SMART_FREQ][WALT_NR_CPUS];
 extern void update_smart_freq_legacy_reason_hyst_time(struct walt_sched_cluster *cluster);
+extern bool move_storage_load(struct rq *rq);
+
+#define MIN_UTIL_FOR_STORAGE_BALANCING		650
 
 /* frequent yielder */
 #define MAX_YIELD_CNT_PER_TASK_THR		25
@@ -1507,4 +1541,10 @@ extern unsigned int load_sync_low_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_low_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct[MAX_CLUSTERS][MAX_CLUSTERS];
 extern unsigned int load_sync_high_pct_60fps[MAX_CLUSTERS][MAX_CLUSTERS];
+extern unsigned int sysctl_pipeline_special_task_util_thres;
+extern unsigned int sysctl_pipeline_non_special_task_util_thres;
+extern unsigned int sysctl_pipeline_pin_thres_low_pct;
+extern unsigned int sysctl_pipeline_pin_thres_high_pct;
+DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
+extern unsigned int walt_sched_yield_counter;
 #endif /* _WALT_H */

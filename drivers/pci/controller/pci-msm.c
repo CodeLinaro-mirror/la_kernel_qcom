@@ -2148,7 +2148,8 @@ static void msm_pcie_show_status(struct msm_pcie_dev_t *dev)
 		PCIE_DBG_FS(dev, "PCIe L1ss sleep is supported using %s\n",
 							dev->drv_name);
 	else
-		PCIE_DBG_FS(dev, "PCIe L1ss sleep is not supported\n");
+		PCIE_DBG_FS(dev, "PCIe L1ss sleep is not supported for RC%d\n",
+				dev->rc_idx);
 }
 
 static void msm_pcie_access_reg(struct msm_pcie_dev_t *dev, bool wr)
@@ -3894,7 +3895,7 @@ static void __maybe_unused
 }
 
 /* Read the curr perf ol value from the cesta register */
-static const char *const msm_pcie_cesta_curr_perf_ol(struct msm_pcie_dev_t *dev)
+static const char *const __maybe_unused msm_pcie_cesta_curr_perf_ol(struct msm_pcie_dev_t *dev)
 {
 	u32 ret;
 	int res;
@@ -10234,7 +10235,7 @@ static int msm_pcie_handle_pm_resume(struct msm_pcie_dev_t *pcie_dev,
 	mutex_lock(&pcie_dev->enumerate_lock);
 	list_for_each_entry_safe(dev_info_itr, temp,
 				 &pcie_dev->susp_ep_list, pcidev_node) {
-		if (dev_info_itr->dev == user) {
+		if (dev_info_itr->dev == pcidev) {
 			list_del(&dev_info_itr->pcidev_node);
 			dev_info = dev_info_itr;
 			list_add_tail(&dev_info->pcidev_node,
