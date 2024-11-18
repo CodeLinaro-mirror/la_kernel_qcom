@@ -481,7 +481,7 @@ static ssize_t glink_pkt_read(struct file *file,
 		return -ENETRESET;
 	}
 
-	GLINK_PKT_INFO("begin for %s by %s:%d ref_cnt[%d], remaining[%lu], count[%lu]\n",
+	GLINK_PKT_INFO("begin for %s by %s:%d ref_cnt[%d], remaining[%zu], count[%zu]\n",
 		       gpdev->ch_name, current->comm,
 		       task_pid_nr(current), refcount_read(&gpdev->refcount),
 			   gpdev->rdata_len, count);
@@ -544,7 +544,7 @@ static ssize_t glink_pkt_read(struct file *file,
 	mutex_unlock(&gpdev->rskb_read_lock);
 
 	ret = (ret < 0) ? ret : use;
-	GLINK_PKT_INFO("end for %s by %s:%d ret[%d], remaining[%lu]\n", gpdev->ch_name,
+	GLINK_PKT_INFO("end for %s by %s:%d ret[%d], remaining[%zu]\n", gpdev->ch_name,
 		       current->comm, task_pid_nr(current), ret, gpdev->rdata_len);
 
 	return ret;
@@ -906,7 +906,7 @@ static int glink_pkt_zerocopy_receive(struct glink_pkt_device *gpdev,
 		pages_to_map--;
 
 	if (leading_page) {
-		rc = vm_insert_page(vma, address, virt_to_page(leading_page));
+		rc = vm_insert_page(vma, address, virt_to_page((void *)leading_page));
 		if (rc)
 			goto zap_pages;
 
@@ -928,7 +928,7 @@ static int glink_pkt_zerocopy_receive(struct glink_pkt_device *gpdev,
 		pages_to_map--;
 	}
 	if (trailing_page) {
-		rc = vm_insert_page(vma, address, virt_to_page(trailing_page));
+		rc = vm_insert_page(vma, address, virt_to_page((void *)trailing_page));
 		if (rc)
 			goto zap_pages;
 
