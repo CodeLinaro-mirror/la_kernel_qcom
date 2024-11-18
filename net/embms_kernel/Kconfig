@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# embms tunnuning module
+#
+config EMBMS_TUNNULING
+        bool "eMBMS Tunneling"
+        help
+          optimized unicast tunneling within kernel of eMBMS traffic.
