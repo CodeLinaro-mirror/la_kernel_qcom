@@ -235,6 +235,15 @@ config QCOM_PDR_HELPERS
 	select QCOM_QMI_HELPERS
 	depends on NET
 
+config MSM_BOOT_TIME_MARKER
+	bool "Use MSM boot time marker reporting"
+	depends on MSM_BOOT_STATS
+	help
+	  Use this to mark msm boot kpi for measurement.
+	  An instrumentation for boot time measurement.
+	  To create an entry, call "place_marker" function.
+	  At userspace, write marker name to "/sys/kernel/boot_kpi/kpi_values"
+
 config QCOM_PANIC_ON_PDR_NOTIF_TIMEOUT
 	bool "Trigger kernel panic when PDR notification timeout expires"
 	help
