@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /dts-v1/;
@@ -29,6 +29,9 @@
 	model = "Qualcomm Technologies, Inc. Robotics RB3gen2";
 	compatible = "qcom,qcs6490-rb3gen2", "qcom,qcm6490";
 	chassis-type = "embedded";
+
+	qcom,msm-id = <497 0x10000>, <498 0x10000>, <475 0x10000>, <515 0x10000>;
+	qcom,board-id = <32 0x5>, <32 0x605>;
 
 	aliases {
 		serial0 = &uart5;
