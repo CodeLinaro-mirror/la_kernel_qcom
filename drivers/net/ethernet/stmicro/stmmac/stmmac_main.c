@@ -142,6 +142,7 @@ static void stmmac_tx_timer_arm(struct stmmac_priv *priv, u32 queue);
 static void stmmac_flush_tx_descriptors(struct stmmac_priv *priv, int queue);
 static void stmmac_set_dma_operation_mode(struct stmmac_priv *priv, u32 txmode,
 					  u32 rxmode, u32 chan);
+static void stmmac_start_all_dma(struct stmmac_priv *priv);
 
 #ifdef CONFIG_DEBUG_FS
 static const struct net_device_ops stmmac_netdev_ops;
@@ -1229,9 +1230,16 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		stmmac_fpe_link_state_handle(priv, true);
 
 	if (!priv->boot_kpi) {
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+		bootmarker_place_marker("M - Ethernet is Ready.Link is UP");
+#else
 		pr_info("M - Ethernet is Ready.Link is UP\n");
+#endif
 		priv->boot_kpi = true;
 	}
+
+	/* Start the ball rolling... */
+	stmmac_start_all_dma(priv);
 }
 
 static const struct phylink_mac_ops stmmac_phylink_mac_ops = {
@@ -2854,7 +2862,11 @@ static int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 				priv->xstats.txq_stats[queue].tx_pkt_n++;
 
 				if (priv->dev->stats.tx_packets == 1)
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+					bootmarker_place_marker("M - Ethernet first pkt xmit");
+#else
 					pr_info("M - Ethernet first packet transmitted\n");
+#endif
 			}
 			if (skb)
 				stmmac_get_tx_hwtstamp(priv, p, skb);
@@ -3683,9 +3695,6 @@ static int stmmac_hw_setup(struct net_device *dev, bool ptp_register)
 	/* Configure real RX and TX queues */
 	netif_set_real_num_rx_queues(dev, priv->plat->rx_queues_to_use);
 	netif_set_real_num_tx_queues(dev, priv->plat->tx_queues_to_use);
-
-	/* Start the ball rolling... */
-	stmmac_start_all_dma(priv);
 
 	if (priv->dma_cap.fpesel) {
 		stmmac_fpe_start_wq(priv);
@@ -7409,8 +7418,13 @@ int stmmac_dvr_probe(struct device *device,
 	u32 rxq;
 	int i, ret = 0;
 
-	ndev = devm_alloc_etherdev_mqs(device, sizeof(struct stmmac_priv),
-				       MTL_MAX_TX_QUEUES, MTL_MAX_RX_QUEUES);
+	if (of_property_read_bool(device->of_node, "virtio-mdio"))
+		ndev = alloc_netdev_mqs(sizeof(struct stmmac_priv), "eth2", NET_NAME_ENUM,
+					ether_setup, MTL_MAX_TX_QUEUES, MTL_MAX_TX_QUEUES);
+	else
+		ndev = devm_alloc_etherdev_mqs(device, sizeof(struct stmmac_priv),
+					       MTL_MAX_TX_QUEUES, MTL_MAX_TX_QUEUES);
+
 	if (!ndev)
 		return -ENOMEM;
 

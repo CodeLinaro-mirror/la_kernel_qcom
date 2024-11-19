@@ -67,6 +67,7 @@ def define_autoghgvm():
         "net/core/failover.ko",
         "net/qrtr/qrtr.ko",
         "net/qrtr/qrtr-mhi.ko",
+        "net/vmw_vsock/vmw_vsock_virtio_transport.ko",
         "net/wireless/cfg80211.ko",
     ]
 

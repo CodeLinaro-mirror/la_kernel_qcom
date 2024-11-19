@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Qualcomm PCIe ECAM root host controller driver
+ * PCIe ECAM root host controller driver
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -442,8 +442,8 @@ static void qcom_msi_deinit(struct qcom_msi *msi)
 static struct qcom_msi *qcom_msi_init(struct device *dev)
 {
 	struct qcom_msi *msi;
+	struct resource cfgres;
 	struct of_phandle_args irq;
-	u64 addr;
 	int ret;
 	int nr = 0;
 
@@ -465,13 +465,15 @@ static struct qcom_msi *qcom_msi_init(struct device *dev)
 		return ERR_PTR(-ENODEV);
 	}
 
-	if (of_property_read_reg(dev->of_node, 0, &addr, NULL) < 0) {
-		dev_err(msi->dev, "failed to get reg address\n");
-		return ERR_PTR(-ENODEV);
+	ret = of_address_to_resource(dev->of_node, 0, &cfgres);
+	if (ret) {
+		dev_err(dev, "failed to get reg address\n");
+		return ERR_PTR(ret);
 	}
 
-	dev_dbg(msi->dev, "hwirq:%d pcie_msi_cfg:%llx\n", msi->nr_hwirqs, addr);
-	msi->pcie_msi_cfg = devm_ioremap(dev, addr + PCIE_MSI_CTRL_BASE, PCIE_MSI_CTRL_SIZE);
+	dev_dbg(msi->dev, "hwirq:%d pcie_msi_cfg:%llx\n", msi->nr_hwirqs, cfgres.start);
+	msi->pcie_msi_cfg = devm_ioremap(dev, cfgres.start + PCIE_MSI_CTRL_BASE,
+								PCIE_MSI_CTRL_SIZE);
 	if (!msi->pcie_msi_cfg)
 		return ERR_PTR(-ENOMEM);
 
@@ -577,5 +579,5 @@ static struct platform_driver qcom_pcie_ecam_driver = {
 module_platform_driver(qcom_pcie_ecam_driver);
 MODULE_SOFTDEP("pre: cnss2");
 
-MODULE_DESCRIPTION("Qualcomm PCIe ECAM root complex driver");
+MODULE_DESCRIPTION("PCIe ECAM root complex driver");
 MODULE_LICENSE("GPL");

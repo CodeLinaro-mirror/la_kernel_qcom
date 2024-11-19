@@ -168,6 +168,8 @@ struct qcom_adsp {
 	void *tcsr_addr;
 	void *spare_reg_addr;
 	bool check_status;
+	bool rproc_ddr_set_icc_low_svs;
+	unsigned int rproc_ddr_lowsvs_icc_bw;
 };
 
 static ssize_t txn_id_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -468,15 +470,23 @@ err_enable:
 static int do_bus_scaling(struct qcom_adsp *adsp, bool enable)
 {
 	int rc = 0;
-	u32 avg_bw = enable ? PIL_TZ_AVG_BW : 0;
-	u32 peak_bw = enable ? PIL_TZ_PEAK_BW : 0;
+	u32 avg_bw = enable
+			? adsp->rproc_ddr_set_icc_low_svs
+				? adsp->rproc_ddr_lowsvs_icc_bw
+				: PIL_TZ_AVG_BW
+			: 0;
+	u32 peak_bw = enable
+			? adsp->rproc_ddr_set_icc_low_svs
+				? adsp->rproc_ddr_lowsvs_icc_bw
+				: PIL_TZ_PEAK_BW
+			: 0;
 
-	if (IS_ERR(adsp->bus_client))
+	if (IS_ERR(adsp->bus_client)) {
 		dev_err(adsp->dev, "Bus scaling not setup for %s\n",
 			adsp->rproc->name);
-	else
+	} else {
 		rc = icc_set_bw(adsp->bus_client, avg_bw, peak_bw);
-
+	}
 	if (rc)
 		dev_err(adsp->dev, "bandwidth request failed(rc:%d)\n", rc);
 
@@ -776,6 +786,8 @@ static int adsp_start(struct rproc *rproc)
 		else if (ret == -ETIMEDOUT)
 			dev_err(adsp->dev, "start timed out\n");
 	}
+
+	adsp->q6v5.seq++;
 
 free_metadata:
 	qcom_mdt_free_metadata(adsp->dev, adsp->pas_id, adsp->mdata,
@@ -1157,6 +1169,7 @@ static int adsp_stop(struct rproc *rproc)
 			dev_err(adsp->dev, "failed to reclaim mpss dsm mem\n");
 	}
 
+	adsp->q6v5.seq++;
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "exit");
 
 	return ret;
@@ -1392,6 +1405,10 @@ static int adsp_init_regulator(struct qcom_adsp *adsp)
 
 static void adsp_init_bus_scaling(struct qcom_adsp *adsp)
 {
+	int ret;
+	bool rproc_ddr_set_icc_low_svs;
+	unsigned int rproc_ddr_lowsvs_icc_bw;
+
 	if (scm_perf_client)
 		goto get_rproc_client;
 
@@ -1403,6 +1420,25 @@ get_rproc_client:
 	adsp->bus_client = of_icc_get(adsp->dev, "rproc_ddr");
 	if (IS_ERR(adsp->bus_client))
 		dev_warn(adsp->dev, "%s: No bus client\n", __func__);
+
+	rproc_ddr_set_icc_low_svs = of_property_read_bool(adsp->dev->of_node,
+				     "rproc-ddr-set-icc-low-svs");
+
+	if (rproc_ddr_set_icc_low_svs) {
+		adsp->rproc_ddr_set_icc_low_svs = rproc_ddr_set_icc_low_svs;
+		ret = of_property_read_u32(adsp->dev->of_node,
+				"rproc-ddr-lowsvs-icc-bw", &rproc_ddr_lowsvs_icc_bw);
+		if (!rproc_ddr_lowsvs_icc_bw) {
+			dev_err(adsp->dev, "Low SVS ICC Bw is not available. Falling back to Turbo..\n");
+			adsp->rproc_ddr_lowsvs_icc_bw = UINT_MAX;
+		} else {
+			adsp->rproc_ddr_lowsvs_icc_bw = rproc_ddr_lowsvs_icc_bw;
+			dev_info(adsp->dev, "LowSVS Bus BW: %d\n", rproc_ddr_lowsvs_icc_bw);
+		}
+	} else {
+		adsp->rproc_ddr_set_icc_low_svs = false;
+		dev_info(adsp->dev, "Low SVS vote for ICC is not set\n");
+	}
 }
 
 static int adsp_pds_attach(struct device *dev, struct device **devs,
@@ -2337,6 +2373,35 @@ static const struct adsp_data anorak_cdsp_resource = {
 	.ssctl_id = 0x17,
 };
 
+static const struct adsp_data neo_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.uses_elf64 = true,
+	.has_aggre2_clk = false,
+	.auto_boot = false,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.qmp_name = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data neo_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.pas_id = 18,
+	.minidump_id = 7,
+	.uses_elf64 = true,
+	.has_aggre2_clk = false,
+	.auto_boot = false,
+	.hyp_assign_mem = true,
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.qmp_name = "cdsp",
+	.ssctl_id = 0x17,
+};
+
 static const struct adsp_data khaje_cdsp_resource = {
 	.crash_reason_smem = 601,
 	.firmware_name = "cdsp.mdt",
@@ -2893,6 +2958,8 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,volcano-cdsp-pas", .data = &volcano_cdsp_resource},
 	{ .compatible = "qcom,anorak-adsp-pas", .data = &anorak_adsp_resource},
 	{ .compatible = "qcom,anorak-cdsp-pas", .data = &anorak_cdsp_resource},
+	{ .compatible = "qcom,neo-adsp-pas", .data = &neo_adsp_resource},
+	{ .compatible = "qcom,neo-cdsp-pas", .data = &neo_cdsp_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
