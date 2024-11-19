@@ -3,7 +3,7 @@
  * Copyright (c) 2021, Konrad Dybcio <konrad.dybcio@somainline.org>
  *
  * based on pinctrl-msm8916.c
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -13,121 +13,7 @@
 #include <linux/pinctrl/pinctrl.h>
 
 #include "pinctrl-msm.h"
-
-#define FUNCTION(fname)			                \
-	[msm_mux_##fname] = {		                \
-		.name = #fname,				\
-		.groups = fname##_groups,               \
-		.ngroups = ARRAY_SIZE(fname##_groups),	\
-	}
-
-#define REG_BASE 0x0
-#define REG_SIZE 0x1000
-#define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, wake_off, bit)	\
-	{					        \
-		.name = "gpio" #id,			\
-		.pins = gpio##id##_pins,		\
-		.npins = (unsigned int)ARRAY_SIZE(gpio##id##_pins),	\
-		.ctl_reg = REG_BASE + REG_SIZE * id,			\
-		.io_reg = REG_BASE + 0x4 + REG_SIZE * id,		\
-		.intr_cfg_reg = REG_BASE + 0x8 + REG_SIZE * id,		\
-		.intr_status_reg = REG_BASE + 0xc + REG_SIZE * id,	\
-		.intr_target_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
-		.mux_bit = 2,			\
-		.pull_bit = 0,			\
-		.drv_bit = 6,			\
-		.egpio_enable = 12,		\
-		.egpio_present = 11,	\
-		.oe_bit = 9,			\
-		.in_bit = 0,			\
-		.out_bit = 1,			\
-		.intr_enable_bit = 0,		\
-		.intr_status_bit = 0,		\
-		.intr_target_bit = 5,		\
-		.intr_target_kpss_val = 4,	\
-		.intr_raw_status_bit = 4,	\
-		.intr_polarity_bit = 1,		\
-		.intr_detection_bit = 2,	\
-		.intr_detection_width = 2,	\
-		.wake_reg = REG_BASE + wake_off,	\
-		.wake_bit = bit,		\
-		.funcs = (int[]){			\
-			msm_mux_gpio, /* gpio mode */	\
-			msm_mux_##f1,			\
-			msm_mux_##f2,			\
-			msm_mux_##f3,			\
-			msm_mux_##f4,			\
-			msm_mux_##f5,			\
-			msm_mux_##f6,			\
-			msm_mux_##f7,			\
-			msm_mux_##f8,			\
-			msm_mux_##f9,			\
-			msm_mux_##f10,			\
-			msm_mux_##f11,			\
-			msm_mux_##f12,			\
-			msm_mux_##f13			\
-		},					        \
-		.nfuncs = 14,				\
-	}
-
-#define SDC_QDSD_PINGROUP(pg_name, ctl, pull, drv)	\
-	{					        \
-		.name = #pg_name,			\
-		.pins = pg_name##_pins,			\
-		.npins = (unsigned int)ARRAY_SIZE(pg_name##_pins),	\
-		.ctl_reg = ctl,				\
-		.io_reg = 0,				\
-		.intr_cfg_reg = 0,			\
-		.intr_status_reg = 0,			\
-		.intr_target_reg = 0,			\
-		.mux_bit = -1,				\
-		.pull_bit = pull,			\
-		.drv_bit = drv,				\
-		.oe_bit = -1,				\
-		.in_bit = -1,				\
-		.out_bit = -1,				\
-		.intr_enable_bit = -1,			\
-		.intr_status_bit = -1,			\
-		.intr_target_bit = -1,			\
-		.intr_raw_status_bit = -1,		\
-		.intr_polarity_bit = -1,		\
-		.intr_detection_bit = -1,		\
-		.intr_detection_width = -1,		\
-	}
-
-#define UFS_RESET(pg_name, offset)				\
-	{					        \
-		.name = #pg_name,			\
-		.pins = pg_name##_pins,			\
-		.npins = (unsigned int)ARRAY_SIZE(pg_name##_pins),	\
-		.ctl_reg = offset,			\
-		.io_reg = offset + 0x4,			\
-		.intr_cfg_reg = 0,			\
-		.intr_status_reg = 0,			\
-		.intr_target_reg = 0,			\
-		.mux_bit = -1,				\
-		.pull_bit = 3,				\
-		.drv_bit = 0,				\
-		.oe_bit = -1,				\
-		.in_bit = -1,				\
-		.out_bit = 0,				\
-		.intr_enable_bit = -1,			\
-		.intr_status_bit = -1,			\
-		.intr_target_bit = -1,			\
-		.intr_raw_status_bit = -1,		\
-		.intr_polarity_bit = -1,		\
-		.intr_detection_bit = -1,		\
-		.intr_detection_width = -1,		\
-	}
-
-#define QUP_I3C(qup_mode, qup_offset)			\
-	{						\
-		.mode = qup_mode,			\
-		.offset = REG_BASE + qup_offset,			\
-	}
-
-
-static const struct pinctrl_pin_desc mdm9x07_pins[] = {
+static const struct pinctrl_pin_desc mdm9607_pins[] = {
 	PINCTRL_PIN(0, "GPIO_0"),
 	PINCTRL_PIN(1, "GPIO_1"),
 	PINCTRL_PIN(2, "GPIO_2"),
@@ -320,7 +206,119 @@ static const unsigned int qdsd_data1_pins[] = { 90 };
 static const unsigned int qdsd_data2_pins[] = { 91 };
 static const unsigned int qdsd_data3_pins[] = { 92 };
 
-enum mdm9x07_functions {
+#define FUNCTION(fname)			                \
+	[msm_mux_##fname] = {		                \
+		.name = #fname,				\
+		.groups = fname##_groups,               \
+		.ngroups = ARRAY_SIZE(fname##_groups),	\
+	}
+
+#define REG_BASE 0x0
+#define REG_SIZE 0x1000
+#define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, wake_off, bit)	\
+	{					        \
+		.name = "gpio" #id,			\
+		.pins = gpio##id##_pins,		\
+		.npins = (unsigned int)ARRAY_SIZE(gpio##id##_pins),	\
+		.ctl_reg = REG_BASE + REG_SIZE * id,			\
+		.io_reg = REG_BASE + 0x4 + REG_SIZE * id,		\
+		.intr_cfg_reg = REG_BASE + 0x8 + REG_SIZE * id,		\
+		.intr_status_reg = REG_BASE + 0xc + REG_SIZE * id,	\
+		.intr_target_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
+		.mux_bit = 2,			\
+		.pull_bit = 0,			\
+		.drv_bit = 6,			\
+		.egpio_enable = 12,		\
+		.egpio_present = 11,	\
+		.oe_bit = 9,			\
+		.in_bit = 0,			\
+		.out_bit = 1,			\
+		.intr_enable_bit = 0,		\
+		.intr_status_bit = 0,		\
+		.intr_target_bit = 5,		\
+		.intr_target_kpss_val = 4,	\
+		.intr_raw_status_bit = 4,	\
+		.intr_polarity_bit = 1,		\
+		.intr_detection_bit = 2,	\
+		.intr_detection_width = 2,	\
+		.wake_reg = REG_BASE + wake_off,	\
+		.wake_bit = bit,		\
+		.funcs = (int[]){			\
+			msm_mux_gpio, /* gpio mode */	\
+			msm_mux_##f1,			\
+			msm_mux_##f2,			\
+			msm_mux_##f3,			\
+			msm_mux_##f4,			\
+			msm_mux_##f5,			\
+			msm_mux_##f6,			\
+			msm_mux_##f7,			\
+			msm_mux_##f8,			\
+			msm_mux_##f9,			\
+			msm_mux_##f10,			\
+			msm_mux_##f11,			\
+			msm_mux_##f12,			\
+			msm_mux_##f13			\
+		},					        \
+		.nfuncs = 14,				\
+	}
+
+#define SDC_QDSD_PINGROUP(pg_name, ctl, pull, drv)	\
+	{					        \
+		.name = #pg_name,			\
+		.pins = pg_name##_pins,			\
+		.npins = (unsigned int)ARRAY_SIZE(pg_name##_pins),	\
+		.ctl_reg = ctl,				\
+		.io_reg = 0,				\
+		.intr_cfg_reg = 0,			\
+		.intr_status_reg = 0,			\
+		.intr_target_reg = 0,			\
+		.mux_bit = -1,				\
+		.pull_bit = pull,			\
+		.drv_bit = drv,				\
+		.oe_bit = -1,				\
+		.in_bit = -1,				\
+		.out_bit = -1,				\
+		.intr_enable_bit = -1,			\
+		.intr_status_bit = -1,			\
+		.intr_target_bit = -1,			\
+		.intr_raw_status_bit = -1,		\
+		.intr_polarity_bit = -1,		\
+		.intr_detection_bit = -1,		\
+		.intr_detection_width = -1,		\
+	}
+
+#define UFS_RESET(pg_name, offset)				\
+	{					        \
+		.name = #pg_name,			\
+		.pins = pg_name##_pins,			\
+		.npins = (unsigned int)ARRAY_SIZE(pg_name##_pins),	\
+		.ctl_reg = offset,			\
+		.io_reg = offset + 0x4,			\
+		.intr_cfg_reg = 0,			\
+		.intr_status_reg = 0,			\
+		.intr_target_reg = 0,			\
+		.mux_bit = -1,				\
+		.pull_bit = 3,				\
+		.drv_bit = 0,				\
+		.oe_bit = -1,				\
+		.in_bit = -1,				\
+		.out_bit = 0,				\
+		.intr_enable_bit = -1,			\
+		.intr_status_bit = -1,			\
+		.intr_target_bit = -1,			\
+		.intr_raw_status_bit = -1,		\
+		.intr_polarity_bit = -1,		\
+		.intr_detection_bit = -1,		\
+		.intr_detection_width = -1,		\
+	}
+
+#define QUP_I3C(qup_mode, qup_offset)			\
+	{						\
+		.mode = qup_mode,			\
+		.offset = REG_BASE + qup_offset,			\
+	}
+
+enum mdm9607_functions {
 	msm_mux_gpio,
 	msm_mux_adsp_ext,
 	msm_mux_atest_bbrx0,
@@ -973,7 +971,7 @@ static const char *const uim_batt_alarm_groups[] = {
 	"gpio35",
 };
 
-static const struct msm_function mdm9x07_functions[] = {
+static const struct msm_function mdm9607_functions[] = {
 	FUNCTION(gpio),
 	FUNCTION(adsp_ext),
 	FUNCTION(atest_bbrx0),
@@ -1138,7 +1136,7 @@ static const struct msm_function mdm9x07_functions[] = {
  * pin descriptor registered with pinctrl core.
  * Clients would not be able to request these dummy pin groups.
  */
-static const struct msm_pingroup mdm9x07_groups[] = {
+static const struct msm_pingroup mdm9607_groups[] = {
 	[0] = PINGROUP(0, blsp_uart_tx3, blsp_spi_mosi3, NA, NA, NA, NA, NA,
 		       qdss_tracedata_a, NA, NA, NA, NA, NA, 0, -1),
 	[1] = PINGROUP(1, blsp_uart_rx3, blsp_spi_miso3, NA, NA, NA, NA, NA,
@@ -1347,10 +1345,10 @@ static const struct msm_pingroup mdm9x07_groups[] = {
 	[92] = SDC_QDSD_PINGROUP(qdsd_data3, 0x19C000, 28, 25),
 };
 
-static struct pinctrl_qup mdm9x07_qup_regs[] = {
+static struct pinctrl_qup mdm9607_qup_regs[] = {
 };
 
-static const struct msm_gpio_wakeirq_map mdm9x07_mpm_map[] = {
+static const struct msm_gpio_wakeirq_map mdm9607_mpm_map[] = {
 	{ 1, 11 }, { 3, 7 }, { 5, 4 }, { 8, 30 }, { 9, 9 }, { 11, 5 }, { 12, 6 },
 	{ 13, 10 }, { 16, 3 }, { 17, 8 }, { 20, 12 }, { 21, 13 }, { 22, 14 },
 	{ 25, 26 }, { 26, 19 }, { 28, 17 }, { 29, 22 }, { 30, 24 }, { 34, 28 },
@@ -1360,58 +1358,51 @@ static const struct msm_gpio_wakeirq_map mdm9x07_mpm_map[] = {
 	{ 76, 41 }, { 79, 38 },
 };
 
-static const struct msm_pinctrl_soc_data mdm9x07_pinctrl = {
-	.pins = mdm9x07_pins,
-	.npins = ARRAY_SIZE(mdm9x07_pins),
-	.functions = mdm9x07_functions,
-	.nfunctions = ARRAY_SIZE(mdm9x07_functions),
-	.groups = mdm9x07_groups,
-	.ngroups = ARRAY_SIZE(mdm9x07_groups),
+static const struct msm_pinctrl_soc_data mdm9607_pinctrl = {
+	.pins = mdm9607_pins,
+	.npins = ARRAY_SIZE(mdm9607_pins),
+	.functions = mdm9607_functions,
+	.nfunctions = ARRAY_SIZE(mdm9607_functions),
+	.groups = mdm9607_groups,
+	.ngroups = ARRAY_SIZE(mdm9607_groups),
 	.ngpios = 80,
-	.qup_regs = mdm9x07_qup_regs,
-	.nqup_regs = ARRAY_SIZE(mdm9x07_qup_regs),
-	.wakeirq_map = mdm9x07_mpm_map,
-	.nwakeirq_map = ARRAY_SIZE(mdm9x07_mpm_map),
+	.qup_regs = mdm9607_qup_regs,
+	.nqup_regs = ARRAY_SIZE(mdm9607_qup_regs),
+	.wakeirq_map = mdm9607_mpm_map,
+	.nwakeirq_map = ARRAY_SIZE(mdm9607_mpm_map),
 };
 
-static const struct of_device_id mdm9x07_pinctrl_of_match[] = {
-	{ .compatible = "qcom,mdm9x07-tlmm", .data = &mdm9x07_pinctrl},
-	{},
-};
-
-static int mdm9x07_pinctrl_probe(struct platform_device *pdev)
+static int mdm9607_pinctrl_probe(struct platform_device *pdev)
 {
-	const struct msm_pinctrl_soc_data *pinctrl_data;
-	struct device *dev = &pdev->dev;
-
-	pinctrl_data = of_device_get_match_data(dev);
-	if (!pinctrl_data)
-		return -EINVAL;
-
-	return msm_pinctrl_probe(pdev, pinctrl_data);
+	return msm_pinctrl_probe(pdev, &mdm9607_pinctrl);
 }
 
-static struct platform_driver mdm9x07_pinctrl_driver = {
+static const struct of_device_id mdm9607_pinctrl_of_match[] = {
+	{ .compatible = "qcom,mdm9607-tlmm", },
+	{ }
+};
+
+static struct platform_driver mdm9607_pinctrl_driver = {
 	.driver = {
-		.name = "mdm9x07-pinctrl",
-		.of_match_table = mdm9x07_pinctrl_of_match,
+		.name = "mdm9607-pinctrl",
+		.of_match_table = mdm9607_pinctrl_of_match,
 	},
-	.probe = mdm9x07_pinctrl_probe,
+	.probe = mdm9607_pinctrl_probe,
 	.remove = msm_pinctrl_remove,
 };
 
-static int __init mdm9x07_pinctrl_init(void)
+static int __init mdm9607_pinctrl_init(void)
 {
-	return platform_driver_register(&mdm9x07_pinctrl_driver);
+	return platform_driver_register(&mdm9607_pinctrl_driver);
 }
-arch_initcall(mdm9x07_pinctrl_init);
+arch_initcall(mdm9607_pinctrl_init);
 
-static void __exit mdm9x07_pinctrl_exit(void)
+static void __exit mdm9607_pinctrl_exit(void)
 {
-	platform_driver_unregister(&mdm9x07_pinctrl_driver);
+	platform_driver_unregister(&mdm9607_pinctrl_driver);
 }
-module_exit(mdm9x07_pinctrl_exit);
+module_exit(mdm9607_pinctrl_exit);
 
-MODULE_DESCRIPTION("QTI mdm9x07 pinctrl driver");
+MODULE_DESCRIPTION("Qualcomm mdm9607 pinctrl driver");
 MODULE_LICENSE("GPL v2");
-MODULE_DEVICE_TABLE(of, mdm9x07_pinctrl_of_match);
+MODULE_DEVICE_TABLE(of, mdm9607_pinctrl_of_match);
