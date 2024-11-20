@@ -90,6 +90,10 @@ struct nf_conntrack_net {
 #include <linux/netfilter_ipv4/ipt_NATTYPE.h>
 #endif
 
+#ifdef CONFIG_NFT_NATTYPE
+#include <linux/netfilter/nf_NATTYPE.h>
+#endif
+
 struct nf_conn {
 	/* Usage count in here is 1 for hash table, 1 per skb,
 	 * plus 1 for any connection(s) we are `master' for
@@ -147,7 +151,7 @@ struct nf_conn {
 	bool sip_reply_dir;
 #endif
 
-#ifdef CONFIG_IP_NF_TARGET_NATTYPE_MODULE
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE) || defined(CONFIG_NFT_NATTYPE)
 	unsigned long nattype_entry;
 #endif
 

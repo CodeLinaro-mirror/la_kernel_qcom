@@ -583,6 +583,19 @@ config NFT_NAT
 	  This option adds the "nat" expression that you can use to perform
 	  typical Network Address Translation (NAT) packet transformations.
 
+config NFT_NATTYPE
+	tristate "Netfilter nf_tables NATTYPE support"
+	depends on NF_NAT
+	default m if NETFILTER_ADVANCED=n
+	help
+	  NATTYPE is a special case of NAT: used to support FULL Cone NAT
+	  and ADDRESS Restricted Cone NAT. All incoming connections are
+	  allowed if there is an outgoing connection using that port.
+	  This option adds the "NATTYPE" expression that you can use to
+	  perform this special NAT packet transformations.
+
+	  To compile it as a module, choose M here.  If unsure, say N.
+
 config NFT_TUNNEL
 	tristate "Netfilter nf_tables tunnel module"
 	help

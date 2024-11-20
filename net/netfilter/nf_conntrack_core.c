@@ -1671,7 +1671,7 @@ __nf_conntrack_alloc(struct net *net,
 
 	nf_ct_zone_add(ct, zone);
 
-#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE) || defined(CONFIG_NFT_NATTYPE)
 	ct->nattype_entry = 0;
 #endif
 	/* Because we use RCU lookups, we set ct_general.use to zero before
@@ -1804,7 +1804,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 			ct->secmark = exp->master->secmark;
 #endif
 /* Initialize the NAT type entry. */
-#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE) || defined(CONFIG_NFT_NATTYPE)
 			ct->nattype_entry = 0;
 #endif
 			NF_CT_STAT_INC(net, expect_new);
@@ -2100,7 +2100,7 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
 			  u32 extra_jiffies,
 			  bool do_acct)
 {
-#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE) || defined(CONFIG_NFT_NATTYPE)
 	bool (*nattype_ref_timer)
 		(unsigned long nattype,
 		unsigned long timeout_value);
@@ -2118,7 +2118,7 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
 		WRITE_ONCE(ct->timeout, extra_jiffies);
 
 /* Refresh the NAT type entry. */
-#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE) || defined(CONFIG_NFT_NATTYPE)
 	nattype_ref_timer = rcu_dereference(nattype_refresh_timer);
 	if (nattype_ref_timer) {
 		if (nf_ct_is_confirmed(ct))
@@ -2863,7 +2863,7 @@ err_expect:
 
 int __nf_ct_change_timeout(struct nf_conn *ct, u64 timeout)
 {
-#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE) || defined(CONFIG_NFT_NATTYPE)
 	bool (*nattype_ref_timer)
 		(unsigned long nattype,
 		unsigned long timeout_value);
@@ -2878,7 +2878,7 @@ int __nf_ct_change_timeout(struct nf_conn *ct, u64 timeout)
 		return -ETIME;
 
 /* Refresh the NAT type entry. */
-#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE) || defined(CONFIG_NFT_NATTYPE)
 	nattype_ref_timer = rcu_dereference(nattype_refresh_timer);
 	if (nattype_ref_timer)
 		nattype_ref_timer(ct->nattype_entry, ct->timeout);
