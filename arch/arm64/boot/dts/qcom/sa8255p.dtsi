@@ -480,6 +480,13 @@
 		#size-cells = <2>;
 		ranges = <0 0 0 0 0x10 0>;
 
+		dcc: dma@40ff000 {
+			compatible = "qcom,dcc-v3", "qcom,dcc";
+			reg = <0x0 0x040ff000 0x0 0x1000>,
+			      <0x0 0x040b8800 0x0 0x6000>;
+			qcom,dcc-offset = <0x38800>;
+		};
+
 		ipcc0: mailbox@408000 {
 			compatible = "qcom,sa8255p-ipcc", "qcom,ipcc";
 			reg = <0x0 0x00408000 0x0 0x1000>;
@@ -1634,6 +1641,9 @@
 			reg = <0x0 0x18591000 0x0 0x1000>,
 			      <0x0 0x18593000 0x0 0x1000>;
 			reg-names = "freq-domain0", "freq-domain1";
+			interrupts = <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 32 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "dcvsh-irq-0", "dcvsh-irq-1";
 
 			clocks = <&bi_tcxo_div2>, <&gpll0_board_clk>;
 			clock-names = "xo", "alternate";
