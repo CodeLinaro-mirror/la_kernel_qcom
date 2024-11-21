@@ -138,6 +138,7 @@ def _define_kernel_build(
         "scripts/sign-file",
         "certs/signing_key.pem",
         "certs/signing_key.x509",
+        "usr/gen_init_cpio",
     ])
 
     kernel_build(
@@ -215,6 +216,7 @@ def _define_kernel_dist(target, msm_target, variant):
             "**/*.dtb*": "755",
             "**/LinuxLoader*": "755",
             "**/sign-file": "755",
+            "**/gen_init_cpio": "755",
             "**/*": "644",
         },
         log = "info",
