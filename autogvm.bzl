@@ -129,6 +129,10 @@ def define_autogvm():
         "net/mac80211/mac80211.ko",
         "net/qrtr/qrtr.ko",
         "net/qrtr/qrtr-mhi.ko",
+        "net/sched/cls_flower.ko",
+        "net/sched/sch_cbs.ko",
+        "net/sched/sch_etf.ko",
+        "net/sched/sch_mqprio.ko",
         "net/wireless/cfg80211.ko",
     ]
 
