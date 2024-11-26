@@ -169,7 +169,7 @@ def define_seraph():
             mod_list = _seraph_in_tree_modules
             board_kernel_cmdline_extras += ["nosoftlockup"]
             kernel_vendor_cmdline_extras += ["nosoftlockup"]
-            board_bootconfig_extras += ["androidboot.console=0"]
+            board_bootconfig_extras += [" "]
 
         define_msm_la(
             msm_target = target_name,
