@@ -25,10 +25,19 @@ union kprobe_data {
 	struct work_struct *data;
 };
 
+static unsigned long dwc3_pt_reg(struct pt_regs *regs, int reg)
+{
+#ifdef CONFIG_ARM64
+	return regs->regs[reg];
+#elif CONFIG_ARM
+	return regs->uregs[reg];
+#endif
+}
+
 static int entry_usb_ep_set_maxpacket_limit(struct kretprobe_instance *ri,
 				struct pt_regs *regs)
 {
-	struct usb_ep *ep = (struct usb_ep *)regs->regs[0];
+	struct usb_ep *ep = (struct usb_ep *)dwc3_pt_reg(regs, 0);
 	struct dwc3_ep *dep;
 	struct dwc3 *dwc;
 	union kprobe_data *data = (union kprobe_data *)ri->data;
@@ -62,8 +71,8 @@ static int exit_usb_ep_set_maxpacket_limit(struct kretprobe_instance *ri,
 static int entry_dwc3_gadget_run_stop(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct dwc3 *dwc = (struct dwc3 *)regs->regs[0];
-	int is_on = (int)regs->regs[1];
+	struct dwc3 *dwc = (struct dwc3 *)dwc3_pt_reg(regs, 0);
+	int is_on = (int)dwc3_pt_reg(regs, 1);
 
 	if (is_on) {
 		/*
@@ -100,8 +109,8 @@ static int entry_dwc3_gadget_run_stop(struct kretprobe_instance *ri,
 static int entry_dwc3_send_gadget_ep_cmd(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct dwc3_ep *dep = (struct dwc3_ep *)regs->regs[0];
-	unsigned int cmd = (unsigned int)regs->regs[1];
+	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 0);
+	unsigned int cmd = (unsigned int)dwc3_pt_reg(regs, 1);
 	struct dwc3 *dwc = dep->dwc;
 
 	if (cmd == DWC3_DEPCMD_ENDTRANSFER)
@@ -115,8 +124,8 @@ static int entry_dwc3_send_gadget_ep_cmd(struct kretprobe_instance *ri,
 static int entry___dwc3_gadget_ep_enable(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct dwc3_ep *dep = (struct dwc3_ep *)regs->regs[0];
-	unsigned int action = (unsigned int)regs->regs[1];
+	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 0);
+	unsigned int action = (unsigned int)dwc3_pt_reg(regs, 1);
 
 	/* DWC3_DEPCFG_ACTION_MODIFY is only done during CONNDONE */
 	if (action == DWC3_DEPCFG_ACTION_MODIFY && dep->number == 1)
@@ -128,7 +137,7 @@ static int entry___dwc3_gadget_ep_enable(struct kretprobe_instance *ri,
 static int entry_dwc3_gadget_reset_interrupt(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct dwc3 *dwc = (struct dwc3 *)regs->regs[0];
+	struct dwc3 *dwc = (struct dwc3 *)dwc3_pt_reg(regs, 0);
 
 	dwc3_core_stop_hw_active_transfers(dwc);
 	dwc3_msm_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_CLEAR_DB, 0);
@@ -139,10 +148,10 @@ static int entry_dwc3_gadget_pullup(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
 	union kprobe_data *data = (union kprobe_data *)ri->data;
-	struct usb_gadget *g = (struct usb_gadget *)regs->regs[0];
+	struct usb_gadget *g = (struct usb_gadget *)dwc3_pt_reg(regs, 0);
 
 	data->dwc = gadget_to_dwc(g);
-	data->xi0 = (int)regs->regs[1];
+	data->xi0 = (int)dwc3_pt_reg(regs, 1);
 	dwc3_msm_notify_event(data->dwc, DWC3_CONTROLLER_PULLUP_ENTER,
 				data->xi0);
 
@@ -167,7 +176,7 @@ static int exit_dwc3_gadget_pullup(struct kretprobe_instance *ri,
 static int entry_trace_event_raw_event_dwc3_log_request(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct dwc3_request *req = (struct dwc3_request *)regs->regs[1];
+	struct dwc3_request *req = (struct dwc3_request *)dwc3_pt_reg(regs, 1);
 
 	dbg_trace_ep_queue(req);
 
@@ -177,10 +186,11 @@ static int entry_trace_event_raw_event_dwc3_log_request(struct kretprobe_instanc
 static int entry_trace_event_raw_event_dwc3_log_gadget_ep_cmd(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct dwc3_ep *dep = (struct dwc3_ep *)regs->regs[1];
-	unsigned int cmd = regs->regs[2];
-	struct dwc3_gadget_ep_cmd_params *param = (struct dwc3_gadget_ep_cmd_params *)regs->regs[3];
-	int cmd_status = regs->regs[4];
+	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 1);
+	unsigned int cmd = dwc3_pt_reg(regs, 2);
+	struct dwc3_gadget_ep_cmd_params *param =
+			(struct dwc3_gadget_ep_cmd_params *)dwc3_pt_reg(regs, 3);
+	int cmd_status = dwc3_pt_reg(regs, 4);
 
 	dbg_trace_gadget_ep_cmd(dep, cmd, param, cmd_status);
 
@@ -190,8 +200,8 @@ static int entry_trace_event_raw_event_dwc3_log_gadget_ep_cmd(struct kretprobe_i
 static int entry_trace_event_raw_event_dwc3_log_trb(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct dwc3_ep *dep = (struct dwc3_ep *)regs->regs[1];
-	struct dwc3_trb *trb = (struct dwc3_trb *)regs->regs[2];
+	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 1);
+	struct dwc3_trb *trb = (struct dwc3_trb *)dwc3_pt_reg(regs, 2);
 
 	dbg_trace_trb_prepare(dep, trb);
 
@@ -201,8 +211,8 @@ static int entry_trace_event_raw_event_dwc3_log_trb(struct kretprobe_instance *r
 static int entry_trace_event_raw_event_dwc3_log_event(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	u32 event = regs->regs[1];
-	struct dwc3 *dwc = (struct dwc3 *)regs->regs[2];
+	u32 event = dwc3_pt_reg(regs, 1);
+	struct dwc3 *dwc = (struct dwc3 *)dwc3_pt_reg(regs, 2);
 
 	dbg_trace_event(event, dwc);
 
@@ -212,7 +222,7 @@ static int entry_trace_event_raw_event_dwc3_log_event(struct kretprobe_instance 
 static int entry_trace_event_raw_event_dwc3_log_ep(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
-	struct dwc3_ep *dep = (struct dwc3_ep *)regs->regs[1];
+	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 1);
 
 	dbg_trace_ep(dep);
 
@@ -222,7 +232,7 @@ static int entry_trace_event_raw_event_dwc3_log_ep(struct kretprobe_instance *ri
 static int entry_android_work(struct kretprobe_instance *ri,
 			     struct pt_regs *regs)
 {
-	struct work_struct *data = (struct work_struct *)regs->regs[0];
+	struct work_struct *data = (struct work_struct *)dwc3_pt_reg(regs, 0);
 	union kprobe_data *w_data = (union kprobe_data *)ri->data;
 
 	w_data->data = data;
