@@ -139,6 +139,7 @@ static inline bool is_event_shared(struct event_data *ev)
 }
 
 #define CYCLE_COUNTER_ID 0x11
+#ifdef CONFIG_ARM64
 static inline u64 cached_count_value(struct event_data *ev, u64 event_cached_count, bool amu)
 {
 	struct arm_pmu *cpu_pmu = container_of(ev->pevent->pmu, struct arm_pmu, pmu);
@@ -158,6 +159,19 @@ static inline u64 cached_count_value(struct event_data *ev, u64 event_cached_cou
 
 	return event_cached_count;
 }
+
+#else
+static inline u64 cached_count_value(struct event_data *ev, u64 event_cached_count, bool amu)
+{
+	if (amu)
+		return event_cached_count;
+
+	event_cached_count = ((event_cached_count & GENMASK(31, 0)) |
+				BIT(31));
+
+	return event_cached_count;
+}
+#endif
 
 static struct perf_event_attr *alloc_attr(void)
 {
@@ -229,6 +243,7 @@ static inline void delete_event(struct event_data *event)
 	}
 }
 
+#ifdef CONFIG_ARM64
 static void read_amu_reg(void *amu_data)
 {
 	struct amu_data *data = amu_data;
@@ -250,6 +265,12 @@ static void read_amu_reg(void *amu_data)
 		pr_err("AMU counter %d not supported!\n", data->amu_id);
 	}
 }
+
+#else
+static void read_amu_reg(void *amu_data)
+{
+}
+#endif
 
 static inline u64 read_event(struct event_data *event, bool local)
 {
