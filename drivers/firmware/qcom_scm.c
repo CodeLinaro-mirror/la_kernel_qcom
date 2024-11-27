@@ -1027,8 +1027,14 @@ int __qcom_scm_ethqos_configure(struct device *dev, u32 emac_base_addr,
 	struct qcom_scm_res res;
 
 	ret = qcom_scm_call(__scm->dev, &desc, &res);
+
+#ifdef CONFIG_PHYS_ADDR_T_64BIT
 	pr_info("scm ethqos configure 0x%x 0x%x 0x%x 0x%llx, 0x%x done =0x%x\n",
 		emac_base_addr, link_speed, if_mode, phys_rgmii_hsr_por, len, ret);
+#else
+	pr_info("scm ethqos configure 0x%x 0x%x 0x%x 0x%x, 0x%x done =0x%x\n",
+		emac_base_addr, link_speed, if_mode, phys_rgmii_hsr_por, len, ret);
+#endif
 
 	return ret;
 }
@@ -1085,8 +1091,13 @@ int __qcom_scm_iomacro_dump(struct device *dev, u32 emac_base_addr,
 	};
 	struct qcom_scm_res res;
 
+#ifdef CONFIG_PHYS_ADDR_T_64BIT
 	pr_info("scm io macro dump 0x%x buf = 0x%llx len = 0x%x\n",
 		emac_base_addr, buffer, len);
+#else
+	pr_info("scm io macro dump 0x%x buf = 0x%x len = 0x%x\n",
+		emac_base_addr, buffer, len);
+#endif
 	ret = qcom_scm_call(__scm->dev, &desc, &res);
 
 	return ret;
