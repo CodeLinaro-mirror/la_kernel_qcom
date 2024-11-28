@@ -26,6 +26,7 @@
 })
 
 struct stmmac_extra_stats;
+struct stmmac_priv;
 struct stmmac_safety_stats;
 struct dma_desc;
 struct dma_extended_desc;
@@ -305,6 +306,8 @@ struct vlan_filter_info;
 struct stmmac_ops {
 	/* MAC core initialization */
 	void (*core_init)(struct mac_device_info *hw, struct net_device *dev);
+	/* Get phylink capabilities */
+	void (*phylink_get_caps)(struct stmmac_priv *priv);
 	/* Enable the MAC RX/TX */
 	void (*set_mac)(void __iomem *ioaddr, bool enable);
 	/* Enable and verify that the IPC module is supported */
@@ -447,6 +450,8 @@ struct stmmac_ops {
 
 #define stmmac_core_init(__priv, __args...) \
 	stmmac_do_void_callback(__priv, mac, core_init, __args)
+#define stmmac_mac_phylink_get_caps(__priv) \
+	stmmac_do_void_callback(__priv, mac, phylink_get_caps, __priv)
 #define stmmac_mac_set(__priv, __args...) \
 	stmmac_do_void_callback(__priv, mac, set_mac, __args)
 #define stmmac_rx_ipc(__priv, __args...) \
@@ -563,8 +568,6 @@ struct stmmac_ops {
 	stmmac_do_void_callback(__priv, mac, config_pfc, __args)
 #define stmmac_configure_pfc_tx_flow_ctrl(__priv, __args...) \
 		stmmac_do_void_callback(__priv, mac, configure_pfc_tx_flow_ctrl, __args)
-
-struct stmmac_priv;
 
 /* PTP and HW Timer helpers */
 struct stmmac_hwtimestamp {

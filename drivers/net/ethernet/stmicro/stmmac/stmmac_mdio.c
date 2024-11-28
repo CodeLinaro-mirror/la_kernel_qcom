@@ -385,7 +385,7 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 					    "snps,reset",
 					    GPIOD_OUT_HIGH);
 		if (IS_ERR(reset_gpio)) {
-			dev_err(priv->device, "error reset GPIO is %d\n", PTR_ERR(reset_gpio));
+			dev_err(priv->device, "error reset GPIO is %ld\n", PTR_ERR(reset_gpio));
 			return PTR_ERR(reset_gpio);
 		}
 
@@ -395,7 +395,7 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 									      GPIOD_OUT_LOW);
 
 			if (IS_ERR(priv->plat->reset_phy1_gpio)) {
-				dev_err(priv->device, "error reset GPIO is %d\n",
+				dev_err(priv->device, "error reset GPIO is %ld\n",
 					PTR_ERR(priv->plat->reset_phy1_gpio));
 				return PTR_ERR(priv->plat->reset_phy1_gpio);
 			}

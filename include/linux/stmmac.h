@@ -143,6 +143,7 @@ struct stmmac_rxq_cfg {
 
 struct stmmac_txq_cfg {
 	u32 weight;
+	bool coe_unsupported;
 	u8 mode_to_use;
 	/* Credit Base Shaper parameters */
 	u32 send_slope;
@@ -228,6 +229,7 @@ struct plat_stmmacenet_data {
 	struct stmmac_mdio_bus_data *mdio_bus_data;
 	struct device_node *phy_node;
 	struct device_node *phylink_node;
+	struct fwnode_handle *port_node;
 	struct device_node *mdio_node;
 	struct stmmac_dma_cfg *dma_cfg;
 	struct stmmac_est *est;

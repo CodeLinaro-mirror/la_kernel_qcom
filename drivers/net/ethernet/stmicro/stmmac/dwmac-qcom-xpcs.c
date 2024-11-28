@@ -76,7 +76,7 @@ int ethqos_xpcs_init(struct net_device *ndev)
 
 	qxpcs = qcom_xpcs_create(xpcs_base, priv->plat->phy_interface);
 	if (!qxpcs || IS_ERR(qxpcs)) {
-		ETHQOSERR("XPCS failed to be created: %d\n", PTR_ERR(qxpcs));
+		ETHQOSERR("XPCS failed to be created: %ld\n", PTR_ERR(qxpcs));
 		return -ENODEV;
 	}
 
@@ -89,20 +89,15 @@ int ethqos_xpcs_init(struct net_device *ndev)
 	ret = ethqos_xpcs_intr_config(ndev);
 	if (!ret) {
 		ret = ethqos_xpcs_intr_enable(ndev);
+		priv->hw->qxpcs->intr_en = true;
 		if (ret) {
 			ETHQOSINFO("Failed to enable XPCS interrupt, using non-interrupt mode\n");
 			priv->hw->qxpcs->intr_en = false;
-			goto out;
 		}
-		priv->hw->qxpcs->intr_en = true;
 	} else {
 		ETHQOSINFO("No DTSI entry found for XPCS interrupt, using non-interrupt mode\n");
 		priv->hw->qxpcs->intr_en = false;
 	}
-
-out:
-	if (!priv->plat->mac2mac_en)
-		phylink_set_pcs(priv->phylink, &priv->hw->qxpcs->pcs);
 
 #ifdef CONFIG_MSM_BOOT_TIME_MARKER
 	update_marker("M - Ethernet xpcs init end");
