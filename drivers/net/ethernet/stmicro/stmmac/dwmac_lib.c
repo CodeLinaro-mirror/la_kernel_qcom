@@ -10,7 +10,6 @@
 #include <linux/iopoll.h>
 #include "common.h"
 #include "dwmac_dma.h"
-#include "stmmac.h"
 
 #define GMAC_HI_REG_AE		0x80000000
 
@@ -33,8 +32,7 @@ void dwmac_enable_dma_transmission(void __iomem *ioaddr)
 	writel(1, ioaddr + DMA_XMT_POLL_DEMAND);
 }
 
-void dwmac_enable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
-			  u32 chan, bool rx, bool tx)
+void dwmac_enable_dma_irq(void __iomem *ioaddr, u32 chan, bool rx, bool tx)
 {
 	u32 value = readl(ioaddr + DMA_INTR_ENA);
 
@@ -46,8 +44,7 @@ void dwmac_enable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
 	writel(value, ioaddr + DMA_INTR_ENA);
 }
 
-void dwmac_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
-			   u32 chan, bool rx, bool tx)
+void dwmac_disable_dma_irq(void __iomem *ioaddr, u32 chan, bool rx, bool tx)
 {
 	u32 value = readl(ioaddr + DMA_INTR_ENA);
 
@@ -59,30 +56,28 @@ void dwmac_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
 	writel(value, ioaddr + DMA_INTR_ENA);
 }
 
-void dwmac_dma_start_tx(struct stmmac_priv *priv, void __iomem *ioaddr,
-			u32 chan)
+void dwmac_dma_start_tx(void __iomem *ioaddr, u32 chan)
 {
 	u32 value = readl(ioaddr + DMA_CONTROL);
 	value |= DMA_CONTROL_ST;
 	writel(value, ioaddr + DMA_CONTROL);
 }
 
-void dwmac_dma_stop_tx(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan)
+void dwmac_dma_stop_tx(void __iomem *ioaddr, u32 chan)
 {
 	u32 value = readl(ioaddr + DMA_CONTROL);
 	value &= ~DMA_CONTROL_ST;
 	writel(value, ioaddr + DMA_CONTROL);
 }
 
-void dwmac_dma_start_rx(struct stmmac_priv *priv, void __iomem *ioaddr,
-			u32 chan)
+void dwmac_dma_start_rx(void __iomem *ioaddr, u32 chan)
 {
 	u32 value = readl(ioaddr + DMA_CONTROL);
 	value |= DMA_CONTROL_SR;
 	writel(value, ioaddr + DMA_CONTROL);
 }
 
-void dwmac_dma_stop_rx(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan)
+void dwmac_dma_stop_rx(void __iomem *ioaddr, u32 chan)
 {
 	u32 value = readl(ioaddr + DMA_CONTROL);
 	value &= ~DMA_CONTROL_SR;
@@ -159,10 +154,9 @@ static void show_rx_process_state(unsigned int status)
 }
 #endif
 
-int dwmac_dma_interrupt(struct stmmac_priv *priv, void __iomem *ioaddr,
+int dwmac_dma_interrupt(void __iomem *ioaddr,
 			struct stmmac_extra_stats *x, u32 chan, u32 dir)
 {
-	struct stmmac_pcpu_stats *stats = this_cpu_ptr(priv->xstats.pcpu_stats);
 	int ret = 0;
 	/* read the status register (CSR5) */
 	u32 intr_status = readl(ioaddr + DMA_STATUS);
@@ -191,10 +185,14 @@ int dwmac_dma_interrupt(struct stmmac_priv *priv, void __iomem *ioaddr,
 		if (unlikely(intr_status & DMA_STATUS_OVF))
 			x->rx_overflow_irq++;
 
-		if (unlikely(intr_status & DMA_STATUS_RU))
+		if (unlikely(intr_status & DMA_STATUS_RU)) {
 			x->rx_buf_unav_irq++;
-		if (unlikely(intr_status & DMA_STATUS_RPS))
+			x->rxq_stats[chan].rx_buf_unav_irq++;
+		}
+		if (unlikely(intr_status & DMA_STATUS_RPS)) {
 			x->rx_process_stopped_irq++;
+			x->rxq_stats[chan].rx_process_stopped_irq++;
+		}
 		if (unlikely(intr_status & DMA_STATUS_RWT))
 			x->rx_watchdog_irq++;
 		if (unlikely(intr_status & DMA_STATUS_ETI))
@@ -205,25 +203,25 @@ int dwmac_dma_interrupt(struct stmmac_priv *priv, void __iomem *ioaddr,
 		}
 		if (unlikely(intr_status & DMA_STATUS_FBI)) {
 			x->fatal_bus_error_irq++;
+			x->txq_stats[chan].fatal_bus_error_irq++;
 			ret = tx_hard_error;
 		}
 	}
 	/* TX/RX NORMAL interrupts */
 	if (likely(intr_status & DMA_STATUS_NIS)) {
+		x->normal_irq_n++;
 		if (likely(intr_status & DMA_STATUS_RI)) {
 			u32 value = readl(ioaddr + DMA_INTR_ENA);
 			/* to schedule NAPI on real RIE event. */
 			if (likely(value & DMA_INTR_ENA_RIE)) {
-				u64_stats_update_begin(&stats->syncp);
-				u64_stats_inc(&stats->rx_normal_irq_n[chan]);
-				u64_stats_update_end(&stats->syncp);
+				x->rx_normal_irq_n++;
+				x->rxq_stats[chan].rx_normal_irq_n++;
 				ret |= handle_rx;
 			}
 		}
 		if (likely(intr_status & DMA_STATUS_TI)) {
-			u64_stats_update_begin(&stats->syncp);
-			u64_stats_inc(&stats->tx_normal_irq_n[chan]);
-			u64_stats_update_end(&stats->syncp);
+			x->tx_normal_irq_n++;
+			x->txq_stats[chan].tx_normal_irq_n++;
 			ret |= handle_tx;
 		}
 		if (unlikely(intr_status & DMA_STATUS_ERI))

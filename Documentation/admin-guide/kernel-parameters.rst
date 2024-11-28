@@ -223,3 +223,13 @@ Todo
 ----
 
 	Add more DRM drivers.
+
+eipv4=	[KNL] Sets ipv4 address at boot up for early ethernet.
+
+eipv6=	[KNL] Sets ipv6 address at boot up for early ethernet.
+
+ermac=	[KNL] Sets mac address at boot up for early ethernet.
+
+eiface= [KNL] Sets ethernet interface type at boot.
+
+eqos=	[KNL] Sets qos config at boot.

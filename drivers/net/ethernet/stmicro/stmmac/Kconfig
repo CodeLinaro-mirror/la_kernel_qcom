@@ -131,6 +131,20 @@ config DWMAC_QCOM_ETHQOS
 	  This selects the Qualcomm ETHQOS glue layer support for the
 	  stmmac device driver.
 
+config DWMAC_QCOM_VER3
+	bool "EMAC ETHQOS support for direwolf"
+	default n
+	depends on OF && (ARCH_QCOM || COMPILE_TEST)
+	help
+	  Support for the EMAC ETHQOS core 3.
+
+	  This selects the EMAC ETHQOS glue layer DMA and MTL offsets for
+	  the stmmac device driver for direwolf. With this config different
+	  base address for various MTL and DMA registers are selected.
+	  This config is only applicable for EMAC version 3. Other targets should
+	  not enable this config.
+
+
 config DWMAC_ROCKCHIP
 	tristate "Rockchip dwmac support"
 	default ARCH_ROCKCHIP
@@ -255,6 +269,46 @@ config DWMAC_VISCONTI
 	help
 	  Support for ethernet controller on Visconti SoCs.
 
+config DWXGMAC_QCOM_4K
+	bool "Support for 4K Virtualization of XGMAC registers"
+	depends on (ARCH_SDXPINN || ARCH_SA525 || ARCH_SDXKOVA)
+	default y
+	help
+	  This selects 4K virtualization of DMA and MTL offsets for the
+	  stmmac device driver. With this config different base addresses
+	  for various MTL and DMA registers are selected. This config is
+	  only applicable for XGMAC2 HW version. Other targets should
+	  not enable this config.
+
+config ETHQOS_QCOM_VER4
+	bool "Emac ethqos support for HW version 4"
+	depends on (ARCH_SDXPINN || ARCH_SA525 || ARCH_SDXKOVA)
+	default y
+	help
+	  This selects proper registers and corresponding bit mapping
+	  for the  configuration of IO Macro block. This config is
+	  only applicable for EMAC version 4. Other targets should
+	  not enable this config.
+
+config ETHQOS_QCOM_SERDES
+	bool "Enable Serdes driver"
+	depends on STMMAC_ETH
+	default y
+	help
+	  SerDes is to provide data transmission over a single line or
+	  a differential pair in order to minimize the number of I/O pins
+	  and interconnects.
+	  Serdes driver by default comes up on 1Gbps mode in SGMII and USXGMII
+	  due to h/w limitation.
+
+config ETHQOS_QCOM_SCM
+	bool "Enable Secure monitor calls"
+	depends on ETHQOS_QCOM_VER4
+	help
+	  Secure monitor calls are needed to pass parameters to EMAC driver running
+	  in secure subsystem so it can configure EMAC wrapper and IO macro hardware
+	  blocks. This is applicable for all interface modes and all speeds for
+	  some specific hardware configurations.
 endif
 
 config DWMAC_INTEL

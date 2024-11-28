@@ -8,7 +8,7 @@
 #include "common.h"
 #include "dwxgmac2.h"
 
-static int dwxgmac2_get_tx_status(struct stmmac_extra_stats *x,
+static int dwxgmac2_get_tx_status(void *data, struct stmmac_extra_stats *x,
 				  struct dma_desc *p, void __iomem *ioaddr)
 {
 	unsigned int tdes3 = le32_to_cpu(p->des3);
@@ -22,9 +22,10 @@ static int dwxgmac2_get_tx_status(struct stmmac_extra_stats *x,
 	return ret;
 }
 
-static int dwxgmac2_get_rx_status(struct stmmac_extra_stats *x,
-				  struct dma_desc *p)
+static int dwxgmac2_get_rx_status_err(void *data, struct stmmac_extra_stats *x,
+				      struct dma_desc *p, int *status)
 {
+	struct net_device_stats *stats = (struct net_device_stats *)data;
 	unsigned int rdes3 = le32_to_cpu(p->des3);
 
 	if (unlikely(rdes3 & XGMAC_RDES3_OWN))
@@ -33,10 +34,45 @@ static int dwxgmac2_get_rx_status(struct stmmac_extra_stats *x,
 		return discard_frame;
 	if (likely(!(rdes3 & XGMAC_RDES3_LD)))
 		return rx_not_ls;
-	if (unlikely((rdes3 & XGMAC_RDES3_ES) && (rdes3 & XGMAC_RDES3_LD)))
+	if (unlikely((rdes3 & XGMAC_RDES3_ES) && (rdes3 & XGMAC_RDES3_LD))) {
+		if (unlikely(((rdes3 & XGMAC_RDES3_ET) >> 16) == XGMAC_RDES3_WDT)) {
+			x->rx_watchdog++;
+			*status = WDT_ERR;
+		}
+
+		if (unlikely(((rdes3 & XGMAC_RDES3_ET) >> 16) == XGMAC_RDES3_OVERFLOW)) {
+			x->rx_gmac_overflow++;
+			*status = OVERFLOW_ERR;
+		}
+
+		if (unlikely(((rdes3 & XGMAC_RDES3_ET) >> 16) == XGMAC_RDES3_CRC)) {
+			x->rx_crc_errors++;
+			stats->rx_crc_errors++;
+			*status = CRC_ERR;
+		}
+
+		if (unlikely(((rdes3 & XGMAC_RDES3_ET) >> 16) == XGMAC_RDES3_DRIBBLE)) {
+			x->dribbling_bit++;
+			*status = DRIBBLE_ERR;
+		}
+
+		if (unlikely(((rdes3 & XGMAC_RDES3_ET) >> 16) == XGMAC_RDES3_RECEIVE_ERROR)) {
+			x->rx_mii++;
+			*status = RECEIVE_ERR;
+		}
+
 		return discard_frame;
+	}
 
 	return good_frame;
+}
+
+static int dwxgmac2_get_rx_status(void *data, struct stmmac_extra_stats *x,
+				  struct dma_desc *p)
+{
+	int status;
+
+	return dwxgmac2_get_rx_status_err(data, x, p, &status);
 }
 
 static int dwxgmac2_get_tx_len(struct dma_desc *p)
@@ -239,6 +275,11 @@ static void dwxgmac2_set_mss(struct dma_desc *p, unsigned int mss)
 	p->des3 = cpu_to_le32(XGMAC_TDES3_CTXT | XGMAC_TDES3_TCMSSV);
 }
 
+static void dwxgmac2_get_addr(struct dma_desc *p, unsigned int *addr)
+{
+	*addr = le32_to_cpu(p->des0);
+}
+
 static void dwxgmac2_set_addr(struct dma_desc *p, dma_addr_t addr)
 {
 	p->des0 = cpu_to_le32(lower_32_bits(addr));
@@ -341,9 +382,73 @@ static void dwxgmac2_set_tbs(struct dma_edesc *p, u32 sec, u32 nsec)
 	p->des7 = 0;
 }
 
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
+static void dwxgmac2_set_hw_ts(struct dma_desc *p, u32 pid)
+{
+	p->des0 = 0;
+	p->des1 = 0;
+	p->des2 = 0;
+	p->des3 = 0;
+	p->des0 = cpu_to_le32(pid & XGMAC_TDES0_TTSL);
+	p->des3 |= cpu_to_le32(XGMAC_TDES3_CTXT);
+	p->des3 |= cpu_to_le32(XGMAC_TDES3_PIDV);
+}
+#endif
+
+static void dwxgmac2_display_ring(void *head, unsigned int size, bool rx,
+				  dma_addr_t dma_rx_phy, unsigned int desc_size)
+{
+	dma_addr_t dma_addr;
+	int i;
+
+	pr_info("%s descriptor ring:\n", rx ? "RX" : "TX");
+
+	if (desc_size == sizeof(struct dma_desc)) {
+		struct dma_desc *p = (struct dma_desc *)head;
+
+		for (i = 0; i < size; i++) {
+			dma_addr = dma_rx_phy + i * sizeof(*p);
+			pr_info("%03d [%pad]: 0x%x 0x%x 0x%x 0x%x\n",
+				i, &dma_addr,
+				le32_to_cpu(p->des0), le32_to_cpu(p->des1),
+				le32_to_cpu(p->des2), le32_to_cpu(p->des3));
+			p++;
+		}
+	} else if (desc_size == sizeof(struct dma_extended_desc)) {
+		struct dma_extended_desc *extp = (struct dma_extended_desc *)head;
+
+		for (i = 0; i < size; i++) {
+			dma_addr = dma_rx_phy + i * sizeof(*extp);
+			pr_info("%03d [%pad]: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+				i, &dma_addr,
+				le32_to_cpu(extp->basic.des0), le32_to_cpu(extp->basic.des1),
+				le32_to_cpu(extp->basic.des2), le32_to_cpu(extp->basic.des3),
+				le32_to_cpu(extp->des4), le32_to_cpu(extp->des5),
+				le32_to_cpu(extp->des6), le32_to_cpu(extp->des7));
+			extp++;
+		}
+	} else if (desc_size == sizeof(struct dma_edesc)) {
+		struct dma_edesc *ep = (struct dma_edesc *)head;
+
+		for (i = 0; i < size; i++) {
+			dma_addr = dma_rx_phy + i * sizeof(*ep);
+			pr_info("%03d [%pad]: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+				i, &dma_addr,
+				le32_to_cpu(ep->des4), le32_to_cpu(ep->des5),
+				le32_to_cpu(ep->des6), le32_to_cpu(ep->des7),
+				le32_to_cpu(ep->basic.des0), le32_to_cpu(ep->basic.des1),
+				le32_to_cpu(ep->basic.des2), le32_to_cpu(ep->basic.des3));
+			ep++;
+		}
+	} else {
+		pr_err("Unsupported descriptor!\n");
+	}
+}
+
 const struct stmmac_desc_ops dwxgmac210_desc_ops = {
 	.tx_status = dwxgmac2_get_tx_status,
 	.rx_status = dwxgmac2_get_rx_status,
+	.rx_status_err = dwxgmac2_get_rx_status_err,
 	.get_tx_len = dwxgmac2_get_tx_len,
 	.get_tx_owner = dwxgmac2_get_tx_owner,
 	.set_tx_owner = dwxgmac2_set_tx_owner,
@@ -361,6 +466,7 @@ const struct stmmac_desc_ops dwxgmac210_desc_ops = {
 	.init_rx_desc = dwxgmac2_init_rx_desc,
 	.init_tx_desc = dwxgmac2_init_tx_desc,
 	.set_mss = dwxgmac2_set_mss,
+	.get_addr = dwxgmac2_get_addr,
 	.set_addr = dwxgmac2_set_addr,
 	.clear = dwxgmac2_clear,
 	.get_rx_hash = dwxgmac2_get_rx_hash,
@@ -370,4 +476,8 @@ const struct stmmac_desc_ops dwxgmac210_desc_ops = {
 	.set_vlan_tag = dwxgmac2_set_vlan_tag,
 	.set_vlan = dwxgmac2_set_vlan,
 	.set_tbs = dwxgmac2_set_tbs,
+	.display_ring = dwxgmac2_display_ring,
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
+	.set_hw_ts = dwxgmac2_set_hw_ts,
+#endif
 };

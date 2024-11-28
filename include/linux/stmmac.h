@@ -14,6 +14,7 @@
 
 #include <linux/platform_device.h>
 #include <linux/phy.h>
+#include <linux/netdevice.h>
 
 #define MTL_MAX_RX_QUEUES	8
 #define MTL_MAX_TX_QUEUES	8
@@ -76,8 +77,6 @@
 			| DMA_AXI_BLEN_32 | DMA_AXI_BLEN_64 \
 			| DMA_AXI_BLEN_128 | DMA_AXI_BLEN_256)
 
-struct stmmac_priv;
-
 /* Platfrom data for platform device structure's platform_data field */
 
 struct stmmac_mdio_bus_data {
@@ -135,11 +134,15 @@ struct stmmac_rxq_cfg {
 	u8 pkt_route;
 	bool use_prio;
 	u32 prio;
+	bool thresholdmode;
+	u32 threshold_byte;
+	u32 fifo_sz_bytes;
+	bool skip_sw;
+	bool mbcast_route;
 };
 
 struct stmmac_txq_cfg {
 	u32 weight;
-	bool coe_unsupported;
 	u8 mode_to_use;
 	/* Credit Base Shaper parameters */
 	u32 send_slope;
@@ -149,6 +152,8 @@ struct stmmac_txq_cfg {
 	bool use_prio;
 	u32 prio;
 	int tbs_en;
+	u32 fifo_sz_bytes;
+	bool skip_sw;
 };
 
 /* FPE link state */
@@ -190,59 +195,39 @@ struct stmmac_safety_feature_cfg {
 	u32 tmouten;
 };
 
-/* Addresses that may be customized by a platform */
-struct dwmac4_addrs {
-	u32 dma_chan;
-	u32 dma_chan_offset;
-	u32 mtl_chan;
-	u32 mtl_chan_offset;
-	u32 mtl_ets_ctrl;
-	u32 mtl_ets_ctrl_offset;
-	u32 mtl_txq_weight;
-	u32 mtl_txq_weight_offset;
-	u32 mtl_send_slp_cred;
-	u32 mtl_send_slp_cred_offset;
-	u32 mtl_high_cred;
-	u32 mtl_high_cred_offset;
-	u32 mtl_low_cred;
-	u32 mtl_low_cred_offset;
+struct emac_emb_smmu_cb_ctx {
+	bool valid;
+	struct platform_device *pdev_master;
+	struct platform_device *smmu_pdev;
+	struct dma_iommu_mapping *mapping;
+	struct iommu_domain *iommu_domain;
+	u32 va_start;
+	u32 va_size;
+	u32 va_end;
+	int ret;
 };
 
-#define STMMAC_FLAG_HAS_INTEGRATED_PCS		BIT(0)
-#define STMMAC_FLAG_SPH_DISABLE			BIT(1)
-#define STMMAC_FLAG_USE_PHY_WOL			BIT(2)
-#define STMMAC_FLAG_HAS_SUN8I			BIT(3)
-#define STMMAC_FLAG_TSO_EN			BIT(4)
-#define STMMAC_FLAG_SERDES_UP_AFTER_PHY_LINKUP	BIT(5)
-#define STMMAC_FLAG_VLAN_FAIL_Q_EN		BIT(6)
-#define STMMAC_FLAG_MULTI_MSI_EN		BIT(7)
-#define STMMAC_FLAG_EXT_SNAPSHOT_EN		BIT(8)
-#define STMMAC_FLAG_INT_SNAPSHOT_EN		BIT(9)
-#define STMMAC_FLAG_RX_CLK_RUNS_IN_LPI		BIT(10)
-#define STMMAC_FLAG_EN_TX_LPI_CLOCKGATING	BIT(11)
-#define STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY	BIT(12)
+enum ch_owner {
+	NOT_USED = 0,
+	USE_IN_STMMAC_SW = 1,
+	USE_IN_OFFLOADER = 2,
+};
+
+struct ch_to_tc_map {
+	bool tc_rx_info[MTL_MAX_TX_QUEUES];
+	bool tc_tx_info[MTL_MAX_RX_QUEUES];
+	u32 ch_to_tc_map_tx[MTL_MAX_TX_QUEUES];
+	u32 ch_to_tc_map_rx[MTL_MAX_RX_QUEUES];
+};
 
 struct plat_stmmacenet_data {
 	int bus_id;
 	int phy_addr;
-	/* MAC ----- optional PCS ----- SerDes ----- optional PHY ----- Media
-	 *       ^                               ^
-	 * mac_interface                   phy_interface
-	 *
-	 * mac_interface is the MAC-side interface, which may be the same
-	 * as phy_interface if there is no intervening PCS. If there is a
-	 * PCS, then mac_interface describes the interface mode between the
-	 * MAC and PCS, and phy_interface describes the interface mode
-	 * between the PCS and PHY.
-	 */
-	phy_interface_t mac_interface;
-	/* phy_interface is the PHY-side interface - the interface used by
-	 * an attached PHY.
-	 */
+	int interface;
 	phy_interface_t phy_interface;
 	struct stmmac_mdio_bus_data *mdio_bus_data;
 	struct device_node *phy_node;
-	struct fwnode_handle *port_node;
+	struct device_node *phylink_node;
 	struct device_node *mdio_node;
 	struct stmmac_dma_cfg *dma_cfg;
 	struct stmmac_est *est;
@@ -264,19 +249,25 @@ struct plat_stmmacenet_data {
 	int unicast_filter_entries;
 	int tx_fifo_size;
 	int rx_fifo_size;
-	u32 host_dma_width;
+	u32 addr64;
 	u32 rx_queues_to_use;
 	u32 tx_queues_to_use;
 	u8 rx_sched_algorithm;
 	u8 tx_sched_algorithm;
 	struct stmmac_rxq_cfg rx_queues_cfg[MTL_MAX_RX_QUEUES];
 	struct stmmac_txq_cfg tx_queues_cfg[MTL_MAX_TX_QUEUES];
-	void (*fix_mac_speed)(void *priv, unsigned int speed, unsigned int mode);
-	int (*fix_soc_reset)(void *priv, void __iomem *ioaddr);
+	void (*fix_mac_speed)(void *priv, unsigned int speed);
+	void (*xpcs_linkup)(void *priv, unsigned int speed);
 	int (*serdes_powerup)(struct net_device *ndev, void *priv);
 	void (*serdes_powerdown)(struct net_device *ndev, void *priv);
 	void (*speed_mode_2500)(struct net_device *ndev, void *priv);
-	void (*ptp_clk_freq_config)(struct stmmac_priv *priv);
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
+	int (*enable_power_saving)(struct net_device *ndev, bool enable);
+	void (*xpcs_powersaving)(struct net_device *ndev, bool enable);
+#endif
+	int (*serdes_powersaving)(struct net_device *ndev, void *priv, bool power_on,
+	     bool needs_reset);
+	void (*ptp_clk_freq_config)(void *priv);
 	int (*init)(struct platform_device *pdev, void *priv);
 	void (*exit)(struct platform_device *pdev, void *priv);
 	struct mac_device_info *(*setup)(void *priv);
@@ -284,27 +275,47 @@ struct plat_stmmacenet_data {
 	int (*crosststamp)(ktime_t *device, struct system_counterval_t *system,
 			   void *ctx);
 	void (*dump_debug_regs)(void *priv);
+	unsigned int (*get_eth_type)(unsigned char *buf);
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
+	void (*set_skb_prio)(void *priv_n, struct sk_buff *skb, u32 queue);
+	bool (*is_skprio_routing)(void *priv);
+#endif
+	int (*enable_wol)(struct net_device *ndev, struct ethtool_wolinfo *wol);
+	int (*release_dma_resources)(struct net_device *ndev);
+	int (*request_dma_resources)(struct net_device *ndev);
 	void *bsp_priv;
 	struct clk *stmmac_clk;
 	struct clk *pclk;
 	struct clk *clk_ptp_ref;
 	unsigned int clk_ptp_rate;
+	unsigned int clk_ptp_req_rate;
 	unsigned int clk_ref_rate;
 	unsigned int mult_fact_100ns;
 	s32 ptp_max_adj;
-	u32 cdc_error_adj;
 	struct reset_control *stmmac_rst;
 	struct reset_control *stmmac_ahb_rst;
+	struct reset_control *rgmii_rst;
+	struct gpio_desc *reset_phy1_gpio;
+	bool is_valid_eth_intf;
 	struct stmmac_axi *axi;
 	int has_gmac4;
+	bool has_sun8i;
+	bool tso_en;
 	int rss_en;
 	int mac_port_sel_speed;
+	bool en_tx_lpi_clockgating;
+	bool rx_clk_runs_in_lpi;
 	int has_xgmac;
+	bool vlan_fail_q_en;
 	u8 vlan_fail_q;
 	unsigned int eee_usecs_rate;
 	struct pci_dev *pdev;
+	bool has_crossts;
 	int int_snapshot_num;
 	int ext_snapshot_num;
+	bool int_snapshot_en;
+	bool ext_snapshot_en;
+	bool multi_msi_en;
 	int msi_mac_vec;
 	int msi_wol_vec;
 	int msi_lpi_vec;
@@ -312,7 +323,57 @@ struct plat_stmmacenet_data {
 	int msi_sfty_ue_vec;
 	int msi_rx_base_vec;
 	int msi_tx_base_vec;
-	const struct dwmac4_addrs *dwmac4_addrs;
-	unsigned int flags;
+	bool use_phy_wol;
+	enum ch_owner tx_dma_ch_owner[MTL_MAX_TX_QUEUES];
+	enum ch_owner rx_dma_ch_owner[MTL_MAX_RX_QUEUES];
+	struct emac_emb_smmu_cb_ctx stmmac_emb_smmu_ctx;
+	bool phy_intr_en_extn_stm;
+	int has_c22_mdio_probe_capability;
+	int has_c45_mdio_probe_capability;
+
+	u16	(*tx_select_queue)
+		(struct net_device *dev, struct sk_buff *skb,
+		 struct net_device *sb_dev);
+	unsigned int (*get_plat_tx_coal_frames)
+		(struct sk_buff *skb);
+	int (*handle_mac_err)(void *priv, int type, int chan);
+	int (*handle_prv_ioctl)(struct net_device *dev, struct ifreq *ifr,
+		int cmd);
+	void (*request_phy_wol)(void *plat);
+	int (*init_pps)(void *priv);
+	int mac2mac_speed;
+	u32 mac2mac_en;
+	int mac2mac_link;
+	bool early_eth;
+	bool sph_disable;
+	void (*phy_irq_enable)(void *priv);
+	void (*phy_irq_disable)(void *priv);
+	void (*wol_irq_enable)(void *priv);
+	void (*wol_irq_disable)(void *priv);
+	int port_num;
+	bool pcs_v3;
+	bool pm_lite;
+	bool fixed_phy_mode;
+	bool fixed_phy_mode_needs_mdio;
+	bool crc_strip_en;
+	bool plat_wait_for_emac_rx_clk_en;
+	bool rx_clk_rdy;
+	bool mac_err_rec;
+	bool mdio_op_busy;
+	atomic_t phy_clks_suspended;
+	struct completion mdio_op;
+	bool mac_suspended;
+	bool separate_wol_pin;
+	bool mka_mcbcq_filtering;
+	bool probe_invoke_if_up;
+	int rx_qos_queues_to_use;
+	int tx_qos_queues_to_use;
+	bool is_config_supp;
+	char qoscfg[4];
+	bool qos_active;
+	struct ch_to_tc_map qos_ch_map;
+	bool enable_pfc;
+	bool qos_use_skprio;
+	bool qos_supported;
 };
 #endif
