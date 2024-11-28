@@ -338,11 +338,8 @@ struct dwc3_msm_req_complete {
 
 enum dwc3_drd_state {
 	DRD_STATE_UNDEFINED = 0,
-
 	DRD_STATE_IDLE,
 	DRD_STATE_PERIPHERAL,
-	DRD_STATE_PERIPHERAL_SUSPEND,
-
 	DRD_STATE_HOST,
 };
 
@@ -350,7 +347,6 @@ static const char *const state_names[] = {
 	[DRD_STATE_UNDEFINED] = "undefined",
 	[DRD_STATE_IDLE] = "idle",
 	[DRD_STATE_PERIPHERAL] = "peripheral",
-	[DRD_STATE_PERIPHERAL_SUSPEND] = "peripheral_suspend",
 	[DRD_STATE_HOST] = "host",
 };
 
@@ -556,7 +552,6 @@ struct dwc3_msm {
 	bool			check_eud_state;
 	bool			vbus_active;
 	bool			eud_active;
-	bool			suspend;
 	bool			use_pdc_interrupts;
 	enum dwc3_id_state	id_state;
 	bool			use_pwr_event_for_wakeup;
@@ -3695,6 +3690,7 @@ static void dwc3_set_phy_speed_flags(struct dwc3_msm *mdwc)
 		return;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
+	reg = dwc3_msm_read_reg(mdwc->base, DWC3_DSTS);
 
 	mdwc->hs_phy->flags &= ~(PHY_HSFS_MODE | PHY_LS_MODE);
 	if (mdwc->in_host_mode) {
@@ -3709,7 +3705,7 @@ static void dwc3_set_phy_speed_flags(struct dwc3_msm *mdwc)
 					mdwc->hs_phy->flags |= PHY_LS_MODE;
 			}
 		}
-	} else if (mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
+	} else if (mdwc->in_device_mode && (DWC3_DSTS_USBLNKST(reg) == DWC3_LINK_STATE_U3)) {
 		if (dwc->gadget->speed == USB_SPEED_HIGH ||
 			dwc->gadget->speed == USB_SPEED_FULL)
 			mdwc->hs_phy->flags |= PHY_HSFS_MODE;
@@ -4052,28 +4048,11 @@ static int dwc3_msm_check_suspend(struct dwc3_msm *mdwc)
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
 
-	if (dwc) {
-		if (!mdwc->in_host_mode) {
-			evt = dwc->ev_buf;
-			if ((evt->flags & DWC3_EVENT_PENDING)) {
-				dev_dbg(mdwc->dev,
-					"%s: %d device events pending, abort suspend\n",
+	if (dwc && !mdwc->in_host_mode) {
+		evt = dwc->ev_buf;
+		if ((evt->flags & DWC3_EVENT_PENDING)) {
+			dev_dbg(mdwc->dev, "%s: %d device events pending, abort suspend\n",
 					__func__, evt->count / 4);
-				return -EBUSY;
-			}
-		}
-
-		/*
-		 * Check if device is not in CONFIGURED state
-		 * then check controller state of L2 and break
-		 * LPM sequence. Check this for device bus suspend case.
-		 */
-		if ((mdwc->dr_mode == USB_DR_MODE_OTG &&
-				mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) &&
-				(dwc->gadget->state != USB_STATE_CONFIGURED)) {
-			pr_err("%s(): Trying to go in LPM with state:%d\n",
-						__func__, dwc->gadget->state);
-			pr_err("%s(): LPM is not performed.\n", __func__);
 			return -EBUSY;
 		}
 	}
@@ -4458,14 +4437,6 @@ static void dwc3_ext_event_notify(struct dwc3_msm *mdwc)
 	} else {
 		dbg_log_string("XCVR: BSV clear\n");
 		clear_bit(B_SESS_VLD, &mdwc->inputs);
-	}
-
-	if (mdwc->suspend) {
-		dbg_log_string("XCVR: SUSP set\n");
-		set_bit(B_SUSPEND, &mdwc->inputs);
-	} else {
-		dbg_log_string("XCVR: SUSP clear\n");
-		clear_bit(B_SUSPEND, &mdwc->inputs);
 	}
 
 	if (mdwc->check_eud_state && mdwc->vbus_active) {
@@ -7206,51 +7177,10 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 			dbg_event(0xFF, "!BSV psync",
 				atomic_read(&mdwc->dev->power.usage_count));
 			work = true;
-		} else if (test_bit(B_SUSPEND, &mdwc->inputs) &&
-			test_bit(B_SESS_VLD, &mdwc->inputs)) {
-			dev_dbg(mdwc->dev, "BPER bsv && susp\n");
-			mdwc->drd_state = DRD_STATE_PERIPHERAL_SUSPEND;
-			/*
-			 * Decrement pm usage count upon bus suspend.
-			 * Count was incremented either upon cable
-			 * connect in DRD_STATE_IDLE or host
-			 * initiated resume after bus suspend in
-			 * DRD_STATE_PERIPHERAL_SUSPEND state
-			 */
-			pm_runtime_mark_last_busy(mdwc->dev);
-			pm_runtime_put_autosuspend(mdwc->dev);
-			dbg_event(0xFF, "SUSP put",
-				atomic_read(&mdwc->dev->power.usage_count));
 		} else if (test_and_clear_bit(CONN_DONE, &mdwc->inputs) && mdwc->wcd_usbss) {
 			wcd_usbss_dpdm_switch_update(true,
 					dwc->gadget->speed == USB_SPEED_HIGH ||
 					mdwc->eud_active);
-		}
-		break;
-
-	case DRD_STATE_PERIPHERAL_SUSPEND:
-		if (!test_bit(B_SESS_VLD, &mdwc->inputs)) {
-			dev_dbg(mdwc->dev, "BSUSP: !bsv\n");
-			mdwc->drd_state = DRD_STATE_IDLE;
-			dwc3_otg_start_peripheral(mdwc, 0);
-		} else if (!test_bit(B_SUSPEND, &mdwc->inputs)) {
-			dev_dbg(mdwc->dev, "BSUSP !susp\n");
-			mdwc->drd_state = DRD_STATE_PERIPHERAL;
-			/*
-			 * Increment pm usage count upon host
-			 * initiated resume. Count was decremented
-			 * upon bus suspend in
-			 * DRD_STATE_PERIPHERAL state.
-			 */
-			ret = pm_runtime_resume_and_get(mdwc->dev);
-			if (ret < 0) {
-				dev_err(mdwc->dev, "%s: pm_runtime_resume_and_get failed\n"
-						, __func__);
-				pm_runtime_set_suspended(mdwc->dev);
-				break;
-			}
-			dbg_event(0xFF, "!SUSP gsync",
-				atomic_read(&mdwc->dev->power.usage_count));
 		}
 		break;
 
