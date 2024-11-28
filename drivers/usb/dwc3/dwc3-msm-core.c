@@ -2390,8 +2390,13 @@ static void gsi_configure_ep(struct usb_ep *ep, struct usb_gsi_request *request)
 			upper_32_bits(mdwc->dummy_gsi_db_dma));
 	dwc3_msm_write_reg(mdwc->base, GSI_DBL_ADDR_L(mdwc->gsi_reg, n),
 			lower_32_bits(mdwc->dummy_gsi_db_dma));
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 	dev_dbg(mdwc->dev, "Dummy DB Addr %pK: %llx\n",
 		&mdwc->dummy_gsi_db, mdwc->dummy_gsi_db_dma);
+#else
+	dev_dbg(mdwc->dev, "Dummy DB Addr %pK: %x\n",
+			&mdwc->dummy_gsi_db, mdwc->dummy_gsi_db_dma);
+#endif
 
 	memset(&params, 0x00, sizeof(params));
 
