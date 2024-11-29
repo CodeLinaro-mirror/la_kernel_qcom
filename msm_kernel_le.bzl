@@ -287,4 +287,4 @@ def define_msm_le(
     if "allyes" in target:
         gen_allyes_files(le_target, target)
 
-    define_extras(target)
+    define_extras(target, flavor = "le")
