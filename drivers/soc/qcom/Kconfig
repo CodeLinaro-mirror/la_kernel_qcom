@@ -287,6 +287,15 @@ config PDR_INDICATION_NOTIF_TIMEOUT
 	  the start and end of notifications, before a warning
 	  is emitted.
 
+config MSM_POWER_STATE
+	tristate "Power State driver support for Deep Sleep and Hibernate"
+	help
+	  This option enables Power State Driver which is the kernel component
+	  for supporting deep sleep and hibernate. Create a power_state device
+	  node for user space communication. User space client can open device
+	  node for communication required for handling deep sleep and hibernate
+	  modes.
+
 config QCOM_QMI_HELPERS
 	tristate
 	depends on NET
@@ -1192,6 +1201,15 @@ config QCOM_S2D_VENDOR_HOOK
 	  hibernation. Callbacks implemented here are called from the
           core kernel and help to do bootloader hibernation specific job.
 	  Enable this if bootloader hibernation is enabled.
+
+config MSM_BAM_DMUX
+	bool "BAM Data Mux Driver"
+	depends on SPS
+	help
+	  Support Muxed Data Channels over BAM interface.
+	  BAM has a limited number of pipes.  This driver
+	  provides a means to support more logical channels
+	  via muxing than BAM could without muxing.
 
 config QCOM_SECURE_HIBERNATION
 	tristate "Add security support to hibernation"

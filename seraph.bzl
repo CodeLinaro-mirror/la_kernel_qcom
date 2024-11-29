@@ -31,6 +31,11 @@ def define_seraph():
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/smem.ko",
         "drivers/soc/qcom/socinfo.ko",
+        "drivers/usb/dwc3/dwc3-msm.ko",
+        "drivers/usb/phy/phy-generic.ko",
+        "drivers/usb/phy/phy-qcom-emu.ko",
+        "net/mac80211/mac80211.ko",
+        "net/wireless/cfg80211.ko",
     ]
 
     _seraph_consolidate_in_tree_modules = _seraph_in_tree_modules + [
