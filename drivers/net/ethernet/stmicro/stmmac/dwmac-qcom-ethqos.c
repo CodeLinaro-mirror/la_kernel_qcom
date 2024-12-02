@@ -1766,9 +1766,6 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 
 	if (priv->plat->phy_intr_en_extn_stm)
 		reinit_completion(&ethqos->clk_enable_done);
-
-	if (priv->plat->mdio_op_busy)
-		wait_for_completion(&priv->plat->mdio_op);
 	ethqos->clks_suspended = 1;
 
 	ethqos_update_rgmii_clk(ethqos, 0);
@@ -1835,10 +1832,9 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 		ethqos_update_rgmii_clk(ethqos, SPEED_10);
 
 	ethqos->clks_suspended = 0;
-	atomic_set(&priv->plat->phy_clks_suspended, 1);
+
 	if (priv->plat->phy_intr_en_extn_stm)
 		complete_all(&ethqos->clk_enable_done);
-
 	ETHQOSDBG("Exit\n");
 }
 
@@ -2701,18 +2697,21 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		return -EINVAL;
 
 	priv = netdev_priv(ndev);
-
+	mutex_lock(&priv->lock);
 	ret = ethqos_init_regulators(ethqos);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&priv->lock);
 		return ret;
-
+	}
 	ret = ethqos_init_gpio(ethqos);
 	if (ret)
 		ETHQOSINFO("GPIO init failed\n");
 
 	ret = qcom_ethqos_enable_clks(ethqos, dev);
-	if (ret)
+	if (ret) {
+		mutex_unlock(&priv->lock);
 		return ret;
+	}
 
 	ethqos_update_rgmii_clk(ethqos, ethqos->speed);
 
@@ -2739,13 +2738,14 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 
 	/* issue software reset to device */
 
+	mutex_unlock(&priv->lock);
+	atomic_set(&priv->plat->phy_clks_suspended, 0);
 	if (!netif_running(ndev)) {
 		rtnl_lock();
 		dev_open(ndev, NULL);
 		rtnl_unlock();
 		ETHQOSINFO("calling open\n");
 	}
-
 	ETHQOSINFO("end\n");
 
 	return ret;
@@ -2771,7 +2771,8 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 		return -EINVAL;
 
 	priv = netdev_priv(ndev);
-
+	atomic_set(&priv->plat->phy_clks_suspended, 1);
+	mutex_lock(&priv->lock);
 	ETHQOSINFO("start\n");
 
 	if (netif_running(ndev)) {
@@ -2792,6 +2793,7 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 	ethqos_free_gpios(ethqos);
 
 	ethqos->curr_serdes_speed = 0;
+	mutex_unlock(&priv->lock);
 
 	ETHQOSINFO("end\n");
 
