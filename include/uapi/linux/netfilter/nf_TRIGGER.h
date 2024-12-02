@@ -1,0 +1,29 @@
+/* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
+/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+#ifndef _NF_TRIGGER_H
+#define _NF_TRIGGER_H
+
+#define NFT_TRIGGER_TIMEOUT 600
+
+enum nft_porttrigger_mode {
+	NFT_MODE_TRIGGER_DNAT,
+	NFT_MODE_TRIGGER_FORWARD_IN,
+	NFT_MODE_TRIGGER_FORWARD_OUT
+};
+
+enum nft_trigger_attributes {
+	NFTA_TRIGGER_UNSPEC,
+	NFTA_TRIGGER_MODE,
+	NFTA_TRIGGER_TPROTO,
+	NFTA_TRIGGER_FPROTO,
+	NFTA_TRIGGER_TIMER,
+	NFTA_TRIGGER_TPORTS_MIN,
+	NFTA_TRIGGER_TPORTS_MAX,
+	NFTA_TRIGGER_FPORTS_MIN,
+	NFTA_TRIGGER_FPORTS_MAX,
+	__NFTA_TRIGGER_MAX,
+};
+
+#define NFTA_TRIGGER_MAX (__NFTA_TRIGGER_MAX - 1)
+
+#endif /* _NF_TRIGGER_H */
