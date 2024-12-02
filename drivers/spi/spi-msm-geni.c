@@ -2992,6 +2992,19 @@ exit_rt_resume:
 		}
 	}
 
+	if (geni_mas->is_hib_done && !geni_mas->setup) {
+		SPI_LOG_ERR(geni_mas->ipc, false, geni_mas->dev,
+				"%s: perform spi master setup\n", __func__);
+		ret = spi_geni_mas_setup(spi);
+		if (ret) {
+			SPI_LOG_ERR(geni_mas->ipc, false, geni_mas->dev,
+					"%s: Error %d spi master setup\n",
+					__func__, ret);
+			return ret;
+		}
+		geni_mas->is_hib_done = false;
+	}
+
 	if (spi->slave) {
 		if (geni_mas->is_hib_done && !geni_mas->slave_setup) {
 			SPI_LOG_ERR(geni_mas->ipc, false, geni_mas->dev,
@@ -3173,6 +3186,7 @@ static int spi_geni_hib_resume(struct device *dev)
 	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
 
 	geni_mas->slave_setup = false;
+	geni_mas->setup = false;
 	geni_se_ssc_clk_enable(&geni_mas->rsc, true);
 	geni_mas->is_hib_done = true;
 	return 0;
