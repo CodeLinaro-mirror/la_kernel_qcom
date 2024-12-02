@@ -978,13 +978,14 @@ static int update_bw_hwmon(struct bw_hwmon *hw)
 static int start_monitor(struct bw_hwmon *hwmon)
 {
 	struct hwmon_node *node = hwmon->node;
-	unsigned long mbps;
+	u64 mbps;
 	int ret;
 
 	node->prev_ts = ktime_get();
 	node->prev_ab = 0;
-	mbps = KHZ_TO_MBPS(node->cur_freqs[0].ib, hwmon->dcvs_width) *
-					node->io_percent / 100;
+
+	mbps = KHZ_TO_MBPS(node->cur_freqs[0].ib, hwmon->dcvs_width) * node->io_percent;
+	do_div(mbps, 100);
 	hwmon->up_wake_mbps = mbps;
 	hwmon->down_wake_mbps = MIN_MBPS;
 	ret = hwmon->start_hwmon(hwmon, mbps);
@@ -1972,8 +1973,11 @@ static int configure_bwmon_resources(struct platform_device *pdev, struct bwmon 
 static int configure_bwmon_hw(struct platform_device *pdev, struct bwmon *m)
 {
 	struct device *dev = &pdev->dev;
+#ifdef CONFIG_GENERIC_ARCH_TOPOLOGY
 	struct cpu_topology *cpu_topo;
-	int ret, cpu, cluster = -1;
+	int cpu, cluster = -1;
+#endif
+	int ret;
 	u32 count_unit;
 
 	if (m->spec->hw_sampling) {
@@ -2021,6 +2025,7 @@ static int configure_bwmon_hw(struct platform_device *pdev, struct bwmon *m)
 		m->hw.get_throttle_adj = mon_get_throttle_adj;
 	}
 
+#ifdef CONFIG_GENERIC_ARCH_TOPOLOGY
 	/* set cpus to track for low power io percent */
 	for_each_possible_cpu(cpu) {
 		cpu_topo = &cpu_topology[cpu];
@@ -2029,7 +2034,7 @@ static int configure_bwmon_hw(struct platform_device *pdev, struct bwmon *m)
 		cpumask_set_cpu(cpu, &m->hw.low_power_cluster_cpus);
 		cluster = cpu_topo->cluster_id;
 	}
-
+#endif
 	m->hw.is_active = false;
 
 	return 0;

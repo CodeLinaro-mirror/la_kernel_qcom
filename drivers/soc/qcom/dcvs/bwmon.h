@@ -13,9 +13,9 @@
 #define NUM_MBPS_ZONES		10
 #define UP_WAKE			1
 #define DOWN_WAKE		2
-#define MBYTE			(1ULL << 20)
-#define MBPS_TO_KHZ(mbps, w)	(mult_frac(mbps, MBYTE, w * 1000ULL))
-#define KHZ_TO_MBPS(khz, w)	(mult_frac(w * 1000ULL, khz, MBYTE))
+#define MBYTE                  (1 << 20)
+#define MBPS_TO_KHZ(mbps, w)   (mult_frac(mbps, MBYTE, w * 1000))
+#define KHZ_TO_MBPS(khz, w)    (mult_frac(w * 1000, khz, MBYTE))
 #define to_bwmon(ptr)		container_of(ptr, struct bwmon, hw)
 #define MAX_NAME_SIZE		64
 #define MAX_LOW_POWER_CLUSTERS	8
