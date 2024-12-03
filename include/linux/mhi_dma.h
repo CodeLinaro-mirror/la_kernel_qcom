@@ -226,6 +226,7 @@ struct mhi_dma_ops {
 				  enum mhi_dma_mstate mstate_info);
 	int (*mhi_dma_resume)(struct mhi_dma_function_params function);
 	int (*mhi_dma_suspend)(struct mhi_dma_function_params function, bool force);
+	int (*mhi_dma_get_ep_mapping)(u8 channel_id);
 };
 
 #if IS_ENABLED(CONFIG_MSM_MHI_DEV)
@@ -537,5 +538,17 @@ void *mhi_dma_alloc_buffer(size_t size, dma_addr_t *phys, gfp_t gfp);
  * @phys: physical address of buffer to free
  */
 void mhi_dma_free_buffer(size_t size, void *virt, dma_addr_t phys);
+
+/*
+ * mhi_dma_get_ep_mapping() - get MHI channel endpoint mapping
+ *
+ * @channel_id: MHI channel number
+ *
+ * This function is called by MHI client driver to get endpoint pipe mapping.
+ * This function is called after receiving the QTI IOCTLS.
+ *
+ * Return : IPA endpoint number
+ */
+int mhi_dma_get_ep_mapping(u8 channel_id);
 
 #endif //_MHI_DMA_H_
