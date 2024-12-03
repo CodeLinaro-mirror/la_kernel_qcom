@@ -9,6 +9,19 @@ def define_autogvm_lxc():
         # keep sorted
         "drivers/rpmsg/qcom_glink_cma.ko",
         "drivers/soc/qcom/hgsl/qcom_hgsl.ko",
+        "drivers/usb/dwc3/dwc3-msm.ko",
+        "drivers/usb/gadget/function/usb_f_cdev.ko",
+        "drivers/usb/misc/lvstest.ko",
+        "drivers/usb/misc/ehset.ko",
+        "drivers/usb/gadget/function/f_fs_ipc_log.ko",
+        "drivers/usb/phy/phy-msm-ssusb-qmp.ko",
+        "drivers/usb/gadget/function/usb_f_qdss.ko",
+        "drivers/usb/phy/phy-msm-snps-hs.ko",
+        "drivers/soc/qcom/usb_bam.ko",
+        "drivers/usb/gadget/function/usb_f_diag.ko",
+        "drivers/usb/gadget/function/usb_f_ccid.ko",
+        "drivers/usb/gadget/function/usb_f_gsi.ko",
+        "drivers/usb/mon/usbmon.ko",
     ]
 
     for variant in lxc_variants:
