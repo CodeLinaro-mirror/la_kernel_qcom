@@ -885,7 +885,7 @@ config QCOM_MINIDUMP_PANIC_DUMP
 
 config QCOM_MINIDUMP_PANIC_CPU_CONTEXT
 	bool "QCOM Minidump Panic dumps CPU Context"
-	depends on ARM64 && QCOM_MINIDUMP_PANIC_DUMP
+	depends on (ARM || ARM64) && QCOM_MINIDUMP_PANIC_DUMP
 	help
 	  This enables cpu context collection in minidump table,
 	  on panic.
@@ -918,7 +918,7 @@ config QCOM_MINIDUMP_PANIC_KTASK_STACK
 
 config QCOM_MINIDUMP_PSTORE
 	bool "QCOM Minidump Pstore dumps Support"
-	depends on ARM64 && QCOM_MINIDUMP
+	depends on (ARM || ARM64) && QCOM_MINIDUMP
 	help
 	  This enables pstore registration in minidump table.
 	  Here, pstore framework dump logs like pmsg, dmesg,
@@ -933,6 +933,15 @@ config MINIDUMP_MAX_ENTRIES
 	help
 	  This defines maximum number of entries to be allocated for application
 	  subsytem in Minidump table.
+
+config MINIDUMP_ALL_TASK_INFO
+	bool "Minidump All task info"
+	depends on QCOM_MINIDUMP
+	help
+	  Minidump runqueue dump only collect running task
+	  info by default, this enables all task info
+	  collection during panic. This can provide more
+	  debug info.
 
 config QCOM_HUNG_TASK_ENH
         tristate "QTI Hung Task Enhancement"
