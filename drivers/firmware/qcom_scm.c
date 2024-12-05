@@ -45,6 +45,8 @@ module_param(pas_shutdown_retry_max, uint, 0644);
 #define SCM_HAS_IFACE_CLK	BIT(1)
 #define SCM_HAS_BUS_CLK		BIT(2)
 
+#define SCM_NOT_INITIALIZED()  (unlikely(!__scm) ? pr_err("SCM not initialized\n") : 0)
+
 struct qcom_scm_waitq {
 	struct idr idr;
 	spinlock_t idr_lock;
@@ -386,7 +388,11 @@ int qcom_scm_set_warm_boot_addr_mc(void *entry, u32 aff0, u32 aff1, u32 aff2,
 	desc.args[4] = ~0ULL;
 	desc.args[5] = flags;
 	desc.arginfo = QCOM_SCM_ARGS(6);
-	ret = qcom_scm_call(__scm ? __scm->dev : NULL, &desc, NULL);
+
+	if (SCM_NOT_INITIALIZED())
+		return -ENODEV;
+
+	ret = qcom_scm_call(__scm->dev, &desc, NULL);
 
 	return ret;
 }
@@ -476,7 +482,10 @@ int qcom_scm_set_cold_boot_addr(void *entry, const cpumask_t *cpus)
 	desc.args[0] = flags;
 	desc.args[1] = virt_to_phys(entry);
 
-	return qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
+	if (SCM_NOT_INITIALIZED())
+		return -ENODEV;
+
+	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_set_cold_boot_addr);
 
@@ -555,7 +564,10 @@ void qcom_scm_disable_sdi(void)
 		.arginfo = QCOM_SCM_ARGS(2),
 	};
 
-	ret = qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
+	if (SCM_NOT_INITIALIZED())
+		return;
+
+	ret = qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 	if (ret)
 		pr_err("Failed to disable secure wdog debug: %d\n", ret);
 }
@@ -664,8 +676,6 @@ EXPORT_SYMBOL_GPL(qcom_scm_config_cpu_errata);
 
 void qcom_scm_phy_update_scm_level_shifter(u32 val)
 {
-	struct device *dev = __scm ? __scm->dev : NULL;
-
 	int ret;
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_BOOT,
@@ -677,7 +687,10 @@ void qcom_scm_phy_update_scm_level_shifter(u32 val)
 	desc.args[1] = 0;
 	desc.arginfo = QCOM_SCM_ARGS(2);
 
-	ret = qcom_scm_call(dev, &desc, NULL);
+	if (SCM_NOT_INITIALIZED())
+		return;
+
+	ret = qcom_scm_call(__scm->dev, &desc, NULL);
 	if (ret)
 		pr_err("Failed to update scm level shifter=0x%x\n", ret);
 
@@ -1033,7 +1046,10 @@ int qcom_scm_io_reset(void)
 		.arginfo = QCOM_SCM_ARGS(2),
 	};
 
-	return qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
+	if (SCM_NOT_INITIALIZED())
+		return -ENODEV;
+
+	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_io_reset);
 
@@ -1121,7 +1137,10 @@ void qcom_scm_deassert_ps_hold(void)
 		.arginfo = QCOM_SCM_ARGS(1),
 	};
 
-	ret = qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
+	if (SCM_NOT_INITIALIZED())
+		return;
+
+	ret = qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 	if (ret)
 		pr_err("Failed to deassert_ps_hold=0x%x\n", ret);
 }
@@ -1230,7 +1249,10 @@ void qcom_scm_mmu_sync(bool sync)
 		.arginfo = QCOM_SCM_ARGS(1),
 	};
 
-	ret = qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
+	if (SCM_NOT_INITIALIZED())
+		return;
+
+	ret = qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 
 	if (ret)
 		pr_err("MMU sync with Hypervisor off %x\n", ret);
@@ -1564,7 +1586,10 @@ int qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
 				struct qcom_scm_current_perm_info *newvms,
 				size_t newvms_sz)
 {
-	return __qcom_scm_assign_mem(__scm ? __scm->dev : NULL,
+	if (SCM_NOT_INITIALIZED())
+		return -ENODEV;
+
+	return __qcom_scm_assign_mem(__scm->dev,
 				     virt_to_phys(mem_regions), mem_regions_sz,
 				     virt_to_phys(srcvms), src_sz,
 				     virt_to_phys(newvms), newvms_sz);
