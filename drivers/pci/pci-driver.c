@@ -893,9 +893,12 @@ static int pci_pm_suspend_noirq(struct device *dev)
 		}
 	}
 
+	/* if d3hot is not supported bail out */
+	if (IS_ENABLED(CONFIG_PCI_QTI) && pci_dev->no_d3hot)
+		return 0;
+
 	if (!pci_dev->state_saved) {
 		pci_save_state(pci_dev);
-
 		/*
 		 * If the device is a bridge with a child in D0 below it,
 		 * it needs to stay in D0, so check skip_bus_pm to avoid
@@ -970,8 +973,10 @@ static int pci_pm_resume_noirq(struct device *dev)
 	 * configuration here and attempting to put them into D0 again is
 	 * pointless, so avoid doing that.
 	 */
-	if (!(skip_bus_pm && pm_suspend_no_platform()))
-		pci_pm_default_resume_early(pci_dev);
+	if (!(skip_bus_pm && pm_suspend_no_platform())) {
+		if (!IS_ENABLED(CONFIG_PCI_QTI) && !pci_dev->no_d3hot)
+			pci_pm_default_resume_early(pci_dev);
+	}
 
 	pci_fixup_device(pci_fixup_resume_early, pci_dev);
 	pcie_pme_root_status_cleanup(pci_dev);
@@ -1339,6 +1344,10 @@ static int pci_pm_runtime_suspend(struct device *dev)
 		return 0;
 	}
 
+	/* if d3hot is not supported bail out */
+	if (IS_ENABLED(CONFIG_PCI_QTI) && pci_dev->no_d3hot)
+		return 0;
+
 	if (!pci_dev->state_saved) {
 		pci_save_state(pci_dev);
 		pci_finish_runtime_suspend(pci_dev);
@@ -1353,6 +1362,10 @@ static int pci_pm_runtime_resume(struct device *dev)
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 	pci_power_t prev_state = pci_dev->current_state;
 	int error = 0;
+
+	/* we skipped d3hot processing so skip re-init */
+	if (IS_ENABLED(CONFIG_PCI_QTI) && pci_dev->no_d3hot)
+		goto skip_restore;
 
 	/*
 	 * Restoring config space is necessary even if the device is not bound
@@ -1371,6 +1384,7 @@ static int pci_pm_runtime_resume(struct device *dev)
 	if (prev_state == PCI_D3cold)
 		pci_pm_bridge_power_up_actions(pci_dev);
 
+skip_restore:
 	if (pm && pm->runtime_resume)
 		error = pm->runtime_resume(dev);
 
