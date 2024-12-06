@@ -132,8 +132,17 @@ static int cpucc_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *
 		parent_req.rate = req->rate;
 		parent_req.best_parent_hw = clk_hw_get_parent_by_index(hw,
 								       P_APCS_CPU_PLL);
+		if (!parent_req.best_parent_hw) {
+			pr_err("Can't find parent for index %u\n", P_APCS_CPU_PLL);
+			return -EINVAL;
+		}
 		req->best_parent_hw = parent_req.best_parent_hw;
 		apcs_parent = clk_hw_get_parent(req->best_parent_hw);
+
+		if (!apcs_parent) {
+			pr_err("Can't find parent for APCS\n");
+			return -EINVAL;
+		}
 		parent_req.best_parent_rate = clk_hw_get_rate(apcs_parent);
 
 		clk_hw_get_rate_range(req->best_parent_hw,
