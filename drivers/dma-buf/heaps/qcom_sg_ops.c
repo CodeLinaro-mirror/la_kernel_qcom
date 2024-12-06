@@ -14,7 +14,7 @@
  * https://lore.kernel.org/lkml/20201017013255.43568-2-john.stultz@linaro.org/
  *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/dma-buf.h>
@@ -71,6 +71,8 @@ static struct sg_table *dup_sg_table(struct sg_table *table)
 
 	new_sg = new_table->sgl;
 	for_each_sgtable_sg(table, sg, i) {
+		if (!new_sg || !sg)
+			break;
 		sg_set_page(new_sg, sg_page(sg), sg->length, sg->offset);
 		new_sg = sg_next(new_sg);
 	}
@@ -286,6 +288,8 @@ static int sgl_sync_range(struct device *dev, struct scatterlist *sgl,
 	dma_addr_t sg_dma_addr;
 
 	for_each_sg(sgl, sg, nents, i) {
+		if (!sg)
+			break;
 		if (sg_dma_len(sg) == 0)
 			break;
 
@@ -303,9 +307,10 @@ static int sgl_sync_range(struct device *dev, struct scatterlist *sgl,
 	for_each_sg(sgl, sg, nents, i) {
 		unsigned int sg_offset, sg_left, size = 0;
 
+		if (!sg)
+			break;
 		if (i == 0)
 			sg_dma_addr = sg_dma_address(sg);
-
 		len += sg->length;
 		if (len <= offset) {
 			sg_dma_addr += sg->length;
@@ -445,9 +450,14 @@ int qcom_sg_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 
 	for_each_sg(table->sgl, sg, table->nents, i) {
-		struct page *page = sg_page(sg);
+		struct page *page;
 		unsigned long remainder = vma->vm_end - addr;
-		unsigned long len = sg->length;
+		unsigned long len;
+
+		if (!sg)
+			break;
+		page = sg_page(sg);
+		len = sg->length;
 
 		if (offset >= sg->length) {
 			offset -= sg->length;
