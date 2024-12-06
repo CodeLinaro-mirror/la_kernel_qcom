@@ -1808,13 +1808,18 @@ mbim_write(struct file *fp, const char __user *buf, size_t count, loff_t *pos)
 {
 	struct f_mbim *dev = fp->private_data;
 	struct ctrl_pkt *cpkt = NULL;
-	struct usb_request *req = dev->not_port.notify_req;
+	struct usb_request *req = NULL;
 	int ret = 0;
 	unsigned long flags;
 	struct usb_cdc_notification	*event;
 
 	pr_debug("Enter(%zu)\n", count);
+	if (!dev) {
+		pr_err("%s: dev is null\n", __func__);
+		return -ENODEV;
+	}
 
+	req = dev->not_port.notify_req;
 	if (!dev || !req || !req->buf) {
 		pr_err("%s: dev %pK req %pK req->buf %pK\n",
 			__func__, dev, req, req ? req->buf : req);
@@ -1886,6 +1891,7 @@ mbim_write(struct file *fp, const char __user *buf, size_t count, loff_t *pos)
 
 	ret = usb_ep_queue(dev->not_port.notify, req, GFP_ATOMIC);
 	if (ret == -EOPNOTSUPP || (ret < 0 && ret != -EAGAIN && ret != EBUSY)) {
+		pr_err("drop ctrl pkt of len %d error %d\n", cpkt->len, ret);
 		spin_lock_irqsave(&dev->lock, flags);
 		/* check if device disconnected while we dropped lock */
 		if (atomic_read(&dev->online)) {
@@ -1895,7 +1901,6 @@ mbim_write(struct file *fp, const char __user *buf, size_t count, loff_t *pos)
 		}
 		dev->cpkt_drop_cnt++;
 		spin_unlock_irqrestore(&dev->lock, flags);
-		pr_err("drop ctrl pkt of len %d error %d\n", cpkt->len, ret);
 	} else {
 		ret = 0;
 	}
@@ -1950,6 +1955,8 @@ static long mbim_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	if (mbim_lock(&mbim->ioctl_excl))
 		return -EBUSY;
+
+	memset(&info, 0, sizeof(info));
 
 	switch (cmd) {
 	case MBIM_GET_NTB_SIZE:
@@ -2127,6 +2134,10 @@ static int mbim_init(int instances)
 	}
 
 	_mbim_dev = dev;
+	if (!dev) {
+		pr_err("mbim dev is null\n");
+		goto fail_probe;
+	}
 	ret = mbim_chrdev_init(dev);
 	if (ret) {
 		pr_err("mbim driver failed to register\n");
@@ -2167,9 +2178,10 @@ static void mbim_free_inst(struct usb_function_instance *f)
 	struct f_mbim_opts *opts = container_of(f, struct f_mbim_opts,
 						func_inst);
 
-	if (opts && opts->interf_group)
-		kfree(opts->interf_group);
+	if (!opts && !opts->interf_group && !opts->usb_mbim)
+		return;
 
+	kfree(opts->interf_group);
 	kfree(opts->usb_mbim);
 	kfree(opts);
 }
