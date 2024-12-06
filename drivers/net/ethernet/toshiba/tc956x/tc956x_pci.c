@@ -202,6 +202,8 @@
  *  VERSION     : 04-00
  *  20 Jun 2024 : 1. Version update
  *  VERSION     : 04-00-01
+ *  06 Dec 2024 : 1. Modification to support PHY_INTERFACE_MODE_10GBASER interface type
+ *  VERSION     : 04-00-02
  */
 
 #include <linux/clk-provider.h>
@@ -1190,7 +1192,11 @@ static int tc956xmac_xgmac3_default_data(struct pci_dev *pdev,
 		plat->max_speed = 10000;
 	}
 	if (plat->port_interface == ENABLE_XFI_INTERFACE) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+		plat->interface = PHY_INTERFACE_MODE_10GBASER;
+#else
 		plat->interface = PHY_INTERFACE_MODE_10GKR;
+#endif
 		plat->max_speed = 10000;
 	}
 	if (plat->port_interface == ENABLE_RGMII_INTERFACE) {

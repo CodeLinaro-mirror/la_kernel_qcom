@@ -157,6 +157,11 @@
  *  20 Jun 2024 : 1. PHY_INTERFACE_MODE_2500BASEX added to "supported" interface when SGMII interface is used.
  *                2. Coding guideline changes
  *  VERSION     : 04-00-01
+ *  06 Dec 2024 : 1. Driver compilation warnings fixed for CCflags Wmissing-prototypes
+.*                2. Modification to support PHY_INTERFACE_MODE_10GBASER interface type
+.*                3. Driver modification to use global array for WOL device name during IRQ registration
+ *                4. Replaced sprintf with snprintf
+ *  VERSION     : 04-00-02
  */
 
 #include <linux/clk.h>
@@ -317,9 +322,7 @@ static void tc956xmac_init_fs(struct net_device *dev);
 static void tc956xmac_exit_fs(struct net_device *dev);
 #endif
 #endif /* TC956X_SRIOV_PF */
-#ifdef TC956X_5_G_2_5_G_EEE_SUPPORT
-extern int phy_ethtool_set_eee_2p5(struct phy_device *phydev, struct ethtool_eee *data);
-#endif
+
 #ifdef TC956X_SRIOV_PF
 extern struct tx956x_shrd_mem tx956x_pci_shrd_mem[TC956X_TOT_CASCADE_DEV];
 
@@ -3076,7 +3079,11 @@ static void tc956xmac_mac_pcs_get_state(struct phylink_config *config,
 	if (reg_value & XGMAC_C37_AN_COMPL) {/*check if AN 37 is complete CL37_ANCMPLT_INTR*/
 		KPRINT_INFO("AN clause 37 completed");
 		if ((priv->plat->interface == PHY_INTERFACE_MODE_USXGMII) ||
-		   (priv->plat->interface == PHY_INTERFACE_MODE_10GKR)) {
+		   (priv->plat->interface == PHY_INTERFACE_MODE_10GKR)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+			|| (priv->plat->interface == PHY_INTERFACE_MODE_10GBASER)
+#endif
+			) {
 			if (reg_value & XGMAC_USXG_AN_STS_LINK_MASK) {/*check link status*/
 				state->link = 1;
 				KPRINT_INFO("XPCS USXGMII link up");
@@ -3137,7 +3144,11 @@ static int tc956xmac_mac_link_state(struct phylink_config *config,
 	if (reg_value & XGMAC_C37_AN_COMPL) {/*check if AN 37 is complete CL37_ANCMPLT_INTR*/
 		KPRINT_INFO("AN clause 37 completed");
 		if ((priv->plat->interface == PHY_INTERFACE_MODE_USXGMII) ||
-		   (priv->plat->interface == PHY_INTERFACE_MODE_10GKR)) {
+		   (priv->plat->interface == PHY_INTERFACE_MODE_10GKR)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+			|| (priv->plat->interface == PHY_INTERFACE_MODE_10GBASER)
+#endif
+			) {
 			if (reg_value & XGMAC_USXG_AN_STS_LINK_MASK) {/*check link status*/
 				state->link = 1;
 				KPRINT_INFO("XPCS USXGMII link up");
@@ -3567,7 +3578,11 @@ static void tc956xmac_mac_an_restart(struct phylink_config *config)
 	if (priv->hw->xpcs) {
 		/*Enable XPCS Autoneg*/
 		if ((priv->plat->interface == PHY_INTERFACE_MODE_10GKR) ||
-			(priv->port_interface == ENABLE_2500BASE_X_INTERFACE)) {
+			(priv->port_interface == ENABLE_2500BASE_X_INTERFACE)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+			|| (priv->plat->interface == PHY_INTERFACE_MODE_10GBASER)
+#endif
+			) {
 			enable_en = false;
 			KPRINT_INFO("%s :Port %d %s AN Enable:%d", __func__, priv->port_num, priv->dev->name, enable_en);
 		} else if (priv->plat->interface == PHY_INTERFACE_MODE_SGMII) {
@@ -4208,7 +4223,11 @@ static void tc956xmac_check_pcs_mode(struct tc956xmac_priv *priv)
 			priv->hw->pcs = TC956XMAC_PCS_SGMII;
 #endif
 		} else if ((interface == PHY_INTERFACE_MODE_USXGMII) ||
-			  (interface == PHY_INTERFACE_MODE_10GKR)) {
+			  (interface == PHY_INTERFACE_MODE_10GKR)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+			  || (interface == PHY_INTERFACE_MODE_10GBASER)
+#endif
+			  ) {
 			netdev_dbg(priv->dev, "PCS USXGMII/XFI support enabled\n");
 #ifdef TC956X
 			priv->hw->pcs = TC956XMAC_PCS_USXGMII;
@@ -4223,7 +4242,11 @@ static void tc956xmac_check_pcs_mode(struct tc956xmac_priv *priv)
 		netdev_dbg(priv->dev, "PCS SGMII support enabled\n");
 		priv->hw->xpcs = TC956XMAC_PCS_SGMII;
 	} else if ((interface == PHY_INTERFACE_MODE_USXGMII) ||
-		  (interface == PHY_INTERFACE_MODE_10GKR)) {
+		  (interface == PHY_INTERFACE_MODE_10GKR)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+		  || (interface == PHY_INTERFACE_MODE_10GBASER)
+#endif
+		  ) {
 		netdev_dbg(priv->dev, "PCS USXGMII support enabled\n");
 		priv->hw->xpcs = TC956XMAC_PCS_USXGMII;
 	}
@@ -6902,7 +6925,11 @@ static int tc956xmac_hw_setup(struct net_device *dev, bool init_ptp)
 	if (priv->hw->xpcs) {
 		/*C37 AN enable*/
 		if ((priv->plat->interface == PHY_INTERFACE_MODE_10GKR) ||
-			(priv->port_interface == ENABLE_2500BASE_X_INTERFACE))
+			(priv->port_interface == ENABLE_2500BASE_X_INTERFACE)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+			|| (priv->plat->interface == PHY_INTERFACE_MODE_10GBASER)
+#endif
+			)
 			enable_en = false;
 		else if (priv->plat->interface == PHY_INTERFACE_MODE_SGMII) {
 			if (priv->is_sgmii_2p5g == true)
@@ -7098,7 +7125,7 @@ static int tc956xmac_open(struct net_device *dev)
 #ifndef TC956X_SRIOV_VF
 	struct phy_device *phydev = NULL;
 	int addr = priv->plat->phy_addr;
-	char wol_dev_name[15];
+	char *pwol_dev_name;
 
 	KPRINT_INFO("---> light weight = %d %s : Port %d interface %s", priv->link_down_rst, __func__, priv->port_num, dev->name);
 #ifndef TC956X_WITHOUT_MDIO_WITHOUT_PHY
@@ -7377,9 +7404,10 @@ static int tc956xmac_open(struct net_device *dev)
 		if (priv->tc956x_port_pm_suspend == false) {
 			/* Request the Wake IRQ in case of another line is used for WoL */
 			if (priv->wol_irq != dev->irq) {
-				snprintf(wol_dev_name, sizeof(wol_dev_name), "%s_wol", dev->name);
+				pwol_dev_name = priv->int_name_wol;
+				snprintf(pwol_dev_name, sizeof(priv->int_name_wol), "%s_wol", dev->name);
 				ret = request_irq(priv->wol_irq, tc956xmac_wol_interrupt,
-						  IRQF_NO_SUSPEND, wol_dev_name, dev);
+						  IRQF_NO_SUSPEND, pwol_dev_name, dev);
 				if (unlikely(ret < 0)) {
 					netdev_err(priv->dev,
 						   "%s: ERROR: allocating the WoL IRQ %d (%d)\n",
@@ -16434,7 +16462,11 @@ void tc956xmac_link_change_set_power(struct tc956xmac_priv *priv, enum TC956X_PO
 
 			/*C37 AN enable*/
 			if ((priv->plat->interface == PHY_INTERFACE_MODE_10GKR) ||
-				(priv->port_interface == ENABLE_2500BASE_X_INTERFACE))
+				(priv->port_interface == ENABLE_2500BASE_X_INTERFACE)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+				|| (priv->plat->interface == PHY_INTERFACE_MODE_10GBASER)
+#endif
+				)
 				enable_en = false;
 			else if (priv->plat->interface == PHY_INTERFACE_MODE_SGMII) {
 				if (priv->is_sgmii_2p5g == true)
