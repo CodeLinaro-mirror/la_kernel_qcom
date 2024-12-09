@@ -152,7 +152,7 @@ static void i2c_msm_qup_fifo_calc_size(struct i2c_msm_ctrl *ctrl)
 /*
  * i2c_msm_tag_byte: accessor for tag as four bytes array
  */
-static u8 *i2c_msm_tag_byte(struct i2c_msm_tag *tag, int byte_n)
+static u8 *i2c_msm_tag_byte(struct i2c_msm_tag *tag, u8 byte_n)
 {
 	return ((u8 *)tag) + byte_n;
 }
