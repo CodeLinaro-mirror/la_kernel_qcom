@@ -2108,9 +2108,9 @@ static int emac_close(struct net_device *netdev)
 
 	if (adpt->irq[EMAC_WOL_IRQ].irq) {
 		phy->is_wol_enabled = false;
+		disable_irq_wake(adpt->irq[EMAC_WOL_IRQ].irq);
 		free_irq(adpt->irq[EMAC_WOL_IRQ].irq, &adpt->irq[EMAC_WOL_IRQ]);
 		phy->is_wol_irq_reg = false; //Use false instead of 0
-		disable_irq_wake(adpt->irq[EMAC_WOL_IRQ].irq);
 	}
 
 	if (!TEST_FLAG(adpt, ADPT_STATE_DOWN))

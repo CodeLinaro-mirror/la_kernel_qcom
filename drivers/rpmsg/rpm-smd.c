@@ -1665,8 +1665,6 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 
 	key = "qcom,use-rpmsg-no-sleep";
 	rpm->use_rpmsg_no_sleep = of_property_read_bool(p, key);
-	if (rpm->use_rpmsg_no_sleep)
-		pr_info("RPM using non sleep send method\n");
 
 	mutex_init(&rpm->lock);
 	init_completion(&rpm->ack);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2017, 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1205,32 +1205,16 @@ static void mbim_suspend(struct usb_function *f)
 {
 	struct f_mbim	*mbim = func_to_mbim(f);
 
-	pr_debug("%s():remote_wakeup:%d\n", __func__,
-			mbim->cdev->gadget->remote_wakeup);
 
 	if (mbim->xport == USB_GADGET_XPORT_BAM_DMUX)
 		return;
 
-	/* If the function is in Function Suspend state, avoid suspending the
-	 * MBIM function again.
-	 */
-	if ((mbim->cdev->gadget->speed == USB_SPEED_SUPER) &&
-		f->func_is_suspended)
-		return;
-
-	if (mbim->cdev->gadget->speed == USB_SPEED_SUPER)
-		mbim->remote_wakeup_enabled = f->func_wakeup_allowed;
-	else
-		mbim->remote_wakeup_enabled = mbim->cdev->gadget->remote_wakeup;
 
 	/* MBIM data interface is up only when alt setting is set to 1. */
 	if (!mbim->data_interface_up) {
 		pr_debug("MBIM data interface is not opened. Returning\n");
 		return;
 	}
-
-	if (!mbim->remote_wakeup_enabled)
-		atomic_set(&mbim->online, 0);
 
 }
 
@@ -1239,14 +1223,6 @@ static void mbim_resume(struct usb_function *f)
 	struct f_mbim	*mbim = func_to_mbim(f);
 
 	if (mbim->xport == USB_GADGET_XPORT_BAM_DMUX)
-		return;
-
-	/*
-	 * If the function is in USB3 Function Suspend state, resume is
-	 * canceled. In this case resume is done by a Function Resume request.
-	 */
-	if ((mbim->cdev->gadget->speed == USB_SPEED_SUPER) &&
-		f->func_is_suspended)
 		return;
 
 	/* resume control path by queuing notify req */
@@ -1259,10 +1235,6 @@ static void mbim_resume(struct usb_function *f)
 		pr_debug("MBIM data interface is not opened. Returning\n");
 		return;
 	}
-
-	if (!mbim->remote_wakeup_enabled)
-		atomic_set(&mbim->online, 1);
-
 }
 
 static int mbim_func_suspend(struct usb_function *f, unsigned char options)
@@ -1272,7 +1244,6 @@ static int mbim_func_suspend(struct usb_function *f, unsigned char options)
 		MBIM_FUNC_WAKEUP_EN_MASK = 0x2
 	};
 
-	bool func_wakeup_allowed;
 	struct f_mbim	*mbim = func_to_mbim(f);
 
 	if (f == NULL)
@@ -1284,23 +1255,6 @@ static int mbim_func_suspend(struct usb_function *f, unsigned char options)
 	/* Function Suspend is supported by Super Speed devices only */
 	if (mbim->cdev->gadget->speed != USB_SPEED_SUPER)
 		return -EOPNOTSUPP;
-
-	func_wakeup_allowed =
-		((options & MBIM_FUNC_WAKEUP_EN_MASK) != 0);
-
-	if (options & MBIM_FUNC_SUSPEND_MASK) {
-		f->func_wakeup_allowed = func_wakeup_allowed;
-		if (!f->func_is_suspended) {
-			mbim_suspend(f);
-			f->func_is_suspended = true;
-		}
-	} else {
-		if (f->func_is_suspended) {
-			f->func_is_suspended = false;
-			mbim_resume(f);
-		}
-		f->func_wakeup_allowed = func_wakeup_allowed;
-	}
 
 	return 0;
 }
@@ -1478,7 +1432,7 @@ static int mbim_get_status(struct usb_function *f)
 	unsigned int remote_wakeup_enabled_bit;
 	const unsigned int remote_wakeup_capable_bit = 1;
 
-	remote_wakeup_enabled_bit = f->func_wakeup_allowed ? 1 : 0;
+	remote_wakeup_enabled_bit = 0;
 	return (remote_wakeup_enabled_bit << MBIM_STS_FUNC_WAKEUP_EN_SHIFT) |
 		(remote_wakeup_capable_bit << MBIM_STS_FUNC_WAKEUP_CAP_SHIFT);
 }
@@ -1890,13 +1844,6 @@ mbim_write(struct file *fp, const char __user *buf, size_t count, loff_t *pos)
 		return -EINVAL;
 	}
 
-	if (dev->function.func_is_suspended &&
-			!dev->function.func_wakeup_allowed) {
-		dev->cpkt_drop_cnt++;
-		pr_err("drop ctrl pkt of len %zu\n", count);
-		mbim_unlock(&dev->write_excl);
-		return -EOPNOTSUPP;
-	}
 
 	cpkt = mbim_alloc_ctrl_pkt(count, GFP_KERNEL);
 	if (!cpkt) {

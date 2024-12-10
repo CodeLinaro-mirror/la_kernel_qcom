@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -482,7 +482,6 @@ static void frmnet_unbind(struct usb_configuration *c, struct usb_function *f)
 	if (dev->notify_req)
 		frmnet_free_req(dev->notify, dev->notify_req);
 
-	c->cdev->gadget->bam2bam_func_enabled = false;
 
 	if (dev->xport_type == BAM_DMUX)
 		gbam_cleanup(dev->bam_dmux_func_type);
@@ -513,35 +512,15 @@ static void frmnet_purge_responses(struct f_rmnet *dev)
 static void frmnet_suspend(struct usb_function *f)
 {
 	struct f_rmnet	*dev = func_to_rmnet(f);
-	bool	remote_wakeup_allowed;
-
-	remote_wakeup_allowed = f->config->cdev->gadget->remote_wakeup;
-
-	pr_debug("%s: dev: %pK remote_wakeup: %d\n", __func__, dev,
-			remote_wakeup_allowed);
 
 	if (dev->notify) {
 		usb_ep_fifo_flush(dev->notify);
 		frmnet_purge_responses(dev);
 	}
-
-	if (dev->xport_type == BAM2BAM_IPA)
-		ipa_data_suspend(&dev->bam_port, dev->ipa_func_type,
-							remote_wakeup_allowed);
 }
 
 static void frmnet_resume(struct usb_function *f)
 {
-	struct f_rmnet	*dev = func_to_rmnet(f);
-	bool	remote_wakeup_allowed;
-
-	remote_wakeup_allowed = f->config->cdev->gadget->remote_wakeup;
-
-	pr_debug("%s: dev: %pK remote_wakeup: %d\n", __func__, dev,
-			remote_wakeup_allowed);
-	if (dev->xport_type == BAM2BAM_IPA)
-		ipa_data_resume(&dev->bam_port, dev->ipa_func_type,
-							remote_wakeup_allowed);
 }
 
 static void frmnet_disable(struct usb_function *f)
@@ -1120,8 +1099,6 @@ static int frmnet_bind(struct usb_configuration *c, struct usb_function *f)
 		return dev->ifc_id;
 	}
 
-	if (dev->xport_type == BAM2BAM_IPA)
-		c->cdev->gadget->bam2bam_func_enabled = true;
 
 	info.data_str_idx = 0;
 	if (dev->qti_port_type == QTI_PORT_RMNET) {
