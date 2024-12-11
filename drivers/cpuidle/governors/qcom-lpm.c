@@ -619,7 +619,7 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	struct lpm_cpu *cpu_gov = this_cpu_ptr(&lpm_cpu_data);
 	s64 latency_req = PM_QOS_CPU_LATENCY_DEFAULT_VALUE;
 	ktime_t delta_tick;
-	u64 reason = 0, htime = 0;
+	u64 htime = 0;
 	s64 duration_ns = 0;
 	unsigned long flags;
 	int i = 0;
@@ -641,24 +641,26 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	cpu_gov->predict_started = false;
 	cpu_gov->now = ktime_get();
 	cpu_gov->pred_type = LPM_PRED_RESET;
+	cpu_gov->hist_reason = cpu_gov->select_reason;
+	cpu_gov->select_reason = 0;
 
 	for (i = drv->state_count - 1; i > 0; i--) {
 		struct cpuidle_state *s = &drv->states[i];
 
 		if (dev->states_usage[i].disable) {
-			reason |= UPDATE_REASON(i, LPM_SELECT_STATE_DISABLED);
+			cpu_gov->select_reason |= UPDATE_REASON(i, LPM_SELECT_STATE_DISABLED);
 			continue;
 		}
 
 		if (latency_req < s->exit_latency) {
-			reason |= UPDATE_REASON(i, LPM_SELECT_STATE_QOS_UNMET);
+			cpu_gov->select_reason |= UPDATE_REASON(i, LPM_SELECT_STATE_QOS_UNMET);
 			continue;
 		}
 
 		if (check_cpu_isactive(dev->cpu) && !cpu_gov->predict_started) {
 			duration_ns = tick_nohz_get_sleep_length(&delta_tick);
 			if (duration_ns <= 0 || s->target_residency_ns > duration_ns) {
-				reason |= UPDATE_REASON(i,
+				cpu_gov->select_reason |= UPDATE_REASON(i,
 						LPM_SELECT_STATE_RESIDENCY_UNMET);
 				continue;
 			}
@@ -668,7 +670,7 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 
 		if (cpu_gov->predicted)
 			if (s->target_residency > cpu_gov->predicted) {
-				reason |= UPDATE_REASON(i,
+				cpu_gov->select_reason |= UPDATE_REASON(i,
 						LPM_SELECT_STATE_PRED);
 				continue;
 		}
@@ -689,18 +691,18 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 done:
 	if ((!cpu_gov->last_idx) && cpu_gov->bias) {
 		biastimer_start(cpu_gov->bias);
-		reason |= UPDATE_REASON(i, LPM_SELECT_STATE_SCHED_BIAS);
+		cpu_gov->select_reason |= UPDATE_REASON(i, LPM_SELECT_STATE_SCHED_BIAS);
 	}
 
 	spin_lock_irqsave(&cpu_gov->lock, flags);
 	if (cpu_gov->ipi_pending) {
 		i = 0;
 		*stop_tick = false;
-		reason = UPDATE_REASON(i, LPM_SELECT_STATE_IPI_PENDING);
+		cpu_gov->select_reason = UPDATE_REASON(i, LPM_SELECT_STATE_IPI_PENDING);
 	}
 	spin_unlock_irqrestore(&cpu_gov->lock, flags);
 
-	trace_lpm_gov_select(i, latency_req, duration_ns, cpu_gov->bias, reason);
+	trace_lpm_gov_select(i, latency_req, duration_ns, cpu_gov->bias, cpu_gov->select_reason);
 	trace_gov_pred_select(cpu_gov->pred_type, cpu_gov->predicted, htime);
 
 	return i;

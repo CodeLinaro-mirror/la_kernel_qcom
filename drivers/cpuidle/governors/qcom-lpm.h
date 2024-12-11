@@ -77,6 +77,8 @@ struct lpm_cpu {
 	uint64_t bias;
 	int64_t next_pred_time;
 	uint32_t pred_type;
+	u64 select_reason;
+	u64 hist_reason;
 	bool ipi_pending;
 	spinlock_t lock;
 	bool cpu_off_invoked;
