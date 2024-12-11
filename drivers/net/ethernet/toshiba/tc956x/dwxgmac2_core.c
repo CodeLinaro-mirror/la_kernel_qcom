@@ -66,6 +66,8 @@
  *  VERSION     : 04-00
  *  06 Dec 2024 : 1. Modification to support PHY_INTERFACE_MODE_10GBASER interface type
  *  VERSION     : 04-00-02
+ *  11 Dec 2024 : 1. Modification to support port interface setting overlay from dts.
+ *  VERSION     : 04-00-03
  */
 
 #include <linux/bitrev.h>
@@ -143,7 +145,8 @@ static void dwxgmac2_core_init(struct tc956xmac_priv *priv,
 		}
 	}
 #ifndef TC956X
-	if (priv->plat->interface == PHY_INTERFACE_MODE_RGMII)
+	if ((priv->plat->interface == PHY_INTERFACE_MODE_RGMII) ||
+		(priv->plat->interface == PHY_INTERFACE_MODE_RGMII_ID))
 		tx |= hw->link.speed1000;
 	else if (priv->plat->interface == PHY_INTERFACE_MODE_SGMII)
 		tx |= hw->link.speed2500;
