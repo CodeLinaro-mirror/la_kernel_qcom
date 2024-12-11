@@ -258,7 +258,6 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 {
 	int i, j;
 	struct cpuidle_driver *drv = cpu_gov->drv;
-	struct cpuidle_state *min_state = &drv->states[0];
 	struct history_lpm *lpm_history = &cpu_gov->lpm_history;
 	struct history_ipi *ipi_history = &cpu_gov->ipi_history;
 	unsigned long flags;
@@ -276,13 +275,6 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 		cpu_gov->next_pred_time = 0;
 		return;
 	}
-
-	/*
-	 * If the duration_ns itself is not sufficient for deeper
-	 * low power modes than clock gating do not predict
-	 */
-	if (min_state->target_residency_ns > duration_ns)
-		return;
 
 	/* Predict only when all the samples are collected */
 	if (lpm_history->nsamp < MAXSAMPLES) {
