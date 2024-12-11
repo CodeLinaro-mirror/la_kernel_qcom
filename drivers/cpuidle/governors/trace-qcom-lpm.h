@@ -14,14 +14,14 @@
 
 TRACE_EVENT(lpm_gov_select,
 
-	TP_PROTO(int idx, s64 qos, u64 sleep, u64 bias_ns, u64 reason),
+	TP_PROTO(int idx, s64 qos, s64 sleep, u64 bias_ns, u64 reason),
 
 	TP_ARGS(idx, qos, sleep, bias_ns, reason),
 
 	TP_STRUCT__entry(
 			 __field(int, idx)
 			 __field(s64, qos)
-			 __field(u64, sleep)
+			 __field(s64, sleep)
 			 __field(u64, bias_ns)
 			 __field(u64, reason)
 	),
@@ -34,21 +34,21 @@ TRACE_EVENT(lpm_gov_select,
 		       __entry->reason = reason;
 	),
 
-	TP_printk("state:%d qos-us:%lld sleep-us:%llu bias_ns:%llu reason:%#llx",
+	TP_printk("state:%d qos-ns:%lld sleep-ns:%lld bias-ns:%llu reason:%#llx",
 		  __entry->idx, __entry->qos, __entry->sleep, __entry->bias_ns,
 		  __entry->reason)
 );
 
 TRACE_EVENT(gov_pred_select,
 
-	TP_PROTO(u32 predtype, u64 predicted, u32 tmr_time),
+	TP_PROTO(u32 predtype, u64 predicted, u64 tmr_time),
 
 	TP_ARGS(predtype, predicted, tmr_time),
 
 	TP_STRUCT__entry(
 		__field(u32, predtype)
 		__field(u64, predicted)
-		__field(u32, tmr_time)
+		__field(u64, tmr_time)
 	),
 
 	TP_fast_assign(
@@ -57,19 +57,19 @@ TRACE_EVENT(gov_pred_select,
 		__entry->tmr_time = tmr_time;
 	),
 
-	TP_printk("pred:%u time:%llu tmr_time:%u",
-		__entry->predtype, __entry->predicted, __entry->tmr_time)
+	TP_printk("pred:%u time:%llu tmr-time:%llu",
+		  __entry->predtype, __entry->predicted, __entry->tmr_time)
 );
 
 TRACE_EVENT(gov_pred_hist,
 
-	TP_PROTO(int idx, u64 residency, int tmr),
+	TP_PROTO(int idx, s64 residency, int tmr),
 
 	TP_ARGS(idx, residency, tmr),
 
 	TP_STRUCT__entry(
 			 __field(int, idx)
-			 __field(u64, residency)
+			 __field(s64, residency)
 			 __field(int, tmr)
 	),
 
@@ -79,7 +79,8 @@ TRACE_EVENT(gov_pred_hist,
 		       __entry->tmr = tmr;
 	),
 
-	TP_printk("idx:%d residency=%llu, tmr=%d", __entry->idx, __entry->residency, __entry->tmr)
+	TP_printk("idx:%d resi:%lld, tmr:%d",
+		  __entry->idx, __entry->residency, __entry->tmr)
 );
 
 #endif /* _TRACE_QCOM_LPM_H */

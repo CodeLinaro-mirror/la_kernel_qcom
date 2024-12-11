@@ -45,15 +45,15 @@ struct qcom_cluster_node {
 };
 
 struct history_lpm {
-	int mode[MAXSAMPLES];
-	u64 resi[MAXSAMPLES];
+	u32 mode[MAXSAMPLES];
+	s64 resi[MAXSAMPLES];
 	int nsamp;
-	uint32_t samples_idx;
+	u32 samples_idx;
 };
 
 struct history_ipi {
-	u64 interval[MAXSAMPLES];
-	uint32_t current_ptr;
+	s64 interval[MAXSAMPLES];
+	u32 current_ptr;
 	ktime_t cpu_idle_resched_ts;
 };
 
@@ -65,8 +65,8 @@ struct lpm_cpu {
 	struct cpuidle_driver *drv;
 	struct cpuidle_device *dev;
 	ktime_t next_wakeup;
-	uint64_t predicted;
-	uint32_t history_invalid;
+	s64 predicted;
+	bool history_invalid;
 	bool predict_started;
 	bool htmr_wkup;
 	struct hrtimer histtimer;
@@ -74,9 +74,9 @@ struct lpm_cpu {
 	struct history_lpm lpm_history;
 	struct history_ipi ipi_history;
 	ktime_t now;
-	uint64_t bias;
+	u64 bias;
 	int64_t next_pred_time;
-	uint32_t pred_type;
+	u32 pred_type;
 	u64 select_reason;
 	u64 hist_reason;
 	bool ipi_pending;
@@ -85,14 +85,14 @@ struct lpm_cpu {
 };
 
 struct cluster_history {
-	uint64_t residency;
+	ktime_t residency;
+	ktime_t entry_time;
 	int mode;
-	uint64_t entry_time;
 };
 
 struct lpm_cluster {
 	struct device *dev;
-	uint32_t samples_idx;
+	u32 samples_idx;
 	bool history_invalid;
 	bool htmr_wkup;
 	int entry_idx;
