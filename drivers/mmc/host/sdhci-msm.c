@@ -404,7 +404,7 @@ enum constraint {
 	QOS_MAX,
 };
 
-static struct sdhci_msm_host *sdhci_slot[2];
+static struct sdhci_msm_host *sdhci_slot[3];
 
 static int sdhci_msm_update_qos_constraints(struct qos_cpu_group *qcg,
 					enum constraint type);
