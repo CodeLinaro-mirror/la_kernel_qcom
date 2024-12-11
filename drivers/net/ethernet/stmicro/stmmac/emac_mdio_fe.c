@@ -332,9 +332,7 @@ int virtio_mdio_read(struct mii_bus *bus, int addr, int regnum)
 
 	if (atomic_read(&priv->plat->phy_clks_suspended))
 		return -EBUSY;
-
-	priv->plat->mdio_op_busy = true;
-	reinit_completion(&priv->plat->mdio_op);
+	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
 	memset(phy_request, 0, sizeof(*phy_request));
@@ -354,13 +352,11 @@ int virtio_mdio_read(struct mii_bus *bus, int addr, int regnum)
 	if (down_timeout(&emac_mdio_fe_ctx->emac_mdio_fe_sem, tmp) == -ETIME) {
 		EMAC_MDIO_FE_DBG("Wait for phy reply timeout\n");
 		mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-		priv->plat->mdio_op_busy = false;
-		complete_all(&priv->plat->mdio_op);
+		mutex_unlock(&priv->lock);
 		return -1;
 	}
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	priv->plat->mdio_op_busy = false;
-	complete_all(&priv->plat->mdio_op);
+	mutex_unlock(&priv->lock);
 	return (int)emac_mdio_fe_ctx->phy_reply;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_read);
@@ -374,10 +370,7 @@ int virtio_mdio_write(struct mii_bus *bus, int addr, int regnum, u16 val)
 
 	if (atomic_read(&priv->plat->phy_clks_suspended))
 		return -EBUSY;
-
-	priv->plat->mdio_op_busy = true;
-	reinit_completion(&priv->plat->mdio_op);
-
+	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
 	memset(phy_request, 0, sizeof(*phy_request));
@@ -398,13 +391,12 @@ int virtio_mdio_write(struct mii_bus *bus, int addr, int regnum, u16 val)
 	if (down_timeout(&emac_mdio_fe_ctx->emac_mdio_fe_sem, tmp) == -ETIME) {
 		EMAC_MDIO_FE_WARN("Wait for phy reply timeout\n");
 		mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-		priv->plat->mdio_op_busy = false;
-		complete_all(&priv->plat->mdio_op);
+		mutex_unlock(&priv->lock);
 		return -1;
 	}
-	priv->plat->mdio_op_busy = false;
-	complete_all(&priv->plat->mdio_op);
+
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
+	mutex_unlock(&priv->lock);
 	return (int)emac_mdio_fe_ctx->phy_reply;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_write);
@@ -418,9 +410,7 @@ int virtio_mdio_read_c45(struct mii_bus *bus, int addr, int devnum, int regnum)
 
 	if (atomic_read(&priv->plat->phy_clks_suspended))
 		return -EBUSY;
-
-	priv->plat->mdio_op_busy = true;
-	reinit_completion(&priv->plat->mdio_op);
+	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
 	memset(phy_request, 0, sizeof(*phy_request));
@@ -441,13 +431,12 @@ int virtio_mdio_read_c45(struct mii_bus *bus, int addr, int devnum, int regnum)
 	if (down_timeout(&emac_mdio_fe_ctx->emac_mdio_fe_sem, tmp) == -ETIME) {
 		EMAC_MDIO_FE_WARN("Wait for phy reply timeout\n");
 		mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-		priv->plat->mdio_op_busy = false;
-		complete_all(&priv->plat->mdio_op);
+		mutex_unlock(&priv->lock);
 		return -1;
 	}
-	priv->plat->mdio_op_busy = false;
-	complete_all(&priv->plat->mdio_op);
+
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
+	mutex_unlock(&priv->lock);
 	return (int)emac_mdio_fe_ctx->phy_reply;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_read_c45);
@@ -461,9 +450,7 @@ int virtio_mdio_write_c45(struct mii_bus *bus, int addr, int devnum, int regnum,
 
 	if (atomic_read(&priv->plat->phy_clks_suspended))
 		return -EBUSY;
-
-	priv->plat->mdio_op_busy = true;
-	reinit_completion(&priv->plat->mdio_op);
+	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
 	memset(phy_request, 0, sizeof(*phy_request));
@@ -484,15 +471,13 @@ int virtio_mdio_write_c45(struct mii_bus *bus, int addr, int devnum, int regnum,
 	tmp = msecs_to_jiffies(WAIT_PHY_REPLY_MAX_TIMEOUT);
 	if (down_timeout(&emac_mdio_fe_ctx->emac_mdio_fe_sem, tmp) == -ETIME) {
 		EMAC_MDIO_FE_WARN("Wait for phy reply timeout\n");
-		priv->plat->mdio_op_busy = false;
-		complete_all(&priv->plat->mdio_op);
 		mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
+		mutex_unlock(&priv->lock);
 		return -1;
 	}
 
-	priv->plat->mdio_op_busy = false;
-	complete_all(&priv->plat->mdio_op);
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
+	mutex_unlock(&priv->lock);
 	return (int)emac_mdio_fe_ctx->phy_reply;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_write_c45);
@@ -506,9 +491,7 @@ int virtio_mdio_read_c45_indirect(struct mii_bus *bus, int addr, int regnum)
 
 	if (atomic_read(&priv->plat->phy_clks_suspended))
 		return -EBUSY;
-
-	priv->plat->mdio_op_busy = true;
-	reinit_completion(&priv->plat->mdio_op);
+	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
 	memset(phy_request, 0, sizeof(*phy_request));
@@ -529,14 +512,11 @@ int virtio_mdio_read_c45_indirect(struct mii_bus *bus, int addr, int regnum)
 	if (down_timeout(&emac_mdio_fe_ctx->emac_mdio_fe_sem, tmp) == -ETIME) {
 		EMAC_MDIO_FE_WARN("Wait for phy reply timeout\n");
 		mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-		priv->plat->mdio_op_busy = false;
-		complete_all(&priv->plat->mdio_op);
+		mutex_unlock(&priv->lock);
 		return -1;
 	}
-
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	priv->plat->mdio_op_busy = false;
-	complete_all(&priv->plat->mdio_op);
+	mutex_unlock(&priv->lock);
 	return (int)emac_mdio_fe_ctx->phy_reply;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_read_c45_indirect);
@@ -550,9 +530,7 @@ int virtio_mdio_write_c45_indirect(struct mii_bus *bus, int addr, int regnum, u1
 
 	if (atomic_read(&priv->plat->phy_clks_suspended))
 		return -EBUSY;
-
-	priv->plat->mdio_op_busy = true;
-	reinit_completion(&priv->plat->mdio_op);
+	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
 	memset(phy_request, 0, sizeof(*phy_request));
@@ -574,14 +552,12 @@ int virtio_mdio_write_c45_indirect(struct mii_bus *bus, int addr, int regnum, u1
 	if (down_timeout(&emac_mdio_fe_ctx->emac_mdio_fe_sem, tmp) == -ETIME) {
 		EMAC_MDIO_FE_WARN("Wait for phy reply timeout\n");
 		mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-		priv->plat->mdio_op_busy = false;
-		complete_all(&priv->plat->mdio_op);
+		mutex_unlock(&priv->lock);
 		return -1;
 	}
 
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	priv->plat->mdio_op_busy = false;
-	complete_all(&priv->plat->mdio_op);
+	mutex_unlock(&priv->lock);
 	return (int)emac_mdio_fe_ctx->phy_reply;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_write_c45_indirect);
