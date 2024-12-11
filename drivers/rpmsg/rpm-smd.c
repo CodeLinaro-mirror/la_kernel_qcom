@@ -720,7 +720,7 @@ static int msm_rpm_trysend_smd_buffer(char *buf, uint32_t size)
 static int msm_rpm_flush_requests(void)
 {
 	struct rb_node *t;
-	int ret;
+	int ret = 0;
 	int count = 0;
 
 	for (t = rb_first(&tr_root); t; t = rb_next(t)) {
