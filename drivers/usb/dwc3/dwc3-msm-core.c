@@ -7521,6 +7521,8 @@ static int dwc3_msm_pm_resume(struct device *dev)
 static void dwc3_host_complete(struct device *dev)
 {
 	int ret = 0;
+	if (strcmp(dev_driver_string(dev), "msm-dwc3") != 0)
+		return;
 
 	if (dev->power.direct_complete) {
 		ret = pm_runtime_resume(dev);
@@ -7542,6 +7544,9 @@ static int dwc3_host_prepare(struct device *dev)
 	 * and PM resume callbacks, and allowing the driver to issue a resume
 	 * using PM runtime instead. (within the complete() callback)
 	 */
+	if (strcmp(dev_driver_string(dev), "msm-dwc3") != 0)
+		return 1;
+
 	if (pm_runtime_enabled(dev) && pm_runtime_suspended(dev))
 		return 1;
 
@@ -7552,6 +7557,9 @@ static int dwc3_core_prepare(struct device *dev)
 {
 	struct dwc3 *dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (strcmp(dev_driver_string(dev), "msm-dwc3") != 0)
+		return 1;
 
 	dbg_event(0xFF, "Core PM prepare", pm_runtime_suspended(dev));
 	/*
@@ -7587,6 +7595,9 @@ static void dwc3_core_complete(struct device *dev)
 	 * needs to be executed. However, in DWC3 MSM case, we can allow changes
 	 * to cable status, or XHCI status to wake up the DWC3 core.
 	 */
+	if (strcmp(dev_driver_string(dev), "msm-dwc3") != 0)
+		return;
+
 	dbg_event(0xFF, "Core PM complete", dev->power.direct_complete);
 
 	if (!mdwc->in_host_mode) {
