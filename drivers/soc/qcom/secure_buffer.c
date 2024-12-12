@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2011 Google, Inc
  * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/highmem.h>
@@ -309,8 +309,16 @@ static int batched_hyp_assign(struct sg_table *table, u32 *source_vmids,
 
 	first_assign_ts = ktime_get();
 	while (batch_start < table->nents) {
+		if (!curr_sgl) {
+			ret = -EINVAL;
+			break;
+		}
 		batches_processed = get_batches_from_sgl(mem_regions_buf,
 							 curr_sgl, &next_sgl);
+		if (!next_sgl) {
+			ret = -EINVAL;
+			break;
+		}
 		curr_sgl = next_sgl;
 		mem_regions_buf_size = batches_processed *
 				       sizeof(*mem_regions_buf);
@@ -371,6 +379,8 @@ static inline void set_each_page_of_sg(struct sg_table *table, u64 flag)
 	int i = 0;
 
 	for_each_sg(table->sgl, sg, table->nents, i) {
+		if (!sg)
+			break;
 		npages = sg->length / PAGE_SIZE;
 		if (sg->length % PAGE_SIZE)
 			npages++;
