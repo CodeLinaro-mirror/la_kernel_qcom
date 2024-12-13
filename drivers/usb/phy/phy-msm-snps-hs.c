@@ -1024,6 +1024,33 @@ static int usb2_get_regulators(struct msm_hsphy *phy)
 	return 0;
 }
 
+static int msm_hsphy_pm_prepare(struct device *dev)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+
+	dev_info(dev, "%s: phy = %x\n", __func__, phy);
+	pm_runtime_force_suspend(phy->pd_devs[0]);
+	pm_runtime_force_suspend(phy->pd_devs[1]);
+
+	return 0;
+}
+
+static void msm_hsphy_pm_complete(struct device *dev)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+
+	dev_info(dev, "%s: phy = %x\n", __func__, phy);
+	pm_runtime_force_resume(phy->pd_devs[0]);
+	pm_runtime_force_resume(phy->pd_devs[1]);
+
+	return;
+}
+
+static const struct dev_pm_ops msm_hsphy_pm_ops = {
+	.prepare = pm_sleep_ptr(msm_hsphy_pm_prepare),
+	.complete = pm_sleep_ptr(msm_hsphy_pm_complete),
+};
+
 static int msm_hsphy_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -1267,6 +1294,7 @@ static struct platform_driver msm_hsphy_driver = {
 	.remove		= msm_hsphy_remove,
 	.driver = {
 		.name	= "msm-usb-hsphy",
+		.pm = &msm_hsphy_pm_ops,
 		.of_match_table = of_match_ptr(msm_usb_id_table),
 	},
 };
