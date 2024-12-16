@@ -726,6 +726,15 @@ static int dwc3_qcom_clk_init(struct dwc3_qcom *qcom, int count)
 	return 0;
 }
 
+static const struct property_entry dwc3_qcom_props[] = {
+	PROPERTY_ENTRY_BOOL("snps,allow-role-switch-userspace-control"),
+	{ },
+};
+
+static const struct software_node dwc3_qcom_swnode_prop = {
+	.properties = dwc3_qcom_props,
+};
+
 static const struct property_entry dwc3_qcom_acpi_properties[] = {
 	PROPERTY_ENTRY_STRING("dr_mode", "host"),
 	{}
@@ -988,6 +997,10 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 
 	qcom->dev = &pdev->dev;
 	qcom->dwc.dev = qcom->dev;
+
+	ret = device_add_software_node(&pdev->dev, &dwc3_qcom_swnode_prop);
+	if (ret)
+		return ret;
 
 	if (has_acpi_companion(dev)) {
 		qcom->acpi_pdata = acpi_device_get_match_data(dev);
