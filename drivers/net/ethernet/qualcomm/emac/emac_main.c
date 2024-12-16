@@ -1247,9 +1247,8 @@ static irqreturn_t emac_isr(int _irq, void *data)
 		}
 
 		if (status & ISR_OVER)
-			emac_warn(adpt, intr, adpt->netdev, "TX/RX overflow status 0x%lx\n",
-				  status & ISR_OVER);
-
+			net_warn_ratelimited("%s: TX/RX overflow interrupt\n",
+					     adpt->netdev->name);
 		/* link event */
 		if (status & (ISR_GPHY_LINK | SW_MAN_INT)) {
 			adpt->irq_status = ISR_GPHY_LINK;
@@ -2982,7 +2981,7 @@ error:
 	return retval;
 }
 
-#ifdef CONFIG_PM_RUNTIME
+#ifdef CONFIG_PM
 static int emac_pm_runtime_suspend(struct device *device)
 {
 	return emac_pm_suspend(device, true);
@@ -3001,7 +3000,7 @@ static int emac_pm_runtime_idle(struct device *device)
 #define emac_pm_runtime_suspend NULL
 #define emac_pm_runtime_resume	NULL
 #define emac_pm_runtime_idle	NULL
-#endif /* CONFIG_PM_RUNTIME */
+#endif /* CONFIG_PM */
 
 #ifdef CONFIG_PM_SLEEP
 static int emac_pm_sys_suspend(struct device *device)
