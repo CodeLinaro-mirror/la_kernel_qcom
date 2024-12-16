@@ -335,8 +335,17 @@ static int coqoshv_platform_init(void)
 	}
 
 	for (mbox_id = 0; mbox_id < coqoshv_mailbox_max; ++mbox_id) {
+		u32 shmem_res_id = READ_ONCE(coqoshv_buffer.mheader[mbox_id].res_id);
+		u32 shmem_req_id = READ_ONCE(coqoshv_buffer.mheader[mbox_id].req_id);
+		if (shmem_res_id != shmem_req_id) {
+			pr_err("Ongoing requests in SMC message buffer (%u != %u)",
+				shmem_req_id, shmem_res_id);
+			goto error_io;
+		}
+		coqoshv_notification[mbox_id].id = shmem_req_id + 1;
+	}
+	for (mbox_id = 0; mbox_id < coqoshv_mailbox_max; ++mbox_id) {
 		sema_init(&coqoshv_notification[mbox_id].sem, 0);
-		coqoshv_notification[mbox_id].id = 1;
 	}
 
 	pr_info("Initialized\n");
