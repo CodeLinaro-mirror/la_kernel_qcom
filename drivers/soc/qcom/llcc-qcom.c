@@ -640,7 +640,7 @@ static const struct llcc_slice_config sdxpinn_data[] = {
 	{LLCC_MDMHPGRW,     25,  128, 1, 1,      0xC, 0x0, 0, 0x0, 0, 0, 0, 0},
 	{LLCC_MODHW,        26,  128, 1, 1,      0xC, 0x0, 0, 0x0, 0, 0, 0, 0},
 	{LLCC_MODPE,        29,   64, 1, 1,      0xC, 0x0, 0, 0x0, 0, 0, 0, 0},
-	{LLCC_APTCM,        30,  128, 3, 1,      0x0, 0x1, 1, 0x0, 1, 0, 0, 0},
+	{LLCC_APTCM,        30,   64, 3, 1,      0x0, 0x1, 1, 0x0, 1, 0, 0, 0},
 	{LLCC_MDMCLAD2,     20,  128, 1, 1,      0x3, 0x0, 0, 0x0, 0, 0, 0, 0},
 };
 
