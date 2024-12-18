@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -81,6 +81,7 @@ struct secure_etr_drvdata {
 	u32	atid_offset;
 	u32 mem_size;
 	struct clk	*clk;
+	bool cma_mem;
 };
 
 DEFINE_CORESIGHT_DEVLIST(secure_etr_devs, "secure_etr");
@@ -480,11 +481,12 @@ static int enable_secure_etr_sink(struct coresight_device *csdev,
 	ret = clk_prepare_enable(drvdata->clk);
 	if (ret)
 		goto unlock_out;
-
-	ret = secure_etr_allocate_mem(drvdata);
-	if (ret) {
-		clk_disable_unprepare(drvdata->clk);
-		goto unlock_out;
+	if (drvdata->cma_mem) {
+		ret = secure_etr_allocate_mem(drvdata);
+		if (ret) {
+			clk_disable_unprepare(drvdata->clk);
+			goto unlock_out;
+		}
 	}
 	/*
 	 * assign the reserved memory region to mpss.
@@ -508,7 +510,8 @@ static int enable_secure_etr_sink(struct coresight_device *csdev,
 
 err:
 	secure_etr_unmap_mem_permission(drvdata->etr_buf);
-	secure_etr_free_mem(drvdata);
+	if (drvdata->cma_mem)
+		secure_etr_free_mem(drvdata);
 	clk_disable_unprepare(drvdata->clk);
 unlock_out:
 	mutex_unlock(&drvdata->mem_lock);
@@ -539,7 +542,8 @@ static int disable_secure_etr_sink(struct coresight_device *csdev)
 		dev_err(drvdata->dev, "assign etr to apss fail\n");
 
 	secure_etr_unmap_mem_permission(drvdata->etr_buf);
-	secure_etr_free_mem(drvdata);
+	if (drvdata->cma_mem)
+		secure_etr_free_mem(drvdata);
 	dev_info(drvdata->dev, "disable modem etr\n");
 	drvdata->mode = CS_MODE_DISABLED;
 	if (drvdata->real_sink) {
@@ -562,11 +566,7 @@ const struct coresight_ops secure_etr_cs_ops = {
 	.sink_ops	= &secure_etr_sink_ops,
 };
 
-/*
- * secure_etr_map_memory - initialize reserved memory region.
- */
-
-static int secure_etr_map_memory(struct secure_etr_drvdata *drvdata)
+static int secure_etr_init_memory(struct secure_etr_drvdata *drvdata)
 {
 	struct device_node *mem_node;
 	int ret;
@@ -584,6 +584,47 @@ static int secure_etr_map_memory(struct secure_etr_drvdata *drvdata)
 			return ret;
 		}
 	}
+
+	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+/*
+ * secure_etr_map_memory - initialize reserved memory region.
+ */
+static int secure_etr_map_memory(struct secure_etr_drvdata *drvdata)
+{
+	struct device_node *np;
+	struct resource r;
+	resource_size_t size;
+	int ret;
+	struct secure_etr_buf *etr_buf;
+
+	np = of_parse_phandle(drvdata->dev->of_node, "memory-region", 0);
+	if (!np) {
+		dev_err(drvdata->dev, "No %s specified\n", "memory-region");
+		return -EINVAL;
+	}
+	ret = of_address_to_resource(np, 0, &r);
+	of_node_put(np);
+	if (ret)
+		return ret;
+
+	etr_buf = devm_kzalloc(drvdata->dev, sizeof(*etr_buf), GFP_KERNEL);
+	if (!etr_buf)
+		return -ENOMEM;
+
+	size = resource_size(&r);
+	etr_buf->base = devm_ioremap_wc(drvdata->dev, r.start, size);
+	if (!etr_buf->base)
+		return -ENOMEM;
+	etr_buf->paddr = (phys_addr_t)r.start;
+	etr_buf->size = size;
+	drvdata->etr_buf = etr_buf;
+
 	return 0;
 }
 
@@ -603,14 +644,9 @@ static int secure_etr_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, drvdata);
 	pdata = coresight_get_platform_data(dev);
 
-	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
-	if (ret < 0)
-		return ret;
-
 	if (IS_ERR(pdata))
 		return PTR_ERR(pdata);
 	dev->platform_data = pdata;
-
 	spin_lock_init(&drvdata->spinlock);
 	mutex_init(&drvdata->mem_lock);
 
@@ -619,15 +655,18 @@ static int secure_etr_probe(struct platform_device *pdev)
 	if (IS_ERR(drvdata->clk))
 		dev_err(dev, "not config clk\n");
 
+	drvdata->cma_mem = of_property_read_bool(dev->of_node, "qcom,cma-mem");
 	ret = of_property_read_string(dev->of_node, "real-name",
 							&drvdata->real_name);
 	if (ret)
 		return ret;
 
-	ret = of_property_read_u32(dev->of_node, "qdss,buffer-size",
-							&drvdata->mem_size);
-	if (ret)
-		return ret;
+	if (drvdata->cma_mem) {
+		ret = of_property_read_u32(dev->of_node, "qdss,buffer-size",
+						&drvdata->mem_size);
+		if (ret)
+			return ret;
+	}
 
 	ret = of_get_coresight_csr_name(dev->of_node, &drvdata->csr_name);
 	if (ret)
@@ -639,17 +678,22 @@ static int secure_etr_probe(struct platform_device *pdev)
 			return -EPROBE_DEFER;
 		}
 	}
+
 	of_property_read_u32(dev->of_node, "csr-atid-offset",
 			&drvdata->atid_offset);
-
-	ret = secure_etr_map_memory(drvdata);
-	if (ret)
-		return ret;
+	if (drvdata->cma_mem) {
+		ret = secure_etr_init_memory(drvdata);
+		if (ret)
+			return ret;
+	} else {
+		ret = secure_etr_map_memory(drvdata);
+		if (ret)
+			return ret;
+	}
 
 	desc.name = coresight_alloc_device_name(&secure_etr_devs, dev);
 	if (!desc.name)
 		return -ENOMEM;
-
 	desc.dev = dev;
 	desc.pdata = pdata;
 	desc.type = CORESIGHT_DEV_TYPE_SINK;
@@ -662,14 +706,12 @@ static int secure_etr_probe(struct platform_device *pdev)
 		ret = PTR_ERR(drvdata->csdev);
 		return ret;
 	}
-
 	drvdata->sram_node = desc.name;
 	ret = sec_etr_sram_dev_register(drvdata);
 	if (ret) {
 		coresight_unregister(drvdata->csdev);
 		return ret;
 	}
-
 	pm_runtime_enable(dev);
 	return 0;
 }
