@@ -37,7 +37,7 @@
  *	Andrew F. Davis <afd@ti.com>
  *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/dma-buf.h>
@@ -368,8 +368,11 @@ static void system_heap_buf_free(struct deferred_freelist_item *item,
 
 	table = &buffer->sg_table;
 	for_each_sg(table->sgl, sg, table->nents, i) {
-		struct page *page = sg_page(sg);
+		struct page *page;
 
+		if (!sg)
+			break;
+		page = sg_page(sg);
 		if (reason == DF_UNDER_PRESSURE) {
 			__free_pages(page, compound_order(page));
 		} else {
@@ -488,6 +491,8 @@ int system_qcom_sg_buffer_alloc(struct dma_heap *heap,
 
 	sg = table->sgl;
 	list_for_each_entry_safe(page, tmp_page, &pages, lru) {
+		if (!sg)
+			break;
 		sg_set_page(sg, page, page_size(page), 0);
 		sg = sg_next(sg);
 		list_del(&page->lru);
