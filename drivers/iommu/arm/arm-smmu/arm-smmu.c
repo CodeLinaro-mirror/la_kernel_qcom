@@ -14,7 +14,7 @@
  *	- Context fault reporting
  *	- Extended Stream ID (16 bit)
  *
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "arm-smmu: " fmt
@@ -2173,6 +2173,8 @@ static int __maybe_unused arm_smmu_map_sg(struct iommu_domain *domain, unsigned 
 	 * does not exist.
 	 */
 	for_each_sg(sg, tmp, nents, i) {
+		if (!tmp)
+			break;
 		ret = ops->map(ops, iova + *mapped, sg_phys(tmp), tmp->length, prot, gfp);
 		if (ret)
 			break;

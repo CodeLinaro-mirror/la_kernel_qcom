@@ -6,7 +6,7 @@
  *
  * Author: Will Deacon <will.deacon@arm.com>
  *
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"arm-lpae io-pgtable: " fmt
@@ -775,7 +775,7 @@ int qcom_arm_lpae_map_sg(struct io_pgtable_ops *ops, unsigned long iova,
 	size_t len = 0;
 	unsigned int i = 0;
 	int ret;
-	phys_addr_t start;
+	phys_addr_t start, s_phys;
 	struct map_state ms = {};
 	struct arm_lpae_io_pgtable *data = io_pgtable_ops_to_data(ops);
 	struct io_pgtable_cfg *cfg = &data->iop.cfg;
@@ -785,8 +785,9 @@ int qcom_arm_lpae_map_sg(struct io_pgtable_ops *ops, unsigned long iova,
 
 	spin_lock_irqsave(&data->lock, flags);
 	while (i <= nents) {
-		phys_addr_t s_phys = sg_phys(sg);
-
+		if (!sg)
+			break;
+		s_phys = sg_phys(sg);
 		if (len && s_phys != start + len) {
 			ret = arm_lpae_map_by_pgsize(ops, iova + *mapped, start,
 						     len, prot, gfp, mapped, &ms, &flags);
