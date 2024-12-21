@@ -5097,6 +5097,51 @@ exit:
 	return ret;
 }
 
+static int ath11k_mac_op_conf_tx_mu_edca(struct ieee80211_hw *hw,
+					 struct ieee80211_vif *vif,
+					 unsigned int link_id, u16 ac,
+					 const struct ieee80211_tx_queue_params *params)
+{
+	struct ath11k *ar = hw->priv;
+	struct ath11k_vif *arvif = ath11k_vif_to_arvif(vif);
+	struct wmi_wmm_params_arg *p = NULL;
+	int ret;
+
+	switch (ac) {
+	case IEEE80211_AC_VO:
+		p = &arvif->muedca_params.ac_vo;
+		break;
+	case IEEE80211_AC_VI:
+		p = &arvif->muedca_params.ac_vi;
+		break;
+	case IEEE80211_AC_BE:
+		p = &arvif->muedca_params.ac_be;
+		break;
+	case IEEE80211_AC_BK:
+		p = &arvif->muedca_params.ac_bk;
+		break;
+	}
+
+	if (WARN_ON(!p)) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	p->cwmin = params->mu_edca_param_rec.ecw_min_max & 0x0f;
+	p->cwmax = (params->mu_edca_param_rec.ecw_min_max & 0xf0) >> 4;
+	p->aifs = params->mu_edca_param_rec.aifsn & 0x0f;
+	p->txop = params->mu_edca_param_rec.mu_edca_timer;
+
+	ret = ath11k_wmi_send_wmm_update_cmd_tlv(ar, arvif->vdev_id,
+						 &arvif->muedca_params,
+						 WMM_PARAM_TYPE_11AX_MU_EDCA);
+	if (ret)
+		ath11k_warn(ar->ab, "failed to set mu_edca params: %d\n", ret);
+
+exit:
+	return ret;
+}
+
 static int ath11k_mac_op_conf_tx(struct ieee80211_hw *hw,
 				 struct ieee80211_vif *vif,
 				 unsigned int link_id, u16 ac,
@@ -5135,10 +5180,19 @@ static int ath11k_mac_op_conf_tx(struct ieee80211_hw *hw,
 	p->txop = params->txop;
 
 	ret = ath11k_wmi_send_wmm_update_cmd_tlv(ar, arvif->vdev_id,
-						 &arvif->wmm_params);
+					 &arvif->wmm_params, WMM_PARAM_TYPE_LEGACY);
 	if (ret) {
 		ath11k_warn(ar->ab, "failed to set wmm params: %d\n", ret);
 		goto exit;
+	}
+
+	if (params->mu_edca) {
+		ret = ath11k_mac_op_conf_tx_mu_edca(hw, vif, link_id, ac,
+						    params);
+		if (ret) {
+			ath11k_warn(ar->ab, "failed to set mu_edca params: %d\n", ret);
+			goto exit;
+		}
 	}
 
 	ret = ath11k_conf_tx_uapsd(ar, vif, ac, params->uapsd);
@@ -5229,8 +5283,6 @@ static int ath11k_mac_set_txbf_conf(struct ath11k_vif *arvif)
 	if (vht_cap & (IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE)) {
 		nsts = vht_cap & IEEE80211_VHT_CAP_BEAMFORMEE_STS_MASK;
 		nsts >>= IEEE80211_VHT_CAP_BEAMFORMEE_STS_SHIFT;
-		if (nsts > (ar->num_rx_chains - 1))
-			nsts = ar->num_rx_chains - 1;
 		value |= SM(nsts, WMI_TXBF_STS_CAP_OFFSET);
 	}
 
@@ -5314,9 +5366,6 @@ static void ath11k_set_vht_txbf_cap(struct ath11k *ar, u32 *vht_cap)
 
 	/* Enable Beamformee STS Field only if SU BF is enabled */
 	if (subfee) {
-		if (nsts > (ar->num_rx_chains - 1))
-			nsts = ar->num_rx_chains - 1;
-
 		nsts <<= IEEE80211_VHT_CAP_BEAMFORMEE_STS_SHIFT;
 		nsts &=  IEEE80211_VHT_CAP_BEAMFORMEE_STS_MASK;
 		*vht_cap |= nsts;
