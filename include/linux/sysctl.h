@@ -137,6 +137,7 @@ struct ctl_table {
 	void *data;
 	int maxlen;
 	umode_t mode;
+	struct ctl_table *child;
 	/**
 	 * enum type - Enumeration to differentiate between ctl target types
 	 * @SYSCTL_TABLE_TYPE_DEFAULT: ctl target with no special considerations
