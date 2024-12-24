@@ -72,7 +72,7 @@ nf_nat_masquerade_ipv4(struct sk_buff *skb, unsigned int hooknum,
 
 	/* Hand modified range to generic setup. */
 #if defined(CONFIG_IP_NF_TARGET_TRIGGER_MODULE) || defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE) || \
-defined(CONFIG_NFT_NATTYPE)
+defined(CONFIG_NFT_NATTYPE) || defined(CONFIG_NFT_TRIGGER)
 	nf_nat_setup_info(ct, &newrange, NF_NAT_MANIP_SRC);
 	return XT_CONTINUE;
 #else
