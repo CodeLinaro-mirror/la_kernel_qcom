@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -538,6 +538,8 @@ static int cqhci_prep_tran_desc(struct mmc_request *mrq,
 	desc = get_trans_desc(cq_host, tag);
 
 	for_each_sg(data->sg, sg, sg_count, i) {
+		if (!sg)
+			break;
 		addr = sg_dma_address(sg);
 		len = sg_dma_len(sg);
 
