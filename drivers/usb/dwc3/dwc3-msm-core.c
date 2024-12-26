@@ -5837,12 +5837,14 @@ static void dwc3_msm_debug_exit(struct dwc3_msm *mdwc)
 	ipc_log_context_destroy(mdwc->dwc_dma_ipc_log_ctxt);
 	debugfs_remove_recursive(mdwc->dbg_dir);
 }
-
+/*
 static void dwc3_host_complete(struct device *dev);
 static int dwc3_host_prepare(struct device *dev);
 static int dwc3_core_prepare(struct device *dev);
 static void dwc3_core_complete(struct device *dev);
+*/
 
+/*
 static void dwc3_msm_override_pm_ops(struct device *dev, struct dev_pm_ops *pm_ops,
 					bool is_host)
 {
@@ -5856,6 +5858,7 @@ static void dwc3_msm_override_pm_ops(struct device *dev, struct dev_pm_ops *pm_o
 	pm_ops->complete = is_host ? dwc3_host_complete : dwc3_core_complete;
 	dev->driver->pm = pm_ops;
 }
+*/
 
 static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 {
@@ -5950,7 +5953,7 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 	if (!mdwc->dwc3_pm_ops)
 		goto depopulate;
 
-	dwc3_msm_override_pm_ops(dwc->dev, mdwc->dwc3_pm_ops, false);
+//	dwc3_msm_override_pm_ops(dwc->dev, mdwc->dwc3_pm_ops, false);
 	if (mdwc->hibernate_skip_thaw)
 		dev_pm_syscore_device(dwc->dev, true);
 
@@ -6955,7 +6958,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		usb_role_switch_set_role(mdwc->dwc3_drd_sw, USB_ROLE_HOST);
 		if (dwc->dr_mode == USB_DR_MODE_OTG)
 			flush_work(&dwc->drd_work);
-		dwc3_msm_override_pm_ops(&dwc->xhci->dev, mdwc->xhci_pm_ops, true);
+//		dwc3_msm_override_pm_ops(&dwc->xhci->dev, mdwc->xhci_pm_ops, true);
 		mdwc->in_host_mode = true;
 		pm_runtime_use_autosuspend(&dwc->xhci->dev);
 		pm_runtime_set_autosuspend_delay(&dwc->xhci->dev, 0);
@@ -7488,8 +7491,8 @@ static int dwc3_msm_pm_resume(struct device *dev)
 	atomic_set(&mdwc->pm_suspended, 0);
 
 	/* Let DWC3 core complete determine if resume is needed */
-	if (!mdwc->in_host_mode)
-		return 0;
+//	if (!mdwc->in_host_mode)
+//		return 0;
 
 	/* Resume dwc to avoid unclocked access by xhci_plat_resume */
 	ret = dwc3_msm_resume(mdwc);
@@ -7518,6 +7521,7 @@ static int dwc3_msm_pm_resume(struct device *dev)
 	return 0;
 }
 
+#if 0
 static void dwc3_host_complete(struct device *dev)
 {
 	int ret = 0;
@@ -7605,6 +7609,8 @@ static void dwc3_core_complete(struct device *dev)
 		queue_work(mdwc->dwc3_wq, &mdwc->resume_work);
 	}
 }
+#endif
+
 #endif
 
 #ifdef CONFIG_PM
