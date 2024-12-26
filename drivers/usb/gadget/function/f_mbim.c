@@ -2095,7 +2095,7 @@ static int mbim_init(int instances)
 {
 	int i;
 	struct f_mbim *dev = NULL;
-	int ret;
+	int ret = 0;
 
 	pr_debug("%s: initialize %d instances\n", __func__, instances);
 
@@ -2178,7 +2178,7 @@ static void mbim_free_inst(struct usb_function_instance *f)
 	struct f_mbim_opts *opts = container_of(f, struct f_mbim_opts,
 						func_inst);
 
-	if (!opts && !opts->interf_group && !opts->usb_mbim)
+	if (!opts->interf_group && !opts->usb_mbim)
 		return;
 
 	kfree(opts->interf_group);
