@@ -749,7 +749,18 @@ static void dwmac4_flow_ctrl(struct mac_device_info *hw, unsigned int duplex,
 static void dwmac4_ctrl_ane(void __iomem *ioaddr, bool ane, bool srgmi_ral,
 			    bool loopback)
 {
+	u32 intr_mask;
+
 	dwmac_ctrl_ane(ioaddr, GMAC_PCS_BASE, ane, srgmi_ral, loopback);
+	intr_mask = readl(ioaddr + GMAC_INT_EN);
+	if (!ane) {
+		intr_mask &= ~(GMAC_INT_PCS_LINK | GMAC_INT_PCS_ANE);
+		pr_info("dwmac4_ctrl_ane: PCS interrupts disabled\n");
+	} else {
+		intr_mask |= (GMAC_INT_PCS_LINK | GMAC_INT_PCS_ANE);
+		pr_info("dwmac4_ctrl_ane: PCS interrupts enabled\n");
+	}
+	writel(intr_mask, ioaddr + GMAC_INT_EN);
 }
 
 static void dwmac4_rane(void __iomem *ioaddr, bool restart)

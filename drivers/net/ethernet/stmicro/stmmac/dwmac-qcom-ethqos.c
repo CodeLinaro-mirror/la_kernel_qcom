@@ -171,6 +171,7 @@
 static int phytype = -1;
 static int boardtype = -1;
 void *ipc_emac_log_ctxt;
+static int disable_pcs_ane = -1;
 
 struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 static int qcom_ethqos_hib_restore(struct device *dev);
@@ -198,6 +199,10 @@ MODULE_PARM_DESC(eipv6, "ipv6 value from ethernet partition");
 static char *ermac;
 module_param(ermac, charp, 0660);
 MODULE_PARM_DESC(ermac, "mac address from ethernet partition");
+
+static char *pcs_ane;
+module_param(pcs_ane, charp, 0660);
+MODULE_PARM_DESC(pcs_ane, "pcs_ane value for disable pcs auto negotiation");
 #endif
 
 inline void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos)
@@ -313,11 +318,22 @@ fail:
 	return 1;
 }
 
+static int set_pcs_ane(char *pcs_ane)
+{
+	if (!strcmp(pcs_ane, "disable"))
+		disable_pcs_ane = 1;
+	else
+		disable_pcs_ane = 0;
+	return 0;
+}
+
 #ifndef MODULE
 
 __setup("dwmac_qcom_eth.board=", set_board_type);
 
 __setup("dwmac_qcom_eth.enet=", set_phy_type);
+
+__setup("pcs_ane=", set_pcs_ane);
 
 static int __init set_early_ethernet_ipv4_static(char *ipv4_addr_in)
 {
@@ -1085,7 +1101,11 @@ int ethqos_configure_sgmii_v3_1(struct qcom_ethqos *ethqos)
 		rgmii_updatel(ethqos, RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
 			      RGMII_CONFIG2_RGMII_CLK_SEL_CFG, RGMII_IO_MACRO_CONFIG2);
 		value = readl(priv->ioaddr + DWMAC4_PCS_BASE);
-		value |= GMAC_AN_CTRL_RAN | GMAC_AN_CTRL_ANE;
+		/* Customer required to disable auto negotiate. */
+		if (priv->plat->disable_pcs_ane)
+			value &= ~GMAC_AN_CTRL_ANE;
+		else
+			value |= GMAC_AN_CTRL_RAN | GMAC_AN_CTRL_ANE;
 		writel(value, priv->ioaddr + DWMAC4_PCS_BASE);
 	break;
 
@@ -2297,6 +2317,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 		if (ermac)
 			ret = set_early_ethernet_mac(ermac);
+
+		if (pcs_ane)
+			ret = set_pcs_ane(pcs_ane);
 #endif
 
 	stmmac_set_phytype(phytype);
@@ -2322,6 +2345,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "dt configuration failed\n");
 		return PTR_ERR(plat_dat);
 	}
+
+	plat_dat->disable_pcs_ane = disable_pcs_ane;
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
 	if (IS_ERR(ethqos->rgmii_base)) {

@@ -310,5 +310,6 @@ struct plat_stmmacenet_data {
 	struct completion mdio_op;
 	int board_type;
 	int phy_type;
+	int disable_pcs_ane;
 };
 #endif
