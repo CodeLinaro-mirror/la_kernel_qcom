@@ -22,7 +22,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/qup_buses_trace.h>
 
-void i2c_trace_log(struct device *dev, const char *fmt, ...)
+static void i2c_trace_log(struct device *dev, const char *fmt, ...)
 {
 	struct va_format vaf = {
 		.fmt = fmt,
