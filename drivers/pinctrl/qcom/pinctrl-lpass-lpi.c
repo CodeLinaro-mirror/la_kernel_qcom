@@ -569,13 +569,14 @@ EXPORT_SYMBOL_GPL(lpi_pinctrl_runtime_suspend);
 
 int lpi_pinctrl_runtime_resume(struct device *dev)
 {
+	int ret;
 	struct lpi_pinctrl *pctrl = dev_get_drvdata(dev);
 
 	mutex_lock(&pctrl->lpi_lock);
-	clk_bulk_prepare_enable(MAX_LPI_NUM_CLKS, pctrl->clks);
+	ret = clk_bulk_prepare_enable(MAX_LPI_NUM_CLKS, pctrl->clks);
 	mutex_unlock(&pctrl->lpi_lock);
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(lpi_pinctrl_runtime_resume);
 
