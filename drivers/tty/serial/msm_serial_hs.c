@@ -69,7 +69,6 @@
 #define IPC_MSM_HS_LOG_DATA_PAGES 3
 #define UART_DMA_DESC_NR 8
 #define BUF_DUMP_SIZE 32
-#define BITS_PER_LONG 32
 
 /* If the debug_mask gets set to FATAL_LEV,
  * a fatal error has happened and further IPC logging
@@ -1496,10 +1495,7 @@ static void msm_hs_mark_next(struct msm_hs_port *msm_uport, int inx)
 		prev = UART_DMA_DESC_NR - 1;
 	else
 		prev = inx - 1;
-	if (prev / BITS_PER_LONG >= 1) {
-		pr_err("prev value should not be greater that 1\n");
-		return;
-	}
+
 	if (!test_bit(prev, &rx->pending_flag))
 		msm_uport->rx.rx_inx = inx;
 	MSM_HS_DBG("%s(): prev %d pending flag 0x%lx, next %d\n", __func__,
