@@ -173,7 +173,7 @@ static void biastimer_start(uint32_t time_ns)
  * @cpu_gov:  targeted cpu's lpm data structure
  * @duration_ns:  cpu's scheduler sleep length
  */
-static uint64_t find_deviation(struct lpm_cpu *cpu_gov, int *samples_history,
+static uint64_t find_deviation(struct lpm_cpu *cpu_gov, u64 *samples_history,
 			       u64 duration_ns)
 {
 	uint64_t max, avg, stddev;
