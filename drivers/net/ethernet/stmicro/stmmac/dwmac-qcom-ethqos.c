@@ -2754,19 +2754,32 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		return -EINVAL;
 
 	priv = netdev_priv(ndev);
-	mutex_lock(&priv->lock);
-	ret = ethqos_init_regulators(ethqos);
-	if (ret) {
-		mutex_unlock(&priv->lock);
-		return ret;
+	if (ethqos->emac_ver != EMAC_HW_v2_1_2  &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+	    ethqos->emac_ver != EMAC_HW_v2_1_1) {
+		mutex_lock(&priv->lock);
+
+		ret = ethqos_init_regulators(ethqos);
+		if (ret) {
+			mutex_unlock(&priv->lock);
+			return ret;
+		}
+	} else {
+		ret = ethqos_init_regulators(ethqos);
+		if (ret)
+			return ret;
 	}
+
 	ret = ethqos_init_gpio(ethqos);
 	if (ret)
 		ETHQOSINFO("GPIO init failed\n");
 
 	ret = qcom_ethqos_enable_clks(ethqos, dev);
 	if (ret) {
-		mutex_unlock(&priv->lock);
+		if (ethqos->emac_ver != EMAC_HW_v2_1_2  &&
+		    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+		    ethqos->emac_ver != EMAC_HW_v2_1_1)
+			mutex_unlock(&priv->lock);
 		return ret;
 	}
 
@@ -2795,8 +2808,13 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 
 	/* issue software reset to device */
 
-	mutex_unlock(&priv->lock);
-	atomic_set(&priv->plat->phy_clks_suspended, 0);
+	if (ethqos->emac_ver != EMAC_HW_v2_1_2  &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+	    ethqos->emac_ver != EMAC_HW_v2_1_1) {
+		mutex_unlock(&priv->lock);
+		atomic_set(&priv->plat->phy_clks_suspended, 0);
+	}
+
 	if (!netif_running(ndev)) {
 		rtnl_lock();
 		dev_open(ndev, NULL);
@@ -2828,8 +2846,12 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 		return -EINVAL;
 
 	priv = netdev_priv(ndev);
-	atomic_set(&priv->plat->phy_clks_suspended, 1);
-	mutex_lock(&priv->lock);
+	if (ethqos->emac_ver != EMAC_HW_v2_1_2  &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+	    ethqos->emac_ver != EMAC_HW_v2_1_1) {
+		atomic_set(&priv->plat->phy_clks_suspended, 1);
+		mutex_lock(&priv->lock);
+	}
 	ETHQOSINFO("start\n");
 
 	if (netif_running(ndev)) {
@@ -2850,7 +2872,10 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 	ethqos_free_gpios(ethqos);
 
 	ethqos->curr_serdes_speed = 0;
-	mutex_unlock(&priv->lock);
+	if (ethqos->emac_ver != EMAC_HW_v2_1_2 &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+	    ethqos->emac_ver != EMAC_HW_v2_1_1)
+		mutex_unlock(&priv->lock);
 
 	ETHQOSINFO("end\n");
 
