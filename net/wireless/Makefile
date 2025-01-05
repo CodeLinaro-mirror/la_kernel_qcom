@@ -24,6 +24,10 @@ ifneq ($(CONFIG_CFG80211_EXTRA_REGDB_KEYDIR),)
 cfg80211-y += extra-certs.o
 endif
 
+ifeq ($(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT),y)
+ccflags-$(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) += -DCFG80211_PROP_SINGLE_WIPHY_SUPPORT
+endif
+
 $(obj)/shipped-certs.c: $(wildcard $(srctree)/$(src)/certs/*.hex)
 	@$(kecho) "  GEN     $@"
 	$(Q)(echo '#include "reg.h"'; \

@@ -36,6 +36,12 @@ config CFG80211
 
 	  When built as a module it will be called cfg80211.
 
+config CFG80211_PROP_SINGLE_WIPHY_SUPPORT
+	tristate "cfg80211 - wireless configuration for single wiphy feature"
+	help
+	  Enable this option if wireless driver needs to operate in
+	  single wiphy feature with new 802.11be version.
+
 if CFG80211
 
 config NL80211_TESTMODE
