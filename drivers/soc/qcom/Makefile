@@ -46,6 +46,7 @@ obj-$(CONFIG_QCOM_MEMORY_DUMP_V2) += memory_dump_v2.o
 obj-$(CONFIG_QCOM_LLCC_PERFMON) += llcc_perfmon.o
 obj-$(CONFIG_QCOM_LLCC_HEURISTICS) += llcc_heuristics.o
 obj-$(CONFIG_QCOM_KRYO_L2_ACCESSORS) +=	kryo-l2-accessors.o
+obj-$(CONFIG_QCOM_RUN_QUEUE_STATS) += rq_stats.o
 obj-$(CONFIG_MSM_BOOT_STATS) += boot_stats.o
 obj-$(CONFIG_MSM_SLATECOM) += slatecom_spi.o
 obj-$(CONFIG_MSM_SLATECOM_INTERFACE) += slatecom_interface.o
