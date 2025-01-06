@@ -8,11 +8,16 @@ def define_seraph():
     _seraph_in_tree_modules = [
         # keep sorted
         # TODO: Need to add GKI modules
+        "drivers/bus/mhi/devices/mhi_dev_uci.ko",
+        "drivers/bus/mhi/host/mhi.ko",
         "drivers/clk/qcom/clk-dummy.ko",
         "drivers/clk/qcom/clk-qcom.ko",
+        "drivers/clk/qcom/evacc-seraph.ko",
         "drivers/clk/qcom/gcc-seraph.ko",
         "drivers/clk/qcom/gdsc-regulator.ko",
+        "drivers/clk/qcom/lsrcc-seraph.ko",
         "drivers/clk/qcom/tcsrcc-seraph.ko",
+        "drivers/clk/qcom/videocc-seraph.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/firmware/qcom-scm.ko",
         "drivers/hwspinlock/qcom_hwspinlock.ko",
@@ -33,6 +38,7 @@ def define_seraph():
         "drivers/mmc/host/cqhci.ko",
         "drivers/mmc/host/sdhci-msm.ko",
         "drivers/nvmem/nvmem_qfprom.ko",
+        "drivers/pci/controller/pci-msm-drv.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
         "drivers/pinctrl/qcom/pinctrl-seraph.ko",
         "drivers/regulator/stub-regulator.ko",
@@ -49,6 +55,7 @@ def define_seraph():
         "drivers/soc/qcom/mem-offline.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
+        "drivers/soc/qcom/pdr_interface.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/qcom_wdt_core.ko",
         "drivers/soc/qcom/qmi_helpers.ko",
