@@ -26,12 +26,15 @@
 #include "dp_drm.h"
 #include "dp_audio.h"
 #include "dp_debug.h"
+#include "dp_mst_drm.h"
 
 static bool psr_enabled = false;
 module_param(psr_enabled, bool, 0);
 MODULE_PARM_DESC(psr_enabled, "enable PSR for eDP and DP displays");
 
 #define HPD_STRING_SIZE 30
+
+#define DEFAULT_STREAM_COUNT 1
 
 enum {
 	ISR_DISCONNECTED,
@@ -67,6 +70,8 @@ enum {
 
 #define WAIT_FOR_RESUME_TIMEOUT_JIFFIES (HZ / 2)
 
+#define MAX_DPCD_TRANSACTION_BYTES 16
+
 struct msm_dp_event {
 	u32 event_id;
 	u32 data;
@@ -96,6 +101,8 @@ struct msm_dp_display_private {
 	/* wait for audio signaling */
 	struct completion audio_comp;
 
+	unsigned int max_stream;
+
 	/* event related only access by event thread */
 	struct mutex event_mutex;
 	wait_queue_head_t event_q;
@@ -108,6 +115,10 @@ struct msm_dp_display_private {
 
 	bool wide_bus_supported;
 
+	u32 active_stream_cnt;
+
+	const unsigned int *intf_map;
+
 	struct msm_dp_audio *audio;
 };
 
@@ -116,17 +127,44 @@ struct msm_dp_desc {
 	unsigned int id;
 	unsigned int connector_type;
 	bool wide_bus_supported;
+	const unsigned int *intf_map;
+	unsigned int max_streams;
+};
+
+/* to be kept in sync with enum dpu_intf of dpu_hw_mdss.h */
+enum dp_mst_intf {
+	INTF_0 = 1,
+	INTF_1,
+	INTF_2,
+	INTF_3,
+	INTF_4,
+	INTF_5,
+	INTF_6,
+	INTF_7,
+	INTF_8,
+	INTF_MAX
+};
+
+static const unsigned int stream_intf_map_sa_8775p[][DP_STREAM_MAX] = {
+	{INTF_0, INTF_3},
+	{INTF_4, INTF_8},
+	{}
 };
 
 static const struct msm_dp_desc msm_dp_desc_qcs8300[] = {
-	{ .io_start = 0xaf54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true },
-	{ .io_start = 0xaf5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true },
+	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true,
+	  .max_streams = 2, .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_0],
+	},
 	{}
 };
 
 static const struct msm_dp_desc msm_dp_desc_sa8775p[] = {
-	{ .io_start = 0xaf54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true },
-	{ .io_start = 0xaf5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true },
+	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true,
+	  .max_streams = 2, .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_0],
+	},
+	{ .io_start = 0x0af5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true,
+	  .max_streams = 2, .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_1],
+	},
 	{}
 };
 
@@ -193,6 +231,15 @@ static const struct of_device_id msm_dp_dt_match[] = {
 	{ .compatible = "qcom,sm8650-dp", .data = &msm_dp_desc_sm8650 },
 	{}
 };
+
+int msm_dp_display_get_active_stream_cnt(struct msm_dp *msm_dp)
+{
+	struct msm_dp_display_private *msm_dp_display;
+
+	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
+
+	return msm_dp_display->active_stream_cnt;
+}
 
 static struct msm_dp_display_private *dev_get_dp_display_private(struct device *dev)
 {
@@ -376,19 +423,62 @@ static int msm_dp_display_send_hpd_notification(struct msm_dp_display_private *d
 	return 0;
 }
 
+static void msm_dp_display_mst_init(struct msm_dp_display_private *dp)
+{
+	const unsigned long clear_mstm_ctrl_timeout_us = 100000;
+	u8 old_mstm_ctrl;
+	struct msm_dp *msm_dp = &dp->msm_dp_display;
+	int ret;
+
+	/* clear sink mst state */
+	drm_dp_dpcd_readb(dp->aux, DP_MSTM_CTRL, &old_mstm_ctrl);
+	drm_dp_dpcd_writeb(dp->aux, DP_MSTM_CTRL, 0);
+
+	/* add extra delay if MST state is not cleared */
+	if (old_mstm_ctrl) {
+		drm_dbg_dp(dp->drm_dev, "MSTM_CTRL is not cleared, wait %luus\n",
+			   clear_mstm_ctrl_timeout_us);
+		usleep_range(clear_mstm_ctrl_timeout_us,
+			     clear_mstm_ctrl_timeout_us + 1000);
+	}
+
+	ret = drm_dp_dpcd_writeb(dp->aux, DP_MSTM_CTRL,
+				 DP_MST_EN | DP_UP_REQ_EN | DP_UPSTREAM_IS_SRC);
+	if (ret < 0) {
+		DRM_ERROR("sink mst enablement failed\n");
+		return;
+	}
+
+	msm_dp->mst_active = true;
+}
+
+static void msm_dp_display_set_mst_mgr_state(struct msm_dp_display_private *dp,
+					     bool state)
+{
+	if (!dp->msm_dp_display.mst_active)
+		return;
+
+	msm_dp_mst_display_set_mgr_state(&dp->msm_dp_display, state);
+
+	drm_dbg_dp(dp->drm_dev, "mst_mgr_state: %d\n", state);
+}
+
 static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
 {
 	struct drm_connector *connector = dp->msm_dp_display.connector;
 	const struct drm_display_info *info = &connector->display_info;
 	int rc = 0;
+	struct msm_dp *dp_display = &dp->msm_dp_display;
 
 	rc = msm_dp_panel_read_link_caps(dp->panel, connector);
 	if (rc)
 		goto end;
 
-	rc = msm_dp_panel_read_edid(dp->panel, connector);
-	if (rc)
-		goto end;
+	if (dp->max_stream <= DEFAULT_STREAM_COUNT || !msm_dp_panel_read_mst_cap(dp->panel)) {
+		rc = msm_dp_panel_read_edid(dp->panel, connector);
+		if (rc)
+			goto end;
+	}
 
 	msm_dp_link_process_request(dp->link);
 
@@ -409,12 +499,17 @@ static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
 	 */
 	msm_dp_link_psm_config(dp->link, &dp->panel->link_info, false);
 
+	if (dp->max_stream > DEFAULT_STREAM_COUNT && msm_dp_panel_read_mst_cap(dp->panel))
+		msm_dp_display_mst_init(dp);
+
 	msm_dp_link_reset_phy_params_vx_px(dp->link);
-	rc = msm_dp_ctrl_on_link(dp->ctrl);
+	rc = msm_dp_ctrl_on_link(dp->ctrl, dp_display->mst_active);
 	if (rc) {
 		DRM_ERROR("failed to complete DP link training\n");
 		goto end;
 	}
+
+	msm_dp_display_set_mst_mgr_state(dp, true);
 
 	msm_dp_add_event(dp, EV_USER_NOTIFICATION, true, 0);
 
@@ -482,6 +577,12 @@ static int msm_dp_display_usbpd_configure_cb(struct device *dev)
 static int msm_dp_display_notify_disconnect(struct device *dev)
 {
 	struct msm_dp_display_private *dp = dev_get_dp_display_private(dev);
+	struct msm_dp *dp_display = &dp->msm_dp_display;
+
+	if (dp_display->mst_active) {
+		msm_dp_mst_display_set_mgr_state(&dp->msm_dp_display, false);
+		dp_display->mst_active = false;
+	}
 
 	msm_dp_add_event(dp, EV_USER_NOTIFICATION, false, 0);
 
@@ -545,6 +646,7 @@ static int msm_dp_display_usbpd_attention_cb(struct device *dev)
 	int rc = 0;
 	u32 sink_request;
 	struct msm_dp_display_private *dp = dev_get_dp_display_private(dev);
+	struct msm_dp *msm_dp_display = &dp->msm_dp_display;
 
 	/* check for any test request issued by sink */
 	rc = msm_dp_link_process_request(dp->link);
@@ -552,12 +654,15 @@ static int msm_dp_display_usbpd_attention_cb(struct device *dev)
 		sink_request = dp->link->sink_request;
 		drm_dbg_dp(dp->drm_dev, "hpd_state=%d sink_request=%d\n",
 					dp->hpd_state, sink_request);
-		if (sink_request & DS_PORT_STATUS_CHANGED)
-			rc = msm_dp_display_handle_port_status_changed(dp);
-		else
+		if (sink_request & DS_PORT_STATUS_CHANGED) {
+			if (!msm_dp_display->mst_active)
+				rc = msm_dp_display_handle_port_status_changed(dp);
+		} else {
 			rc = msm_dp_display_handle_irq_hpd(dp);
+		}
 	}
 
+	msm_dp_mst_display_hpd_irq(&dp->msm_dp_display);
 	return rc;
 }
 
@@ -702,12 +807,16 @@ static int msm_dp_irq_hpd_handle(struct msm_dp_display_private *dp, u32 data)
 	drm_dbg_dp(dp->drm_dev, "Before, type=%d hpd_state=%d\n",
 			dp->msm_dp_display.connector_type, state);
 
-	if (state == ST_DISPLAY_OFF) {
+	/* irq hpd to indicate monitor disconnect/connect can happen even
+	 * after stream is disabled not necessarily due to hotplug disconnect
+	 */
+	if (state == ST_DISPLAY_OFF && !dp->msm_dp_display.mst_active) {
 		mutex_unlock(&dp->event_mutex);
 		return 0;
 	}
 
-	if (state == ST_MAINLINK_READY || state == ST_DISCONNECT_PENDING) {
+	if ((state == ST_MAINLINK_READY || state == ST_DISCONNECT_PENDING) &&
+			!dp->msm_dp_display.mst_active) {
 		/* wait until ST_CONNECTED */
 		msm_dp_add_event(dp, EV_IRQ_HPD_INT, 0, 1); /* delay = 1 */
 		mutex_unlock(&dp->event_mutex);
@@ -722,6 +831,34 @@ static int msm_dp_irq_hpd_handle(struct msm_dp_display_private *dp, u32 data)
 	mutex_unlock(&dp->event_mutex);
 
 	return 0;
+}
+
+struct msm_dp_panel *msm_dp_display_get_panel(struct msm_dp *dp_display)
+{
+	struct msm_dp_display_private *dp;
+	struct msm_dp_panel *dp_panel;
+
+	struct msm_dp_panel_in panel_in;
+
+	dp = container_of(dp_display, struct msm_dp_display_private, msm_dp_display);
+
+	panel_in.dev = &dp_display->pdev->dev;
+	panel_in.aux = dp->aux;
+	panel_in.catalog = dp->catalog;
+	panel_in.link = dp->link;
+
+	dp_panel = msm_dp_panel_get(&panel_in);
+
+	if (IS_ERR(dp->panel)) {
+		DRM_ERROR("failed to initialize panel\n");
+		return NULL;
+	}
+
+	memcpy(dp_panel->dpcd, dp->panel->dpcd, DP_RECEIVER_CAP_SIZE + 1);
+	memcpy(&dp_panel->link_info, &dp->panel->link_info,
+	       sizeof(dp->panel->link_info));
+
+	return dp_panel;
 }
 
 static void msm_dp_display_deinit_sub_modules(struct msm_dp_display_private *dp)
@@ -819,16 +956,40 @@ error:
 }
 
 static int msm_dp_display_set_mode(struct msm_dp *msm_dp_display,
-			       struct msm_dp_display_mode *mode)
+				   const struct drm_display_mode *adjusted_mode,
+				   struct msm_dp_panel *msm_dp_panel)
 {
-	struct msm_dp_display_private *dp;
+	struct msm_dp_display_mode msm_dp_mode;
 
-	dp = container_of(msm_dp_display, struct msm_dp_display_private, msm_dp_display);
+	memset(&msm_dp_mode, 0x0, sizeof(struct msm_dp_display_mode));
 
-	drm_mode_copy(&dp->panel->msm_dp_mode.drm_mode, &mode->drm_mode);
-	dp->panel->msm_dp_mode.bpp = mode->bpp;
-	dp->panel->msm_dp_mode.out_fmt_is_yuv_420 = mode->out_fmt_is_yuv_420;
-	msm_dp_panel_init_panel_info(dp->panel);
+	if (msm_dp_display_check_video_test(msm_dp_display))
+		msm_dp_mode.bpp = msm_dp_display_get_test_bpp(msm_dp_display);
+	else /* Default num_components per px = 3 */
+		msm_dp_mode.bpp = msm_dp_panel->connector->display_info.bpc * 3;
+
+	if (!msm_dp_mode.bpp)
+		msm_dp_mode.bpp = 24; /* Default bpp */
+
+	drm_mode_copy(&msm_dp_mode.drm_mode, adjusted_mode);
+
+	msm_dp_mode.v_active_low =
+		!!(msm_dp_mode.drm_mode.flags & DRM_MODE_FLAG_NVSYNC);
+
+	msm_dp_mode.h_active_low =
+		!!(msm_dp_mode.drm_mode.flags & DRM_MODE_FLAG_NHSYNC);
+
+	msm_dp_mode.out_fmt_is_yuv_420 =
+		drm_mode_is_420_only(&msm_dp_display->connector->display_info, adjusted_mode) &&
+		msm_dp_panel->vsc_sdp_supported;
+
+	drm_mode_copy(&msm_dp_panel->msm_dp_mode.drm_mode, &msm_dp_mode.drm_mode);
+	msm_dp_panel->msm_dp_mode.bpp = msm_dp_mode.bpp;
+	msm_dp_panel->msm_dp_mode.out_fmt_is_yuv_420 = msm_dp_mode.out_fmt_is_yuv_420;
+	msm_dp_panel->msm_dp_mode.v_active_low = msm_dp_mode.v_active_low;
+	msm_dp_panel->msm_dp_mode.h_active_low = msm_dp_mode.h_active_low;
+	msm_dp_panel_init_panel_info(msm_dp_panel);
+
 	return 0;
 }
 
@@ -867,20 +1028,14 @@ static int msm_dp_display_prepare(struct msm_dp_display_private *dp)
 	return rc;
 }
 
-static int msm_dp_display_enable(struct msm_dp_display_private *dp)
+static int msm_dp_display_enable(struct msm_dp_display_private *dp,
+				 struct msm_dp_panel *msm_dp_panel)
 {
 	int rc = 0;
-	struct msm_dp *msm_dp_display = &dp->msm_dp_display;
 
 	drm_dbg_dp(dp->drm_dev, "sink_count=%d\n", dp->link->sink_count);
-	if (msm_dp_display->power_on) {
-		drm_dbg_dp(dp->drm_dev, "Link already setup, return\n");
-		return 0;
-	}
 
-	rc = msm_dp_ctrl_on_stream(dp->ctrl, dp->panel);
-	if (!rc)
-		msm_dp_display->power_on = true;
+	rc = msm_dp_ctrl_on_stream(dp->ctrl, msm_dp_panel, dp->max_stream);
 
 	return rc;
 }
@@ -924,28 +1079,17 @@ static void msm_dp_display_audio_notify_disable(struct msm_dp_display_private *d
 	msm_dp_display->audio_enabled = false;
 }
 
-static int msm_dp_display_disable(struct msm_dp_display_private *dp)
+static int msm_dp_display_disable(struct msm_dp_display_private *dp,
+				  struct msm_dp_panel *msm_dp_panel)
 {
-	struct msm_dp *msm_dp_display = &dp->msm_dp_display;
-
-	if (!msm_dp_display->power_on)
+	if (!dp->active_stream_cnt)
 		return 0;
 
-	msm_dp_ctrl_clear_vsc_sdp_pkt(dp->ctrl, dp->panel);
+	msm_dp_ctrl_clear_vsc_sdp_pkt(dp->ctrl, msm_dp_panel);
 
-	/* dongle is still connected but sinks are disconnected */
-	if (dp->link->sink_count == 0)
-		msm_dp_ctrl_psm_config(dp->ctrl);
+	msm_dp_ctrl_stream_clk_off(dp->ctrl, msm_dp_panel);
 
-	msm_dp_ctrl_off(dp->ctrl);
-
-	/* re-init the PHY so that we can listen to Dongle disconnect */
-	if (dp->link->sink_count == 0)
-		msm_dp_ctrl_reinit_phy(dp->ctrl);
-	else
-		msm_dp_display_host_phy_exit(dp);
-
-	msm_dp_display->power_on = false;
+	dp->active_stream_cnt--;
 
 	drm_dbg_dp(dp->drm_dev, "sink count: %d\n", dp->link->sink_count);
 	return 0;
@@ -964,25 +1108,58 @@ int msm_dp_display_set_plugged_cb(struct msm_dp *msm_dp_display,
 	return 0;
 }
 
+int msm_dp_display_set_stream_info(struct msm_dp *dp,
+				   struct msm_dp_panel *panel, u32 strm_id, u32 start_slot,
+				   u32 num_slots, u32 pbn, int vcpi)
+{
+	struct msm_dp_display_private *msm_dp_display;
+	const int max_slots = 64;
+
+
+	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
+
+	if (!msm_dp_display) {
+		DRM_ERROR("invalid input\n");
+		return -EINVAL;
+	}
+
+	if (strm_id >= DP_STREAM_MAX) {
+		DRM_ERROR("invalid stream id:%d\n", strm_id);
+		return -EINVAL;
+	}
+
+	if (start_slot + num_slots > max_slots) {
+		DRM_ERROR("invalid channel info received. start:%d, slots:%d\n",
+			  start_slot, num_slots);
+		return -EINVAL;
+	}
+
+	msm_dp_ctrl_set_mst_channel_info(msm_dp_display->ctrl, strm_id, start_slot, num_slots);
+
+	if (panel) {
+		panel->stream_id = strm_id;
+		panel->mst_caps.pbn = pbn;
+	}
+
+	return 0;
+}
+
 /**
  * msm_dp_bridge_mode_valid - callback to determine if specified mode is valid
- * @bridge: Pointer to drm bridge structure
+ * @dp: Pointer to dp display structure
  * @info: display info
  * @mode: Pointer to drm mode structure
  * Returns: Validity status for specified mode
  */
-enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *bridge,
-					  const struct drm_display_info *info,
-					  const struct drm_display_mode *mode)
+enum drm_mode_status msm_dp_display_mode_valid(struct msm_dp *dp,
+					       const struct drm_display_info *info,
+					       const struct drm_display_mode *mode)
 {
 	const u32 num_components = 3, default_bpp = 24;
 	struct msm_dp_display_private *msm_dp_display;
 	struct msm_dp_link_info *link_info;
 	u32 mode_rate_khz = 0, supported_rate_khz = 0, mode_bpp = 0;
-	struct msm_dp *dp;
 	int mode_pclk_khz = mode->clock;
-
-	dp = to_dp_bridge(bridge)->msm_dp_display;
 
 	if (!dp || !mode_pclk_khz || !dp->connector) {
 		DRM_ERROR("invalid params\n");
@@ -1069,7 +1246,7 @@ void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm_dp *dp)
 	 */
 	mutex_lock(&msm_dp_display->event_mutex);
 
-	if (!dp->power_on) {
+	if (!msm_dp_display->active_stream_cnt) {
 		mutex_unlock(&msm_dp_display->event_mutex);
 		return;
 	}
@@ -1324,6 +1501,20 @@ static int msm_dp_auxbus_done_probe(struct drm_dp_aux *aux)
 	return msm_dp_display_probe_tail(aux->dev);
 }
 
+int msm_dp_get_mst_max_stream(const struct msm_dp *dp_display)
+{
+	struct msm_dp_display_private *dp_priv;
+
+	dp_priv = container_of(dp_display, struct msm_dp_display_private, msm_dp_display);
+
+	return dp_priv->max_stream;
+}
+
+int msm_dp_mst_bridge_init(struct msm_dp *dp_display, struct drm_encoder *encoder)
+{
+	return msm_dp_mst_drm_bridge_init(dp_display, encoder);
+}
+
 static int msm_dp_display_probe(struct platform_device *pdev)
 {
 	int rc = 0;
@@ -1349,6 +1540,11 @@ static int msm_dp_display_probe(struct platform_device *pdev)
 	dp->wide_bus_supported = desc->wide_bus_supported;
 	dp->msm_dp_display.is_edp =
 		(dp->msm_dp_display.connector_type == DRM_MODE_CONNECTOR_eDP);
+
+	dp->max_stream = (desc->max_streams > DEFAULT_STREAM_COUNT) ?
+			  desc->max_streams : DEFAULT_STREAM_COUNT;
+
+	dp->intf_map = desc->intf_map;
 
 	rc = msm_dp_init_sub_modules(dp);
 	if (rc) {
@@ -1504,6 +1700,18 @@ bool msm_dp_wide_bus_available(const struct msm_dp *msm_dp_display)
 	return dp->wide_bus_supported;
 }
 
+int msm_dp_get_mst_intf_id(struct msm_dp *dp_display, int stream_id)
+{
+	struct msm_dp_display_private *dp;
+
+	dp = container_of(dp_display, struct msm_dp_display_private, msm_dp_display);
+
+	if (dp->intf_map)
+		return dp->intf_map[stream_id];
+
+	return 0;
+}
+
 void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display, struct dentry *root, bool is_edp)
 {
 	struct msm_dp_display_private *dp;
@@ -1549,11 +1757,35 @@ int msm_dp_modeset_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
 	return 0;
 }
 
-void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
-			     struct drm_bridge_state *old_bridge_state)
+int msm_dp_mst_register(struct msm_dp *dp)
 {
-	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
-	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
+	struct msm_dp_display_private *dp_display;
+
+	dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
+
+	return msm_dp_mst_init(dp, dp_display->max_stream,
+			   MAX_DPCD_TRANSACTION_BYTES, dp_display->aux);
+}
+
+void msm_dp_display_atomic_prepare(struct msm_dp *dp)
+{
+	int rc = 0;
+	struct msm_dp_display_private *msm_dp_display;
+
+	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
+
+	mutex_lock(&msm_dp_display->event_mutex);
+
+	rc = msm_dp_display_prepare(msm_dp_display);
+	if (rc) {
+		DRM_ERROR("DP display prepare failed, rc=%d\n", rc);
+	}
+
+	mutex_unlock(&msm_dp_display->event_mutex);
+}
+
+void msm_dp_display_enable_helper(struct msm_dp *dp, struct msm_dp_panel *msm_dp_panel)
+{
 	int rc = 0;
 	struct msm_dp_display_private *msm_dp_display;
 
@@ -1564,22 +1796,17 @@ void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 
 	mutex_lock(&msm_dp_display->event_mutex);
 
-	rc = msm_dp_display_prepare(msm_dp_display);
-	if (rc) {
-		DRM_ERROR("DP display prepare failed, rc=%d\n", rc);
-		mutex_unlock(&msm_dp_display->event_mutex);
-		return;
-	}
-
-	rc = msm_dp_display_enable(msm_dp_display);
+	rc = msm_dp_display_enable(msm_dp_display, msm_dp_panel);
 	if (rc)
 		DRM_ERROR("DP display enable failed, rc=%d\n", rc);
 
 	rc = msm_dp_display_post_enable(dp);
 	if (rc) {
 		DRM_ERROR("DP display post enable failed, rc=%d\n", rc);
-		msm_dp_display_disable(msm_dp_display);
+		msm_dp_display_disable(msm_dp_display, msm_dp_panel);
 	}
+
+	msm_dp_display->active_stream_cnt++;
 
 	/* completed connection */
 	msm_dp_display->hpd_state = ST_CONNECTED;
@@ -1588,37 +1815,77 @@ void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 	mutex_unlock(&msm_dp_display->event_mutex);
 }
 
-void msm_dp_bridge_atomic_disable(struct drm_bridge *drm_bridge,
-			      struct drm_bridge_state *old_bridge_state)
+void msm_dp_display_atomic_enable(struct msm_dp *msm_dp)
 {
-	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
-	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
+	struct msm_dp_display_private *msm_dp_display;
+
+	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
+
+	// move this to a different commit
+	msm_dp_display_set_stream_info(msm_dp, msm_dp_display->panel, 0, 0, 0, 0, 0);
+
+	msm_dp_display_enable_helper(msm_dp, msm_dp_display->panel);
+}
+
+void msm_dp_display_disable_helper(struct msm_dp *dp, struct msm_dp_panel *msm_dp_panel)
+{
 	struct msm_dp_display_private *msm_dp_display;
 
 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
 
-	msm_dp_ctrl_push_idle(msm_dp_display->ctrl);
-}
-
-static void msm_dp_display_unprepare(struct msm_dp_display_private *dp)
-{
-	struct msm_dp *msm_dp_display = &dp->msm_dp_display;
-
-	if (!msm_dp_display->prepared) {
-		drm_dbg_dp(dp->drm_dev, "Link already unprepared, return\n");
+	if (!msm_dp_display->active_stream_cnt) {
+		drm_dbg_dp(dp->drm_dev, "no active streams\n");
 		return;
 	}
 
-	pm_runtime_put_sync(&msm_dp_display->pdev->dev);
-
-	msm_dp_display->prepared = false;
+	msm_dp_ctrl_push_vcpf(msm_dp_display->ctrl, msm_dp_panel);
+	msm_dp_ctrl_mst_stream_channel_slot_setup(msm_dp_display->ctrl, msm_dp_display->max_stream);
+	msm_dp_ctrl_mst_send_act(msm_dp_display->ctrl);
 }
 
-void msm_dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
-				   struct drm_bridge_state *old_bridge_state)
+void msm_dp_display_atomic_disable(struct msm_dp *msm_dp)
 {
-	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
-	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
+	struct msm_dp_display_private *msm_dp_display;
+
+	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
+
+	msm_dp_ctrl_push_idle(msm_dp_display->ctrl);
+}
+
+void msm_dp_display_unprepare(struct msm_dp *msm_dp)
+{
+	struct msm_dp_display_private *msm_dp_display;
+
+	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
+	if (!msm_dp->prepared) {
+		drm_dbg_dp(msm_dp->drm_dev, "Link already unprepare, return\n");
+		return;
+	}
+
+	if (msm_dp_display->active_stream_cnt) {
+		drm_dbg_dp(msm_dp->drm_dev, "stream still active, return\n");
+		return;
+	}
+
+	/* dongle is still connected but sinks are disconnected */
+	if (msm_dp_display->link->sink_count == 0)
+		msm_dp_ctrl_psm_config(msm_dp_display->ctrl);
+
+	msm_dp_ctrl_off_link(msm_dp_display->ctrl);
+
+	/* re-init the PHY so that we can listen to Dongle disconnect */
+	if (msm_dp_display->link->sink_count == 0)
+		msm_dp_ctrl_reinit_phy(msm_dp_display->ctrl);
+	else
+		msm_dp_display_host_phy_exit(msm_dp_display);
+
+	pm_runtime_put_sync(&msm_dp->pdev->dev);
+
+	msm_dp->prepared = false;
+}
+
+void msm_dp_display_atomic_post_disable_helper(struct msm_dp *dp, struct msm_dp_panel *msm_dp_panel)
+{
 	u32 state;
 	struct msm_dp_display_private *msm_dp_display;
 
@@ -1636,59 +1903,43 @@ void msm_dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
 
 	msm_dp_display_audio_notify_disable(msm_dp_display);
 
-	msm_dp_display_disable(msm_dp_display);
+	msm_dp_display_disable(msm_dp_display, msm_dp_panel);
 
 	state =  msm_dp_display->hpd_state;
-	if (state == ST_DISCONNECT_PENDING) {
+	if (state == ST_DISCONNECT_PENDING && !msm_dp_display->active_stream_cnt) {
 		/* completed disconnection */
 		msm_dp_display->hpd_state = ST_DISCONNECTED;
-	} else {
+	} else if (state != ST_DISCONNECT_PENDING && state != ST_DISCONNECTED) {
+		/* stay at pending till both streams are disabled, otherwise OFF */
 		msm_dp_display->hpd_state = ST_DISPLAY_OFF;
 	}
-
-	msm_dp_display_unprepare(msm_dp_display);
 
 	drm_dbg_dp(dp->drm_dev, "type=%d Done\n", dp->connector_type);
 
 	mutex_unlock(&msm_dp_display->event_mutex);
 }
 
-void msm_dp_bridge_mode_set(struct drm_bridge *drm_bridge,
-			const struct drm_display_mode *mode,
-			const struct drm_display_mode *adjusted_mode)
+void msm_dp_display_atomic_post_disable(struct msm_dp *msm_dp)
 {
-	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
-	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
 	struct msm_dp_display_private *msm_dp_display;
-	struct msm_dp_panel *msm_dp_panel;
-	struct msm_dp_display_mode msm_dp_mode;
 
-	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
-	msm_dp_panel = msm_dp_display->panel;
+	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
 
-	memset(&msm_dp_mode, 0x0, sizeof(struct msm_dp_display_mode));
+	msm_dp_display_atomic_post_disable_helper(msm_dp, msm_dp_display->panel);
 
-	if (msm_dp_display_check_video_test(dp))
-		msm_dp_mode.bpp = msm_dp_display_get_test_bpp(dp);
-	else /* Default num_components per pixel = 3 */
-		msm_dp_mode.bpp = dp->connector->display_info.bpc * 3;
+	msm_dp_display_unprepare(msm_dp);
+}
 
-	if (!msm_dp_mode.bpp)
-		msm_dp_mode.bpp = 24; /* Default bpp */
+void msm_dp_display_mode_set_helper(struct msm_dp *msm_dp,
+				    const struct drm_display_mode *mode,
+				    const struct drm_display_mode *adjusted_mode,
+				    struct msm_dp_panel *msm_dp_panel)
+{
+	struct msm_dp_display_private *msm_dp_display;
 
-	drm_mode_copy(&msm_dp_mode.drm_mode, adjusted_mode);
+	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
 
-	msm_dp_mode.v_active_low =
-		!!(msm_dp_mode.drm_mode.flags & DRM_MODE_FLAG_NVSYNC);
-
-	msm_dp_mode.h_active_low =
-		!!(msm_dp_mode.drm_mode.flags & DRM_MODE_FLAG_NHSYNC);
-
-	msm_dp_mode.out_fmt_is_yuv_420 =
-		drm_mode_is_420_only(&dp->connector->display_info, adjusted_mode) &&
-		msm_dp_panel->vsc_sdp_supported;
-
-	msm_dp_display_set_mode(dp, &msm_dp_mode);
+	msm_dp_display_set_mode(msm_dp, adjusted_mode, msm_dp_panel);
 
 	/* populate wide_bus_support to different layers */
 	msm_dp_display->ctrl->wide_bus_en =
@@ -1697,6 +1948,17 @@ void msm_dp_bridge_mode_set(struct drm_bridge *drm_bridge,
 	msm_dp_display->catalog->wide_bus_en =
 		msm_dp_panel->msm_dp_mode.out_fmt_is_yuv_420 ?
 		false : msm_dp_display->wide_bus_supported;
+}
+
+void msm_dp_display_mode_set(struct msm_dp *msm_dp,
+			     const struct drm_display_mode *mode,
+			     const struct drm_display_mode *adjusted_mode)
+{
+	struct msm_dp_display_private *msm_dp_display;
+
+	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
+
+	msm_dp_display_mode_set_helper(msm_dp, mode, adjusted_mode, msm_dp_display->panel);
 }
 
 void msm_dp_bridge_hpd_enable(struct drm_bridge *bridge)

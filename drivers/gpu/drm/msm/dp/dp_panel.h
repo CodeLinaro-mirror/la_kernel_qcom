@@ -33,6 +33,11 @@ struct msm_dp_panel_psr {
 	u8 capabilities;
 };
 
+struct mst_caps {
+	u32 pbn_no_overhead;
+	u32 pbn;
+};
+
 struct msm_dp_panel {
 	/* dpcd raw data */
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
@@ -46,10 +51,14 @@ struct msm_dp_panel {
 	bool video_test;
 	bool vsc_sdp_supported;
 
+	enum msm_dp_stream_id stream_id;
+
 	u32 max_dp_lanes;
 	u32 max_dp_link_rate;
 
 	u32 max_bw_code;
+
+	struct mst_caps mst_caps;
 };
 
 int msm_dp_panel_init_panel_info(struct msm_dp_panel *msm_dp_panel);
