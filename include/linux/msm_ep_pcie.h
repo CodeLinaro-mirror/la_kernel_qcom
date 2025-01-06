@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,6 +17,7 @@
 #include <linux/types.h>
 
 enum ep_pcie_link_status {
+	EP_PCIE_LINK_INVALID,
 	EP_PCIE_LINK_DISABLED,
 	EP_PCIE_LINK_UP,
 	EP_PCIE_LINK_ENABLED,
