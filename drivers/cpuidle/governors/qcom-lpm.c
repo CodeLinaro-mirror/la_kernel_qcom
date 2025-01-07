@@ -373,11 +373,11 @@ static void update_cpu_history(struct lpm_cpu *cpu_gov)
 	    idx > cpu_gov->drv->state_count - 1)
 		return;
 
-	if (cpu_gov->dev->last_residency_ns == 0) {
-		histtimer_cancel();
-		biastimer_cancel();
+	histtimer_cancel();
+	biastimer_cancel();
+
+	if (cpu_gov->dev->last_residency_ns == 0)
 		return;
-	}
 
 	target = &cpu_gov->drv->states[idx];
 
