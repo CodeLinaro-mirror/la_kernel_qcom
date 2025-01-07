@@ -3761,7 +3761,8 @@ static int msm_otg_vbus_notifier(struct notifier_block *nb, unsigned long event,
 static int msm_otg_id_notifier(struct notifier_block *nb, unsigned long event,
 				void *ptr)
 {
-	struct msm_otg *motg = the_msm_otg;
+	struct usb_phy *phy = container_of(nb, struct usb_phy, id_nb);
+	struct msm_otg *motg = container_of(phy, struct msm_otg, phy);
 
 	if (event)
 		motg->id_state = USB_ID_GROUND;
