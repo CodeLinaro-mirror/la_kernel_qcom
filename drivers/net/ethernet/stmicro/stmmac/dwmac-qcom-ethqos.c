@@ -168,6 +168,8 @@
 #define DWMAC4_PCS_BASE			0x000000e0
 #define RGMII_CONFIG_10M_CLK_DVD	GENMASK(18, 10)
 
+static int phytype = -1;
+static int boardtype = -1;
 void *ipc_emac_log_ctxt;
 
 struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
@@ -177,6 +179,14 @@ struct plat_stmmacenet_data *plat_dat;
 struct qcom_ethqos *pethqos;
 
 #ifdef MODULE
+static char *board;
+module_param(board, charp, 0660);
+MODULE_PARM_DESC(board, "board type of the device");
+
+static char *enet;
+module_param(enet, charp, 0660);
+MODULE_PARM_DESC(enet, "enet value for the phy connection");
+
 static char *eipv4;
 module_param(eipv4, charp, 0660);
 MODULE_PARM_DESC(eipv4, "ipv4 value from ethernet partition");
@@ -202,6 +212,32 @@ inline void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos)
 static unsigned char dev_addr[ETH_ALEN] = {
 	0, 0x55, 0x7b, 0xb5, 0x7d, 0xf7};
 static struct ip_params pparams = {"", "", "", ""};
+
+static int set_board_type(char *board_params)
+{
+	ETHQOSINFO("Board Param from command line: %s", board_params);
+	if (!strcmp(board_params, "Air"))
+		boardtype = AIR_BOARD;
+	else if (!strcmp(board_params, "Star"))
+		boardtype = STAR_BOARD;
+	else
+		return -1;
+	return 0;
+}
+
+static int set_phy_type(char *enet_params)
+{
+	ETHQOSINFO("Enet Param from command line: %s", enet_params);
+	if (!strcmp(enet_params, "1") || !strcmp(enet_params, "2"))
+		phytype = PHY_1G;
+	else if (!strcmp(enet_params, "3") || !strcmp(enet_params, "6"))
+		phytype = PHY_25G;
+	else if (!strcmp(enet_params, "4") || !strcmp(enet_params, "5"))
+		phytype = SWITCH;
+	else
+		return -1;
+	return 0;
+}
 
 static int set_early_ethernet_ipv4(char *ipv4_addr_in)
 {
@@ -278,6 +314,11 @@ fail:
 }
 
 #ifndef MODULE
+
+__setup("dwmac_qcom_eth.board=", set_board_type);
+
+__setup("dwmac_qcom_eth.enet=", set_phy_type);
+
 static int __init set_early_ethernet_ipv4_static(char *ipv4_addr_in)
 {
 	int ret = 1;
@@ -415,6 +456,14 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 {
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	unsigned int eth_type, priority;
+	int gso = skb_shinfo(skb)->gso_type;
+
+	if (skb && skb->priority) {
+		if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4))
+			return 0;
+		else
+			return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
+	}
 
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
@@ -1766,9 +1815,6 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 
 	if (priv->plat->phy_intr_en_extn_stm)
 		reinit_completion(&ethqos->clk_enable_done);
-
-	if (priv->plat->mdio_op_busy)
-		wait_for_completion(&priv->plat->mdio_op);
 	ethqos->clks_suspended = 1;
 
 	ethqos_update_rgmii_clk(ethqos, 0);
@@ -1835,10 +1881,9 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 		ethqos_update_rgmii_clk(ethqos, SPEED_10);
 
 	ethqos->clks_suspended = 0;
-	atomic_set(&priv->plat->phy_clks_suspended, 1);
+
 	if (priv->plat->phy_intr_en_extn_stm)
 		complete_all(&ethqos->clk_enable_done);
-
 	ETHQOSDBG("Exit\n");
 }
 
@@ -2230,6 +2275,12 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ETHQOSINFO("M - Ethernet probe start\n");
 
 #ifdef MODULE
+		if (enet)
+			ret = set_phy_type(enet);
+
+		if (board)
+			ret = set_board_type(board);
+
 		if (eipv4)
 			ret = set_early_ethernet_ipv4(eipv4);
 
@@ -2240,6 +2291,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 			ret = set_early_ethernet_mac(ermac);
 #endif
 
+	stmmac_set_phytype(phytype);
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return ret;
@@ -2371,7 +2423,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 	ETHQOSDBG("gdsc-off-on-suspend = %d\n",
 		  ethqos->gdsc_off_on_suspend);
-
+	plat_dat->phy_type = phytype;
+	plat_dat->board_type = boardtype;
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;
@@ -2701,18 +2754,34 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		return -EINVAL;
 
 	priv = netdev_priv(ndev);
+	if (ethqos->emac_ver != EMAC_HW_v2_1_2  &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+	    ethqos->emac_ver != EMAC_HW_v2_1_1) {
+		mutex_lock(&priv->lock);
 
-	ret = ethqos_init_regulators(ethqos);
-	if (ret)
-		return ret;
+		ret = ethqos_init_regulators(ethqos);
+		if (ret) {
+			mutex_unlock(&priv->lock);
+			return ret;
+		}
+	} else {
+		ret = ethqos_init_regulators(ethqos);
+		if (ret)
+			return ret;
+	}
 
 	ret = ethqos_init_gpio(ethqos);
 	if (ret)
 		ETHQOSINFO("GPIO init failed\n");
 
 	ret = qcom_ethqos_enable_clks(ethqos, dev);
-	if (ret)
+	if (ret) {
+		if (ethqos->emac_ver != EMAC_HW_v2_1_2  &&
+		    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+		    ethqos->emac_ver != EMAC_HW_v2_1_1)
+			mutex_unlock(&priv->lock);
 		return ret;
+	}
 
 	ethqos_update_rgmii_clk(ethqos, ethqos->speed);
 
@@ -2739,13 +2808,19 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 
 	/* issue software reset to device */
 
+	if (ethqos->emac_ver != EMAC_HW_v2_1_2  &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+	    ethqos->emac_ver != EMAC_HW_v2_1_1) {
+		mutex_unlock(&priv->lock);
+		atomic_set(&priv->plat->phy_clks_suspended, 0);
+	}
+
 	if (!netif_running(ndev)) {
 		rtnl_lock();
 		dev_open(ndev, NULL);
 		rtnl_unlock();
 		ETHQOSINFO("calling open\n");
 	}
-
 	ETHQOSINFO("end\n");
 
 	return ret;
@@ -2771,7 +2846,12 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 		return -EINVAL;
 
 	priv = netdev_priv(ndev);
-
+	if (ethqos->emac_ver != EMAC_HW_v2_1_2  &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+	    ethqos->emac_ver != EMAC_HW_v2_1_1) {
+		atomic_set(&priv->plat->phy_clks_suspended, 1);
+		mutex_lock(&priv->lock);
+	}
 	ETHQOSINFO("start\n");
 
 	if (netif_running(ndev)) {
@@ -2792,6 +2872,10 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 	ethqos_free_gpios(ethqos);
 
 	ethqos->curr_serdes_speed = 0;
+	if (ethqos->emac_ver != EMAC_HW_v2_1_2 &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_1 &&
+	    ethqos->emac_ver != EMAC_HW_v2_1_1)
+		mutex_unlock(&priv->lock);
 
 	ETHQOSINFO("end\n");
 
