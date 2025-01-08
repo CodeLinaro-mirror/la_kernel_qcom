@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2010,2015,2019,2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2015 Linaro Ltd.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt)     "qcom-scm: %s: " fmt, __func__
 
@@ -442,7 +443,7 @@ int qcom_scm_set_warm_boot_addr(void *entry, const cpumask_t *cpus)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_set_warm_boot_addr);
+EXPORT_SYMBOL(qcom_scm_set_warm_boot_addr);
 
 /**
  * qcom_scm_set_cold_boot_addr() - Set the cold boot address for cpus
@@ -487,7 +488,7 @@ int qcom_scm_set_cold_boot_addr(void *entry, const cpumask_t *cpus)
 
 	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_set_cold_boot_addr);
+EXPORT_SYMBOL(qcom_scm_set_cold_boot_addr);
 
 /**
  * qcom_scm_cpu_power_down() - Power down the cpu
@@ -509,7 +510,7 @@ void qcom_scm_cpu_power_down(u32 flags)
 
 	qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_cpu_power_down);
+EXPORT_SYMBOL(qcom_scm_cpu_power_down);
 
 /**
  * qcm_scm_sec_wdog_deactivate() - Deactivate secure watchdog
@@ -526,7 +527,7 @@ int qcom_scm_sec_wdog_deactivate(void)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_sec_wdog_deactivate);
+EXPORT_SYMBOL(qcom_scm_sec_wdog_deactivate);
 
 /**
  * qcom_scm_sec_wdog_trigger() - Trigger secure watchdog
@@ -547,7 +548,7 @@ int qcom_scm_sec_wdog_trigger(void)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_sec_wdog_trigger);
+EXPORT_SYMBOL(qcom_scm_sec_wdog_trigger);
 
 /**
  * qcom_scm_disable_sdi() - Disable SDI
@@ -571,7 +572,7 @@ void qcom_scm_disable_sdi(void)
 	if (ret)
 		pr_err("Failed to disable secure wdog debug: %d\n", ret);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_disable_sdi);
+EXPORT_SYMBOL(qcom_scm_disable_sdi);
 
 int qcom_scm_set_remote_state(u32 state, u32 id)
 {
@@ -590,7 +591,7 @@ int qcom_scm_set_remote_state(u32 state, u32 id)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_set_remote_state);
+EXPORT_SYMBOL(qcom_scm_set_remote_state);
 
 int qcom_scm_spin_cpu(void)
 {
@@ -604,7 +605,7 @@ int qcom_scm_spin_cpu(void)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_spin_cpu);
+EXPORT_SYMBOL(qcom_scm_spin_cpu);
 
 static int __qcom_scm_set_dload_mode(struct device *dev, enum qcom_download_mode mode)
 {
@@ -640,7 +641,7 @@ void qcom_scm_set_download_mode(enum qcom_download_mode mode, phys_addr_t tcsr_b
 	if (ret)
 		dev_err(dev, "failed to set download mode: %d\n", ret);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_set_download_mode);
+EXPORT_SYMBOL(qcom_scm_set_download_mode);
 
 int qcom_scm_get_download_mode(unsigned int *mode, phys_addr_t tcsr_boot_misc)
 {
@@ -659,7 +660,7 @@ int qcom_scm_get_download_mode(unsigned int *mode, phys_addr_t tcsr_boot_misc)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_get_download_mode);
+EXPORT_SYMBOL(qcom_scm_get_download_mode);
 
 int qcom_scm_config_cpu_errata(void)
 {
@@ -672,7 +673,7 @@ int qcom_scm_config_cpu_errata(void)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_config_cpu_errata);
+EXPORT_SYMBOL(qcom_scm_config_cpu_errata);
 
 void qcom_scm_phy_update_scm_level_shifter(u32 val)
 {
@@ -695,7 +696,7 @@ void qcom_scm_phy_update_scm_level_shifter(u32 val)
 		pr_err("Failed to update scm level shifter=0x%x\n", ret);
 
 }
-EXPORT_SYMBOL_GPL(qcom_scm_phy_update_scm_level_shifter);
+EXPORT_SYMBOL(qcom_scm_phy_update_scm_level_shifter);
 
 
 /**
@@ -738,7 +739,7 @@ int qcom_scm_pas_init_image(u32 peripheral, dma_addr_t metadata)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_pas_init_image);
+EXPORT_SYMBOL(qcom_scm_pas_init_image);
 
 /**
  * qcom_scm_pas_mem_setup() - Prepare the memory related to a given peripheral
@@ -777,7 +778,7 @@ int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr, phys_addr_t size)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_pas_mem_setup);
+EXPORT_SYMBOL(qcom_scm_pas_mem_setup);
 
 /**
  * qcom_scm_pas_auth_and_reset() - Authenticate the given peripheral firmware
@@ -812,7 +813,7 @@ int qcom_scm_pas_auth_and_reset(u32 peripheral)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_pas_auth_and_reset);
+EXPORT_SYMBOL(qcom_scm_pas_auth_and_reset);
 
 /**
  * qcom_scm_pas_shutdown() - Shut down the remote processor
@@ -847,7 +848,7 @@ int qcom_scm_pas_shutdown(u32 peripheral)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_pas_shutdown);
+EXPORT_SYMBOL(qcom_scm_pas_shutdown);
 
 int qcom_scm_pas_shutdown_retry(u32 peripheral)
 {
@@ -869,7 +870,7 @@ int qcom_scm_pas_shutdown_retry(u32 peripheral)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_pas_shutdown_retry);
+EXPORT_SYMBOL(qcom_scm_pas_shutdown_retry);
 
 /**
  * qcom_scm_pas_supported() - Check if the peripheral authentication service is
@@ -898,7 +899,7 @@ bool qcom_scm_pas_supported(u32 peripheral)
 
 	return ret ? false : !!res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_pas_supported);
+EXPORT_SYMBOL(qcom_scm_pas_supported);
 
 static int __qcom_scm_pas_mss_reset(struct device *dev, bool reset)
 {
@@ -958,7 +959,7 @@ int qcom_scm_get_sec_dump_state(u32 *dump_state)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_get_sec_dump_state);
+EXPORT_SYMBOL(qcom_scm_get_sec_dump_state);
 
 int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t size)
 {
@@ -974,7 +975,7 @@ int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t s
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_assign_dump_table_region);
+EXPORT_SYMBOL(qcom_scm_assign_dump_table_region);
 
 int qcom_scm_tz_blsp_modify_owner(int food, u64 subsystem, int *out)
 {
@@ -996,7 +997,7 @@ int qcom_scm_tz_blsp_modify_owner(int food, u64 subsystem, int *out)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_tz_blsp_modify_owner);
+EXPORT_SYMBOL(qcom_scm_tz_blsp_modify_owner);
 
 int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val)
 {
@@ -1017,7 +1018,7 @@ int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val)
 
 	return ret < 0 ? ret : 0;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_io_readl);
+EXPORT_SYMBOL(qcom_scm_io_readl);
 
 int qcom_scm_io_writel(phys_addr_t addr, unsigned int val)
 {
@@ -1032,7 +1033,7 @@ int qcom_scm_io_writel(phys_addr_t addr, unsigned int val)
 
 	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_io_writel);
+EXPORT_SYMBOL(qcom_scm_io_writel);
 
 /**
  * qcom_scm_io_reset()
@@ -1051,21 +1052,21 @@ int qcom_scm_io_reset(void)
 
 	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_io_reset);
+EXPORT_SYMBOL(qcom_scm_io_reset);
 
 bool qcom_scm_is_secure_wdog_trigger_available(void)
 {
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_BOOT,
 						QCOM_SCM_BOOT_SEC_WDOG_TRIGGER);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_is_secure_wdog_trigger_available);
+EXPORT_SYMBOL(qcom_scm_is_secure_wdog_trigger_available);
 
 bool qcom_scm_is_mode_switch_available(void)
 {
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_BOOT,
 						QCOM_SCM_BOOT_SWITCH_MODE);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_is_mode_switch_available);
+EXPORT_SYMBOL(qcom_scm_is_mode_switch_available);
 
 int __qcom_scm_get_feat_version(struct device *dev, u64 feat_id, u64 *version)
 {
@@ -1092,7 +1093,7 @@ int qcom_scm_get_jtag_etm_feat_id(u64 *version)
 	return __qcom_scm_get_feat_version(__scm ? __scm->dev : NULL,
 					QCOM_SCM_TZ_DBG_ETM_FEAT_ID, version);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_get_jtag_etm_feat_id);
+EXPORT_SYMBOL(qcom_scm_get_jtag_etm_feat_id);
 
 /**
  * qcom_halt_spmi_pmic_arbiter() - Halt SPMI PMIC arbiter
@@ -1117,7 +1118,7 @@ void qcom_scm_halt_spmi_pmic_arbiter(void)
 	if (ret)
 		pr_debug("Failed to halt_spmi_pmic_arbiter=0x%x\n", ret);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_halt_spmi_pmic_arbiter);
+EXPORT_SYMBOL(qcom_scm_halt_spmi_pmic_arbiter);
 
 /**
  * qcom_deassert_ps_hold() - Deassert PS_HOLD
@@ -1144,7 +1145,7 @@ void qcom_scm_deassert_ps_hold(void)
 	if (ret)
 		pr_err("Failed to deassert_ps_hold=0x%x\n", ret);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_deassert_ps_hold);
+EXPORT_SYMBOL(qcom_scm_deassert_ps_hold);
 
 static int __qcom_scm_paravirt_smmu_attach(struct device *dev, u64 sid,
 				    u64 asid, u64 ste_pa, u64 ste_size,
@@ -1257,7 +1258,7 @@ void qcom_scm_mmu_sync(bool sync)
 	if (ret)
 		pr_err("MMU sync with Hypervisor off %x\n", ret);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_mmu_sync);
+EXPORT_SYMBOL(qcom_scm_mmu_sync);
 
 /**
  * qcom_scm_restore_sec_cfg_available() - Check if secure environment
@@ -1270,7 +1271,7 @@ bool qcom_scm_restore_sec_cfg_available(void)
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_MP,
 					    QCOM_SCM_MP_RESTORE_SEC_CFG);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_restore_sec_cfg_available);
+EXPORT_SYMBOL(qcom_scm_restore_sec_cfg_available);
 
 int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare)
 {
@@ -1289,7 +1290,7 @@ int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_restore_sec_cfg);
+EXPORT_SYMBOL(qcom_scm_restore_sec_cfg);
 
 int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size)
 {
@@ -1310,7 +1311,7 @@ int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size)
 
 	return ret ? : res.result[1];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_iommu_secure_ptbl_size);
+EXPORT_SYMBOL(qcom_scm_iommu_secure_ptbl_size);
 
 int qcom_scm_iommu_secure_ptbl_init(u64 addr, u32 size, u32 spare)
 {
@@ -1334,7 +1335,7 @@ int qcom_scm_iommu_secure_ptbl_init(u64 addr, u32 size, u32 spare)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_iommu_secure_ptbl_init);
+EXPORT_SYMBOL(qcom_scm_iommu_secure_ptbl_init);
 
 int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
 				   u32 cp_nonpixel_start,
@@ -1358,7 +1359,7 @@ int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_mem_protect_video_var);
+EXPORT_SYMBOL(qcom_scm_mem_protect_video_var);
 
 int qcom_scm_mem_protect_region_id(phys_addr_t paddr, size_t size)
 {
@@ -1373,7 +1374,7 @@ int qcom_scm_mem_protect_region_id(phys_addr_t paddr, size_t size)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_mem_protect_region_id);
+EXPORT_SYMBOL(qcom_scm_mem_protect_region_id);
 
 int qcom_scm_mem_protect_lock_id2_flat(phys_addr_t list_addr,
 				size_t list_size, size_t chunk_size,
@@ -1396,7 +1397,7 @@ int qcom_scm_mem_protect_lock_id2_flat(phys_addr_t list_addr,
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_mem_protect_lock_id2_flat);
+EXPORT_SYMBOL(qcom_scm_mem_protect_lock_id2_flat);
 
 int qcom_scm_iommu_secure_map(phys_addr_t sg_list_addr, size_t num_sg,
 				size_t sg_block_size, u64 sec_id, int cbndx,
@@ -1426,7 +1427,7 @@ int qcom_scm_iommu_secure_map(phys_addr_t sg_list_addr, size_t num_sg,
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_iommu_secure_map);
+EXPORT_SYMBOL(qcom_scm_iommu_secure_map);
 
 int qcom_scm_iommu_secure_unmap(u64 sec_id, int cbndx, unsigned long iova,
 				size_t total_len)
@@ -1449,7 +1450,7 @@ int qcom_scm_iommu_secure_unmap(u64 sec_id, int cbndx, unsigned long iova,
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_iommu_secure_unmap);
+EXPORT_SYMBOL(qcom_scm_iommu_secure_unmap);
 
 static int __qcom_scm_assign_mem(struct device *dev, phys_addr_t mem_region,
 				 size_t mem_sz, phys_addr_t src, size_t src_sz,
@@ -1558,7 +1559,7 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	*srcvm = next_vm;
 	return 0;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_assign_mem);
+EXPORT_SYMBOL(qcom_scm_assign_mem);
 
 /**
  * qcom_scm_assign_mem_regions() - Make a secure call to reassign memory
@@ -1594,7 +1595,7 @@ int qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
 				     virt_to_phys(srcvms), src_sz,
 				     virt_to_phys(newvms), newvms_sz);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_assign_mem_regions);
+EXPORT_SYMBOL(qcom_scm_assign_mem_regions);
 
 /**
  * qcom_scm_mem_protect_sd_ctrl() - SDE memory protect.
@@ -1621,7 +1622,7 @@ int qcom_scm_mem_protect_sd_ctrl(u32 devid, phys_addr_t mem_addr, u64 mem_size,
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_mem_protect_sd_ctrl);
+EXPORT_SYMBOL(qcom_scm_mem_protect_sd_ctrl);
 
 bool qcom_scm_kgsl_set_smmu_aperture_available(void)
 {
@@ -1632,7 +1633,7 @@ bool qcom_scm_kgsl_set_smmu_aperture_available(void)
 
 	return ret > 0;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture_available);
+EXPORT_SYMBOL(qcom_scm_kgsl_set_smmu_aperture_available);
 
 int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
 {
@@ -1651,7 +1652,7 @@ int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture);
+EXPORT_SYMBOL(qcom_scm_kgsl_set_smmu_aperture);
 
 int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
 {
@@ -1670,7 +1671,7 @@ int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_lpac_aperture);
+EXPORT_SYMBOL(qcom_scm_kgsl_set_smmu_lpac_aperture);
 
 int qcom_scm_kgsl_init_regs(u32 gpu_req)
 {
@@ -1684,7 +1685,7 @@ int qcom_scm_kgsl_init_regs(u32 gpu_req)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
+EXPORT_SYMBOL(qcom_scm_kgsl_init_regs);
 
 int qcom_scm_enable_shm_bridge(void)
 {
@@ -1700,7 +1701,7 @@ int qcom_scm_enable_shm_bridge(void)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_enable_shm_bridge);
+EXPORT_SYMBOL(qcom_scm_enable_shm_bridge);
 
 int qcom_scm_delete_shm_bridge(u64 handle)
 {
@@ -1714,7 +1715,7 @@ int qcom_scm_delete_shm_bridge(u64 handle)
 
 	return qcom_scm_call(__scm ? __scm->dev : NULL, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_delete_shm_bridge);
+EXPORT_SYMBOL(qcom_scm_delete_shm_bridge);
 
 int qcom_scm_create_shm_bridge(u64 pfn_and_ns_perm_flags,
 	u64 ipfn_and_s_perm_flags, u64 size_and_flags, u64 ns_vmids,
@@ -1741,7 +1742,7 @@ int qcom_scm_create_shm_bridge(u64 pfn_and_ns_perm_flags,
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_create_shm_bridge);
+EXPORT_SYMBOL(qcom_scm_create_shm_bridge);
 
 int qcom_scm_smmu_prepare_atos_id(u64 dev_id, int cb_num, int operation)
 {
@@ -1758,7 +1759,7 @@ int qcom_scm_smmu_prepare_atos_id(u64 dev_id, int cb_num, int operation)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_smmu_prepare_atos_id);
+EXPORT_SYMBOL(qcom_scm_smmu_prepare_atos_id);
 
 /**
  * qcom_mdf_assign_memory_to_subsys - SDE memory protect.
@@ -1784,7 +1785,7 @@ int qcom_mdf_assign_memory_to_subsys(u64 start_addr, u64 end_addr,
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_mdf_assign_memory_to_subsys);
+EXPORT_SYMBOL(qcom_mdf_assign_memory_to_subsys);
 
 /**
  * qcom_scm_dcvs_core_available() - check if core DCVS operations are available
@@ -1800,7 +1801,7 @@ bool qcom_scm_dcvs_core_available(void)
 	       __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
 					    QCOM_SCM_DCVS_RESET);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_dcvs_core_available);
+EXPORT_SYMBOL(qcom_scm_dcvs_core_available);
 
 /**
  * qcom_scm_dcvs_ca_available() - check if context aware DCVS operations are
@@ -1815,7 +1816,7 @@ bool qcom_scm_dcvs_ca_available(void)
 	       __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
 					    QCOM_SCM_DCVS_UPDATE_CA_V2);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_dcvs_ca_available);
+EXPORT_SYMBOL(qcom_scm_dcvs_ca_available);
 
 /**
  * qcom_scm_dcvs_reset()
@@ -1830,7 +1831,7 @@ int qcom_scm_dcvs_reset(void)
 
 	return qcom_scm_call(__scm ? __scm->dev : NULL, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_dcvs_reset);
+EXPORT_SYMBOL(qcom_scm_dcvs_reset);
 
 int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
 {
@@ -1851,7 +1852,7 @@ int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
 		*version = res.result[0];
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_v2);
+EXPORT_SYMBOL(qcom_scm_dcvs_init_v2);
 
 int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
 {
@@ -1866,7 +1867,7 @@ int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_ca_v2);
+EXPORT_SYMBOL(qcom_scm_dcvs_init_ca_v2);
 
 int qcom_scm_dcvs_update(int level, s64 total_time, s64 busy_time)
 {
@@ -1886,7 +1887,7 @@ int qcom_scm_dcvs_update(int level, s64 total_time, s64 busy_time)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update);
+EXPORT_SYMBOL(qcom_scm_dcvs_update);
 
 int qcom_scm_dcvs_update_v2(int level, s64 total_time, s64 busy_time)
 {
@@ -1906,7 +1907,7 @@ int qcom_scm_dcvs_update_v2(int level, s64 total_time, s64 busy_time)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update_v2);
+EXPORT_SYMBOL(qcom_scm_dcvs_update_v2);
 
 int qcom_scm_dcvs_update_ca_v2(int level, s64 total_time, s64 busy_time,
 			       int context_count)
@@ -1928,14 +1929,14 @@ int qcom_scm_dcvs_update_ca_v2(int level, s64 total_time, s64 busy_time,
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update_ca_v2);
+EXPORT_SYMBOL(qcom_scm_dcvs_update_ca_v2);
 
 int qcom_scm_get_feat_version_cp(u64 *version)
 {
 	return __qcom_scm_get_feat_version(__scm->dev, QCOM_SCM_MP_CP_FEAT_ID,
 						version);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_get_feat_version_cp);
+EXPORT_SYMBOL(qcom_scm_get_feat_version_cp);
 
 /**
  * qcom_scm_ocmem_lock_available() - is OCMEM lock/unlock interface available
@@ -1945,7 +1946,7 @@ bool qcom_scm_ocmem_lock_available(void)
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_OCMEM,
 					    QCOM_SCM_OCMEM_LOCK_CMD);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_ocmem_lock_available);
+EXPORT_SYMBOL(qcom_scm_ocmem_lock_available);
 
 /**
  * qcom_scm_ocmem_lock() - call OCMEM lock interface to assign an OCMEM
@@ -1971,7 +1972,7 @@ int qcom_scm_ocmem_lock(enum qcom_scm_ocmem_client id, u32 offset, u32 size,
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_ocmem_lock);
+EXPORT_SYMBOL(qcom_scm_ocmem_lock);
 
 /**
  * qcom_scm_ocmem_unlock() - call OCMEM unlock interface to release an OCMEM
@@ -1994,7 +1995,7 @@ int qcom_scm_ocmem_unlock(enum qcom_scm_ocmem_client id, u32 offset, u32 size)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_ocmem_unlock);
+EXPORT_SYMBOL(qcom_scm_ocmem_unlock);
 
 /**
  * qcom_scm_ice_available() - Is the ICE key programming interface available?
@@ -2009,7 +2010,7 @@ bool qcom_scm_ice_available(void)
 		__qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_ES,
 					     QCOM_SCM_ES_CONFIG_SET_ICE_KEY);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_ice_available);
+EXPORT_SYMBOL(qcom_scm_ice_available);
 
 /**
  * qcom_scm_ice_invalidate_key() - Invalidate an inline encryption key
@@ -2035,7 +2036,7 @@ int qcom_scm_ice_invalidate_key(u32 index)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_ice_invalidate_key);
+EXPORT_SYMBOL(qcom_scm_ice_invalidate_key);
 
 /**
  * qcom_scm_ice_set_key() - Set an inline encryption key
@@ -2101,7 +2102,7 @@ int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
 	dma_free_coherent(__scm->dev, key_size, keybuf, key_phys);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_ice_set_key);
+EXPORT_SYMBOL(qcom_scm_ice_set_key);
 
 int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr, size_t size,
 				uint32_t cipher, unsigned int data_unit,
@@ -2124,7 +2125,7 @@ int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr, size_t size,
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_config_set_ice_key);
+EXPORT_SYMBOL(qcom_scm_config_set_ice_key);
 
 int qcom_scm_clear_ice_key(uint32_t index,  unsigned int ce)
 {
@@ -2139,7 +2140,7 @@ int qcom_scm_clear_ice_key(uint32_t index,  unsigned int ce)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_clear_ice_key);
+EXPORT_SYMBOL(qcom_scm_clear_ice_key);
 
 int qcom_scm_derive_raw_secret(phys_addr_t paddr_key, size_t size_key,
 		phys_addr_t paddr_secret, size_t size_secret)
@@ -2158,7 +2159,7 @@ int qcom_scm_derive_raw_secret(phys_addr_t paddr_key, size_t size_key,
 					QCOM_SCM_RW, QCOM_SCM_VAL);
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_derive_raw_secret);
+EXPORT_SYMBOL(qcom_scm_derive_raw_secret);
 
 /**
  * qcom_scm_hdcp_available() - Check if secure environment supports HDCP.
@@ -2180,7 +2181,7 @@ bool qcom_scm_hdcp_available(void)
 
 	return avail;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_hdcp_available);
+EXPORT_SYMBOL(qcom_scm_hdcp_available);
 
 /**
  * qcom_scm_hdcp_req() - Send HDCP request.
@@ -2227,35 +2228,35 @@ int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt, u32 *resp)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_hdcp_req);
+EXPORT_SYMBOL(qcom_scm_hdcp_req);
 
 bool qcom_scm_is_lmh_debug_set_available(void)
 {
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_LMH,
 					QCOM_SCM_LMH_DEBUG_SET);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_is_lmh_debug_set_available);
+EXPORT_SYMBOL(qcom_scm_is_lmh_debug_set_available);
 
 bool qcom_scm_is_lmh_debug_read_buf_size_available(void)
 {
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_LMH,
 					QCOM_SCM_LMH_DEBUG_READ_BUF_SIZE);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_is_lmh_debug_read_buf_size_available);
+EXPORT_SYMBOL(qcom_scm_is_lmh_debug_read_buf_size_available);
 
 bool qcom_scm_is_lmh_debug_read_buf_available(void)
 {
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_LMH,
 					QCOM_SCM_LMH_DEBUG_READ);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_is_lmh_debug_read_buf_available);
+EXPORT_SYMBOL(qcom_scm_is_lmh_debug_read_buf_available);
 
 bool qcom_scm_is_lmh_debug_get_type_available(void)
 {
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_LMH,
 					QCOM_SCM_LMH_DEBUG_GET_TYPE);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_is_lmh_debug_get_type_available);
+EXPORT_SYMBOL(qcom_scm_is_lmh_debug_get_type_available);
 
 int qcom_scm_lmh_read_buf_size(int *size)
 {
@@ -2274,7 +2275,7 @@ int qcom_scm_lmh_read_buf_size(int *size)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_read_buf_size);
+EXPORT_SYMBOL(qcom_scm_lmh_read_buf_size);
 
 int qcom_scm_lmh_limit_dcvsh(phys_addr_t payload, uint32_t payload_size,
 			u64 limit_node, uint32_t node_id, u64 version)
@@ -2295,7 +2296,7 @@ int qcom_scm_lmh_limit_dcvsh(phys_addr_t payload, uint32_t payload_size,
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_limit_dcvsh);
+EXPORT_SYMBOL(qcom_scm_lmh_limit_dcvsh);
 
 int qcom_scm_lmh_debug_read(phys_addr_t payload, uint32_t size)
 {
@@ -2314,7 +2315,7 @@ int qcom_scm_lmh_debug_read(phys_addr_t payload, uint32_t size)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_debug_read);
+EXPORT_SYMBOL(qcom_scm_lmh_debug_read);
 
 int __qcom_scm_lmh_debug_config_write(struct device *dev, u64 cmd_id,
 			phys_addr_t payload, int payload_size, uint32_t *buf,
@@ -2347,7 +2348,7 @@ int qcom_scm_lmh_debug_set_config_write(phys_addr_t payload, int payload_size,
 			QCOM_SCM_LMH_DEBUG_SET, payload, payload_size, buf,
 			buf_size);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_debug_set_config_write);
+EXPORT_SYMBOL(qcom_scm_lmh_debug_set_config_write);
 
 int qcom_scm_lmh_get_type(phys_addr_t payload, u64 payload_size,
 		u64 debug_type, uint32_t get_from, uint32_t *size)
@@ -2373,7 +2374,7 @@ int qcom_scm_lmh_get_type(phys_addr_t payload, u64 payload_size,
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_get_type);
+EXPORT_SYMBOL(qcom_scm_lmh_get_type);
 
 int qcom_scm_lmh_fetch_data(u32 node_id, u32 debug_type, uint32_t *peak,
 		uint32_t *avg)
@@ -2403,7 +2404,7 @@ int qcom_scm_lmh_fetch_data(u32 node_id, u32 debug_type, uint32_t *peak,
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_fetch_data);
+EXPORT_SYMBOL(qcom_scm_lmh_fetch_data);
 
 int qcom_scm_smmu_change_pgtbl_format(u64 dev_id, int cbndx)
 {
@@ -2420,7 +2421,7 @@ int qcom_scm_smmu_change_pgtbl_format(u64 dev_id, int cbndx)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_smmu_change_pgtbl_format);
+EXPORT_SYMBOL(qcom_scm_smmu_change_pgtbl_format);
 
 int qcom_scm_qsmmu500_wait_safe_toggle(bool en)
 {
@@ -2436,7 +2437,7 @@ int qcom_scm_qsmmu500_wait_safe_toggle(bool en)
 
 	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_qsmmu500_wait_safe_toggle);
+EXPORT_SYMBOL(qcom_scm_qsmmu500_wait_safe_toggle);
 
 int qcom_scm_smmu_notify_secure_lut(u64 dev_id, bool secure)
 {
@@ -2451,7 +2452,7 @@ int qcom_scm_smmu_notify_secure_lut(u64 dev_id, bool secure)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_smmu_notify_secure_lut);
+EXPORT_SYMBOL(qcom_scm_smmu_notify_secure_lut);
 
 int qcom_scm_qdss_invoke(phys_addr_t paddr, size_t size, u64 *out)
 {
@@ -2473,7 +2474,7 @@ int qcom_scm_qdss_invoke(phys_addr_t paddr, size_t size, u64 *out)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_qdss_invoke);
+EXPORT_SYMBOL(qcom_scm_qdss_invoke);
 
 int qcom_scm_camera_protect_all(uint32_t protect, uint32_t param)
 {
@@ -2488,7 +2489,7 @@ int qcom_scm_camera_protect_all(uint32_t protect, uint32_t param)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_camera_protect_all);
+EXPORT_SYMBOL(qcom_scm_camera_protect_all);
 
 int qcom_scm_camera_protect_phy_lanes(bool protect, u64 regmask)
 {
@@ -2503,7 +2504,7 @@ int qcom_scm_camera_protect_phy_lanes(bool protect, u64 regmask)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_camera_protect_phy_lanes);
+EXPORT_SYMBOL(qcom_scm_camera_protect_phy_lanes);
 
 int qcom_scm_tsens_reinit(int *tsens_ret)
 {
@@ -2521,7 +2522,7 @@ int qcom_scm_tsens_reinit(int *tsens_ret)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_tsens_reinit);
+EXPORT_SYMBOL(qcom_scm_tsens_reinit);
 
 static int qcom_scm_reboot(struct device *dev)
 {
@@ -2544,13 +2545,13 @@ int qcom_scm_ice_restore_cfg(void)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_ice_restore_cfg);
+EXPORT_SYMBOL(qcom_scm_ice_restore_cfg);
 
 bool qcom_scm_lmh_dcvsh_available(void)
 {
 	return __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_LMH, QCOM_SCM_LMH_LIMIT_DCVSH);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_dcvsh_available);
+EXPORT_SYMBOL(qcom_scm_lmh_dcvsh_available);
 
 int qcom_scm_lmh_profile_change(u32 profile_id)
 {
@@ -2564,7 +2565,7 @@ int qcom_scm_lmh_profile_change(u32 profile_id)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_profile_change);
+EXPORT_SYMBOL(qcom_scm_lmh_profile_change);
 
 int qcom_scm_lmh_dcvsh(u32 payload_fn, u32 payload_reg, u32 payload_val,
 		       u64 limit_node, u32 node_id, u64 version)
@@ -2602,7 +2603,7 @@ int qcom_scm_lmh_dcvsh(u32 payload_fn, u32 payload_reg, u32 payload_val,
 	dma_free_coherent(__scm->dev, payload_size, payload_buf, payload_phys);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_lmh_dcvsh);
+EXPORT_SYMBOL(qcom_scm_lmh_dcvsh);
 
 int qcom_scm_prefetch_tgt_ctrl(bool en)
 {
@@ -2616,21 +2617,21 @@ int qcom_scm_prefetch_tgt_ctrl(bool en)
 
 	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_prefetch_tgt_ctrl);
+EXPORT_SYMBOL(qcom_scm_prefetch_tgt_ctrl);
 
 int qcom_scm_get_tz_log_feat_id(u64 *version)
 {
 	return __qcom_scm_get_feat_version(__scm->dev, QCOM_SCM_FEAT_LOG_ID,
 					   version);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_get_tz_log_feat_id);
+EXPORT_SYMBOL(qcom_scm_get_tz_log_feat_id);
 
 int qcom_scm_get_tz_feat_id_version(u64 feat_id, u64 *version)
 {
 	return __qcom_scm_get_feat_version(__scm->dev, feat_id,
 					   version);
 }
-EXPORT_SYMBOL_GPL(qcom_scm_get_tz_feat_id_version);
+EXPORT_SYMBOL(qcom_scm_get_tz_feat_id_version);
 
 int qcom_scm_register_qsee_log_buf(phys_addr_t buf, size_t len)
 {
@@ -2649,7 +2650,7 @@ int qcom_scm_register_qsee_log_buf(phys_addr_t buf, size_t len)
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_register_qsee_log_buf);
+EXPORT_SYMBOL(qcom_scm_register_qsee_log_buf);
 
 int qcom_scm_query_encrypted_log_feature(u64 *enabled)
 {
@@ -2667,7 +2668,7 @@ int qcom_scm_query_encrypted_log_feature(u64 *enabled)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_query_encrypted_log_feature);
+EXPORT_SYMBOL(qcom_scm_query_encrypted_log_feature);
 
 int qcom_scm_request_encrypted_log(phys_addr_t buf,
 				   size_t len,
@@ -2702,7 +2703,7 @@ int qcom_scm_request_encrypted_log(phys_addr_t buf,
 
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_request_encrypted_log);
+EXPORT_SYMBOL(qcom_scm_request_encrypted_log);
 
 int qcom_scm_invoke_smc_legacy(phys_addr_t in_buf, size_t in_buf_size,
 		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
@@ -2737,7 +2738,7 @@ int qcom_scm_invoke_smc_legacy(phys_addr_t in_buf, size_t in_buf_size,
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_invoke_smc_legacy);
+EXPORT_SYMBOL(qcom_scm_invoke_smc_legacy);
 
 int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
 		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
@@ -2771,7 +2772,7 @@ int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_invoke_smc);
+EXPORT_SYMBOL(qcom_scm_invoke_smc);
 
 int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 	size_t out_buf_size, int32_t *result, u64 *response_type,
@@ -2802,7 +2803,7 @@ int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_invoke_callback_response);
+EXPORT_SYMBOL(qcom_scm_invoke_callback_response);
 
 int qcom_scm_qseecom_call(u32 cmd_id, struct qseecom_scm_desc *desc, bool retry)
 {
@@ -2837,7 +2838,7 @@ int qcom_scm_qseecom_call(u32 cmd_id, struct qseecom_scm_desc *desc, bool retry)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_qseecom_call);
+EXPORT_SYMBOL(qcom_scm_qseecom_call);
 
 
 static int qcom_scm_find_dload_address(struct device *dev, u64 *addr)
@@ -2873,13 +2874,13 @@ bool qcom_scm_is_available(void)
 {
 	return !!__scm;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_is_available);
+EXPORT_SYMBOL(qcom_scm_is_available);
 
 void *qcom_get_scm_device(void)
 {
 	return __scm ? __scm->dev : NULL;
 }
-EXPORT_SYMBOL_GPL(qcom_get_scm_device);
+EXPORT_SYMBOL(qcom_get_scm_device);
 
 static int qcom_scm_do_restart(struct notifier_block *this, unsigned long event,
 			      void *ptr)
