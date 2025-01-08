@@ -1496,9 +1496,8 @@ static void msm_hs_mark_next(struct msm_hs_port *msm_uport, int inx)
 	else
 		prev = inx - 1;
 
-	if(prev <= sizeof(prev)*8)
-		if (!test_bit(prev, &rx->pending_flag))
-			msm_uport->rx.rx_inx = inx;
+	if (!test_bit(prev, &rx->pending_flag))
+		msm_uport->rx.rx_inx = inx;
 	MSM_HS_DBG("%s(): prev %d pending flag 0x%lx, next %d\n", __func__,
 		prev, rx->pending_flag, msm_uport->rx.rx_inx);
 }
