@@ -379,7 +379,6 @@ config SKB_RECYCLER
 	  routing workloads. It can reduce skbuff freeing or
 	  reallocation overhead.
 
-
 config SKB_RECYCLER_MULTI_CPU
 	bool "Cross-CPU recycling for CPU-locked workloads"
 	depends on SMP && SKB_RECYCLER
@@ -413,6 +412,17 @@ config SKB_RECYCLE_MAX_PREALLOC_SKBS
 	default 16384
 	help
 	 Number of SKBs each of 4K size to be preallocated for recycling
+
+config ALLOC_SKB_PAGE_FRAG_DISABLE
+	bool "Disable page fragment based skbuff payload allocations"
+	depends on !SKB_RECYCLER
+	default n
+	help
+	 Disable page fragment based allocations for skbuff payloads.
+         For low memory profiles such as 256MB, using __alloc_page_frag()
+         for skb allocations can potentially cause pages to be held up
+         for longer duration without getting freed by the kernel memory
+         manageer. This can potentially cause out-of-memory situaions.
 
 menu "Network testing"
 
