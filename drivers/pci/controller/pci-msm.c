@@ -5416,8 +5416,8 @@ static int msm_pcie_get_phy_status_reg(struct msm_pcie_dev_t *pcie_dev)
 	}
 
 	PCIE_DBG(pcie_dev,
-			"PCIe: RC%d: no of phy dbg regs:%lu size:%u\n",
-			pcie_dev->rc_idx, size/sizeof(u32), size);
+			"PCIe: RC%d: no of phy dbg regs:%u size:%u\n",
+			pcie_dev->rc_idx, pcie_dev->phy_debug_reg_len, size);
 	return 0;
 }
 
@@ -5455,8 +5455,8 @@ static int msm_pcie_get_parf_status_reg(struct msm_pcie_dev_t *pcie_dev)
 	}
 
 	PCIE_DBG(pcie_dev,
-			"PCIe: RC%d: no of parf dbg regs:%lu size:%u\n",
-			pcie_dev->rc_idx, size/sizeof(u32), size);
+			"PCIe: RC%d: no of parf dbg regs:%u size:%u\n",
+			pcie_dev->rc_idx, pcie_dev->parf_debug_reg_len, size);
 	return 0;
 }
 
@@ -5494,8 +5494,8 @@ static int msm_pcie_get_dbi_status_reg(struct msm_pcie_dev_t *pcie_dev)
 	}
 
 	PCIE_DBG(pcie_dev,
-			"PCIe: RC%d: no of dbi dbg regs:%lu size:%u\n",
-			pcie_dev->rc_idx, size/sizeof(u32), size);
+			"PCIe: RC%d: no of dbi dbg regs:%u size:%u\n",
+			pcie_dev->rc_idx, pcie_dev->dbi_debug_reg_len, size);
 	return 0;
 }
 
