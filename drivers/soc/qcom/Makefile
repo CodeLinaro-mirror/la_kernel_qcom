@@ -102,6 +102,7 @@ wcd_usbss_i2c-y += wcd-usbss-utils.o
 wcd_usbss_i2c-y += wcd939x-i2c.o
 obj-$(CONFIG_QCOM_VM_DMESG_DUMPER) += dmesg_dumper.o
 obj-$(CONFIG_QCOM_VM_ALIVE_LOG_ENCRYPT) += dmesg_dumper_crypto.o
+obj-$(CONFIG_DUMP_XBL_LOG) += dump_boot_log.o
 obj-$(CONFIG_QCOM_DEBUG_SYMBOL) += debug_symbol.o
 obj-$(CONFIG_GH_TLMM_VM_MEM_ACCESS) += gh_tlmm_vm_mem_access.o
 obj-$(CONFIG_QCOM_TLMM_VM_IRQCHIP) += qcom_tlmm_vm_irqchip.o
