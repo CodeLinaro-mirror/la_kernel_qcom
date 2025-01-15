@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19, Linaro Limited
-// Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -457,6 +457,9 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	unsigned int eth_type, priority;
 	int gso = skb_shinfo(skb)->gso_type;
+
+	if (!skb)
+		return txqueue_select;
 
 	if (skb && skb->priority) {
 		if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4))
