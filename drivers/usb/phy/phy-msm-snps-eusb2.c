@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/power_supply.h>
 #include <linux/qcom_scm.h>
 #include <linux/reset.h>
@@ -193,7 +194,86 @@ struct msm_eusb2_phy {
 	struct usb_repeater	*ur;
 
 	u8			eud_det_val;
+	bool			fw_managed_pwr;
+	struct device		**pd_devs;
+	int pd_count;
 };
+
+static void msm_eusbphy_modeled_domain_detach(struct msm_eusb2_phy *phy)
+{
+	int i;
+
+	if (phy->pd_count <= 1)
+		return;
+
+	for (i = phy->pd_count - 1; i >= 0; i--) {
+		if (!IS_ERR_OR_NULL(phy->pd_devs[i]))
+			dev_pm_domain_detach(phy->pd_devs[i], true);
+	}
+}
+
+static int msm_eusbphy_modeled_domain_attach(struct msm_eusb2_phy *phy)
+{
+        struct device *dev = phy->phy.dev;
+	int i;
+
+	phy->pd_count = of_count_phandle_with_args(
+		dev->of_node, "power-domains", NULL);
+	if (phy->pd_count <= 1)
+		return -1;
+
+	phy->pd_devs = devm_kcalloc(dev, phy->pd_count,
+					  sizeof(*phy->pd_devs),
+					  GFP_KERNEL);
+
+	if (!phy->pd_devs)
+		return -ENOMEM;
+
+	for (i = 0; i < phy->pd_count; i++) {
+		phy->pd_devs[i] = dev_pm_domain_attach_by_id(dev, i);
+		if (IS_ERR(phy->pd_devs[i])) {
+			msm_eusbphy_modeled_domain_detach(phy);
+			return PTR_ERR(phy->pd_devs[i]);
+		}
+	}
+	return 0;
+}
+
+/* d3_to_d0 transition by turning on all the suppliers */
+static int msm_eusbphy_modeled_d3_to_d0(struct msm_eusb2_phy *phy)
+{
+       int ret = 0;
+
+       if (!phy->fw_managed_pwr)
+               return 0;
+
+       ret = pm_runtime_resume_and_get(phy->pd_devs[0]);
+       if (ret)
+               return ret;
+
+       ret = pm_runtime_resume_and_get(phy->pd_devs[1]);
+
+       return ret;
+}
+
+/* d0_to_d3 transition by turning off all the suppliers */
+static void msm_eusbphy_modeled_d0_to_d3(struct msm_eusb2_phy *phy)
+{
+       if (!phy->fw_managed_pwr)
+               return;
+
+       pm_runtime_put_sync(phy->pd_devs[0]);
+       pm_runtime_put_sync(phy->pd_devs[1]);
+}
+
+/* d0_to_d1 transition by turning off all the suppliers */
+static void msm_eusbphy_modeled_d0_to_d1(struct msm_eusb2_phy *phy)
+{
+       if (!phy->fw_managed_pwr)
+               return;
+
+       pm_runtime_put_sync(phy->pd_devs[0]);
+}
 
 static inline bool is_eud_debug_mode_active(struct msm_eusb2_phy *phy)
 {
@@ -206,6 +286,9 @@ static inline bool is_eud_debug_mode_active(struct msm_eusb2_phy *phy)
 
 static void msm_eusb2_phy_clocks(struct msm_eusb2_phy *phy, bool on)
 {
+       if (phy->fw_managed_pwr)
+               return;
+
 	dev_dbg(phy->phy.dev, "clocks_enabled:%d on:%d\n",
 			phy->clocks_enabled, on);
 
@@ -243,6 +326,9 @@ static void msm_eusb2_phy_update_eud_detect(struct msm_eusb2_phy *phy, bool set)
 static int msm_eusb2_phy_power(struct msm_eusb2_phy *phy, bool on)
 {
 	int ret = 0;
+
+       if (phy->fw_managed_pwr)
+               return ret;
 
 	dev_dbg(phy->phy.dev, "turn %s regulators. power_enabled:%d\n",
 			on ? "on" : "off", phy->power_enabled);
@@ -543,6 +629,9 @@ static void msm_eusb2_phy_reset(struct msm_eusb2_phy *phy)
 {
 	int ret;
 
+	if (phy->fw_managed_pwr)
+		return;
+
 	ret = reset_control_assert(phy->phy_reset);
 	if (ret)
 		dev_err(phy->phy.dev, "phy reset assert failed\n");
@@ -656,7 +745,10 @@ static void msm_eusb2_ref_clk_init(struct usb_phy *uphy)
 
 static int msm_eusb2_repeater_reset_and_init(struct msm_eusb2_phy *phy)
 {
-	int ret;
+	int ret = 0;
+
+	if (phy->fw_managed_pwr)
+		return ret;
 
 	if (phy->ur)
 		phy->ur->flags = phy->phy.flags;
@@ -688,11 +780,14 @@ static int msm_eusb2_phy_init(struct usb_phy *uphy)
 			qcom_scm_io_writel(phy->eud_reg, 0x0);
 			phy->re_enable_eud = true;
 		} else {
+			msm_eusbphy_modeled_d3_to_d0(phy);
 			msm_eusb2_phy_power(phy, true);
 			msm_eusb2_phy_clocks(phy, true);
 			return msm_eusb2_repeater_reset_and_init(phy);
 		}
 	}
+
+	msm_eusbphy_modeled_d3_to_d0(phy);
 
 	ret = msm_eusb2_phy_power(phy, true);
 	if (ret)
@@ -796,6 +891,7 @@ static int msm_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 		if (phy->cable_connected ||
 			(phy->phy.flags & PHY_HOST_MODE)) {
 			msm_eusb2_phy_clocks(phy, false);
+			msm_eusbphy_modeled_d0_to_d1(phy);
 			goto suspend_exit;
 		}
 
@@ -812,12 +908,14 @@ static int msm_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 
 		msm_eusb2_phy_clocks(phy, false);
 		msm_eusb2_phy_power(phy, false);
+		msm_eusbphy_modeled_d0_to_d3(phy);
 
 		/* Hold repeater into reset after powering down PHY */
 		usb_repeater_reset(phy->ur, false);
 		usb_repeater_powerdown(phy->ur);
 	} else {
 		/* Bus resume and cable connect handling */
+		msm_eusbphy_modeled_d3_to_d0(phy);
 		msm_eusb2_phy_power(phy, true);
 		msm_eusb2_phy_clocks(phy, true);
 	}
@@ -926,8 +1024,10 @@ static void msm_eusb2_phy_create_debugfs(struct msm_eusb2_phy *phy)
 					&apb_reg_rw_fops);
 }
 
+
 static int msm_eusb2_phy_probe(struct platform_device *pdev)
 {
+	struct device_node *np = pdev->dev.of_node;
 	struct msm_eusb2_phy *phy;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
@@ -940,10 +1040,12 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 		goto err_ret;
 	}
 
-	ur = devm_usb_get_repeater_by_phandle(dev, "usb-repeater", 0);
-	if (IS_ERR(ur)) {
-		ret = PTR_ERR(ur);
-		goto err_ret;
+	if (!(of_device_is_compatible(np, "qcom,usb-snps-eusb2-fw-managed"))) {
+		ur = devm_usb_get_repeater_by_phandle(dev, "usb-repeater", 0);
+		if (IS_ERR(ur)) {
+			ret = PTR_ERR(ur);
+			goto err_ret;
+		}
 	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
@@ -985,47 +1087,59 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 		device_property_read_u8(dev, "qcom,eud-det-val", &phy->eud_det_val);
 	}
 
-	phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
-	if (IS_ERR(phy->ref_clk_src)) {
-		dev_err(dev, "clk get failed for ref_clk_src\n");
-		ret = PTR_ERR(phy->ref_clk_src);
-		goto err_ret;
-	}
+	phy->phy.dev = dev;
 
-	phy->ref_clk = devm_clk_get_optional(dev, "ref_clk");
-	if (IS_ERR(phy->ref_clk)) {
-		dev_err(dev, "clk get failed for ref_clk\n");
-		ret = PTR_ERR(phy->ref_clk);
-		goto err_ret;
-	}
+	if (of_device_is_compatible(np, "qcom,usb-snps-eusb2-fw-managed")) {
+		ret =  msm_eusbphy_modeled_domain_attach(phy);
+		if (ret) {
+			dev_err(dev, "Failed to attach modeled domains. Bail out\n");
+			return ret;
+		}
+		phy->fw_managed_pwr = true;
+	} else {
 
-	phy->phy_reset = devm_reset_control_get(dev, "phy_reset");
-	if (IS_ERR(phy->phy_reset)) {
-		ret = PTR_ERR(phy->phy_reset);
-		goto err_ret;
-	}
+		phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
+		if (IS_ERR(phy->ref_clk_src)) {
+			dev_err(dev, "clk get failed for ref_clk_src\n");
+			ret = PTR_ERR(phy->ref_clk_src);
+			goto err_ret;
+		}
 
-	ret = of_property_read_u32_array(dev->of_node, "qcom,vdd-voltage-level",
-					 (u32 *) phy->vdd_levels,
-					 ARRAY_SIZE(phy->vdd_levels));
-	if (ret) {
-		dev_err(dev, "error reading qcom,vdd-voltage-level property\n");
-		goto err_ret;
-	}
+		phy->ref_clk = devm_clk_get_optional(dev, "ref_clk");
+		if (IS_ERR(phy->ref_clk)) {
+			dev_err(dev, "clk get failed for ref_clk\n");
+			ret = PTR_ERR(phy->ref_clk);
+			goto err_ret;
+		}
 
-	phy->vdd = devm_regulator_get(dev, "vdd");
-	if (IS_ERR(phy->vdd)) {
-		dev_err(dev, "unable to get vdd supply\n");
-		ret = PTR_ERR(phy->vdd);
-		goto err_ret;
-	}
+		phy->phy_reset = devm_reset_control_get(dev, "phy_reset");
+		if (IS_ERR(phy->phy_reset)) {
+			ret = PTR_ERR(phy->phy_reset);
+			goto err_ret;
+		}
 
-	phy->vdda12 = devm_regulator_get(dev, "vdda12");
-	if (IS_ERR(phy->vdda12)) {
-		dev_err(dev, "unable to get vdda12 supply\n");
-		ret = PTR_ERR(phy->vdda12);
-		goto err_ret;
-	}
+		ret = of_property_read_u32_array(dev->of_node, "qcom,vdd-voltage-level",
+						 (u32 *) phy->vdd_levels,
+						 ARRAY_SIZE(phy->vdd_levels));
+		if (ret) {
+			dev_err(dev, "error reading qcom,vdd-voltage-level property\n");
+			goto err_ret;
+		}
+
+		phy->vdd = devm_regulator_get(dev, "vdd");
+		if (IS_ERR(phy->vdd)) {
+			dev_err(dev, "unable to get vdd supply\n");
+			ret = PTR_ERR(phy->vdd);
+			goto err_ret;
+		}
+
+		phy->vdda12 = devm_regulator_get(dev, "vdda12");
+		if (IS_ERR(phy->vdda12)) {
+			dev_err(dev, "unable to get vdda12 supply\n");
+			ret = PTR_ERR(phy->vdda12);
+			goto err_ret;
+		}
+	};
 
 	phy->param_override_seq_cnt = of_property_count_elems_of_size(
 					dev->of_node, "qcom,param-override-seq",
@@ -1058,7 +1172,6 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 	}
 
 	phy->ur = ur;
-	phy->phy.dev = dev;
 	platform_set_drvdata(pdev, phy);
 
 	phy->phy.init			= msm_eusb2_phy_init;
@@ -1077,6 +1190,7 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 	 * keep LDOs, clocks and repeater on here.
 	 */
 	if (is_eud_debug_mode_active(phy)) {
+		msm_eusbphy_modeled_d3_to_d0(phy);
 		msm_eusb2_phy_power(phy, true);
 		msm_eusb2_phy_clocks(phy, true);
 		msm_eusb2_repeater_reset_and_init(phy);
@@ -1102,16 +1216,24 @@ static int msm_eusb2_phy_remove(struct platform_device *pdev)
 
 	debugfs_remove_recursive(phy->root);
 	usb_remove_phy(&phy->phy);
-	clk_disable_unprepare(phy->ref_clk);
-	clk_disable_unprepare(phy->ref_clk_src);
-	msm_eusb2_phy_clocks(phy, false);
-	msm_eusb2_phy_power(phy, false);
+       if (!phy->fw_managed_pwr) {
+		clk_disable_unprepare(phy->ref_clk);
+		clk_disable_unprepare(phy->ref_clk_src);
+		msm_eusb2_phy_clocks(phy, false);
+		msm_eusb2_phy_power(phy, false);
+	} else {
+		msm_eusbphy_modeled_d0_to_d3(phy);
+		msm_eusbphy_modeled_domain_detach(phy);
+	}
 	return 0;
 }
 
 static const struct of_device_id msm_usb_id_table[] = {
 	{
 		.compatible = "qcom,usb-snps-eusb2-phy",
+	},
+	{
+		.compatible = "qcom,usb-snps-eusb2-fw-managed",
 	},
 	{ },
 };
