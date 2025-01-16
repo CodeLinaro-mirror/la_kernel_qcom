@@ -7133,3 +7133,5 @@
 	dwmac_qcom_eth.board=	[KNL] Sets Board type of device at boot up for phy detection.
 
 	dwmac_qcom_eth.enet=	[KNL] Sets the PHY type on device at boot up for phy detection.
+
+	pcs_ane= [KNL] Sets pcs ane flag at boot up for disabling pcs ane.
