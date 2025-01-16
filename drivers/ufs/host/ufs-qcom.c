@@ -3895,10 +3895,6 @@ static int ufs_qcom_common_init(struct ufs_hba *hba)
 		goto out_variant_clear;
 	}
 
-	err = ufs_qcom_bus_register(host);
-	if (err)
-		goto out_variant_clear;
-
 	ufs_qcom_get_controller_revision(hba, &host->hw_ver.major,
 		&host->hw_ver.minor, &host->hw_ver.step);
 
@@ -3927,7 +3923,6 @@ static int ufs_qcom_common_init(struct ufs_hba *hba)
 	 */
 	ufshcd_qti_hba_init_crypto_capabilities(hba);
 
-	ufs_qcom_set_bus_vote(hba, true);
 
 	if (hba->dev->id < MAX_UFS_QCOM_HOSTS)
 		ufs_qcom_hosts[hba->dev->id] = host;
@@ -4083,6 +4078,12 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	err = ufs_qcom_init_lane_clks(host);
 	if (err)
 		goto out_disable_parent_vreg;
+
+	err = ufs_qcom_bus_register(host);
+	if (err)
+		goto out_variant_clear;
+
+	ufs_qcom_set_bus_vote(hba, true);
 
 	ufs_qcom_parse_g4_workaround_flag(host);
 	ufs_qcom_parse_lpm(host);
