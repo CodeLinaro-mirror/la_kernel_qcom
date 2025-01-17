@@ -83,7 +83,7 @@
 #include <linux/user_namespace.h>
 #include <linux/indirect_call_wrapper.h>
 #include <linux/textsearch.h>
-
+#include <linux/kmemleak.h>
 #include <trace/hooks/net.h>
 
 #include "dev.h"
@@ -758,6 +758,12 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev,
 		 */
 		skb->truesize = SKB_TRUESIZE(SKB_DATA_ALIGN(len + NET_SKB_PAD));
 		skb->recycled_for_ds = 0;
+#ifdef CONFIG_DEBUG_KMEMLEAK
+		kmemleak_update_trace(skb);
+		kmemleak_restore(skb, 1);
+		kmemleak_update_trace(skb->head);
+		kmemleak_restore(skb->head, 1);
+#endif
 		return skb;
 	}
 
@@ -863,6 +869,12 @@ struct sk_buff *__netdev_alloc_skb_no_skb_reset(struct net_device *dev,
 		 */
 		skb->truesize = SKB_TRUESIZE(SKB_DATA_ALIGN(len + NET_SKB_PAD));
 		skb->fast_recycled = 0;
+#ifdef CONFIG_DEBUG_KMEMLEAK
+		kmemleak_update_trace(skb);
+		kmemleak_restore(skb, 1);
+		kmemleak_update_trace(skb->head);
+		kmemleak_restore(skb->head, 1);
+#endif
 		return skb;
 	}
 
