@@ -16491,6 +16491,13 @@ nl80211_set_ttlm(struct sk_buff *skb, struct genl_info *info)
 		 NL80211_FLAG_NEED_RTNL)		\
 	SELECTOR(__sel, NETDEV_UP,			\
 		 NL80211_FLAG_NEED_NETDEV_UP)		\
+	SELECTOR(__sel, NETDEV_UP_RTNL,			\
+		 NL80211_FLAG_NEED_NETDEV_UP |		\
+		 NL80211_FLAG_NEED_RTNL)		\
+	SELECTOR(__sel, NETDEV_UP_REMOVELINK_RTNL,	\
+		 NL80211_FLAG_NEED_NETDEV_UP |		\
+		 NL80211_FLAG_MLO_VALID_LINK_ID |	\
+		 NL80211_FLAG_NEED_RTNL)		\
 	SELECTOR(__sel, NETDEV_UP_LINK,			\
 		 NL80211_FLAG_NEED_NETDEV_UP |		\
 		 NL80211_FLAG_MLO_VALID_LINK_ID)	\
@@ -17588,6 +17595,7 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 		.flags = GENL_UNS_ADMIN_PERM,
 		.internal_flags = IFLAGS(NL80211_FLAG_NEED_NETDEV_UP),
 	},
+#ifndef CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 	{
 		.cmd = NL80211_CMD_ADD_LINK,
 		.doit = nl80211_add_link,
@@ -17601,6 +17609,23 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 		.internal_flags = IFLAGS(NL80211_FLAG_NEED_NETDEV_UP |
 					 NL80211_FLAG_MLO_VALID_LINK_ID),
 	},
+#else
+	{
+		.cmd = NL80211_CMD_ADD_LINK,
+		.doit = nl80211_add_link,
+		.flags = GENL_UNS_ADMIN_PERM,
+		.internal_flags = IFLAGS(NL80211_FLAG_NEED_NETDEV_UP |
+					NL80211_FLAG_NEED_RTNL),
+	},
+	{
+		.cmd = NL80211_CMD_REMOVE_LINK,
+		.doit = nl80211_remove_link,
+		.flags = GENL_UNS_ADMIN_PERM,
+		.internal_flags = IFLAGS(NL80211_FLAG_NEED_NETDEV_UP |
+					 NL80211_FLAG_MLO_VALID_LINK_ID |
+					 NL80211_FLAG_NEED_RTNL),
+	},
+#endif
 	{
 		.cmd = NL80211_CMD_ADD_LINK_STA,
 		.doit = nl80211_add_link_station,
