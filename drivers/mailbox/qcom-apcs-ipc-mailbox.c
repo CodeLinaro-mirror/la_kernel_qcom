@@ -101,7 +101,7 @@ static int qcom_apcs_ipc_probe(struct platform_device *pdev)
 
 	apcs_data = of_device_get_match_data(&pdev->dev);
 	if (!apcs_data)
-		return 0;
+		return -EINVAL;
 
 	apcs->regmap = regmap;
 	apcs->offset = apcs_data->offset;
