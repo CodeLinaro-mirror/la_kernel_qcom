@@ -2658,23 +2658,47 @@ void cfg80211_remove_link(struct wireless_dev *wdev, unsigned int link_id)
 		/* per-link not relevant */
 		break;
 	}
-
-	wdev->valid_links &= ~BIT(link_id);
+	if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+		wdev->valid_links &= ~BIT(link_id);
 
 	rdev_del_intf_link(rdev, wdev, link_id);
 
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+		wdev->valid_links &= ~BIT(link_id);
+
 	eth_zero_addr(wdev->links[link_id].addr);
 }
+
+#ifndef CFG80211_PROP_SINGLE_WIPHY_SUPPORT
+static bool cfg80211_check_mode(enum nl80211_iftype iftype)
+{
+	/* links are controlled by upper layers (userspace/cfg)
+	 * only for AP mode, so only remove them here for AP
+	 */
+	if (iftype != NL80211_IFTYPE_AP)
+		return true;
+	else
+		return false;
+}
+#else
+static bool cfg80211_check_mode(enum nl80211_iftype iftype)
+{
+	/* links are controlled by upper layers (userspace/cfg)
+	 * only for AP and STA mode, so only remove them here for AP or STA
+	 */
+	if (iftype != NL80211_IFTYPE_AP &&
+	    iftype != NL80211_IFTYPE_STATION)
+		return true;
+	else
+		return false;
+}
+#endif
 
 void cfg80211_remove_links(struct wireless_dev *wdev)
 {
 	unsigned int link_id;
 
-	/*
-	 * links are controlled by upper layers (userspace/cfg)
-	 * only for AP mode, so only remove them here for AP
-	 */
-	if (wdev->iftype != NL80211_IFTYPE_AP)
+	if (cfg80211_check_mode(wdev->iftype))
 		return;
 
 	wdev_lock(wdev);

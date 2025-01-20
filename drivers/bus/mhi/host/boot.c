@@ -82,7 +82,7 @@ int mhi_rddm_download_status(struct mhi_controller *mhi_cntrl)
 			return 0;
 		}
 
-		udelay(delayus);
+		usleep_range(delayus, delayus + 100);
 	}
 
 	ee = mhi_get_exec_env(mhi_cntrl);

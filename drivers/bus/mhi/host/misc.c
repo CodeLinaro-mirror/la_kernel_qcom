@@ -1365,7 +1365,7 @@ int mhi_process_misc_tsync_ev_ring(struct mhi_controller *mhi_cntrl,
 	spin_lock_bh(&mhi_event->lock);
 	ptr = le64_to_cpu(er_ctxt->rp);
 	if (!is_valid_ring_ptr(ev_ring, ptr)) {
-		MHI_ERR(dev, "tsync event ring pointer is invalid rp: %llx\n", ptr);
+		MHI_ERR(dev, "tsync event ring pointer is invalid rp: %pad\n", &ptr);
 		spin_unlock_bh(&mhi_event->lock);
 		goto exit_tsync_process;
 	}
@@ -1478,7 +1478,7 @@ int mhi_process_misc_bw_ev_ring(struct mhi_controller *mhi_cntrl,
 	spin_lock_bh(&mhi_event->lock);
 	ptr = le64_to_cpu(er_ctxt->rp);
 	if (!is_valid_ring_ptr(ev_ring, ptr)) {
-		MHI_ERR(dev, "bw event ring pointer is invalid rp: %llx\n", ptr);
+		MHI_ERR(dev, "bw event ring pointer is invalid rp: %pad\n", &ptr);
 		spin_unlock_bh(&mhi_event->lock);
 		goto exit_bw_scale_process;
 	}

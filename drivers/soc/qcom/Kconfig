@@ -116,6 +116,15 @@ config QCOM_DCC_V2
          driver provides interface to configure DCC block and read back
          captured data from DCC's internal SRAM.
 
+config DUMP_XBL_LOG
+	tristate "print xbl log on console from fs"
+	help
+	  This driver is used to capture xbl log from reserved memory  region
+	  defined separately in each device tree and print on console when user
+	  requests. User can perform below command to print xbl log stored in
+	  reserved memory region:
+		cat /sys/kernel/xbl_log/xbl_log
+
 config QCOM_GENI_SE
 	tristate "QCOM GENI Serial Engine Driver"
 	depends on ARCH_QCOM || COMPILE_TEST
@@ -235,6 +244,15 @@ config QCOM_PDR_HELPERS
 	select QCOM_QMI_HELPERS
 	depends on NET
 
+config MSM_BOOT_TIME_MARKER
+	bool "Use MSM boot time marker reporting"
+	depends on MSM_BOOT_STATS
+	help
+	  Use this to mark msm boot kpi for measurement.
+	  An instrumentation for boot time measurement.
+	  To create an entry, call "place_marker" function.
+	  At userspace, write marker name to "/sys/kernel/boot_kpi/kpi_values"
+
 config QCOM_PANIC_ON_PDR_NOTIF_TIMEOUT
 	bool "Trigger kernel panic when PDR notification timeout expires"
 	help
@@ -283,6 +301,14 @@ config QCOM_QFPROM_SYS
            values are exported as sysfs entries.
 
            Say y here to enable QFPROM SYS support.
+
+config MSM_CORE_HANG_DETECT
+        tristate "MSM Core Hang Detection Support"
+        help
+          This enables the core hang detection module. It causes SoC
+          reset on core hang detection and collects the core context
+          for hang. By using sysfs entries core hang detection can be
+          enabled or disabled dynamically.
 
 config QCOM_RAMP_CTRL
 	tristate "Qualcomm Ramp Controller driver"
@@ -358,6 +384,14 @@ config QCOM_RPMPD
 	  performance states. The driver communicates a performance state
 	  value to RPM which then translates it into corresponding voltage
 	  for the voltage rail.
+
+config QCOM_RUN_QUEUE_STATS
+       tristate "Enable collection and exporting of QTI Run Queue stats to userspace"
+       help
+        This option enables the driver to periodically collecting the statistics
+        of kernel run queue information and calculate the load of the system.
+        This information is exported to usespace via sysfs entries and userspace
+        algorithms uses info and decide when to turn on/off the cpu cores.
 
 config QCOM_SMEM
 	tristate "Qualcomm Shared Memory Manager (SMEM)"

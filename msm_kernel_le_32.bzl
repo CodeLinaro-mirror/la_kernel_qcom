@@ -1,3 +1,12 @@
+load(
+    "//build:msm_kernel_extensions.bzl",
+    "define_extras",
+    "get_build_config_fragments",
+    "get_dtb_list",
+    "get_dtbo_list",
+    "get_dtstree",
+    "get_vendor_ramdisk_binaries",
+)
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load("//build/kernel/kleaf:constants.bzl", "aarch64_outs")
 load(
@@ -10,21 +19,13 @@ load(
     "kernel_uapi_headers_cc_library",
     "merged_kernel_uapi_headers",
 )
-load(
-    "//build:msm_kernel_extensions.bzl",
-    "define_extras",
-    "get_build_config_fragments",
-    "get_dtb_list",
-    "get_dtbo_list",
-    "get_dtstree",
-    "get_vendor_ramdisk_binaries",
-)
+load(":allyes_images.bzl", "gen_allyes_files")
+load(":image_opts.bzl", "boot_image_opts")
+load(":msm_abl.bzl", "define_abl_dist")
 load(":msm_common.bzl", "define_top_level_config", "gen_config_without_source_lines", "get_out_dir")
 load(":msm_dtc.bzl", "define_dtc_dist")
-load(":msm_abl.bzl", "define_abl_dist")
-load(":image_opts.bzl", "boot_image_opts")
+load(":msm_prebuilt.bzl", "define_prebuilt_lib_copy")
 load(":target_variants.bzl", "le_32_variants")
-load(":allyes_images.bzl", "gen_allyes_files")
 
 def _define_build_config(
         msm_target,
@@ -306,6 +307,8 @@ def define_msm_le_32(
     define_abl_dist(target, msm_target, variant)
 
     define_dtc_dist(target, msm_target, variant)
+
+    define_prebuilt_lib_copy(target, msm_target, variant)
 
     if "allyes" in target:
         gen_allyes_files(le_target, target)
