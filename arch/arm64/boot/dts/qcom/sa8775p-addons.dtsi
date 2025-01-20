@@ -3,10 +3,12 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-#include "sa8775p-dma-heaps.dtsi"
+#include <dt-bindings/arm/qcom_dma_heap_dt_constants.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
 #include <dt-bindings/thermal/thermal.h>
 
-/ {
+&{/} {
 	reserved-memory {
 		audio_cma_mem: qcom,audio-ml {
 			compatible = "shared-dma-pool";
@@ -373,14 +375,6 @@
 };
 
 &soc {
-	qcom_tzlog: tz-log@146d8720 {
-		compatible = "qcom,tz-log";
-		reg = <0x0 0x146d8720 0x0 0x3000>;
-		qcom,hyplog-enabled;
-		hyplog-address-offset = <0x410>;
-		hyplog-size-offset = <0x414>;
-	};
-
 	lpass_tlmm: pinctrl@3440000 {
 		compatible = "qcom,qcs9100-lpass-lpi-pinctrl";
 		reg = <0x0 0x03440000 0x0 0x20000>,
@@ -395,6 +389,10 @@
 		gpio-ranges = <&lpass_tlmm 0 0 23>;
 	};
 
+	msm_gpu: qcom,kgsl-3d0@3d00000 {
+		#cooling-cells = <2>;
+	};
+
 	csr: csr@4001000 {
 		compatible = "qcom,coresight-csr";
 		reg = <0x0 0x4001000 0x0 0x1000>;
@@ -406,10 +404,6 @@
 		qcom,hwctrl-set-support;
 		qcom,set-byte-cntr-support;
 		qcom,blk-size = <1>;
-	};
-
-	msm_gpu: qcom,kgsl-3d0@3d00000 {
-		#cooling-cells = <2>;
 	};
 
 	tmc_etr: tmc@4048000 {
@@ -472,21 +466,37 @@
 		tgu-steps = <3>;
 		tgu-timer-counters = <8>;
 	};
-};
 
-&sram {
-	mem_dump_table@10 {
-		compatible = "qcom,msm-imem-mem-dump-table";
-		reg = <0x10 0x8>;
+	qcom_tzlog: tz-log@146d8720 {
+		compatible = "qcom,tz-log";
+		reg = <0x0 0x146d8720 0x0 0x3000>;
+		qcom,hyplog-enabled;
+		hyplog-address-offset = <0x410>;
+		hyplog-size-offset = <0x414>;
 	};
 
-	kaslr_offset@6d0 {
-		compatible = "qcom,msm-imem-kaslr_offset";
-		reg = <0x6d0 0xc>;
-	};
-};
+	qcom,dma-heaps {
+	        compatible = "qcom,dma-heaps";
 
-&soc {
+		qcom,qseecom {
+			qcom,dma-heap-name = "qcom,qseecom";
+			qcom,dma-heap-type = <HEAP_TYPE_CMA>;
+			memory-region = <&qseecom_mem>;
+		};
+
+		qcom,qseecom_ta {
+			qcom,dma-heap-name = "qcom,qseecom-ta";
+			qcom,dma-heap-type = <HEAP_TYPE_CMA>;
+			memory-region = <&qseecom_ta_mem>;
+		};
+
+		qcom,secure_cdsp {
+			qcom,dma-heap-name = "qcom,cma-secure-cdsp";
+			qcom,dma-heap-type = <HEAP_TYPE_CMA>;
+			memory-region = <&cdsp_secure_heap>;
+		};
+	};
+
 	qcom,mem-buf {
 		compatible = "qcom,mem-buf";
 		qcom,mem-buf-capabilities = "supplier";
@@ -500,6 +510,18 @@
 	qcom,secure-buffer {
 		compatible = "qcom,secure-buffer";
 		qcom,vmid-cp-camera-preview-ro;
+	};
+};
+
+&sram {
+	mem_dump_table@10 {
+		compatible = "qcom,msm-imem-mem-dump-table";
+		reg = <0x10 0x8>;
+	};
+
+	kaslr_offset@6d0 {
+		compatible = "qcom,msm-imem-kaslr_offset";
+		reg = <0x6d0 0xc>;
 	};
 };
 

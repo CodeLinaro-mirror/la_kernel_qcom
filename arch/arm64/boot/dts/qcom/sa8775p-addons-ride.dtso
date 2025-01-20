@@ -3,9 +3,12 @@
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+/dts-v1/;
+/plugin/;
+
 #include "sa8775p-addons.dtsi"
 
-/ {
+&{/} {
 	sound {
 		compatible = "qcom,qcs9100-sndcard";
 		model = "qcs9100-ridesx-snd-card";
