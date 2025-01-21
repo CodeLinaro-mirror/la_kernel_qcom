@@ -714,6 +714,9 @@ static inline void wiphy_read_of_freq_limits(struct wiphy *wiphy)
  *	belonging to that MU-MIMO groupID; %NULL if not changed
  * @vht_mumimo_follow_addr: MU-MIMO follow address, used for monitoring
  *	MU-MIMO packets going to the specified station; %NULL if not changed
+ * @radio_iface: Radio iface name
+ * @mld_macaddr: MLO address to use for this virtual interface.
+ * @mld_iface_name: MLO interface name to use for this virtual interface.
  */
 struct vif_params {
 	u32 flags;
@@ -721,6 +724,9 @@ struct vif_params {
 	u8 macaddr[ETH_ALEN];
 	const u8 *vht_mumimo_groups;
 	const u8 *vht_mumimo_follow_addr;
+	char *radio_iface;
+	u8 mld_macaddr[ETH_ALEN];
+	char *mld_iface_name;
 };
 
 /**
@@ -4084,6 +4090,23 @@ struct mgmt_frame_regs {
 };
 
 /**
+ * struct cfg80211_link_reconfig_removal_params - Contains params needed for
+ * link reconfig removal
+ * @link_removal_cntdown: TBTT countdown value until which the beacon with ML
+ *	reconfigure IE will be sent.
+ * @ie: ML reconfigure IE to be updated in beacon in the link going to be
+ *	removed and in all affiliated links.
+ * @ie_len: ML reconfigure IE length
+ * @link_id: Link id of the link to be removed.
+ */
+struct cfg80211_link_reconfig_removal_params {
+	u16 link_removal_cntdown;
+	const u8 *ie;
+	size_t ie_len;
+	unsigned int link_id;
+};
+
+/**
  * struct cfg80211_ops - backend description for wireless configuration
  *
  * This struct is registered by fullmac card drivers and/or wireless stacks
@@ -4484,6 +4507,11 @@ struct mgmt_frame_regs {
  *
  * @set_hw_timestamp: Enable/disable HW timestamping of TM/FTM frames.
  * @set_ttlm: set the TID to link mapping.
+ *
+ * @link_reconfig_remove: Notifies the driver about the link to be
+ *	scheduled for removal with ML reconfigure IE built for that particular
+ *	link along with the TBTT count until which the beacon with ML
+ *	reconfigure IE should be sent.
  */
 struct cfg80211_ops {
 	int	(*suspend)(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
@@ -4849,6 +4877,9 @@ struct cfg80211_ops {
 				    struct cfg80211_set_hw_timestamp *hwts);
 	int	(*set_ttlm)(struct wiphy *wiphy, struct net_device *dev,
 			    struct cfg80211_ttlm_params *params);
+	int	(*link_reconfig_remove)(struct wiphy *wiphy,
+		struct net_device *dev,
+		const struct cfg80211_link_reconfig_removal_params *params);
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
@@ -9364,4 +9395,42 @@ bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
  */
 void cfg80211_links_removed(struct net_device *dev, u16 link_mask);
 
+enum ieee80211_link_reconfig_remove_state {
+	IEEE80211_LINK_RECONFIG_START,
+	IEEE80211_LINK_RECONFIG_COMPLETE,
+};
+
+/**
+ * cfg80211_update_link_reconfig_remove_status - Inform userspace about
+ *	the removal status of link which is scheduled for removal
+ * @dev: the device on which the operation is requested
+ * @link_id: Link which is undergoing removal
+ * @tbtt_count: Current tbtt_count to be updated.
+ * @tsf: Beacon's timestamp value
+ * @bcn_intr: Beacon interval value
+ * @status: Inform started or completed action to userspace based on the value
+ *	received,
+ *	i) 0 (IEEE80211_LINK_RECONFIG_START) - Send
+ *		NL80211_CMD_LINK_REMOVAL_STARTED
+ *	ii) 1 (IEEE80211_LINK_RECONFIG_COMPLETE) - Send
+ *		NL80211_CMD_LINK_REMOVAL_COMPLETED
+ *
+ *
+ * This function is used to inform userspace about the ongoing link removal
+ * status. 'IEEE80211_LINK_RECONFIG_START' is issued when the first beacon with
+ * ML reconfigure IE is sent out. This event can be used by userspace to start
+ * the BTM in case of AP mode. And, IEEE80211_LINK_RECONFIG_COMPLETE is issued
+ * when the last beacon is sent with ML reconfigure IE. This is used to
+ * initiate the deletion of that link, also to trigger deauth/disassoc for the
+ * associated peer(s).
+ *
+ * Note: This API is currently used by drivers which supports offloaded
+ * Multi-Link reconfigure link removal. Returns failure if FEATURE FLAG is not
+ * set or success if NL message is sent.
+ */
+int
+cfg80211_update_link_reconfig_remove_status(struct net_device *dev,
+					    unsigned int link_id,
+					    u16 tbtt_count, u64 tsf, u32 bcn_intr,
+					    enum ieee80211_link_reconfig_remove_state action);
 #endif /* __NET_CFG80211_H */

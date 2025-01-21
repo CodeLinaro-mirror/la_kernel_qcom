@@ -821,6 +821,10 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_BSS_DUMP_INCLUDE_USE_DATA] = { .type = NLA_FLAG },
 	[NL80211_ATTR_MLO_TTLM_DLINK] = NLA_POLICY_EXACT_LEN(sizeof(u16) * 8),
 	[NL80211_ATTR_MLO_TTLM_ULINK] = NLA_POLICY_EXACT_LEN(sizeof(u16) * 8),
+	[NL80211_ATTR_RADIO_IFACE] = { .type = NLA_BINARY, .len = IFNAMSIZ - 1 },
+	[NL80211_ATTR_MLD_IFACE_NAME] = { .type = NLA_BINARY, .len = IFNAMSIZ - 1 },
+	[NL80211_ATTR_AP_REMOVAL_COUNT] = { .type = NLA_U16 },
+	[NL80211_ATTR_TSF] = { .type = NLA_U64 },
 };
 
 /* policy for the key attributes */
@@ -4327,6 +4331,34 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info)
 	err = nl80211_parse_mon_options(rdev, type, info, &params);
 	if (err < 0)
 		return err;
+
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT)) {
+		if (rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_MLO) {
+			if (info->attrs[NL80211_ATTR_RADIO_IFACE])
+				params.radio_iface =
+					nla_data(info->attrs[NL80211_ATTR_RADIO_IFACE]);
+		}
+
+		if (info->attrs[NL80211_ATTR_MLD_ADDR]) {
+			if (rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_MLO) {
+				nla_memcpy(params.mld_macaddr,
+					   info->attrs[NL80211_ATTR_MLD_ADDR],
+					   ETH_ALEN);
+				if (!is_valid_ether_addr(params.mld_macaddr))
+					return -EADDRNOTAVAIL;
+			} else {
+				return -EOPNOTSUPP;
+			}
+		}
+
+		if (info->attrs[NL80211_ATTR_MLD_IFACE_NAME]) {
+			if (rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_MLO)
+				params.mld_iface_name =
+					nla_data(info->attrs[NL80211_ATTR_MLD_IFACE_NAME]);
+			else
+				return -EOPNOTSUPP;
+		}
+	}
 
 	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg)
@@ -16391,6 +16423,9 @@ static int nl80211_remove_link(struct sk_buff *skb, struct genl_info *info)
 	unsigned int link_id = nl80211_link_id(info->attrs);
 	struct net_device *dev = info->user_ptr[1];
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	struct cfg80211_link_reconfig_removal_params params = {};
+	bool is_ml_reconfig = false;
+	int ret = 0;
 
 	/* cannot remove if there's no link */
 	if (!info->attrs[NL80211_ATTR_MLO_LINK_ID])
@@ -16404,8 +16439,38 @@ static int nl80211_remove_link(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 	}
 
-	wdev_lock(wdev);
-	cfg80211_remove_link(wdev, link_id);
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT)) {
+		if (info->attrs[NL80211_ATTR_AP_REMOVAL_COUNT]) {
+			/* Parsing and sending information to driver about ML
+			 * reconfiguration is supported only when
+			 * NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD is set
+			 */
+			if (!wiphy_ext_feature_isset(wdev->wiphy,
+						     NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD))
+				return -EOPNOTSUPP;
+
+			/* If AP removal count is present, it is mandatory to have IE
+			 * attribute as well, return error if not present
+			 */
+			if (!info->attrs[NL80211_ATTR_IE])
+				return -EINVAL;
+
+			is_ml_reconfig = true;
+			params.ie = nla_data(info->attrs[NL80211_ATTR_IE]);
+			params.ie_len = nla_len(info->attrs[NL80211_ATTR_IE]);
+			params.link_removal_cntdown =
+				nla_get_u16(info->attrs[NL80211_ATTR_AP_REMOVAL_COUNT]);
+			params.link_id = link_id;
+		}
+		wdev_lock(wdev);
+		if (is_ml_reconfig)
+			ret = cfg80211_link_reconfig_remove(wdev, &params);
+		else
+			cfg80211_remove_link(wdev, link_id);
+	} else {
+		wdev_lock(wdev);
+		cfg80211_remove_link(wdev, link_id);
+	}
 	wdev_unlock(wdev);
 
 	return 0;
@@ -20502,6 +20567,72 @@ nla_put_failure:
 	nlmsg_free(msg);
 }
 EXPORT_SYMBOL(cfg80211_update_owe_info_event);
+
+int
+cfg80211_update_link_reconfig_remove_status(struct net_device *netdev,
+					    unsigned int link_id,
+					    u16 tbtt_count, u64 tsf, u32 bcn_intr,
+					    enum ieee80211_link_reconfig_remove_state action)
+{
+	struct wiphy *wiphy = netdev->ieee80211_ptr->wiphy;
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
+	struct sk_buff *msg;
+	void *hdr = NULL;
+	int ret = 0;
+
+	/* Only for ML reconfigure link removal offloaded driver, need to
+	 * update the status about the ongoing link removal to userspace.
+	 */
+	if (!wiphy_ext_feature_isset(wiphy,
+				     NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD))
+		return -EOPNOTSUPP;
+
+	trace_cfg80211_update_link_reconfig_remove_status(wiphy, netdev,
+							  link_id, tbtt_count,
+							  tsf, bcn_intr, action);
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_ATOMIC);
+	if (!msg)
+		return -ENOMEM;
+
+	if (action == IEEE80211_LINK_RECONFIG_START)
+		hdr = nl80211hdr_put(msg, 0, 0, 0, NL80211_CMD_LINK_REMOVAL_STARTED);
+	else if (action == IEEE80211_LINK_RECONFIG_COMPLETE)
+		hdr = nl80211hdr_put(msg, 0, 0, 0, NL80211_CMD_LINK_REMOVAL_COMPLETED);
+
+	if (!hdr) {
+		ret = -ENOBUFS;
+		goto nla_put_failure;
+	}
+
+	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
+	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, netdev->ifindex)) {
+		ret = -EINVAL;
+		goto nla_put_failure;
+	}
+
+	if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) ||
+	    nla_put_u16(msg, NL80211_ATTR_AP_REMOVAL_COUNT, tbtt_count) ||
+	    nla_put_u64_64bit(msg, NL80211_ATTR_TSF, tsf, NL80211_ATTR_PAD) ||
+	    nla_put_u32(msg, NL80211_ATTR_BEACON_INTERVAL, bcn_intr)) {
+		ret = -EINVAL;
+		goto nla_put_failure;
+	}
+
+	genlmsg_end(msg, hdr);
+
+	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(&rdev->wiphy), msg, 0,
+				NL80211_MCGRP_MLME, GFP_ATOMIC);
+
+	return ret;
+
+ nla_put_failure:
+	genlmsg_cancel(msg, hdr);
+	nlmsg_free(msg);
+
+	return ret;
+}
+EXPORT_SYMBOL(cfg80211_update_link_reconfig_remove_status);
 
 /* initialisation/exit functions */
 
