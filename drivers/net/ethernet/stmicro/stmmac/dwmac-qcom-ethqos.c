@@ -474,6 +474,9 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 	unsigned int eth_type, priority;
 	int gso = skb_shinfo(skb)->gso_type;
 
+	if (!skb)
+		return txqueue_select;
+
 	if (skb && skb->priority) {
 		if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4))
 			return 0;
