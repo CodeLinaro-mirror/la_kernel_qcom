@@ -133,13 +133,15 @@ static void __maybe_unused reset_event_queue(struct gsi_data_port *port)
 	spin_unlock_irqrestore(&port->evt_q.q_lock, flags);
 }
 
-static int gsi_wakeup_host(struct f_gsi *gsi)
+static void gsi_wakeup_work(struct work_struct *w)
 {
 
 	int ret;
+	struct f_gsi *gsi;
 	struct usb_gadget *gadget;
 	struct usb_function *func;
 
+	gsi = container_of(w, struct f_gsi, wakeup_work);
 	func = &gsi->function;
 	gadget = gsi->function.config->cdev->gadget;
 
@@ -147,7 +149,7 @@ static int gsi_wakeup_host(struct f_gsi *gsi)
 
 	if (!gadget) {
 		log_event_err("FAILED: d_port->cdev->gadget == NULL");
-		return -ENODEV;
+		return;
 	}
 
 	if (func->func_suspended) {
@@ -161,7 +163,7 @@ static int gsi_wakeup_host(struct f_gsi *gsi)
 	if (ret)
 		log_event_err("wakeup failed. ret=%d.", ret);
 
-	return ret;
+	return;
 }
 
 static void gsi_rw_timer_func(struct timer_list *t)
@@ -175,7 +177,7 @@ static void gsi_rw_timer_func(struct timer_list *t)
 	}
 
 	log_event_dbg("%s: calling gsi_wakeup_host\n", __func__);
-	gsi_wakeup_host(gsi);
+	schedule_work(&gsi->wakeup_work);
 
 	if (gsi->debugfs_rw_timer_enable) {
 		log_event_dbg("%s: re-arm the timer\n", __func__);
@@ -445,7 +447,7 @@ static int ipa_usb_notify_cb(enum ipa_usb_notify_event event,
 		break;
 
 	case IPA_USB_REMOTE_WAKEUP:
-		gsi_wakeup_host(gsi);
+		schedule_work(&gsi->wakeup_work);
 		break;
 
 	case IPA_USB_SUSPEND_COMPLETED:
@@ -786,6 +788,13 @@ static int ipa_suspend_work_handler(struct gsi_data_port *d_port)
 		goto done;
 	}
 
+	/*
+	 * Ensure that the DBL is blocked before suspend.
+	 */
+	block_db = true;
+	usb_gsi_ep_op(gsi->d_port.in_ep, (void *)&block_db,
+					GSI_EP_OP_SET_CLR_BLOCK_DBL);
+
 	log_event_dbg("%s: Calling xdci_suspend", __func__);
 	ret = d_port->ipa_ops->xdci_suspend(gsi->d_port.out_channel_handle,
 				gsi->d_port.in_channel_handle, gsi->prot_id,
@@ -800,7 +809,7 @@ static int ipa_suspend_work_handler(struct gsi_data_port *d_port)
 		block_db = false;
 		usb_gsi_ep_op(d_port->in_ep, (void *)&block_db,
 					GSI_EP_OP_SET_CLR_BLOCK_DBL);
-		gsi_wakeup_host(gsi);
+		schedule_work(&gsi->wakeup_work);
 	} else if (ret == -EINPROGRESS) {
 		d_port->sm_state = STATE_SUSPEND_IN_PROGRESS;
 	} else {
@@ -1855,7 +1864,7 @@ static void gsi_rndis_flow_ctrl_enable(bool enable, struct rndis_params *param)
 
 static int queue_notification_request(struct f_gsi *gsi)
 {
-	int ret;
+	int ret = 0;
 	unsigned long flags;
 	struct usb_request *req = gsi->c_port.notify_req;
 	struct usb_ep *ep = gsi->c_port.notify;
@@ -1867,7 +1876,7 @@ static int queue_notification_request(struct f_gsi *gsi)
 		spin_unlock_irqrestore(&gsi->c_port.lock, flags);
 
 		log_event_dbg("%s wakeup host\n", __func__);
-		ret = gsi_wakeup_host(gsi);
+		schedule_work(&gsi->wakeup_work);
 
 		return ret;
 	}
@@ -2581,6 +2590,7 @@ static void gsi_disable(struct usb_function *f)
 
 static void gsi_suspend(struct usb_function *f)
 {
+	int ret = 0;
 	bool block_db;
 	struct f_gsi *gsi = func_to_gsi(f);
 
@@ -2597,6 +2607,27 @@ static void gsi_suspend(struct usb_function *f)
 	post_event(&gsi->d_port, EVT_SUSPEND);
 	queue_delayed_work(gsi->d_port.ipa_usb_wq, &gsi->d_port.usb_ipa_w, 0);
 	log_event_dbg("gsi suspended");
+
+	/*
+	 * If host suspended bus without receiving notification request then
+	 * initiate remote-wakeup. As driver won't be able to do it later since
+	 * notification request is already queued. If remote wakeup is not
+	 * allowed, dequeue that request as we are in some incomplete state and
+	 * this request is of no use now and most likely we would initiate a
+	 * protocol disconnect during suspend.
+	 */
+	if (gsi->c_port.notify_req_queued) {
+		if (usb_gsi_remote_wakeup_allowed(f)) {
+			log_event_dbg("%s: pending response, trigger wakeup\n",
+				      __func__);
+			schedule_work(&gsi->wakeup_work);
+		} else {
+			ret = usb_ep_dequeue(gsi->c_port.notify,
+					     gsi->c_port.notify_req);
+			if (ret < 0)
+				log_event_err("%s:dequeue failed\n", __func__);
+		}
+	}
 }
 
 static void gsi_resume(struct usb_function *f)
@@ -2677,13 +2708,11 @@ static int gsi_func_suspend(struct usb_function *f, u8 options)
 	return 0;
 }
 
-static int gsi_update_function_bind_params(struct f_gsi *gsi,
+
+static int gsi_assign_string_ids(struct f_gsi *gsi,
 	struct usb_composite_dev *cdev,
 	struct gsi_function_bind_info *info)
 {
-	struct usb_ep *ep;
-	struct usb_cdc_notification *event;
-	struct usb_function *f = &gsi->function;
 	int status;
 
 	if (info->ctrl_str_idx >= 0 && info->ctrl_desc) {
@@ -2739,6 +2768,23 @@ static int gsi_update_function_bind_params(struct f_gsi *gsi,
 	if (info->data_nop_desc)
 		info->data_nop_desc->bInterfaceNumber = gsi->data_id;
 
+	return 0;
+}
+
+
+static int gsi_update_function_bind_params(struct f_gsi *gsi,
+	struct usb_composite_dev *cdev,
+	struct gsi_function_bind_info *info)
+{
+	struct usb_ep *ep;
+	struct usb_cdc_notification *event;
+	struct usb_function *f = &gsi->function;
+	int status;
+
+	status = gsi_assign_string_ids(gsi, cdev, info);
+	if (status < 0)
+		return status;
+
 	/* allocate instance-specific endpoints */
 	if (info->fs_in_desc) {
 		ep = usb_ep_autoconfig(cdev->gadget, info->fs_in_desc);
@@ -2773,7 +2819,7 @@ static int gsi_update_function_bind_params(struct f_gsi *gsi,
 		gsi->c_port.notify_req->buf =
 			kmalloc(info->notify_buf_len, GFP_KERNEL);
 		if (!gsi->c_port.notify_req->buf)
-			goto fail;
+			goto free_req;
 
 		gsi->c_port.notify_req->length = info->notify_buf_len;
 		gsi->c_port.notify_req->context = gsi;
@@ -2826,15 +2872,17 @@ static int gsi_update_function_bind_params(struct f_gsi *gsi,
 	status = usb_assign_descriptors(f, info->fs_desc_hdr, info->hs_desc_hdr,
 					info->ss_desc_hdr, info->ss_desc_hdr);
 	if (status)
-		goto fail;
+		goto free_req_buf;
 
 	return 0;
 
-fail:
-	if (gsi->c_port.notify_req) {
+free_req_buf:
+	if (gsi->c_port.notify_req && gsi->c_port.notify_req->buf)
 		kfree(gsi->c_port.notify_req->buf);
+free_req:
+	if (gsi->c_port.notify_req)
 		usb_ep_free_request(gsi->c_port.notify, gsi->c_port.notify_req);
-	}
+fail:
 	/* we might as well release our claims on endpoints */
 	if (gsi->c_port.notify)
 		gsi->c_port.notify->driver_data = NULL;
@@ -3333,6 +3381,7 @@ static struct f_gsi *gsi_function_init(enum ipa_usb_teth_prot prot_id)
 	spin_lock_init(&gsi->d_port.lock);
 
 	INIT_DELAYED_WORK(&gsi->d_port.usb_ipa_w, ipa_work_handler);
+	INIT_WORK(&gsi->wakeup_work, gsi_wakeup_work);
 
 	gsi->d_port.in_channel_handle = -EINVAL;
 	gsi->d_port.out_channel_handle = -EINVAL;
