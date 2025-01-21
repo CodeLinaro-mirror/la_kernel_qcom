@@ -996,7 +996,11 @@ static int cfg80211_wext_giwtxpower(struct net_device *dev,
 		return -EOPNOTSUPP;
 
 	wiphy_lock(&rdev->wiphy);
-	err = rdev_get_tx_power(rdev, wdev, &val);
+	if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+		err = rdev_get_tx_power(rdev, wdev, &val);
+	else
+		err = rdev_get_tx_power_mlo(rdev, wdev, 0, &val);
+
 	wiphy_unlock(&rdev->wiphy);
 	if (err)
 		return err;

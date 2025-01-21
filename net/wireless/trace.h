@@ -1595,6 +1595,11 @@ DEFINE_EVENT(wiphy_wdev_evt, rdev_get_tx_power,
 	TP_ARGS(wiphy, wdev)
 );
 
+DEFINE_EVENT(wiphy_wdev_evt, rdev_get_tx_power_mlo,
+	     TP_PROTO(struct wiphy *wiphy, struct wireless_dev *wdev),
+	     TP_ARGS(wiphy, wdev)
+);
+
 TRACE_EVENT(rdev_set_tx_power,
 	TP_PROTO(struct wiphy *wiphy, struct wireless_dev *wdev,
 		 enum nl80211_tx_power_setting type, int mbm),
