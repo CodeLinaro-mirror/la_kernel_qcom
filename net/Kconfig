@@ -424,6 +424,13 @@ config ALLOC_SKB_PAGE_FRAG_DISABLE
          for longer duration without getting freed by the kernel memory
          manageer. This can potentially cause out-of-memory situaions.
 
+config SKB_FAST_RECYCLABLE_DEBUG_ENABLE
+	bool "Enable debug API for fast recycled skbs"
+	depends on SKB_RECYCLER
+	default n
+	help
+	 Enable debug API for fast recycled skbs.
+
 menu "Network testing"
 
 config NET_PKTGEN
