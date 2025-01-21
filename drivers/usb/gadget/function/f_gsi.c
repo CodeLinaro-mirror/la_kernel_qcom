@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1552,6 +1552,7 @@ static long gsi_ctrl_dev_ioctl(struct file *fp, unsigned int cmd,
 		atomic_set(&c_port->ctrl_online, 1);
 		break;
 	case QTI_CTRL_GET_LINE_STATE:
+	case GSI_MBIM_GPS_USB_STATUS:
 		val = atomic_read(&gsi->connected);
 		if (gsi->prot_id == IPA_USB_RMNET)
 			val = gsi->rmnet_dtr_status;
@@ -2399,23 +2400,17 @@ static int gsi_get_alt(struct usb_function *f, unsigned int intf)
 	return -EINVAL;
 }
 
-static int gsi_set_alt(struct usb_function *f, unsigned int intf,
-						unsigned int alt)
+static int gsi_set_alt_ctrl_intf(struct usb_function *f, unsigned int intf,
+				 unsigned int alt)
 {
 	struct f_gsi	 *gsi = func_to_gsi(f);
 	struct usb_composite_dev *cdev = f->config->cdev;
-	struct net_device	*net;
 	int ret = 0;
-
-	log_event_dbg("intf=%u, alt=%u", intf, alt);
 
 	/* Control interface has only altsetting 0 */
 	if (intf == gsi->ctrl_id || gsi->prot_id == IPA_USB_RMNET) {
-		if (alt != 0)
-			goto fail;
-
-		if (!gsi->c_port.notify)
-			goto fail;
+		if (alt || !gsi->c_port.notify)
+			return -EINVAL;
 
 		if (gsi->c_port.notify->driver_data) {
 			log_event_dbg("reset gsi control %d", intf);
@@ -2428,17 +2423,33 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 			gsi->c_port.notify->desc = NULL;
 			log_event_err("Config-fail notify ep %s: err %d",
 				gsi->c_port.notify->name, ret);
-			goto fail;
+			return -EINVAL;
 		}
 
 		ret = usb_ep_enable(gsi->c_port.notify);
 		if (ret) {
 			log_event_err("usb ep#%s enable failed, err#%d",
 				gsi->c_port.notify->name, ret);
-			goto fail;
+			return -EINVAL;
 		}
 		gsi->c_port.notify->driver_data = gsi;
 	}
+
+	return 0;
+}
+
+static int gsi_set_alt(struct usb_function *f, unsigned int intf,
+						unsigned int alt)
+{
+	struct f_gsi	 *gsi = func_to_gsi(f);
+	struct usb_composite_dev *cdev = f->config->cdev;
+	struct net_device	*net;
+	int ret = 0;
+
+	log_event_dbg("intf=%u, alt=%u", intf, alt);
+
+	if (gsi_set_alt_ctrl_intf(f, intf, alt))
+		goto fail;
 
 	/* Data interface has two altsettings, 0 and 1 */
 	if (intf == gsi->data_id) {
@@ -2446,13 +2457,9 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 		/* for rndis and rmnet alt is always 0 update alt accordingly */
 		if (gsi->prot_id == IPA_USB_RNDIS ||
 				gsi->prot_id == IPA_USB_RMNET ||
-				gsi->prot_id == IPA_USB_DIAG) {
-			if (gsi->d_port.in_ep &&
-				!gsi->d_port.in_ep->driver_data)
-				alt = 1;
-			else
-				alt = 0;
-		}
+				gsi->prot_id == IPA_USB_DIAG)
+			alt = (gsi->d_port.in_ep &&
+				!gsi->d_port.in_ep->driver_data) ? 1 : 0;
 
 		if (alt > 1)
 			goto notify_ep_disable;
@@ -2521,7 +2528,8 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 	atomic_set(&gsi->connected, 1);
 
 	/* send 0 len pkt to qti to notify state change */
-	if (gsi->prot_id == IPA_USB_DIAG)
+	if (gsi->prot_id == IPA_USB_DIAG ||
+			gsi->prot_id == IPA_USB_MBIM)
 		gsi_ctrl_send_cpkt_tomodem(gsi, NULL, 0);
 
 	return ret;
@@ -2553,7 +2561,7 @@ static void gsi_disable(struct usb_function *f)
 	}
 
 	gsi_ctrl_clear_cpkt_queues(gsi, false);
-	/* send 0 len pkt to qti/qbi to notify state change */
+	/* send 0 len pkt to qti/qbi/gps to notify state change */
 	gsi_ctrl_send_cpkt_tomodem(gsi, NULL, 0);
 	gsi->c_port.notify_req_queued = false;
 	/* Disable Data Path  - only if it was initialized already (alt=1) */
@@ -2851,6 +2859,60 @@ void ipa_ready_callback(void *ops)
 }
 EXPORT_SYMBOL(ipa_ready_callback);
 
+static void gsi_assign_rndis_id(struct f_gsi *gsi, __u8 *class,
+				__u8 *subclass, __u8 *proto)
+{
+	switch (gsi->rndis_id) {
+	default:
+		/* fall throug */
+	case WIRELESS_CONTROLLER_REMOTE_NDIS:
+		*class = USB_CLASS_WIRELESS_CONTROLLER;
+		*subclass = 0x01;
+		*proto = 0x03;
+		break;
+	case MISC_ACTIVE_SYNC:
+		*class = USB_CLASS_MISC;
+		*subclass = 0x01;
+		*proto = 0x01;
+		break;
+	case MISC_RNDIS_OVER_ETHERNET:
+		*class = USB_CLASS_MISC;
+		*subclass = 0x04;
+		*proto = 0x01;
+		break;
+	case MISC_RNDIS_OVER_WIFI:
+		*class = USB_CLASS_MISC;
+		*subclass = 0x04;
+		*proto = 0x02;
+		break;
+	case MISC_RNDIS_OVER_WIMAX:
+		*class = USB_CLASS_MISC;
+		*subclass = 0x04;
+		*proto = 0x03;
+		break;
+	case MISC_RNDIS_OVER_WWAN:
+		*class = USB_CLASS_MISC;
+		*subclass = 0x04;
+		*proto = 0x04;
+		break;
+	case MISC_RNDIS_FOR_IPV4:
+		*class = USB_CLASS_MISC;
+		*subclass = 0x04;
+		*proto = 0x05;
+		break;
+	case MISC_RNDIS_FOR_IPV6:
+		*class = USB_CLASS_MISC;
+		*subclass = 0x04;
+		*proto = 0x06;
+		break;
+	case MISC_RNDIS_FOR_GPRS:
+		*class = USB_CLASS_MISC;
+		*subclass = 0x04;
+		*proto = 0x07;
+		break;
+	}
+}
+
 static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct usb_composite_dev *cdev = c->cdev;
@@ -2952,55 +3014,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 		if (gsi->rndis_id == RNDIS_ID_UNKNOWN)
 			gsi->rndis_id = MISC_RNDIS_OVER_ETHERNET;
 
-		switch (gsi->rndis_id) {
-		default:
-			/* fall throug */
-		case WIRELESS_CONTROLLER_REMOTE_NDIS:
-			class = USB_CLASS_WIRELESS_CONTROLLER;
-			subclass = 0x01;
-			proto = 0x03;
-			break;
-		case MISC_ACTIVE_SYNC:
-			class = USB_CLASS_MISC;
-			subclass = 0x01;
-			proto = 0x01;
-			break;
-		case MISC_RNDIS_OVER_ETHERNET:
-			class = USB_CLASS_MISC;
-			subclass = 0x04;
-			proto = 0x01;
-			break;
-		case MISC_RNDIS_OVER_WIFI:
-			class = USB_CLASS_MISC;
-			subclass = 0x04;
-			proto = 0x02;
-			break;
-		case MISC_RNDIS_OVER_WIMAX:
-			class = USB_CLASS_MISC;
-			subclass = 0x04;
-			proto = 0x03;
-			break;
-		case MISC_RNDIS_OVER_WWAN:
-			class = USB_CLASS_MISC;
-			subclass = 0x04;
-			proto = 0x04;
-			break;
-		case MISC_RNDIS_FOR_IPV4:
-			class = USB_CLASS_MISC;
-			subclass = 0x04;
-			proto = 0x05;
-			break;
-		case MISC_RNDIS_FOR_IPV6:
-			class = USB_CLASS_MISC;
-			subclass = 0x04;
-			proto = 0x06;
-			break;
-		case MISC_RNDIS_FOR_GPRS:
-			class = USB_CLASS_MISC;
-			subclass = 0x04;
-			proto = 0x07;
-			break;
-		}
+		gsi_assign_rndis_id(gsi, &class, &subclass, &proto);
 
 		info.iad_desc->bFunctionClass = class;
 		info.iad_desc->bFunctionSubClass = subclass;
