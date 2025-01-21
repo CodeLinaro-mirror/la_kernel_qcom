@@ -3367,6 +3367,11 @@ DEFINE_EVENT(cfg80211_rx_evt, cfg80211_rx_unexpected_4addr_frame,
 	TP_ARGS(netdev, addr)
 );
 
+DEFINE_EVENT(cfg80211_rx_evt, cfg80211_rx_unexpected_4addr_frame_mlo,
+	     TP_PROTO(struct net_device *netdev, const u8 *addr),
+	     TP_ARGS(netdev, addr)
+);
+
 TRACE_EVENT(cfg80211_ibss_joined,
 	TP_PROTO(struct net_device *netdev, const u8 *bssid,
 		 struct ieee80211_channel *channel),

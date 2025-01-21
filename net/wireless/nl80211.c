@@ -18906,7 +18906,8 @@ void cfg80211_conn_failed(struct net_device *dev, const u8 *mac_addr,
 EXPORT_SYMBOL(cfg80211_conn_failed);
 
 static bool __nl80211_unexpected_frame(struct net_device *dev, u8 cmd,
-				       const u8 *addr, gfp_t gfp)
+				       const u8 *addr, gfp_t gfp,
+				       const int link_id)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
@@ -18932,6 +18933,9 @@ static bool __nl80211_unexpected_frame(struct net_device *dev, u8 cmd,
 	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr))
 		goto nla_put_failure;
 
+	if (link_id != -1)
+		nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id);
+
 	genlmsg_end(msg, hdr);
 	genlmsg_unicast(wiphy_net(&rdev->wiphy), msg, nlportid);
 	return true;
@@ -18955,7 +18959,7 @@ bool cfg80211_rx_spurious_frame(struct net_device *dev,
 		return false;
 	}
 	ret = __nl80211_unexpected_frame(dev, NL80211_CMD_UNEXPECTED_FRAME,
-					 addr, gfp);
+					 addr, gfp, -1);
 	trace_cfg80211_return_bool(ret);
 	return ret;
 }
@@ -18977,11 +18981,34 @@ bool cfg80211_rx_unexpected_4addr_frame(struct net_device *dev,
 	}
 	ret = __nl80211_unexpected_frame(dev,
 					 NL80211_CMD_UNEXPECTED_4ADDR_FRAME,
-					 addr, gfp);
+					 addr, gfp, -1);
 	trace_cfg80211_return_bool(ret);
 	return ret;
 }
 EXPORT_SYMBOL(cfg80211_rx_unexpected_4addr_frame);
+
+bool cfg80211_rx_unexpected_4addr_frame_mlo(struct net_device *dev,
+					    const u8 *addr, gfp_t gfp,
+					    const int link_id)
+{
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	bool ret;
+
+	trace_cfg80211_rx_unexpected_4addr_frame_mlo(dev, addr);
+
+	if (WARN_ON(wdev->iftype != NL80211_IFTYPE_AP &&
+		    wdev->iftype != NL80211_IFTYPE_P2P_GO &&
+		    wdev->iftype != NL80211_IFTYPE_AP_VLAN)) {
+		trace_cfg80211_return_bool(false);
+		return false;
+	}
+	ret = __nl80211_unexpected_frame(dev,
+					 NL80211_CMD_UNEXPECTED_4ADDR_FRAME,
+					 addr, gfp, link_id);
+	trace_cfg80211_return_bool(ret);
+	return ret;
+}
+EXPORT_SYMBOL(cfg80211_rx_unexpected_4addr_frame_mlo);
 
 int nl80211_send_mgmt(struct cfg80211_registered_device *rdev,
 		      struct wireless_dev *wdev, u32 nlportid,
