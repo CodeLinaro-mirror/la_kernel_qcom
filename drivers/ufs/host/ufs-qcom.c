@@ -769,9 +769,6 @@ static void ufs_qcom_select_unipro_mode(struct ufs_qcom_host *host)
 		ufshcd_rmwl(host->hba, QUNIPRO_G4_SEL, 0, REG_UFS_CFG0);
 		ufshcd_rmwl(host->hba, HCI_UAWM_OOO_DIS, 0, REG_UFS_CFG0);
 	}
-
-	/* make sure above configuration is applied before we return */
-	mb();
 }
 
 /*
@@ -935,7 +932,7 @@ static int ufs_qcom_enable_hw_clk_gating(struct ufs_hba *hba)
 			UNUSED_UNIPRO_CLK_GATED, UFS_AH8_CFG);
 
 	/* Ensure that HW clock gating is enabled before next operations */
-	mb();
+	ufshcd_readl(hba, REG_UFS_CFG2);
 
 	/* Enable Qunipro internal clock gating if supported */
 	if (!ufs_qcom_cap_qunipro_clk_gating(host))
@@ -1123,7 +1120,7 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 		 * make sure above write gets applied before we return from
 		 * this function.
 		 */
-		mb();
+		ufshcd_readl(hba, REG_UFS_SYS1CLK_1US);
 	}
 
 	if (ufs_qcom_cap_qunipro(host))
@@ -2522,8 +2519,6 @@ static void ufshcd_parse_pm_levels(struct ufs_hba *hba)
 		ufshcd_is_valid_pm_lvl(spm_lvl))
 		hba->spm_lvl = spm_lvl;
 	host->is_dt_pm_level_read = true;
-
-	host->spm_lvl_default = hba->spm_lvl;
 }
 
 static void ufs_qcom_override_pa_tx_hsg1_sync_len(struct ufs_hba *hba)
@@ -2784,7 +2779,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 		break;
 	case POST_CHANGE:
 		if (!on) {
-			if (ufs_qcom_is_link_hibern8(hba)) {
+			if ((ufs_qcom_is_link_hibern8(hba)) || (ufs_qcom_is_link_off(hba))) {
 				ufs_qcom_phy_set_src_clk_h8_enter(phy);
 				/*
 				 * As XO is set to the source of lane clocks, hence
@@ -3243,6 +3238,7 @@ static void ufs_qcom_parse_pm_level(struct ufs_hba *hba)
 {
 	struct device *dev = hba->dev;
 	struct device_node *np = dev->of_node;
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	if (np) {
 		if (of_property_read_u32(np, "rpm-level",
@@ -3251,6 +3247,9 @@ static void ufs_qcom_parse_pm_level(struct ufs_hba *hba)
 		if (of_property_read_u32(np, "spm-level",
 					 &hba->spm_lvl))
 			hba->spm_lvl = -1;
+
+		if (of_property_read_bool(np, "set-ds-spm-level"))
+			host->set_ds_spm_level = true;
 	}
 }
 
@@ -3719,14 +3718,15 @@ cell_put:
 }
 
 /**
- * setup_vreg_to_enable - Determine and set the appropriate voltage
+ * ufs_qcom_setup_vreg_to_enable - Determine and set the appropriate voltage
  * regulator to enable.
  * @host: UFS host structure containing the regulator information.
- * @hba: Host Bus Adapter instance.
+ *
+ * Return: Pointer to the selected voltage regulator, or NULL if no
+ * appropriate regulator is found.
  */
-static void ufs_qcom_setup_vreg_to_enable(struct ufs_hba *hba)
+static struct ufs_vreg *ufs_qcom_setup_vreg_to_enable(struct ufs_qcom_host *host)
 {
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_vreg *vccq_parent = NULL;
 	struct ufs_vreg *vccq2_parent = NULL;
 	int err;
@@ -3742,10 +3742,12 @@ static void ufs_qcom_setup_vreg_to_enable(struct ufs_hba *hba)
 	} else {
 		host->parent_vreg = vccq_parent ? vccq_parent : vccq2_parent;
 		if (!host->parent_vreg) {
-			dev_info(hba->dev, "vccq or vccq2 parent node is not provided\n");
-			return;
+			dev_info(host->hba->dev, "vccq or vccq2 parent node is not provided\n");
+			return NULL;
 		}
 	}
+
+	return host->parent_vreg;
 }
 
 static int ufs_qcom_get_host_id(struct ufs_hba *hba)
@@ -3847,7 +3849,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 					 &host->vdd_hba_reg_nb);
 
 	/* update phy revision information before calling phy_init() */
-	ufs_qcom_phy_save_controller_version(host->generic_phy,
+	err = ufs_qcom_phy_save_controller_version(host->generic_phy,
 		host->hw_ver.major, host->hw_ver.minor, host->hw_ver.step);
 	if (err == -EPROBE_DEFER) {
 		pr_err("%s: phy device probe is not completed yet\n",
@@ -3876,7 +3878,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	}
 
 	ufs_qcom_parse_limits(host);
-	ufs_qcom_setup_vreg_to_enable(hba);
+	host->parent_vreg = ufs_qcom_setup_vreg_to_enable(host);
 	if (host->parent_vreg) {
 		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
 		if (err) {
@@ -5044,6 +5046,8 @@ static void ufs_qcom_config_scaling_param(struct ufs_hba *hba,
 	p->timer = DEVFREQ_TIMER_DELAYED;
 	d->upthreshold = 70;
 	d->downdifferential = 65;
+
+	hba->clk_scaling.suspend_on_no_request = true;
 }
 
 #else
@@ -6139,38 +6143,51 @@ static int ufs_qcom_suspend_prepare(struct device *dev)
 	hba = dev_get_drvdata(dev);
 	host = ufshcd_get_variant(hba);
 
-	/* For deep sleep, set spm level to lvl 5 because all
-	 * regulators is turned off in DS. For other senerios
-	 * like s2idle, retain the default spm level.
+	host->spm_lvl_prev = hba->spm_lvl;
+
+	/*
+	 * For deep sleep, if "set_ds_spm_level" flag is true, set the
+	 * spm level to lvl 5 because all regulators is turned off in DS.
+	 * For other scenarios like s2idle, retain the default spm level.
 	 */
 	switch (host->ufs_pm_mode) {
 	case UFS_QCOM_SYSFS_NONE:
-		if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		if (host->set_ds_spm_level && (pm_suspend_target_state == PM_SUSPEND_MEM))
 			hba->spm_lvl = UFS_PM_LVL_5;
-		else
-			hba->spm_lvl = host->spm_lvl_default;
-		break;
-	case UFS_QCOM_SYSFS_S2R:
-		hba->spm_lvl = host->spm_lvl_default;
 		break;
 	case UFS_QCOM_SYSFS_DEEPSLEEP:
-		hba->spm_lvl = UFS_PM_LVL_5;
+		if (host->set_ds_spm_level)
+			hba->spm_lvl = UFS_PM_LVL_5;
 		break;
+	case UFS_QCOM_SYSFS_S2R:
 	default:
 		break;
 	}
 
-	dev_info(dev, "spm level is set to %d\n", hba->spm_lvl);
+	if (hba->spm_lvl != host->spm_lvl_prev)
+		dev_info(dev, "spm level is changed from %d to %d\n",
+			host->spm_lvl_prev, hba->spm_lvl);
 
 	return ufshcd_suspend_prepare(dev);
 }
 
 static void ufs_qcom_resume_complete(struct device *dev)
 {
+	struct ufs_hba *hba;
+	struct ufs_qcom_host *host;
+
 	if (!is_bootdevice_ufs) {
 		dev_info(dev, "UFS is not boot dev.\n");
 		return;
 	}
+
+	hba = dev_get_drvdata(dev);
+	host = ufshcd_get_variant(hba);
+
+	if (host->set_ds_spm_level)
+		hba->spm_lvl = host->spm_lvl_prev;
+
+	host->ufs_pm_mode = UFS_QCOM_SYSFS_NONE;
 
 	return ufshcd_resume_complete(dev);
 }

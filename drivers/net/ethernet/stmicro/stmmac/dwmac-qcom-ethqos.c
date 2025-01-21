@@ -215,6 +215,7 @@ static struct ip_params pparams = {"", "", "", ""};
 
 static int set_board_type(char *board_params)
 {
+	ETHQOSINFO("Board Param from command line: %s", board_params);
 	if (!strcmp(board_params, "Air"))
 		boardtype = AIR_BOARD;
 	else if (!strcmp(board_params, "Star"))
@@ -226,10 +227,13 @@ static int set_board_type(char *board_params)
 
 static int set_phy_type(char *enet_params)
 {
+	ETHQOSINFO("Enet Param from command line: %s", enet_params);
 	if (!strcmp(enet_params, "1") || !strcmp(enet_params, "2"))
 		phytype = PHY_1G;
 	else if (!strcmp(enet_params, "3") || !strcmp(enet_params, "6"))
 		phytype = PHY_25G;
+	else if (!strcmp(enet_params, "4") || !strcmp(enet_params, "5"))
+		phytype = SWITCH;
 	else
 		return -1;
 	return 0;
@@ -311,9 +315,9 @@ fail:
 
 #ifndef MODULE
 
-__setup("board=", set_board_type);
+__setup("dwmac_qcom_eth.board=", set_board_type);
 
-__setup("enet=", set_phy_type);
+__setup("dwmac_qcom_eth.enet=", set_phy_type);
 
 static int __init set_early_ethernet_ipv4_static(char *ipv4_addr_in)
 {
@@ -458,6 +462,14 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 {
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	unsigned int eth_type, priority;
+	int gso = skb_shinfo(skb)->gso_type;
+
+	if (skb && skb->priority) {
+		if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4))
+			return 0;
+		else
+			return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
+	}
 
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
@@ -2294,6 +2306,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		if (ermac)
 			ret = set_early_ethernet_mac(ermac);
 #endif
+
+	stmmac_set_phytype(phytype);
 
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
