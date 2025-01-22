@@ -42,3 +42,4 @@ qcom_aoss.ko
 qcom-ipcc.ko
 qcom_wdt_core.ko
 gh_virt_wdt.ko
+llcc-qcom.ko
