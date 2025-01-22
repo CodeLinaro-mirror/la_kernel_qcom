@@ -35,6 +35,9 @@
 #define ATTR0_RES_WAYS_MASK           GENMASK(15, 0)
 #define ATTR0_BONUS_WAYS_MASK         GENMASK(31, 16)
 #define ATTR0_BONUS_WAYS_SHIFT        0x10
+#define ATTR2_PROBE_TARGET_WAYS_SHIFT 0x4
+#define ATTR2_FIXED_SIZE_SHIFT        0x8
+#define ATTR2_PRIORITY_SHIFT          0xc
 #define LLCC_STATUS_READ_DELAY        100
 
 #define CACHE_LINE_SIZE_SHIFT         6
@@ -80,6 +83,11 @@
 #define LLCC_TRP_ALGO_CFG6            0x21F24 // ALLOC_OTHER_OC_ON_OC
 #define LLCC_TRP_ALGO_CFG7            0x21F28 // ALLOC_OTHER_LP_OC_ON_OC
 #define LLCC_TRP_ALGO_CFG8            0x21F30 // ALLOC_VICTIM_PL_ON_UC
+
+#define LLCC_V6_TRP_ATTR0_CFGn(n)     (cfg->reg_offset[LLCC_TRP_ATTR0_CFG] + SZ_64 * n)
+#define LLCC_V6_TRP_ATTR1_CFGn(n)     (cfg->reg_offset[LLCC_TRP_ATTR1_CFG] + SZ_64 * n)
+#define LLCC_V6_TRP_ATTR2_CFGn(n)     (cfg->reg_offset[LLCC_TRP_ATTR2_CFG] + SZ_64 * n)
+#define LLCC_V6_TRP_ATTR3_CFGn(n)     (cfg->reg_offset[LLCC_TRP_ATTR3_CFG] + SZ_64 * n)
 
 /**
  * llcc_slice_config - Data associated with the llcc slice
@@ -158,6 +166,31 @@ static u32 llcc_offsets_v21[] = {
 	0x500000
 };
 
+static u32 llcc_offsets_v51[] = {
+	0x0,
+	0x400000
+};
+
+enum llcc_reg_offset {
+	LLCC_COMMON_HW_INFO,
+	LLCC_COMMON_STATUS,
+	LLCC_TRP_ATTR0_CFG,
+	LLCC_TRP_ATTR1_CFG,
+	LLCC_TRP_ATTR2_CFG,
+	LLCC_TRP_ATTR3_CFG,
+	LLCC_TRP_SID_DIS_CAP_ALLOC,
+	LLCC_TRP_ALGO_STALE_EN,
+	LLCC_TRP_ALGO_STALE_CAP_EN,
+	LLCC_TRP_ALGO_MRU0,
+	LLCC_TRP_ALGO_MRU1,
+	LLCC_TRP_ALGO_ALLOC0,
+	LLCC_TRP_ALGO_ALLOC1,
+	LLCC_TRP_ALGO_ALLOC2,
+	LLCC_TRP_ALGO_ALLOC3,
+	LLCC_TRP_WRS_EN,
+	LLCC_TRP_WRS_CACHEABLE_EN,
+};
+
 static u32 llcc_offsets_v31[] = {
 	0x0,
 	0x100000,
@@ -201,6 +234,7 @@ static u32 *llcc_regs = llcc_regs_v2;
 struct qcom_llcc_config {
 	const struct llcc_slice_config *sct_data;
 	int size;
+	const u32 *reg_offset;
 };
 
 static const struct llcc_slice_config sc7180_data[] =  {
@@ -491,6 +525,26 @@ static const struct llcc_slice_config niobe_data[] = {
 };
 
 static const struct llcc_slice_config neo_xr_data[] =  {
+};
+/* LLCC register offset starting from v5.1.0 */
+static u32 llcc_v51_reg_offset[] = {
+	[LLCC_COMMON_HW_INFO]		= 0x00064000,
+	[LLCC_COMMON_STATUS]		= 0x0006400c,
+	[LLCC_TRP_ATTR0_CFG]		= 0x00041000,
+	[LLCC_TRP_ATTR1_CFG]		= 0x00041008,
+	[LLCC_TRP_ATTR2_CFG]		= 0x00041010,
+	[LLCC_TRP_ATTR3_CFG]		= 0x00041014,
+	[LLCC_TRP_SID_DIS_CAP_ALLOC]	= 0x00042000,
+	[LLCC_TRP_ALGO_STALE_EN]	= 0x00042008,
+	[LLCC_TRP_ALGO_STALE_CAP_EN]	= 0x00042010,
+	[LLCC_TRP_ALGO_MRU0]		= 0x00042018,
+	[LLCC_TRP_ALGO_MRU1]		= 0x00042020,
+	[LLCC_TRP_ALGO_ALLOC0]		= 0x00042028,
+	[LLCC_TRP_ALGO_ALLOC1]		= 0x00042030,
+	[LLCC_TRP_ALGO_ALLOC2]		= 0x00042038,
+	[LLCC_TRP_ALGO_ALLOC3]		= 0x00042040,
+	[LLCC_TRP_WRS_EN]		= 0x00042080,
+	[LLCC_TRP_WRS_CACHEABLE_EN]	= 0x00042088,
 };
 
 static const struct llcc_slice_config neo_xr_v2_data[] =  {
@@ -1227,6 +1281,142 @@ static int qcom_llcc_cfg_program(struct platform_device *pdev)
 	return ret;
 }
 
+static int _qcom_llcc_cfg_program_v51(const struct llcc_slice_config *config,
+				  const struct qcom_llcc_config *cfg)
+{
+	int ret;
+	u32 attr0_cfg, attr1_cfg, attr2_cfg, attr3_cfg;
+	u32 attr0_val, attr1_val, attr2_val, attr3_val;
+	u32 disable_cap_alloc, wren, wr_cache_en;
+	u32 stale_en, stale_cap_en, mru_uncap_en, mru_rollover;
+	u32 alloc_oneway_en, ovcap_en, ovcap_prio, vict_prio;
+	u32 slice_offset, reg_offset;
+	struct llcc_slice_desc desc;
+
+	attr0_cfg = LLCC_V6_TRP_ATTR0_CFGn(config->slice_id);
+	attr1_cfg = LLCC_V6_TRP_ATTR1_CFGn(config->slice_id);
+	attr2_cfg = LLCC_V6_TRP_ATTR2_CFGn(config->slice_id);
+	attr3_cfg = LLCC_V6_TRP_ATTR3_CFGn(config->slice_id);
+
+	attr0_val = config->res_ways;
+	attr1_val = config->bonus_ways;
+	attr2_val = config->cache_mode;
+	attr2_val |= config->probe_target_ways << ATTR2_PROBE_TARGET_WAYS_SHIFT;
+	attr2_val |= config->fixed_size << ATTR2_FIXED_SIZE_SHIFT;
+	attr2_val |= config->priority << ATTR2_PRIORITY_SHIFT;
+
+	attr3_val = MAX_CAP_TO_BYTES(config->max_cap);
+	attr3_val /= drv_data->num_banks;
+	attr3_val >>= CACHE_LINE_SIZE_SHIFT;
+
+	ret = regmap_write(drv_data->bcast_regmap, attr0_cfg, attr0_val);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(drv_data->bcast_regmap, attr1_cfg, attr1_val);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(drv_data->bcast_regmap, attr2_cfg, attr2_val);
+	if (ret)
+		return ret;
+
+	ret = regmap_write(drv_data->bcast_regmap, attr3_cfg, attr3_val);
+	if (ret)
+		return ret;
+
+	slice_offset = config->slice_id % 32;
+	reg_offset = (config->slice_id / 32) * 4;
+
+		disable_cap_alloc = config->dis_cap_alloc << slice_offset;
+		ret = regmap_write(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_SID_DIS_CAP_ALLOC] + reg_offset,
+			disable_cap_alloc);
+
+		if (ret)
+			return ret;
+
+	wren = config->write_scid_en << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_WRS_EN] + reg_offset,
+			BIT(slice_offset), wren);
+	if (ret)
+		return ret;
+
+	wr_cache_en = config->write_scid_cacheable_en << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_WRS_CACHEABLE_EN] + reg_offset,
+			BIT(slice_offset), wr_cache_en);
+	if (ret)
+		return ret;
+
+	stale_en = config->stale_en << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_ALGO_STALE_EN] + reg_offset,
+			BIT(slice_offset), stale_en);
+	if (ret)
+		return ret;
+
+	stale_cap_en = config->stale_cap_en << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_ALGO_STALE_CAP_EN] + reg_offset,
+			BIT(slice_offset), stale_cap_en);
+	if (ret)
+		return ret;
+
+	mru_uncap_en = config->mru_uncap_en << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_ALGO_MRU0] + reg_offset,
+			BIT(slice_offset), mru_uncap_en);
+	if (ret)
+		return ret;
+
+	mru_rollover = config->mru_rollover << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_ALGO_MRU1] + reg_offset,
+			BIT(slice_offset), mru_rollover);
+	if (ret)
+		return ret;
+
+	alloc_oneway_en = config->alloc_oneway_en << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_ALGO_ALLOC0] + reg_offset,
+			BIT(slice_offset), alloc_oneway_en);
+	if (ret)
+		return ret;
+
+	ovcap_en = config->ovcap_en << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_ALGO_ALLOC1] + reg_offset,
+			BIT(slice_offset), ovcap_en);
+	if (ret)
+		return ret;
+
+	ovcap_prio = config->ovcap_prio << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_ALGO_ALLOC2] + reg_offset,
+			BIT(slice_offset), ovcap_prio);
+	if (ret)
+		return ret;
+
+	vict_prio = config->vict_prio << slice_offset;
+	ret = regmap_update_bits(drv_data->bcast_regmap,
+			cfg->reg_offset[LLCC_TRP_ALGO_ALLOC3] + reg_offset,
+			BIT(slice_offset), vict_prio);
+	if (ret)
+		return ret;
+
+	if (config->activate_on_init) {
+		desc = llcc_slice_getd(config->usecase_id);
+		if (PTR_ERR_OR_ZERO(desc))
+			return -EINVAL;
+
+		ret = llcc_slice_activate(desc);
+	}
+
+	return ret;
+}
+
 static int qcom_llcc_remove(struct platform_device *pdev)
 {
 	/* Set the global pointer to a error code to avoid referencing it */
@@ -1290,6 +1480,12 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	}
 
 	if (of_property_match_string(dev->of_node,
+			"compatible", "qcom,llcc-v51") >= 0) {
+		drv_data->llcc_ver = 51;
+		llcc_regs = llcc_v51_reg_offset;
+		drv_data->offsets = llcc_offsets_v51;
+		drv_data->num_banks = ARRAY_SIZE(llcc_offsets_v51);
+	} else if (of_property_match_string(dev->of_node,
 				    "compatible", "qcom,llcc-v50") >= 0) {
 		drv_data->llcc_ver = 50;
 		llcc_regs = llcc_regs_v21;
@@ -1338,8 +1534,10 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 		multiple_llcc = true;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "multi_ch_reg");
+
 	if (res)
 		ch_reg = devm_ioremap_resource(&pdev->dev, res);
+
 	if (!IS_ERR_OR_NULL(ch_reg)) {
 		if (of_property_read_u32_index(dev->of_node, "multi-ch-off", 1, &ch_reg_sz)) {
 			dev_err(&pdev->dev,
@@ -1395,12 +1593,29 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	mutex_init(&drv_data->lock);
 	platform_set_drvdata(pdev, drv_data);
 
-	ret = qcom_llcc_cfg_program(pdev);
-	if (ret) {
-		pr_err("llcc configuration failed!!\n");
-		goto err;
-	}
+	if (drv_data->llcc_ver <= 50) {
+		ret = qcom_llcc_cfg_program(pdev);
+			if (ret) {
+				pr_err("llcc configuration failed!!\n");
+				goto err;
+			}
+	} else {
+		const struct llcc_slice_config *llcc_table;
 
+		sz = drv_data->cfg_size;
+		llcc_table = drv_data->cfg;
+
+		for (i = 0; i < sz; i++) {
+			drv_data->desc[i].slice_id = llcc_table[i].slice_id;
+			drv_data->desc[i].slice_size = llcc_table[i].max_cap;
+			atomic_set(&drv_data->desc[i].refcount, 0);
+		}
+		for (i = 0; i < sz; i++) {
+			ret = _qcom_llcc_cfg_program_v51(&llcc_table[i], cfg);
+			if (ret)
+				goto err;
+		}
+	}
 	drv_data->ecc_irq = platform_get_irq_optional(pdev, 0);
 	if (drv_data->ecc_irq >= 0) {
 		llcc_edac = platform_device_register_data(&pdev->dev,
@@ -1412,7 +1627,6 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 
 	if (of_platform_populate(dev->of_node, NULL, NULL, dev) < 0)
 		dev_err(dev, "llcc populate failed!!\n");
-
 	return 0;
 err:
 	drv_data = ERR_PTR(-ENODEV);
