@@ -195,23 +195,22 @@ static const struct i2c_msm_tag tag_lookup_table[2][2][2] = {
 static struct i2c_msm_tag i2c_msm_tag_create(bool is_new_addr, bool is_last_buf,
 					bool is_rx, u8 buf_len, u8 slave_addr)
 {
-	struct i2c_msm_tag tag[4];
+	struct i2c_msm_tag tag;
 	/* Normalize booleans to 1 or 0 */
 	is_new_addr = is_new_addr ? 1 : 0;
 	is_last_buf = is_last_buf ? 1 : 0;
 	is_rx = is_rx ? 1 : 0;
 
-
-	tag[0] = tag_lookup_table[is_new_addr][is_last_buf][is_rx];
+	tag = tag_lookup_table[is_new_addr][is_last_buf][is_rx];
 	/* fill in the non-const value: the address and the length */
-	if (tag[0].len == I2C_MSM_TAG2_MAX_LEN) {
-			*i2c_msm_tag_byte(&tag[0], 1) = slave_addr;
-			*i2c_msm_tag_byte(&tag[0], 3) = buf_len;
+	if (tag.len == I2C_MSM_TAG2_MAX_LEN) {
+		*i2c_msm_tag_byte(&tag, 1) = slave_addr;
+		*i2c_msm_tag_byte(&tag, 3) = buf_len;
 	} else {
-			*i2c_msm_tag_byte(&tag[0], 1) = buf_len;
+		*i2c_msm_tag_byte(&tag, 1) = buf_len;
 	}
 
-	return tag[0];
+	return tag;
 }
 
 static int
@@ -561,7 +560,7 @@ static size_t i2c_msm_fifo_xfer_wr_tag(struct i2c_msm_ctrl *ctrl)
 								sizeof(str)));
 	}
 
-	if (buf->out_tag.len && (buf->out_tag.len <= sizeof(buf->out_tag.val))) {
+	if (buf->out_tag.len) {
 		len = i2c_msm_fifo_wr_buf(ctrl, (u8 *) &buf->out_tag.val,
 							buf->out_tag.len);
 
@@ -602,10 +601,8 @@ static void i2c_msm_fifo_read_xfer_buf(struct i2c_msm_ctrl *ctrl)
 		 */
 		if (buf->in_tag.len) {
 			copy_bc = min_t(int, word_bc, buf->in_tag.len);
-			if (copy_bc <= sizeof(word))
-				memcpy(p_tag_val + buf->in_tag.len, word, copy_bc);
-			else
-				return;
+
+			memcpy(p_tag_val + buf->in_tag.len, word, copy_bc);
 
 			word_idx        += copy_bc;
 			word_bc         -= copy_bc;
@@ -623,10 +620,7 @@ static void i2c_msm_fifo_read_xfer_buf(struct i2c_msm_ctrl *ctrl)
 
 		/* copy bytes from fifo word to user's buffer */
 		copy_bc = min_t(int, word_bc, buf_need_bc);
-		if (word_idx >= 0 && word_idx + copy_bc <= sizeof(word))
-			memcpy(msg->buf + buf->byte_idx, word + word_idx, copy_bc);
-		else
-			return;
+		memcpy(msg->buf + buf->byte_idx, word + word_idx, copy_bc);
 
 		buf->byte_idx += copy_bc;
 		buf_need_bc   -= copy_bc;
@@ -859,7 +853,7 @@ static int i2c_msm_blk_xfer_wr_tag(struct i2c_msm_ctrl *ctrl)
 	struct i2c_msm_xfer_buf *buf = &ctrl->xfer.cur_buf;
 	int len = 0;
 
-	if (!buf->out_tag.len && (buf->out_tag.len > sizeof(buf->out_tag.val)))
+	if (!buf->out_tag.len)
 		return 0;
 
 	len = i2c_msm_blk_wr_buf(ctrl, (u8 *) &buf->out_tag.val,
