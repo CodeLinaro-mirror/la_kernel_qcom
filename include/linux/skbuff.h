@@ -1021,6 +1021,8 @@ struct sk_buff {
 	__u8			int_pri:4;
 	/* Priority info for hardware qdiscs */
 
+	__u8			fast_forwarded:1;
+	/* 1 or 3 bit hole */
 #if defined(CONFIG_NET_SCHED) || defined(CONFIG_NET_XGRESS)
 	__u16			tc_index;	/* traffic control index */
 #endif
