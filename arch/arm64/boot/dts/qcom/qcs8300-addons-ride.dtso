@@ -4,16 +4,12 @@
  */
 
 /dts-v1/;
+/plugin/;
 
-#include "qcs8300-ride.dts"
 #include "qcs8300-addons.dtsi"
 
 
-/ {
-	model = "Qualcomm Technologies, Inc. QCS8300-addons RIDE";
-	compatible = "qcom,qcs8300-addons-ride", "qcom,qcs8300-ride", "qcom,qcs8275",
-		     "qcom,qcs8300";
-
+&{/} {
 	sound {
 		compatible = "qcom,qcs8300-sndcard";
 		model = "qcs8300-ridesx-snd-card";
