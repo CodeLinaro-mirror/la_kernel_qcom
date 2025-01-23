@@ -6,40 +6,9 @@
  *
  */
 
+#include <dt-bindings/arm/qcom_dma_heap_dt_constants.h>
+
 /{
-	reserved-memory {
-		audio_cma_mem: qcom,audio-ml {
-			compatible = "shared-dma-pool";
-			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
-			reusable;
-			alignment = <0x0 0x400000>;
-			size = <0x0 0x1000000>; /* 16M */
-		};
-
-		qseecom_mem: qcom,qseecom {
-			compatible = "shared-dma-pool";
-			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
-			reusable;
-			alignment = <0x0 0x400000>;
-			size = <0x0 0x1400000>; /* 20M */
-		};
-
-		qseecom_ta_mem: qcom,qseecom-ta {
-			compatible = "shared-dma-pool";
-			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
-			reusable;
-			alignment = <0x0 0x400000>;
-			size = <0x0 0x1000000>; /* 16M */
-		};
-
-		dump_mem: mem-dump-region {
-			compatible = "shared-dma-pool";
-			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
-			reusable;
-			size = <0 0x2c00000>;
-		};
-	};
-
 	/* Add overlay for firmware node containing qcom_scm in sc7280.dtsi */
 	firmware {
 		qtee_shmbridge {
@@ -410,6 +379,39 @@
 	pmic_glink: pmic-glink {
 	};
 
+	reserved-memory {
+		dump_mem: mem-dump-region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			size = <0 0x2c00000>;
+		};
+
+		audio_cma_mem: qcom,audio-ml {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x1000000>; /* 16M */
+		};
+
+		qseecom_mem: qcom,qseecom {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x1400000>; /* 20M */
+		};
+
+		qseecom_ta_mem: qcom,qseecom-ta {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x1000000>; /* 16M */
+		};
+	};
+
 	/* add overlay for smp2p nodes in sc7280.dtsi */
 	smp2p-adsp {
 		smp2p_rdbg2_out: smp2p-rdbg2-out {
@@ -454,13 +456,6 @@
 
 	redriver: typec-retimer@1c {
 	};
-};
-
-/* Delete venus node properties to adapt with downstream video driver  */
-&venus {
-	/delete-property/ iommus;
-	/delete-node/ video-decoder;
-	/delete-node/ video-encoder;
 };
 
 &gmu {
@@ -550,20 +545,22 @@
 };
 
 &soc {
-	audio-etm0 {
-		compatible = "qcom,coresight-remote-etm";
+	msm_gpu: qcom,kgsl-3d0@3d00000 {
+		#cooling-cells = <2>;
+	};
 
-		qcom,inst-id = <5>;
-		device-name = "audio_etm0";
+	csr: csr@6001000 {
+		compatible = "qcom,coresight-csr";
+		reg = <0x0 0x06001000 0x0 0x1000>;
+		reg-names = "csr-base";
 
-		out-ports {
-			port {
-				audio_etm0_out_funnel_lpass_lpi: endpoint {
-					remote-endpoint =
-					<&funnel_lpass_lpi_in_audio_etm0>;
-				};
-			};
-		};
+		clocks = <&aoss_qmp>;
+		clock-names = "apb_pclk";
+
+		device-name = "csr";
+		qcom,set-byte-cntr-support;
+
+		qcom,blk-size = <1>;
 	};
 
 	funnel@6042000 {
@@ -576,6 +573,13 @@
 				};
 			};
 		};
+	};
+
+	etr@6048000 {
+		qcom,sw-usb;
+		coresight-csr = <&csr>;
+		interrupts = <GIC_SPI 270 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "byte-cntr-irq";
 	};
 
 	funnel@6804000 {
@@ -857,6 +861,42 @@
 		};
 	};
 
+	sram@146a5000{
+		kaslr_offset@56d0 {
+			compatible = "qcom,msm-imem-kaslr_offset";
+			reg = <0x56d0 0xc>;
+		};
+
+		mem-dump-table@5010 {
+			compatible = "qcom,msm-imem-mem-dump-table";
+			reg = <0x5010 0x8>;
+		};
+	};
+
+	qcom_tzlog: tz-log@146aa720 {
+		compatible = "qcom,tz-log";
+		reg = <0x0 0x146aa720 0x0 0x3000>;
+		qcom,hyplog-enabled;
+		hyplog-address-offset = <0x410>;
+		hyplog-size-offset = <0x414>;
+	};
+
+	audio-etm0 {
+		compatible = "qcom,coresight-remote-etm";
+
+		qcom,inst-id = <5>;
+		device-name = "audio_etm0";
+
+		out-ports {
+			port {
+				audio_etm0_out_funnel_lpass_lpi: endpoint {
+					remote-endpoint =
+					<&funnel_lpass_lpi_in_audio_etm0>;
+				};
+			};
+		};
+	};
+
 	modem-etm0 {
 		compatible = "qcom,coresight-remote-etm";
 
@@ -889,10 +929,6 @@
 		};
 	};
 
-	msm_gpu: qcom,kgsl-3d0@3d00000 {
-		#cooling-cells = <2>;
-	};
-
 	msm_stub_codec: msm-stub-codec {
 		compatible = "qcom,msm-stub-codec";
 		#sound-dai-cells = <1>;
@@ -902,6 +938,43 @@
 		compatible = "qcom,devfreq-cdev";
 		qcom,devfreq = <&msm_gpu>;
 		#cooling-cells = <2>;
+	};
+
+	qcom,dma-heaps {
+		compatible = "qcom,dma-heaps";
+
+		qcom,qseecom {
+			qcom,dma-heap-name = "qcom,qseecom";
+			qcom,dma-heap-type = <HEAP_TYPE_CMA>;
+			memory-region = <&qseecom_mem>;
+		};
+
+		qcom,qseecom_ta {
+			qcom,dma-heap-name = "qcom,qseecom-ta";
+			qcom,dma-heap-type = <HEAP_TYPE_CMA>;
+			memory-region = <&qseecom_ta_mem>;
+		};
+
+		qcom,secure_cdsp {
+			qcom,dma-heap-name = "qcom,cma-secure-cdsp";
+			qcom,dma-heap-type = <HEAP_TYPE_CMA>;
+			memory-region = <&cdsp_secure_heap>;
+		};
+	};
+
+	qcom,mem-buf {
+		compatible = "qcom,mem-buf";
+		qcom,mem-buf-capabilities = "supplier";
+		qcom,vmid = <3>;
+	};
+
+	qcom,mem-buf-msgq {
+		compatible = "qcom,mem-buf-msgq";
+	};
+
+	qcom,secure-buffer {
+		compatible = "qcom,secure-buffer";
+		qcom,vmid-cp-camera-preview-ro;
 	};
 
 	/* smp2p information */
@@ -937,6 +1010,22 @@
 		interrupt-names = "smp2p-sleepstate-in";
 	};
 
+	source {
+		compatible = "arm,coresight-dummy-source";
+
+		device-name = "modem_diag";
+
+		arm,trace-id = <50>;
+		out-ports {
+			port {
+				modem_diag_out_funnel_mq6_dup: endpoint {
+					remote-endpoint =
+						<&funnel_mq6_dup_in_modem_diag>;
+				};
+			};
+		};
+	};
+
 	spf_core_platform: spf-core-platform {
 		compatible = "qcom,spf-core-platform";
 
@@ -953,22 +1042,6 @@
 		msm_audio_mem_cma: msm-audio-mem-cma {
 			compatible = "qcom,msm-audio-mem";
 			memory-region = <&audio_cma_mem>;
-		};
-	};
-
-	source {
-		compatible = "arm,coresight-dummy-source";
-
-		device-name = "modem_diag";
-
-		arm,trace-id = <50>;
-		out-ports {
-			port {
-				modem_diag_out_funnel_mq6_dup: endpoint {
-					remote-endpoint =
-						<&funnel_mq6_dup_in_modem_diag>;
-				};
-			};
 		};
 	};
 
@@ -1002,62 +1075,6 @@
 				};
 			};
 		};
-	};
-
-	sram@146a5000{
-		kaslr_offset@56d0 {
-			compatible = "qcom,msm-imem-kaslr_offset";
-			reg = <0x56d0 0xc>;
-		};
-
-		mem-dump-table@5010 {
-			compatible = "qcom,msm-imem-mem-dump-table";
-			reg = <0x5010 0x8>;
-		};
-	};
-
-	qcom_tzlog: tz-log@146aa720 {
-		compatible = "qcom,tz-log";
-		reg = <0x0 0x146aa720 0x0 0x3000>;
-		qcom,hyplog-enabled;
-		hyplog-address-offset = <0x410>;
-		hyplog-size-offset = <0x414>;
-	};
-
-	qcom,mem-buf {
-		compatible = "qcom,mem-buf";
-		qcom,mem-buf-capabilities = "supplier";
-		qcom,vmid = <3>;
-	};
-
-	qcom,mem-buf-msgq {
-		compatible = "qcom,mem-buf-msgq";
-	};
-
-	qcom,secure-buffer {
-		compatible = "qcom,secure-buffer";
-		qcom,vmid-cp-camera-preview-ro;
-	};
-
-	csr: csr@6001000 {
-		compatible = "qcom,coresight-csr";
-		reg = <0x0 0x06001000 0x0 0x1000>;
-		reg-names = "csr-base";
-
-		clocks = <&aoss_qmp>;
-		clock-names = "apb_pclk";
-
-		device-name = "csr";
-		qcom,set-byte-cntr-support;
-
-		qcom,blk-size = <1>;
-	};
-
-	etr@6048000 {
-		qcom,sw-usb;
-		coresight-csr = <&csr>;
-		interrupts = <GIC_SPI 270 IRQ_TYPE_EDGE_RISING>;
-		interrupt-names = "byte-cntr-irq";
 	};
 };
 
@@ -1993,4 +2010,9 @@
 	nvmem-cell-names = "tsens_chipinfo";
 };
 
-#include "qcm6490-dma-heaps.dtsi"
+/* Delete venus node properties to adapt with downstream video driver  */
+&venus {
+	/delete-property/ iommus;
+	/delete-node/ video-decoder;
+	/delete-node/ video-encoder;
+};
