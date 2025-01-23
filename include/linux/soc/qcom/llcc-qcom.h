@@ -57,9 +57,6 @@
 #define LLCC_DISP_WB     53
 #define LLCC_DISP_1      54
 #define LLCC_SAIL        55
-#define LLCC_GPUMV       59
-#define LLCC_EVA_GAIN    62
-#define LLCC_VIDSC_DEPT  63
 #define LLCC_VIDVSP      64
 #define LLCC_DISLFT      65
 #define LLCC_DISRGHT     66
@@ -67,23 +64,10 @@
 #define LLCC_EVCSRGHT    68
 #define LLCC_EVA_3DR     69
 #define LLCC_DCP         86
-#define LLCC_GPU_LAYERS    256
 #define LLCC_GPU_TEMP_DATA 257
-#define LLCC_VIDSC_LAYER0  258
-#define LLCC_VIDSC_LAYER1  259
-#define LLCC_VIDSC_LAYER2  260
-#define LLCC_VIDSC_LAYER3  261
-#define LLCC_CSC_LAYER0    266
-#define LLCC_CSC_LAYER1    267
-#define LLCC_CSC_LAYER2    268
-#define LLCC_CSC_LAYER3    269
-#define LLCC_GCX_DPU_L     282
-#define LLCC_GCX_DPU_R     283
-#define LLCC_VIDSC_DEPT0   284
-#define LLCC_VIDSC_DEPT1   285
 #define LLCC_TCM_WIFI      286
-#define LLCC_CAM_TF_BUFFER 289
-#define LLCC_CAM_IPE_BUFFER 290
+#define LLCC_TCM_OEM       288
+#define LLCC_CAM_META_ADV 291
 
 /**
  * llcc_slice_desc - Cache slice descriptor
