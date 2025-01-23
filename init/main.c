@@ -54,6 +54,7 @@
 #include <linux/efi.h>
 #include <linux/tick.h>
 #include <linux/sched/isolation.h>
+#include <soc/qcom/boot_stats.h>
 #include <linux/interrupt.h>
 #include <linux/taskstats_kern.h>
 #include <linux/delayacct.h>
@@ -1464,6 +1465,11 @@ static int __ref kernel_init(void *unused)
 
 	rcu_end_inkernel_boot();
 
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - DRIVER Kernel Boot Done");
+#endif
+
+	pr_info("Kernel Boot Done\n");
 	do_sysctl_args();
 
 	if (ramdisk_execute_command) {
