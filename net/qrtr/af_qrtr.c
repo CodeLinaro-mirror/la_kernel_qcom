@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -17,7 +17,7 @@
 #include <linux/pm_wakeup.h>
 #include <linux/completion.h>
 #include <linux/ipc_logging.h>
-
+#include <soc/qcom/boot_stats.h>
 #include <net/sock.h>
 #include <uapi/linux/sched/types.h>
 
@@ -160,6 +160,9 @@ static DEFINE_SPINLOCK(qrtr_port_lock);
 static struct sk_buff_head qrtr_backup_lo;
 static struct sk_buff_head qrtr_backup_hi;
 static struct work_struct qrtr_backup_work;
+
+static bool log_tx_bootkpi = true;
+static bool log_rx_bootkpi = true;
 
 /**
  * struct qrtr_node - endpoint node
@@ -367,11 +370,20 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 				  type, le32_to_cpu(pkt.client.node),
 				  le32_to_cpu(pkt.client.port));
 		else if (type == QRTR_TYPE_HELLO ||
-			 type == QRTR_TYPE_BYE)
+			 type == QRTR_TYPE_BYE) {
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x node[0x%x]\n",
 				  type, hdr->src_node_id);
-		else if (type == QRTR_TYPE_DEL_PROC)
+			if (le32_to_cpu(hdr->dst_node_id) == 0 ||
+			    le32_to_cpu(hdr->dst_node_id) == 3) {
+				if (log_tx_bootkpi) {
+					update_marker("M - Modem QMI Readiness TX");
+					log_tx_bootkpi = false;
+				}
+				pr_err("qrtr: Modem QMI Readiness TX cmd:0x%x node[0x%x]\n",
+				       type, hdr->src_node_id);
+			}
+		} else if (type == QRTR_TYPE_DEL_PROC)
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x node[0x%x]\n",
 				  type, pkt.proc.node);
@@ -413,10 +425,29 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 				  cb->type, le32_to_cpu(pkt.client.node),
 				  le32_to_cpu(pkt.client.port));
 		else if (cb->type == QRTR_TYPE_HELLO ||
-			 cb->type == QRTR_TYPE_BYE)
+			 cb->type == QRTR_TYPE_BYE) {
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x node[0x%x]\n",
 				  cb->type, cb->src_node);
+			if (cb->src_node == 0 || cb->src_node == 3) {
+				if (atomic_read(&node->hello_sent)) {
+					pr_err("qrtr: Modem QMI Readiness TX cmd:0x%x node[0x%x]\n",
+					       cb->type, cb->src_node);
+					if (log_tx_bootkpi) {
+						update_marker("M - Modem QMI Readiness TX");
+						log_tx_bootkpi = false;
+					}
+				}
+
+				if (log_rx_bootkpi) {
+					update_marker("M - Modem QMI Readiness RX");
+					log_rx_bootkpi = false;
+				}
+
+				pr_err("qrtr: Modem QMI Readiness RX cmd:0x%x node[0x%x]\n",
+				       cb->type, cb->src_node);
+			}
+		}
 	}
 }
 
