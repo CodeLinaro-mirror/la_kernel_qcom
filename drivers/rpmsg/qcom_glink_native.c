@@ -631,7 +631,7 @@ static int qcom_glink_send_open_req(struct qcom_glink *glink,
 	req.msg.cmd = cpu_to_le16(RPM_CMD_OPEN);
 	req.msg.param1 = cpu_to_le16(channel->lcid);
 	req.msg.param2 = cpu_to_le32(name_len);
-	strcpy(req.name, channel->name);
+	strscpy(req.name, channel->name, GLINK_NAME_SIZE);
 
 	ret = qcom_glink_tx(glink, &req, req_len, NULL, 0, true);
 	if (ret)
@@ -1630,7 +1630,7 @@ static irqreturn_t qcom_glink_native_intr(int irq, void *data)
 	struct qcom_glink *glink = data;
 	int ret;
 
-	ret = qcom_glink_native_rx(glink, 10);
+	ret = qcom_glink_native_rx(glink, 15);
 
 	return (ret) ? IRQ_WAKE_THREAD : IRQ_HANDLED;
 }
