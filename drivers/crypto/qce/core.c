@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
@@ -192,7 +193,8 @@ static int qce_crypto_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct qce_device *qce;
-	int ret;
+	struct resource *res = NULL;
+	int ret = 0;
 
 	qce = devm_kzalloc(dev, sizeof(*qce), GFP_KERNEL);
 	if (!qce)
@@ -204,6 +206,18 @@ static int qce_crypto_probe(struct platform_device *pdev)
 	qce->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(qce->base))
 		return PTR_ERR(qce->base);
+
+	if (device_property_read_bool(dev, "qce,cmd_desc_support")) {
+		qce->qce_cmd_desc_enable = true;
+		res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+		if (!res)
+			return -EINVAL;
+		qce->base_dma = dma_map_resource(dev, res->start, resource_size(res),
+						 DMA_BIDIRECTIONAL, 0);
+		ret = dma_mapping_error(dev, qce->base_dma);
+		if (ret)
+			return ret;
+	}
 
 	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(32));
 	if (ret < 0)
@@ -225,7 +239,12 @@ static int qce_crypto_probe(struct platform_device *pdev)
 	if (IS_ERR(qce->mem_path))
 		return PTR_ERR(qce->mem_path);
 
-	ret = icc_set_bw(qce->mem_path, QCE_DEFAULT_MEM_BANDWIDTH, QCE_DEFAULT_MEM_BANDWIDTH);
+	if (of_property_read_u32((&pdev->dev)->of_node, "qcom,icc_bw", &qce->icc_bw)) {
+		pr_warn("%s: No icc BW set, using default\n", __func__);
+		qce->icc_bw = QCE_DEFAULT_MEM_BANDWIDTH;
+	}
+
+	ret = icc_set_bw(qce->mem_path, qce->icc_bw, qce->icc_bw);
 	if (ret)
 		return ret;
 
@@ -280,13 +299,74 @@ err_mem_path_disable:
 static void qce_crypto_remove(struct platform_device *pdev)
 {
 	struct qce_device *qce = platform_get_drvdata(pdev);
+	int ret = 0;
 
 	tasklet_kill(&qce->done_tasklet);
 	qce_unregister_algs(qce);
+	ret = icc_set_bw(qce->mem_path, qce->icc_bw, qce->icc_bw);
+	if (ret) {
+		dev_info(qce->dev, "icc_set_bw failed\n");
+		return;
+	}
 	qce_dma_release(&qce->dma);
+	ret = icc_set_bw(qce->mem_path, 0, 0);
+	if (ret) {
+		dev_info(qce->dev, "icc_set_bw failed\n");
+		return;
+	}
 	clk_disable_unprepare(qce->bus);
 	clk_disable_unprepare(qce->iface);
 	clk_disable_unprepare(qce->core);
+}
+
+static int  qce_crypto_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	struct qce_device *qce = platform_get_drvdata(pdev);
+
+	clk_disable_unprepare(qce->bus);
+	clk_disable_unprepare(qce->iface);
+	clk_disable_unprepare(qce->core);
+	icc_set_bw(qce->mem_path, 0, 0);
+
+	return 0;
+}
+
+static int  qce_crypto_resume(struct platform_device *pdev)
+{
+	struct qce_device *qce = platform_get_drvdata(pdev);
+	int ret = 0;
+
+	ret = icc_set_bw(qce->mem_path, qce->icc_bw, qce->icc_bw);
+	if (ret)
+		return ret;
+
+	ret = clk_prepare_enable(qce->core);
+	if (ret)
+		goto err_mem_path_disable;
+
+	ret = clk_prepare_enable(qce->iface);
+	if (ret)
+		goto err_clks_core;
+
+	ret = clk_prepare_enable(qce->bus);
+	if (ret)
+		goto err_clks_iface;
+
+	return 0;
+
+err_clks_iface:
+	clk_disable_unprepare(qce->iface);
+err_clks_core:
+	clk_disable_unprepare(qce->core);
+err_mem_path_disable:
+	icc_set_bw(qce->mem_path, 0, 0);
+
+	return ret;
+}
+
+static void qce_crypto_shutdown(struct platform_device *pdev)
+{
+	qce_crypto_remove(pdev);
 }
 
 static const struct of_device_id qce_crypto_of_match[] = {
@@ -300,6 +380,9 @@ MODULE_DEVICE_TABLE(of, qce_crypto_of_match);
 static struct platform_driver qce_crypto_driver = {
 	.probe = qce_crypto_probe,
 	.remove_new = qce_crypto_remove,
+	.suspend = qce_crypto_suspend,
+	.resume = qce_crypto_resume,
+	.shutdown = qce_crypto_shutdown,
 	.driver = {
 		.name = KBUILD_MODNAME,
 		.of_match_table = qce_crypto_of_match,
