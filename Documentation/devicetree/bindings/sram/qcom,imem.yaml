@@ -21,6 +21,7 @@ properties:
           - qcom,msm8226-imem
           - qcom,msm8974-imem
           - qcom,qcs404-imem
+          - qcom,qcs8300-imem
           - qcom,qdu1000-imem
           - qcom,sa8775p-imem
           - qcom,sc7180-imem
@@ -53,6 +54,25 @@ patternProperties:
     $ref: /schemas/remoteproc/qcom,pil-info.yaml#
     description: Peripheral image loader relocation region
 
+  "^mem-dump-table@[0-9a-f]+$":
+    $ref: /schemas/soc/qcom/qcom,imem-mem-dump.yaml#
+    description: Memory dump table region
+
+patternProperties:
+  "^kaslr_offset@[0-9a-f]+$":
+  type: object
+  description: Used to store kaslr addr
+  properties:
+    compatible:
+      const: "qcom,msm-imem-kaslr_offset"
+
+    reg:
+      maxItems: 1
+
+  required:
+    - compatible
+    - reg
+
 required:
   - compatible
   - reg
@@ -76,6 +96,16 @@ examples:
             pil-reloc@94c {
                 compatible = "qcom,pil-reloc-info";
                 reg = <0x94c 0xc8>;
+            };
+
+            mem-dump-table@10 {
+                compatible = "qcom,imem-mem-dump-table";
+                reg = <0x10 0x8>;
+            };
+
+            kaslr_offset@6d0 {
+                compatible = "qcom,msm-imem-kaslr_offset";
+                reg = <0x6d0 12>;
             };
         };
     };
