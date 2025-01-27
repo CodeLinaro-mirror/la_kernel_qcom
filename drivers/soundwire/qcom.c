@@ -1345,7 +1345,7 @@ static int qcom_swrm_register_dais(struct qcom_swrm_ctrl *ctrl)
 
 		stream->channels_min = 1;
 		stream->channels_max = 1;
-		stream->rates = SNDRV_PCM_RATE_48000;
+		stream->rates = SNDRV_PCM_RATE_8000_384000;
 		stream->formats = SNDRV_PCM_FMTBIT_S16_LE;
 
 		dais[i].ops = &qcom_swrm_pdm_dai_ops;
@@ -1373,26 +1373,16 @@ static int qcom_swrm_get_port_config(struct qcom_swrm_ctrl *ctrl)
 	int i, ret, nports, val;
 	bool si_16 = false;
 
-	ctrl->reg_read(ctrl, SWRM_COMP_PARAMS, &val);
-
-	ctrl->num_dout_ports = FIELD_GET(SWRM_COMP_PARAMS_DOUT_PORTS_MASK, val);
-	ctrl->num_din_ports = FIELD_GET(SWRM_COMP_PARAMS_DIN_PORTS_MASK, val);
 
 	ret = of_property_read_u32(np, "qcom,din-ports", &val);
 	if (ret)
 		return ret;
-
-	if (val > ctrl->num_din_ports)
-		return -EINVAL;
 
 	ctrl->num_din_ports = val;
 
 	ret = of_property_read_u32(np, "qcom,dout-ports", &val);
 	if (ret)
 		return ret;
-
-	if (val > ctrl->num_dout_ports)
-		return -EINVAL;
 
 	ctrl->num_dout_ports = val;
 
