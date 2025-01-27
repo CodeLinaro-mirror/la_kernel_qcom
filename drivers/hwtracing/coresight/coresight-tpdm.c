@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/amba/bus.h>
@@ -18,8 +18,29 @@
 
 #include "coresight-priv.h"
 #include "coresight-tpdm.h"
+#include "coresight-common.h"
+#include "coresight-tpda.h"
+
+#define TPDA_KEY	"tpda"
 
 DEFINE_CORESIGHT_DEVLIST(tpdm_devs, "tpdm");
+
+static int coresight_get_aggre_atid(struct coresight_device *csdev);
+
+static bool tpdm_has_dsb_dataset(struct tpdm_drvdata *drvdata)
+{
+	return (drvdata->datasets & TPDM_PIDR0_DS_DSB);
+}
+
+static bool tpdm_has_cmb_dataset(struct tpdm_drvdata *drvdata)
+{
+	return (drvdata->datasets & TPDM_PIDR0_DS_CMB);
+}
+
+static bool tpdm_has_mcmb_dataset(struct tpdm_drvdata *drvdata)
+{
+	return (drvdata->datasets & TPDM_PIDR0_DS_MCMB);
+}
 
 /* Read dataset array member with the index number */
 static ssize_t tpdm_simple_dataset_show(struct device *dev,
@@ -198,7 +219,7 @@ static umode_t tpdm_cmb_is_visible(struct kobject *kobj,
 	struct device *dev = kobj_to_dev(kobj);
 	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
-	if (drvdata && tpdm_has_cmb_dataset(drvdata))
+	if (drvdata && drvdata->cmb)
 		return attr->mode;
 
 	return 0;
@@ -232,6 +253,18 @@ static umode_t tpdm_cmb_msr_is_visible(struct kobject *kobj,
 		container_of(dev_attr, struct tpdm_dataset_attribute, attr);
 
 	if (tpdm_attr->idx < drvdata->cmb_msr_num)
+		return attr->mode;
+
+	return 0;
+}
+
+static umode_t tpdm_mcmb_is_visible(struct kobject *kobj,
+				    struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	if (drvdata && tpdm_has_mcmb_dataset(drvdata))
 		return attr->mode;
 
 	return 0;
@@ -388,7 +421,7 @@ static void tpdm_enable_cmb(struct tpdm_drvdata *drvdata)
 {
 	u32 val, i;
 
-	if (!tpdm_has_cmb_dataset(drvdata))
+	if (!drvdata->cmb)
 		return;
 
 	/* Configure pattern registers */
@@ -415,6 +448,19 @@ static void tpdm_enable_cmb(struct tpdm_drvdata *drvdata)
 		val |= TPDM_CMB_CR_MODE;
 	else
 		val &= ~TPDM_CMB_CR_MODE;
+
+	if (tpdm_has_mcmb_dataset(drvdata)) {
+		val &= ~TPDM_CMB_CR_XTRIG_LNSEL;
+		/* Set the lane participates in the output pattern */
+		val |= FIELD_PREP(TPDM_CMB_CR_XTRIG_LNSEL,
+			drvdata->cmb->mcmb.trig_lane);
+
+		/* Set the enablement of the lane */
+		val &= ~TPDM_CMB_CR_E_LN;
+		val |= FIELD_PREP(TPDM_CMB_CR_E_LN,
+			drvdata->cmb->mcmb.lane_select);
+	}
+
 	/* Set the enable bit of CMB control register to 1 */
 	val |= TPDM_CMB_CR_ENA;
 	writel_relaxed(val, drvdata->base + TPDM_CMB_CR);
@@ -443,6 +489,7 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 		       __maybe_unused struct coresight_trace_id_map *id_map)
 {
 	struct tpdm_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	int ret = -EINVAL;
 
 	spin_lock(&drvdata->spinlock);
 	if (drvdata->enable) {
@@ -454,6 +501,14 @@ static int tpdm_enable(struct coresight_device *csdev, struct perf_event *event,
 		spin_unlock(&drvdata->spinlock);
 		return -EBUSY;
 	}
+
+	ret = coresight_get_aggre_atid(csdev);
+	if (ret < 0) {
+		spin_unlock(&drvdata->spinlock);
+		return ret;
+	}
+	drvdata->traceid = ret;
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
 
 	__tpdm_enable(drvdata);
 	drvdata->enable = true;
@@ -480,7 +535,7 @@ static void tpdm_disable_cmb(struct tpdm_drvdata *drvdata)
 {
 	u32 val;
 
-	if (!tpdm_has_cmb_dataset(drvdata))
+	if (!drvdata->cmb)
 		return;
 
 	val = readl_relaxed(drvdata->base + TPDM_CMB_CR);
@@ -514,6 +569,8 @@ static void tpdm_disable(struct coresight_device *csdev,
 	__tpdm_disable(drvdata);
 	coresight_set_mode(csdev, CS_MODE_DISABLED);
 	drvdata->enable = false;
+	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
+	drvdata->traceid = 0;
 	spin_unlock(&drvdata->spinlock);
 
 	dev_dbg(drvdata->dev, "TPDM tracing disabled\n");
@@ -542,12 +599,14 @@ static int tpdm_datasets_setup(struct tpdm_drvdata *drvdata)
 		if (!drvdata->dsb)
 			return -ENOMEM;
 	}
-	if (tpdm_has_cmb_dataset(drvdata) && (!drvdata->cmb)) {
+	if ((tpdm_has_cmb_dataset(drvdata) || tpdm_has_mcmb_dataset(drvdata))
+			&& (!drvdata->cmb)) {
 		drvdata->cmb = devm_kzalloc(drvdata->dev,
 						sizeof(*drvdata->cmb), GFP_KERNEL);
 		if (!drvdata->cmb)
 			return -ENOMEM;
 	}
+
 	tpdm_reset_datasets(drvdata);
 
 	return 0;
@@ -613,9 +672,56 @@ static ssize_t integration_test_store(struct device *dev,
 }
 static DEVICE_ATTR_WO(integration_test);
 
+static bool coresight_is_tpda_device(struct coresight_device *csdev)
+{
+	if (strnstr(dev_name(&csdev->dev), TPDA_KEY, strlen(dev_name(&csdev->dev))))
+		return true;
+
+	return false;
+}
+
+static int coresight_get_aggre_atid(struct coresight_device *csdev)
+{
+	int i, atid;
+	struct tpda_drvdata *tpda_drvdata;
+
+	if (coresight_is_tpda_device(csdev)) {
+		tpda_drvdata = dev_get_drvdata(csdev->dev.parent);
+		return tpda_drvdata->atid;
+	}
+
+	/*
+	 * Recursively explore each port found on this element.
+	 */
+	for (i = 0; i < csdev->pdata->nr_outconns; i++) {
+		struct coresight_device *child_dev;
+
+		child_dev = csdev->pdata->out_conns[i]->dest_dev;
+		if (child_dev)
+			atid = coresight_get_aggre_atid(child_dev);
+		if (atid > 0)
+			return atid;
+	}
+
+	return -EINVAL;
+}
+
+static ssize_t traceid_show(struct device *dev,
+			    struct device_attribute *attr, char *buf)
+{
+	unsigned long atid;
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	atid = drvdata->traceid;
+
+	return scnprintf(buf, PAGE_SIZE, "%#lx\n", atid);
+}
+static DEVICE_ATTR_RO(traceid);
+
 static struct attribute *tpdm_attrs[] = {
 	&dev_attr_reset_dataset.attr,
 	&dev_attr_integration_test.attr,
+	&dev_attr_traceid.attr,
 	NULL,
 };
 
@@ -991,6 +1097,62 @@ static ssize_t cmb_trig_ts_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(cmb_trig_ts);
 
+static ssize_t mcmb_trig_lane_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n",
+			  (unsigned int)drvdata->cmb->mcmb.trig_lane);
+}
+
+static ssize_t mcmb_trig_lane_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf,
+				    size_t size)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if ((kstrtoul(buf, 0, &val)) || (val >= TPDM_MCMB_MAX_LANES))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	drvdata->cmb->mcmb.trig_lane = val;
+
+	return size;
+}
+static DEVICE_ATTR_RW(mcmb_trig_lane);
+
+static ssize_t mcmb_lanes_select_show(struct device *dev,
+				      struct device_attribute *attr,
+				      char *buf)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n",
+			  (unsigned int)drvdata->cmb->mcmb.lane_select);
+}
+
+static ssize_t mcmb_lanes_select_store(struct device *dev,
+				       struct device_attribute *attr,
+				       const char *buf,
+				       size_t size)
+{
+	struct tpdm_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val) || (val & ~TPDM_MCMB_E_LN_MASK))
+		return -EINVAL;
+
+	guard(spinlock)(&drvdata->spinlock);
+	drvdata->cmb->mcmb.lane_select = val & TPDM_MCMB_E_LN_MASK;
+
+	return size;
+}
+static DEVICE_ATTR_RW(mcmb_lanes_select);
+
 static struct attribute *tpdm_dsb_edge_attrs[] = {
 	&dev_attr_ctrl_idx.attr,
 	&dev_attr_ctrl_val.attr,
@@ -1153,6 +1315,12 @@ static struct attribute *tpdm_cmb_msr_attrs[] = {
 	NULL,
 };
 
+static struct attribute *tpdm_mcmb_attrs[] = {
+	&dev_attr_mcmb_trig_lane.attr,
+	&dev_attr_mcmb_lanes_select.attr,
+	NULL,
+};
+
 static struct attribute *tpdm_dsb_attrs[] = {
 	&dev_attr_dsb_mode.attr,
 	&dev_attr_dsb_trig_ts.attr,
@@ -1219,6 +1387,11 @@ static struct attribute_group tpdm_cmb_msr_grp = {
 	.name = "cmb_msr",
 };
 
+static struct attribute_group tpdm_mcmb_attr_grp = {
+	.attrs = tpdm_mcmb_attrs,
+	.is_visible = tpdm_mcmb_is_visible,
+};
+
 static const struct attribute_group *tpdm_attr_grps[] = {
 	&tpdm_attr_grp,
 	&tpdm_dsb_attr_grp,
@@ -1230,6 +1403,7 @@ static const struct attribute_group *tpdm_attr_grps[] = {
 	&tpdm_cmb_trig_patt_grp,
 	&tpdm_cmb_patt_grp,
 	&tpdm_cmb_msr_grp,
+	&tpdm_mcmb_attr_grp,
 	NULL,
 };
 

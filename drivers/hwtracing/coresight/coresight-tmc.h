@@ -12,6 +12,8 @@
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
 #include <linux/refcount.h>
+#include "coresight-byte-cntr.h"
+#include "coresight-tmc-usb.h"
 
 #define TMC_RSZ			0x004
 #define TMC_STS			0x00c
@@ -140,6 +142,18 @@ enum etr_mode {
 
 struct etr_buf_operations;
 
+enum tmc_etr_out_mode {
+	TMC_ETR_OUT_MODE_NONE,
+	TMC_ETR_OUT_MODE_MEM,
+	TMC_ETR_OUT_MODE_USB,
+};
+
+static const char * const str_tmc_etr_out_mode[] = {
+	[TMC_ETR_OUT_MODE_NONE]		= "none",
+	[TMC_ETR_OUT_MODE_MEM]		= "mem",
+	[TMC_ETR_OUT_MODE_USB]		= "usb",
+};
+
 /**
  * struct etr_buf - Details of the buffer used by ETR
  * refcount	; Number of sources currently using this etr_buf.
@@ -207,13 +221,19 @@ struct tmc_drvdata {
 	u32			max_burst_size;
 	enum tmc_config_type	config_type;
 	enum tmc_mem_intf_width	memwidth;
+	struct mutex		mem_lock;
 	u32			trigger_cntr;
 	u32			etr_caps;
 	enum etr_mode		etr_mode;
 	struct idr		idr;
 	struct mutex		idr_mutex;
 	struct etr_buf		*sysfs_buf;
+	struct byte_cntr	*byte_cntr;
+	struct coresight_csr	*csr;
+	const char		*csr_name;
 	struct etr_buf		*perf_buf;
+	enum tmc_etr_out_mode	out_mode;
+	struct tmc_usb_data	*usb_data;
 };
 
 struct etr_buf_operations {
@@ -262,6 +282,8 @@ int tmc_wait_for_tmcready(struct tmc_drvdata *drvdata);
 void tmc_flush_and_stop(struct tmc_drvdata *drvdata);
 void tmc_enable_hw(struct tmc_drvdata *drvdata);
 void tmc_disable_hw(struct tmc_drvdata *drvdata);
+extern int tmc_etr_usb_init(struct device *adev,
+		struct tmc_drvdata *drvdata);
 u32 tmc_get_memwidth_mask(struct tmc_drvdata *drvdata);
 
 /* ETB/ETF functions */
@@ -272,13 +294,20 @@ extern const struct coresight_ops tmc_etf_cs_ops;
 
 ssize_t tmc_etb_get_sysfs_trace(struct tmc_drvdata *drvdata,
 				loff_t pos, size_t len, char **bufpp);
+ssize_t tmc_etr_buf_get_data(struct etr_buf *etr_buf,
+				u64 offset, size_t len, char **bufpp);
 /* ETR functions */
 int tmc_read_prepare_etr(struct tmc_drvdata *drvdata);
 int tmc_read_unprepare_etr(struct tmc_drvdata *drvdata);
 void tmc_etr_disable_hw(struct tmc_drvdata *drvdata);
+struct byte_cntr *byte_cntr_init(struct device *adev,
+					struct tmc_drvdata *drvdata);
+void byte_cntr_remove(struct byte_cntr *byte_cntr);
 extern const struct coresight_ops tmc_etr_cs_ops;
 ssize_t tmc_etr_get_sysfs_trace(struct tmc_drvdata *drvdata,
 				loff_t pos, size_t len, char **bufpp);
+long tmc_get_rwp_offset(struct tmc_drvdata *drvdata);
+int tmc_etr_switch_mode(struct tmc_drvdata *drvdata, const char *out_mode);
 
 
 #define TMC_REG_PAIR(name, lo_off, hi_off)				\
