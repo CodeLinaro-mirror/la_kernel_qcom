@@ -164,6 +164,14 @@ static inline int qcom_scm_qseecom_app_send(u32 app_id,
 	return -EINVAL;
 }
 
-#endif /* CONFIG_QCOM_QSEECOM */
+extern int qcom_scm_derive_sw_secret(const u8 *wkey, size_t wkey_size,
+				     u8 *sw_secret, size_t sw_secret_size);
 
+extern int qcom_scm_generate_ice_key(u8 *lt_key, size_t lt_key_size);
+extern int qcom_scm_prepare_ice_key(const u8 *lt_key, size_t lt_key_size,
+				    u8 *eph_key, size_t eph_size);
+extern int qcom_scm_import_ice_key(const u8 *imp_key, size_t imp_size,
+				   u8 *lt_key, size_t lt_key_size);
+
+#endif /* CONFIG_QCOM_QSEECOM */
 #endif
