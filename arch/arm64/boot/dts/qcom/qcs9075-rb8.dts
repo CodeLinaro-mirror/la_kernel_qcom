@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2023, Linaro Limited
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 /dts-v1/;
 
 #include <dt-bindings/gpio/gpio.h>
@@ -10,56 +9,28 @@
 
 #include "sa8775p.dtsi"
 #include "sa8775p-pmics.dtsi"
+#include "qcs9075-thermal.dtsi"
 
 / {
+	model = "Qualcomm Technologies, Inc. QCS9075 RB8";
+	compatible = "qcom,qcs9075-rb8", "qcom,qcs9075", "qcom,sa8775p";
+	qcom,msm-id = <676 0x20000>;
+	qcom,board-id = <0x10020 0>, <0x10019 0>;
+
 	aliases {
-		ethernet0 = &ethernet0;
-		ethernet1 = &ethernet1;
-		i2c11 = &i2c11;
-		i2c18 = &i2c18;
 		serial0 = &uart10;
-		serial1 = &uart12;
-		serial2 = &uart17;
-		spi16 = &spi16;
-		ufshc1 = &ufs_mem_hc;
+		serial1 = &uart17;
 	};
 
 	chosen {
 		stdout-path = "serial0:115200n8";
 	};
 
-	vreg_conn_1p8: vreg_conn_1p8 {
-		compatible = "regulator-fixed";
-		regulator-name = "vreg_conn_1p8";
-		startup-delay-us = <4000>;
-		enable-active-high;
-		gpio = <&pmm8654au_1_gpios 4 GPIO_ACTIVE_HIGH>;
-	};
-
-	vreg_conn_pa: vreg_conn_pa {
-		compatible = "regulator-fixed";
-		regulator-name = "vreg_conn_pa";
-		startup-delay-us = <4000>;
-		enable-active-high;
-		gpio = <&pmm8654au_1_gpios 6 GPIO_ACTIVE_HIGH>;
-	};
-
 	wcn6855-pmu {
 		compatible = "qcom,wcn6855-pmu";
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&bt_en_state>, <&wlan_en_state>;
-
-		vddio-supply = <&vreg_conn_pa>;
-		vddaon-supply = <&vreg_l2c>;
-		vddpmu-supply = <&vreg_conn_1p8>;
-		vddrfa0p95-supply = <&vreg_l2c>;
-		vddrfa1p3-supply = <&vreg_l6e>;
-		vddrfa1p9-supply = <&vreg_s5a>;
-		vddpcie1p3-supply = <&vreg_l6e>;
-		vddpcie1p9-supply = <&vreg_s5a>;
-
-		bt-enable-gpios = <&pmm8654au_1_gpios 8 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&wlan_en_state>;
 		wlan-enable-gpios = <&pmm8654au_1_gpios 7 GPIO_ACTIVE_HIGH>;
 
 		regulators {
@@ -337,238 +308,102 @@
 	};
 };
 
-&ethernet0 {
-	phy-handle = <&sgmii_phy0>;
-
-	pinctrl-0 = <&ethernet0_default>;
-	pinctrl-names = "default";
-
-	snps,mtl-rx-config = <&mtl_rx_setup>;
-	snps,mtl-tx-config = <&mtl_tx_setup>;
-	snps,ps-speed = <1000>;
-
-	status = "okay";
-
-	mdio: mdio {
-		compatible = "snps,dwmac-mdio";
-		#address-cells = <1>;
-		#size-cells = <0>;
-	};
-
-	mtl_rx_setup: rx-queues-config {
-		snps,rx-queues-to-use = <4>;
-		snps,rx-sched-sp;
-
-		queue0 {
-			snps,dcb-algorithm;
-			snps,map-to-dma-channel = <0x0>;
-			snps,route-up;
-			snps,priority = <0x1>;
-		};
-
-		queue1 {
-			snps,dcb-algorithm;
-			snps,map-to-dma-channel = <0x1>;
-			snps,route-ptp;
-		};
-
-		queue2 {
-			snps,avb-algorithm;
-			snps,map-to-dma-channel = <0x2>;
-			snps,route-avcp;
-		};
-
-		queue3 {
-			snps,avb-algorithm;
-			snps,map-to-dma-channel = <0x3>;
-			snps,priority = <0xc>;
-		};
-	};
-
-	mtl_tx_setup: tx-queues-config {
-		snps,tx-queues-to-use = <4>;
-		snps,tx-sched-sp;
-
-		queue0 {
-			snps,dcb-algorithm;
-		};
-
-		queue1 {
-			snps,dcb-algorithm;
-		};
-
-		queue2 {
-			snps,avb-algorithm;
-			snps,send_slope = <0x1000>;
-			snps,idle_slope = <0x1000>;
-			snps,high_credit = <0x3e800>;
-			snps,low_credit = <0xffc18000>;
-		};
-
-		queue3 {
-			snps,avb-algorithm;
-			snps,send_slope = <0x1000>;
-			snps,idle_slope = <0x1000>;
-			snps,high_credit = <0x3e800>;
-			snps,low_credit = <0xffc18000>;
-		};
-	};
+&i2c0 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&ethernet1 {
-	phy-handle = <&sgmii_phy1>;
-
-	snps,mtl-rx-config = <&mtl_rx_setup1>;
-	snps,mtl-tx-config = <&mtl_tx_setup1>;
-	snps,ps-speed = <1000>;
-
-	status = "okay";
-
-	mtl_rx_setup1: rx-queues-config {
-		snps,rx-queues-to-use = <4>;
-		snps,rx-sched-sp;
-
-		queue0 {
-			snps,dcb-algorithm;
-			snps,map-to-dma-channel = <0x0>;
-			snps,route-up;
-			snps,priority = <0x1>;
-		};
-
-		queue1 {
-			snps,dcb-algorithm;
-			snps,map-to-dma-channel = <0x1>;
-			snps,route-ptp;
-		};
-
-		queue2 {
-			snps,avb-algorithm;
-			snps,map-to-dma-channel = <0x2>;
-			snps,route-avcp;
-		};
-
-		queue3 {
-			snps,avb-algorithm;
-			snps,map-to-dma-channel = <0x3>;
-			snps,priority = <0xc>;
-		};
-	};
-
-	mtl_tx_setup1: tx-queues-config {
-		snps,tx-queues-to-use = <4>;
-		snps,tx-sched-sp;
-
-		queue0 {
-			snps,dcb-algorithm;
-		};
-
-		queue1 {
-			snps,dcb-algorithm;
-		};
-
-		queue2 {
-			snps,avb-algorithm;
-			snps,send_slope = <0x1000>;
-			snps,idle_slope = <0x1000>;
-			snps,high_credit = <0x3e800>;
-			snps,low_credit = <0xffc18000>;
-		};
-
-		queue3 {
-			snps,avb-algorithm;
-			snps,send_slope = <0x1000>;
-			snps,idle_slope = <0x1000>;
-			snps,high_credit = <0x3e800>;
-			snps,low_credit = <0xffc18000>;
-		};
-	};
+&i2c1 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&eud {
-	status = "okay";
+&i2c2 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&gpi_dma0 {
-	status = "okay";
+&i2c3 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&gpi_dma1 {
-	status = "okay";
+&i2c4 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&gpi_dma2 {
-	status = "okay";
+&i2c5 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&gpi_dma3 {
-	status = "okay";
+&i2c7 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c8 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c9 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c10 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
 &i2c11 {
-	clock-frequency = <400000>;
-	pinctrl-0 = <&qup_i2c11_default>;
-	pinctrl-names = "default";
-	status = "okay";
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c12 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c13 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c14 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c15 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c16 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c17 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
 &i2c18 {
-	clock-frequency = <400000>;
-	pinctrl-0 = <&qup_i2c18_default>;
-	pinctrl-names = "default";
-	status = "okay";
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&i2c19 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
 &llcc {
-	status = "okay";
-};
-
-&mdss0 {
-	status = "okay";
-};
-
-&mdss0_dp0 {
-	status = "okay";
-};
-
-&mdss0_dp0_out {
-	data-lanes = <0 1 2 3>;
-	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
-};
-
-&mdss0_edp_phy {
-	status = "okay";
-};
-
-&mdss0_dp1 {
-	status = "okay";
-};
-
-&mdss0_dp1_out {
-	data-lanes = <0 1 2 3>;
-	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
-};
-
-&mdss0_edp1_phy {
-	status = "okay";
-};
-
-&pmm8654au_0_gpios {
-	gpio-line-names = "DS_EN",
-			  "POFF_COMPLETE",
-			  "UFS0_VER_ID",
-			  "FAST_POFF",
-			  "DBU1_PON_DONE",
-			  "AOSS_SLEEP",
-			  "CAM_DES0_EN",
-			  "CAM_DES1_EN",
-			  "CAM_DES2_EN",
-			  "CAM_DES3_EN",
-			  "UEFI",
-			  "ANALOG_PON_OPT";
-};
-
-&pmm8654au_0_pon_resin {
-	linux,code = <KEY_VOLUMEDOWN>;
 	status = "okay";
 };
 
@@ -584,13 +419,6 @@
 			  "USB2_PWR_EN",
 			  "USB2_FAULT";
 
-	wlan_en_state: wlan-en-state {
-		pins = "gpio7";
-		function = "normal";
-		output-low;
-		bias-pull-down;
-	};
-
 	bt_en_state: bt-en-state {
 		pins = "gpio8";
 		function = "normal";
@@ -604,47 +432,22 @@
 		output-high;
 		power-source = <0>;
 	};
+
+	wlan_en_state: wlan-en-state {
+		pins = "gpio7";
+		function = "normal";
+		output-low;
+		bias-pull-down;
+	};
 };
 
 &pmm8654au_2_gpios {
-	gpio-line-names = "PMIC_E_ID0",
-			  "PMIC_E_ID1",
-			  "USB0_PWR_EN",
-			  "USB0_FAULT",
-			  "SENSOR_IRQ_1",
-			  "SENSOR_IRQ_2",
-			  "SENSOR_RST",
-			  "SGMIIO0_RST",
-			  "SGMIIO1_RST",
-			  "USB1_PWR_ENABLE",
-			  "USB1_FAULT",
-			  "VMON_SPX8";
-
-	usb0_en_state: usb0-en-state {
-		pins = "gpio3";
-		function = "normal";
-		output-high;
-		power-source = <0>;
-	};
-
 	usb1_en_state: usb1-en-state {
-		pins = "gpio10";
+		pins = "gpio8";
 		function = "normal";
 		output-high;
 		power-source = <0>;
 	};
-};
-
-&pmm8654au_3_gpios {
-	gpio-line-names = "PMIC_G_ID0",
-			  "PMIC_G_ID1",
-			  "GNSS_RST",
-			  "GNSS_EN",
-			  "GNSS_BOOT_MODE";
-};
-
-&qupv3_id_0 {
-	status = "okay";
 };
 
 &qupv3_id_1 {
@@ -655,116 +458,143 @@
 	status = "okay";
 };
 
-&qupv3_id_3 {
+&remoteproc_adsp {
+	firmware-name = "qcom/sa8775p/adsp.mbn";
 	status = "okay";
 };
 
-&serdes0 {
-	phy-supply = <&vreg_l5a>;
+&remoteproc_cdsp0 {
+	firmware-name = "qcom/sa8775p/cdsp0.mbn";
 	status = "okay";
 };
 
-&serdes1 {
-	phy-supply = <&vreg_l5a>;
+&remoteproc_cdsp1 {
+	firmware-name = "qcom/sa8775p/cdsp1.mbn";
+	status = "okay";
+};
+
+&remoteproc_gpdsp0 {
+	firmware-name = "qcom/sa8775p/gpdsp0.mbn";
+	status = "okay";
+};
+
+&remoteproc_gpdsp1 {
+	firmware-name = "qcom/sa8775p/gpdsp1.mbn";
 	status = "okay";
 };
 
 &sleep_clk {
-	clock-frequency = <32764>;
+	clock-frequency = <32768>;
+};
+
+&spi0 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi1 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi2 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi3 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi4 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi5 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi7 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi8 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi9 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi10 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi11 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi12 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi14 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi15 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
 &spi16 {
-	pinctrl-0 = <&qup_spi16_default>;
-	pinctrl-names = "default";
-	status = "okay";
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
 
-	spidev@0 {
-		compatible = "rohm,dh2228fv";
-		reg = <0>;
-		spi-max-frequency = <10000000>;
-		spi-cpha;
-	};
+&spi17 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi18 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&spi19 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
 &tlmm {
-	dp_hot_plug_det: dp-hot-plug-det-state {
-		pins = "gpio101";
-		function = "edp0_hot";
-		bias-disable;
+	bt_bootstrap_default: bt_bootstrap_default {
+		pins = "gpio147";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+		drive-strength = <2>;
 	};
 
-	dp1_hot_plug_det: dp1-hot-plug-det-state {
-		pins = "gpio102";
-		function = "edp1_hot";
-		bias-disable;
-	};
+	/* FIXME: mdss0_dp0 is dependent on this so adding a dummy node for now */
+	dp_hot_plug_det: dp-hot-plug-det-state {};
 
-	ethernet0_default: ethernet0-default-state {
-		ethernet0_mdc: ethernet0-mdc-pins {
-			pins = "gpio8";
-			function = "emac0_mdc";
-			drive-strength = <16>;
-			bias-pull-up;
-		};
-
-		ethernet0_mdio: ethernet0-mdio-pins {
-			pins = "gpio9";
-			function = "emac0_mdio";
-			drive-strength = <16>;
-			bias-pull-up;
-		};
-	};
+	/* FIXME: mdss0_dp1 is dependent on this so adding a dummy node for now */
+	dp1_hot_plug_det: dp1-hot-plug-det-state {};
 
 	qup_uart10_default: qup-uart10-state {
 		pins = "gpio46", "gpio47";
 		function = "qup1_se3";
-	};
-
-	qup_spi16_default: qup-spi16-state {
-		pins = "gpio86", "gpio87", "gpio88", "gpio89";
-		function = "qup2_se2";
-		drive-strength = <6>;
-		bias-disable;
-	};
-
-	qup_i2c11_default: qup-i2c11-state {
-		pins = "gpio48", "gpio49";
-		function = "qup1_se4";
-		drive-strength = <2>;
-		bias-pull-up;
-	};
-
-	qup_i2c18_default: qup-i2c18-state {
-		pins = "gpio95", "gpio96";
-		function = "qup2_se4";
-		drive-strength = <2>;
-		bias-pull-up;
-	};
-
-	qup_uart12_default: qup-uart12-state {
-		qup_uart12_cts: qup-uart12-cts-pins {
-			pins = "gpio52";
-			function = "qup1_se5";
-			bias-disable;
-		};
-
-		qup_uart12_rts: qup-uart12-rts-pins {
-			pins = "gpio53";
-			function = "qup1_se5";
-			bias-pull-down;
-		};
-
-		qup_uart12_tx: qup-uart12-tx-pins {
-			pins = "gpio54";
-			function = "qup1_se5";
-			bias-pull-up;
-		};
-
-		qup_uart12_rx: qup-uart12-rx-pins {
-			pins = "gpio55";
-			function = "qup1_se5";
-			bias-pull-down;
-		};
 	};
 
 	qup_uart17_default: qup-uart17-state {
@@ -847,37 +677,6 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_default_state>;
 
-	iommu-map = <0x0 &pcie_smmu 0x0000 0x1>,
-		    <0x100 &pcie_smmu 0x0001 0x1>,
-		    <0x101 &pcie_smmu 0x0002 0x1>,
-		    <0x208 &pcie_smmu 0x0003 0x1>,
-		    <0x210 &pcie_smmu 0x0004 0x1>,
-		    <0x218 &pcie_smmu 0x0005 0x1>,
-		    <0x280 &pcie_smmu 0x0006 0x1>,
-		    <0x281 &pcie_smmu 0x0007 0x1>,
-		    <0x282 &pcie_smmu 0x0008 0x1>,
-		    <0x283 &pcie_smmu 0x0009 0x1>,
-		    <0x284 &pcie_smmu 0x000a 0x1>,
-		    <0x285 &pcie_smmu 0x000b 0x1>,
-		    <0x286 &pcie_smmu 0x000c 0x1>,
-		    <0x287 &pcie_smmu 0x000d 0x1>,
-		    <0x288 &pcie_smmu 0x000e 0x1>,
-		    <0x289 &pcie_smmu 0x000f 0x1>,
-		    <0x28a &pcie_smmu 0x0010 0x1>,
-		    <0x28b &pcie_smmu 0x0011 0x1>,
-		    <0x28c &pcie_smmu 0x0012 0x1>,
-		    <0x28d &pcie_smmu 0x0013 0x1>,
-		    <0x28e &pcie_smmu 0x0014 0x1>,
-		    <0x28f &pcie_smmu 0x0015 0x1>,
-		    <0x290 &pcie_smmu 0x0016 0x1>,
-		    <0x291 &pcie_smmu 0x0017 0x1>,
-		    <0x292 &pcie_smmu 0x0018 0x1>,
-		    <0x293 &pcie_smmu 0x0019 0x1>,
-		    <0x300 &pcie_smmu 0x001a 0x1>,
-		    <0x400 &pcie_smmu 0x001b 0x1>,
-		    <0x500 &pcie_smmu 0x001c 0x1>,
-		    <0x501 &pcie_smmu 0x001d 0x1>;
-
 	status = "okay";
 };
 
@@ -887,37 +686,6 @@
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie1_default_state>;
-
-	iommu-map = <0x0 &pcie_smmu 0x0080 0x1>,
-		    <0x100 &pcie_smmu 0x0081 0x1>,
-		    <0x101 &pcie_smmu 0x0082 0x1>,
-		    <0x208 &pcie_smmu 0x0083 0x1>,
-		    <0x210 &pcie_smmu 0x0084 0x1>,
-		    <0x218 &pcie_smmu 0x0085 0x1>,
-		    <0x280 &pcie_smmu 0x0086 0x1>,
-		    <0x281 &pcie_smmu 0x0087 0x1>,
-		    <0x282 &pcie_smmu 0x0088 0x1>,
-		    <0x283 &pcie_smmu 0x0089 0x1>,
-		    <0x284 &pcie_smmu 0x008a 0x1>,
-		    <0x285 &pcie_smmu 0x008b 0x1>,
-		    <0x286 &pcie_smmu 0x008c 0x1>,
-		    <0x287 &pcie_smmu 0x008d 0x1>,
-		    <0x288 &pcie_smmu 0x008e 0x1>,
-		    <0x289 &pcie_smmu 0x008f 0x1>,
-		    <0x28a &pcie_smmu 0x0090 0x1>,
-		    <0x28b &pcie_smmu 0x0091 0x1>,
-		    <0x28c &pcie_smmu 0x0092 0x1>,
-		    <0x28d &pcie_smmu 0x0093 0x1>,
-		    <0x28e &pcie_smmu 0x0094 0x1>,
-		    <0x28f &pcie_smmu 0x0095 0x1>,
-		    <0x290 &pcie_smmu 0x0096 0x1>,
-		    <0x291 &pcie_smmu 0x0097 0x1>,
-		    <0x292 &pcie_smmu 0x0098 0x1>,
-		    <0x29d &pcie_smmu 0x0099 0x1>,
-		    <0x300 &pcie_smmu 0x009a 0x1>,
-		    <0x400 &pcie_smmu 0x009b 0x1>,
-		    <0x500 &pcie_smmu 0x009c 0x1>,
-		    <0x501 &pcie_smmu 0x009d 0x1>;
 
 	status = "okay";
 };
@@ -938,10 +706,8 @@
 
 &pcieport0 {
 	wifi@0 {
-		compatible = "pci17cb,1101";
+		compatible = "qcom,wcn6855-wifi";
 		reg = <0x10000 0x0 0x0 0x0 0x0>;
-
-		qcom,ath11k-calibration-variant = "QC_SA8775P_Ride";
 
 		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
 		vddaon-supply = <&vreg_pmu_aon_0p59>;
@@ -955,29 +721,49 @@
 	};
 };
 
-&remoteproc_adsp {
-	firmware-name = "qcom/sa8775p/adsp.mbn";
-	status = "okay";
+&uart0 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&remoteproc_cdsp0 {
-	firmware-name = "qcom/sa8775p/cdsp0.mbn";
-	status = "okay";
+&uart1 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&remoteproc_cdsp1 {
-	firmware-name = "qcom/sa8775p/cdsp1.mbn";
-	status = "okay";
+&uart2 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&remoteproc_gpdsp0 {
-	firmware-name = "qcom/sa8775p/gpdsp0.mbn";
-	status = "okay";
+&uart3 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&remoteproc_gpdsp1 {
-	firmware-name = "qcom/sa8775p/gpdsp1.mbn";
-	status = "okay";
+&uart4 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&uart5 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&uart7 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&uart8 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&uart9 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
 &uart10 {
@@ -987,63 +773,65 @@
 	status = "okay";
 };
 
+&uart11 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
 &uart12 {
-	pinctrl-0 = <&qup_uart12_default>;
-	pinctrl-names = "default";
-	status = "okay";
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&uart14 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&uart15 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+};
+
+&uart16 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
 &uart17 {
 	pinctrl-0 = <&qup_uart17_default>;
 	pinctrl-names = "default";
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 	status = "okay";
 
-	bluetooth {
+	/* HS UART Instance */
+	bluetooth: bluetooth {
 		compatible = "qcom,wcn6855-bt";
 		pinctrl-names = "default";
-		pinctrl-0 = <&bt_en_state>;
+		pinctrl-0 = <&bt_en_state>, <&bt_bootstrap_default>;
 		enable-gpios = <&pmm8654au_1_gpios 8 GPIO_ACTIVE_HIGH>; /* BT_EN */
-
-		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
-		vddaon-supply = <&vreg_pmu_aon_0p59>;
-		vddbtcmx-supply = <&vreg_pmu_btcmx_0p85>;
-		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
-		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
-		vddrfa1p7-supply = <&vreg_pmu_rfa_1p7>;
+		max-speed = <3200000>;
 	};
 };
 
-&ufs_mem_hc {
-	reset-gpios = <&tlmm 149 GPIO_ACTIVE_LOW>;
-	vcc-supply = <&vreg_l8a>;
-	vcc-max-microamp = <1100000>;
-	vccq-supply = <&vreg_l4c>;
-	vccq-max-microamp = <1200000>;
-
-	status = "okay";
+&uart18 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
-&ufs_mem_phy {
-	vdda-phy-supply = <&vreg_l4a>;
-	vdda-pll-supply = <&vreg_l1c>;
-
-	status = "okay";
+&uart19 {
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
 };
 
 &usb_0 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&usb0_en_state>;
-
 	status = "okay";
 };
 
 &usb_0_dwc3 {
-	snps,dis-u2-entry-quirk;
-	snps,dis-u1-entry-quirk;
-	snps,dis_u2_susphy_quirk;
-	snps,dis_u3_susphy_quirk;
-
-	dr_mode = "peripheral";
+	usb-role-switch;
+	dr_mode = "otg";
 };
 
 &usb_0_hsphy {
@@ -1095,7 +883,6 @@
 };
 
 &usb_2_dwc3 {
-	snps,dwc3_guctl_resbwhseps_quirk;
 	dr_mode = "host";
 };
 
