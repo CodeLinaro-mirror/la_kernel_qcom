@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+// Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -1211,10 +1212,19 @@ static int tx_macro_digital_mute(struct snd_soc_dai *dai, int mute, int stream)
 	return 0;
 }
 
+static int tx_macro_pcm_new(struct snd_soc_pcm_runtime *rtd,
+			    struct snd_soc_dai *dai)
+{
+	int dir = SNDRV_PCM_STREAM_CAPTURE;
+
+	return lpass_macro_add_chmap_ctls(rtd, dai, dir);
+}
+
 static const struct snd_soc_dai_ops tx_macro_dai_ops = {
 	.hw_params = tx_macro_hw_params,
 	.get_channel_map = tx_macro_get_channel_map,
 	.mute_stream = tx_macro_digital_mute,
+	.pcm_new = tx_macro_pcm_new,
 };
 
 static struct snd_soc_dai_driver tx_macro_dai[] = {
@@ -2131,6 +2141,10 @@ static int tx_macro_component_probe(struct snd_soc_component *comp)
 		INIT_DELAYED_WORK(&tx->tx_mute_dwork[i].dwork,
 			  tx_macro_mute_update_callback);
 	}
+
+	for (i = 0; i < TX_MACRO_MAX_DAIS; i++)
+		tx->active_decimator[i] = -1;
+
 	tx->component = comp;
 
 	snd_soc_component_update_bits(comp, CDC_TX0_TX_PATH_SEC7, 0x3F,
@@ -2407,6 +2421,8 @@ static int __maybe_unused tx_macro_runtime_suspend(struct device *dev)
 	regcache_cache_only(tx->regmap, true);
 	regcache_mark_dirty(tx->regmap);
 
+	clk_disable_unprepare(tx->macro);
+	clk_disable_unprepare(tx->dcodec);
 	clk_disable_unprepare(tx->fsgen);
 	clk_disable_unprepare(tx->npl);
 	clk_disable_unprepare(tx->mclk);
@@ -2418,6 +2434,18 @@ static int __maybe_unused tx_macro_runtime_resume(struct device *dev)
 {
 	struct tx_macro *tx = dev_get_drvdata(dev);
 	int ret;
+
+	ret = clk_prepare_enable(tx->macro);
+	if (ret) {
+		dev_err(dev, "unable to prepare macro\n");
+		return ret;
+	}
+
+	ret = clk_prepare_enable(tx->dcodec);
+	if (ret) {
+		dev_err(dev, "unable to prepare dcodec\n");
+		return ret;
+	}
 
 	ret = clk_prepare_enable(tx->mclk);
 	if (ret) {
