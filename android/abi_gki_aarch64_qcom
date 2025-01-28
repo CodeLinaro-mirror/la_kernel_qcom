@@ -2286,12 +2286,14 @@
   usb_free_coherent
   usb_function_register
   usb_function_unregister
+  usb_func_wakeup
   usb_gadget_connect
   usb_gadget_disconnect
   usb_gadget_wakeup
   usb_hcd_is_primary_hcd
   usb_ifnum_to_if
   usb_interface_id
+  usb_os_desc_prepare_interf_dir
   usb_phy_set_charger_current
   usb_put_function_instance
   usb_register_notify
