@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -551,8 +551,9 @@ static inline void qcom_geni_i2c_calc_timeout(struct geni_i2c_dev *gi2c)
 	xfer_max_usec = (bit_usec * I2C_TIMEOUT_SAFETY_COEFFICIENT) +
 							I2C_TIMEOUT_MIN_USEC;
 	gi2c->xfer_timeout = usecs_to_jiffies(xfer_max_usec);
+
 	I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
-		    "%s: us:%lu jiffies:%d\n",
+		    "%s: us:%zu jiffies:%d\n",
 		    __func__, xfer_max_usec, gi2c->xfer_timeout);
 }
 
