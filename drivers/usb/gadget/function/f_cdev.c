@@ -55,6 +55,7 @@
 #define GS_LOG2_NOTIFY_INTERVAL		5  /* 1 << 5 == 32 msec */
 #define GS_NOTIFY_MAXPACKET		10 /* notification + 2 bytes */
 
+#define REMOTEWAKEUP_RETRY_MAX	5  /* MAXIMUM remote wakeup retry */
 struct cserial {
 	struct usb_function		func;
 	struct usb_ep			*in;
@@ -352,6 +353,23 @@ static inline struct f_cdev *func_to_port(struct usb_function *f)
 static inline struct f_cdev *cser_to_port(struct cserial *cser)
 {
 	return container_of(cser, struct f_cdev, port_usb);
+}
+
+static unsigned int convert_uart_sigs_to_acm(unsigned int uart_sig)
+{
+	unsigned int acm_sig = 0;
+
+	/* should this needs to be in calling functions ??? */
+	uart_sig &= (TIOCM_RI | TIOCM_CD | TIOCM_DSR);
+
+	if (uart_sig & TIOCM_RI)
+		acm_sig |= ACM_CTRL_RI;
+	if (uart_sig & TIOCM_CD)
+		acm_sig |= ACM_CTRL_DCD;
+	if (uart_sig & TIOCM_DSR)
+		acm_sig |= ACM_CTRL_DSR;
+
+	return acm_sig;
 }
 
 static unsigned int convert_acm_sigs_to_uart(unsigned int acm_sig)
@@ -862,6 +880,7 @@ static int usb_cser_bind(struct usb_configuration *c, struct usb_function *f)
 		if (status < 0)
 			return status;
 		cser_string_defs[0].id = status;
+		cser_interface_desc.iInterface = status;
 	}
 
 	status = usb_interface_id(c, f);
@@ -1512,6 +1531,12 @@ static int f_cdev_tiocmget(struct f_cdev *port)
 
 	if (cser->serial_state & TIOCM_RI)
 		result |= TIOCM_RI;
+
+	if (cser->serial_state & TIOCM_DSR)
+		result |= TIOCM_DSR;
+
+	if (cser->serial_state & TIOCM_CTS)
+		result |= TIOCM_CTS;
 	return result;
 }
 
@@ -1552,6 +1577,24 @@ static int f_cdev_tiocmset(struct f_cdev *port,
 		}
 	}
 
+	if (set & TIOCM_DSR)
+		cser->serial_state |= TIOCM_DSR;
+
+	if (clear & TIOCM_DSR)
+		cser->serial_state &= ~TIOCM_DSR;
+
+	if (set & TIOCM_CTS) {
+		if (cser->send_break) {
+			cser->serial_state |= TIOCM_CTS;
+			status = cser->send_break(cser, 0);
+		}
+	}
+	if (clear & TIOCM_CTS) {
+		if (cser->send_break) {
+			cser->serial_state &= ~TIOCM_CTS;
+			status = cser->send_break(cser, 1);
+		}
+	}
 	return status;
 }
 
@@ -1602,7 +1645,9 @@ static void usb_cser_notify_modem(void *fport, int ctrl_bits)
 {
 	int temp;
 	struct f_cdev *port = fport;
+	struct cserial *cser;
 
+	cser = &port->port_usb;
 	if (!port) {
 		pr_err("port is null\n");
 		return;
@@ -1617,6 +1662,17 @@ static void usb_cser_notify_modem(void *fport, int ctrl_bits)
 
 	port->cbits_to_modem = temp;
 	port->cbits_updated = true;
+
+	 /* if DTR is high, update latest modem info to laptop */
+	if (port->cbits_to_modem & TIOCM_DTR) {
+		unsigned int result;
+		unsigned int cbits_to_laptop;
+
+		result = f_cdev_tiocmget(port);
+		cbits_to_laptop = convert_uart_sigs_to_acm(result);
+		if (cser->send_modem_ctrl_bits)
+			cser->send_modem_ctrl_bits(cser, cbits_to_laptop);
+	}
 
 	wake_up(&port->read_wq);
 }
@@ -1704,6 +1760,8 @@ static ssize_t cser_rw_write(struct file *file, const char __user *ubuf,
 	struct usb_function *func;
 	struct usb_gadget *gadget;
 	int ret;
+	u8 remote_wakeup_retry = 0;
+
 
 	cser = &port->port_usb;
 	if (!cser) {
@@ -1744,6 +1802,7 @@ static ssize_t cser_rw_write(struct file *file, const char __user *ubuf,
 	port->debugfs_rw_enable = !!input;
 	if (port->debugfs_rw_enable) {
 		gadget = cser->func.config->cdev->gadget;
+retry_wakeup:
 		if (func->func_suspended) {
 			pr_debug("Calling usb_func_wakeup\n");
 			ret = usb_func_wakeup(func);
@@ -1752,8 +1811,14 @@ static ssize_t cser_rw_write(struct file *file, const char __user *ubuf,
 			ret = usb_gadget_wakeup(gadget);
 		}
 
-		if (ret)
-			pr_err("wakeup failed. ret=%d.\n", ret);
+		if (ret && (++remote_wakeup_retry <
+				REMOTEWAKEUP_RETRY_MAX)) {
+			msleep(20);
+			goto retry_wakeup;
+		} else
+			pr_info("wakeup %s. ret=%d\n",
+				ret ? "failed" : "passed", ret);
+
 	} else {
 		pr_debug("RW disabled.\n");
 	}
