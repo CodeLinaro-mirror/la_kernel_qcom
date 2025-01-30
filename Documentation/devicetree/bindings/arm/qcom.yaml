@@ -42,15 +42,20 @@ description: |
         msm8996
         msm8998
         qcs404
+        qcs8275
+        qcs8300
         qcs8550
+        qcs9100
         qcm2290
         qcm6490
         qdu1000
         qrb2210
         qrb4210
         qru1000
+        sa7255p
         sa8155p
         sa8540p
+        sa8255p
         sa8775p
         sc7180
         sc7280
@@ -897,8 +902,19 @@ properties:
 
       - items:
           - enum:
+              - qcom,qcs8300-ride
+          - const: qcom,qcs8275
+          - const: qcom,qcs8300
+
+      - items:
+          - enum:
               - qcom,sa8155p-adp
           - const: qcom,sa8155p
+
+      - items:
+          - enum:
+              - qcom,sa8255p-ride
+          - const: qcom,sa8255p
 
       - items:
           - enum:
@@ -910,6 +926,14 @@ properties:
           - enum:
               - qcom,sa8775p-ride
               - qcom,sa8775p-ride-r3
+          - const: qcom,sa8775p
+          - const: qcom,qcs9100
+
+      - items:
+          - enum:
+              - qcom,qcs9100-ride
+              - qcom,qcs9100-ride-r3
+          - const: qcom,qcs9100
           - const: qcom,sa8775p
 
       - items:
@@ -1034,6 +1058,11 @@ properties:
               - samsung,q5q
               - sony,pdx234
           - const: qcom,sm8550
+
+      - items:
+          - enum:
+              - qcom,sa7255p-ride
+          - const: qcom,sa7255p
 
       - items:
           - enum:

@@ -27,6 +27,83 @@
 	chosen {
 		stdout-path = "serial0:115200n8";
 	};
+
+	vreg_conn_1p8: vreg_conn_1p8 {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_conn_1p8";
+		startup-delay-us = <4000>;
+		enable-active-high;
+		gpio = <&pmm8654au_1_gpios 4 GPIO_ACTIVE_HIGH>;
+	};
+
+	vreg_conn_pa: vreg_conn_pa {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_conn_pa";
+		startup-delay-us = <4000>;
+		enable-active-high;
+		gpio = <&pmm8654au_1_gpios 6 GPIO_ACTIVE_HIGH>;
+	};
+
+	wcn6855-pmu {
+		compatible = "qcom,wcn6855-pmu";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&bt_en_state>, <&wlan_en_state>;
+
+		vddio-supply = <&vreg_conn_pa>;
+		vddaon-supply = <&vreg_l2c>;
+		vddpmu-supply = <&vreg_conn_1p8>;
+		vddrfa0p95-supply = <&vreg_l2c>;
+		vddrfa1p3-supply = <&vreg_l6e>;
+		vddrfa1p9-supply = <&vreg_s5a>;
+		vddpcie1p3-supply = <&vreg_l6e>;
+		vddpcie1p9-supply = <&vreg_s5a>;
+
+		bt-enable-gpios = <&pmm8654au_1_gpios 8 GPIO_ACTIVE_HIGH>;
+		wlan-enable-gpios = <&pmm8654au_1_gpios 7 GPIO_ACTIVE_HIGH>;
+
+		regulators {
+			vreg_pmu_rfa_cmn: ldo0 {
+				regulator-name = "vreg_pmu_rfa_cmn";
+			};
+
+			vreg_pmu_aon_0p59: ldo1 {
+				regulator-name = "vreg_pmu_aon_0p59";
+			};
+
+			vreg_pmu_wlcx_0p8: ldo2 {
+				regulator-name = "vreg_pmu_wlcx_0p8";
+			};
+
+			vreg_pmu_wlmx_0p85: ldo3 {
+				regulator-name = "vreg_pmu_wlmx_0p85";
+			};
+
+			vreg_pmu_btcmx_0p85: ldo4 {
+				regulator-name = "vreg_pmu_btcmx_0p85";
+			};
+
+			vreg_pmu_rfa_0p8: ldo5 {
+				regulator-name = "vreg_pmu_rfa_0p8";
+			};
+
+			vreg_pmu_rfa_1p2: ldo6 {
+				regulator-name = "vreg_pmu_rfa_1p2";
+			};
+
+			vreg_pmu_rfa_1p7: ldo7 {
+				regulator-name = "vreg_pmu_rfa_1p7";
+			};
+
+			vreg_pmu_pcie_0p9: ldo8 {
+				regulator-name = "vreg_pmu_pcie_0p9";
+			};
+
+			vreg_pmu_pcie_1p8: ldo9 {
+				regulator-name = "vreg_pmu_pcie_1p8";
+			};
+		};
+	};
 };
 
 &apps_rsc {
@@ -407,6 +484,26 @@
 	};
 };
 
+&eud {
+	status = "okay";
+};
+
+&gpi_dma0 {
+	status = "okay";
+};
+
+&gpi_dma1 {
+	status = "okay";
+};
+
+&gpi_dma2 {
+	status = "okay";
+};
+
+&gpi_dma3 {
+	status = "okay";
+};
+
 &i2c11 {
 	clock-frequency = <400000>;
 	pinctrl-0 = <&qup_i2c11_default>;
@@ -418,6 +515,40 @@
 	clock-frequency = <400000>;
 	pinctrl-0 = <&qup_i2c18_default>;
 	pinctrl-names = "default";
+	status = "okay";
+};
+
+&llcc {
+	status = "okay";
+};
+
+&mdss0 {
+	status = "okay";
+};
+
+&mdss0_dp0 {
+	status = "okay";
+};
+
+&mdss0_dp0_out {
+	data-lanes = <0 1 2 3>;
+	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
+};
+
+&mdss0_edp_phy {
+	status = "okay";
+};
+
+&mdss0_dp1 {
+	status = "okay";
+};
+
+&mdss0_dp1_out {
+	data-lanes = <0 1 2 3>;
+	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
+};
+
+&mdss0_edp1_phy {
 	status = "okay";
 };
 
@@ -452,6 +583,20 @@
 			  "BT_EN",
 			  "USB2_PWR_EN",
 			  "USB2_FAULT";
+
+	wlan_en_state: wlan-en-state {
+		pins = "gpio7";
+		function = "normal";
+		output-low;
+		bias-pull-down;
+	};
+
+	bt_en_state: bt-en-state {
+		pins = "gpio8";
+		function = "normal";
+		output-low;
+		bias-pull-down;
+	};
 
 	usb2_en_state: usb2-en-state {
 		pins = "gpio9";
@@ -498,11 +643,19 @@
 			  "GNSS_BOOT_MODE";
 };
 
+&qupv3_id_0 {
+	status = "okay";
+};
+
 &qupv3_id_1 {
 	status = "okay";
 };
 
 &qupv3_id_2 {
+	status = "okay";
+};
+
+&qupv3_id_3 {
 	status = "okay";
 };
 
@@ -524,9 +677,28 @@
 	pinctrl-0 = <&qup_spi16_default>;
 	pinctrl-names = "default";
 	status = "okay";
+
+	spidev@0 {
+		compatible = "rohm,dh2228fv";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+		spi-cpha;
+	};
 };
 
 &tlmm {
+	dp_hot_plug_det: dp-hot-plug-det-state {
+		pins = "gpio101";
+		function = "edp0_hot";
+		bias-disable;
+	};
+
+	dp1_hot_plug_det: dp1-hot-plug-det-state {
+		pins = "gpio102";
+		function = "edp1_hot";
+		bias-disable;
+	};
+
 	ethernet0_default: ethernet0-default-state {
 		ethernet0_mdc: ethernet0-mdc-pins {
 			pins = "gpio8";
@@ -675,6 +847,37 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_default_state>;
 
+	iommu-map = <0x0 &pcie_smmu 0x0000 0x1>,
+		    <0x100 &pcie_smmu 0x0001 0x1>,
+		    <0x101 &pcie_smmu 0x0002 0x1>,
+		    <0x208 &pcie_smmu 0x0003 0x1>,
+		    <0x210 &pcie_smmu 0x0004 0x1>,
+		    <0x218 &pcie_smmu 0x0005 0x1>,
+		    <0x280 &pcie_smmu 0x0006 0x1>,
+		    <0x281 &pcie_smmu 0x0007 0x1>,
+		    <0x282 &pcie_smmu 0x0008 0x1>,
+		    <0x283 &pcie_smmu 0x0009 0x1>,
+		    <0x284 &pcie_smmu 0x000a 0x1>,
+		    <0x285 &pcie_smmu 0x000b 0x1>,
+		    <0x286 &pcie_smmu 0x000c 0x1>,
+		    <0x287 &pcie_smmu 0x000d 0x1>,
+		    <0x288 &pcie_smmu 0x000e 0x1>,
+		    <0x289 &pcie_smmu 0x000f 0x1>,
+		    <0x28a &pcie_smmu 0x0010 0x1>,
+		    <0x28b &pcie_smmu 0x0011 0x1>,
+		    <0x28c &pcie_smmu 0x0012 0x1>,
+		    <0x28d &pcie_smmu 0x0013 0x1>,
+		    <0x28e &pcie_smmu 0x0014 0x1>,
+		    <0x28f &pcie_smmu 0x0015 0x1>,
+		    <0x290 &pcie_smmu 0x0016 0x1>,
+		    <0x291 &pcie_smmu 0x0017 0x1>,
+		    <0x292 &pcie_smmu 0x0018 0x1>,
+		    <0x293 &pcie_smmu 0x0019 0x1>,
+		    <0x300 &pcie_smmu 0x001a 0x1>,
+		    <0x400 &pcie_smmu 0x001b 0x1>,
+		    <0x500 &pcie_smmu 0x001c 0x1>,
+		    <0x501 &pcie_smmu 0x001d 0x1>;
+
 	status = "okay";
 };
 
@@ -684,6 +887,37 @@
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie1_default_state>;
+
+	iommu-map = <0x0 &pcie_smmu 0x0080 0x1>,
+		    <0x100 &pcie_smmu 0x0081 0x1>,
+		    <0x101 &pcie_smmu 0x0082 0x1>,
+		    <0x208 &pcie_smmu 0x0083 0x1>,
+		    <0x210 &pcie_smmu 0x0084 0x1>,
+		    <0x218 &pcie_smmu 0x0085 0x1>,
+		    <0x280 &pcie_smmu 0x0086 0x1>,
+		    <0x281 &pcie_smmu 0x0087 0x1>,
+		    <0x282 &pcie_smmu 0x0088 0x1>,
+		    <0x283 &pcie_smmu 0x0089 0x1>,
+		    <0x284 &pcie_smmu 0x008a 0x1>,
+		    <0x285 &pcie_smmu 0x008b 0x1>,
+		    <0x286 &pcie_smmu 0x008c 0x1>,
+		    <0x287 &pcie_smmu 0x008d 0x1>,
+		    <0x288 &pcie_smmu 0x008e 0x1>,
+		    <0x289 &pcie_smmu 0x008f 0x1>,
+		    <0x28a &pcie_smmu 0x0090 0x1>,
+		    <0x28b &pcie_smmu 0x0091 0x1>,
+		    <0x28c &pcie_smmu 0x0092 0x1>,
+		    <0x28d &pcie_smmu 0x0093 0x1>,
+		    <0x28e &pcie_smmu 0x0094 0x1>,
+		    <0x28f &pcie_smmu 0x0095 0x1>,
+		    <0x290 &pcie_smmu 0x0096 0x1>,
+		    <0x291 &pcie_smmu 0x0097 0x1>,
+		    <0x292 &pcie_smmu 0x0098 0x1>,
+		    <0x29d &pcie_smmu 0x0099 0x1>,
+		    <0x300 &pcie_smmu 0x009a 0x1>,
+		    <0x400 &pcie_smmu 0x009b 0x1>,
+		    <0x500 &pcie_smmu 0x009c 0x1>,
+		    <0x501 &pcie_smmu 0x009d 0x1>;
 
 	status = "okay";
 };
@@ -700,6 +934,25 @@
 	vdda-pll-supply = <&vreg_l1c>;
 
 	status = "okay";
+};
+
+&pcieport0 {
+	wifi@0 {
+		compatible = "pci17cb,1101";
+		reg = <0x10000 0x0 0x0 0x0 0x0>;
+
+		qcom,ath11k-calibration-variant = "QC_SA8775P_Ride";
+
+		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
+		vddaon-supply = <&vreg_pmu_aon_0p59>;
+		vddwlcx-supply = <&vreg_pmu_wlcx_0p8>;
+		vddwlmx-supply = <&vreg_pmu_wlmx_0p85>;
+		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
+		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
+		vddrfa1p7-supply = <&vreg_pmu_rfa_1p7>;
+		vddpcie0p9-supply = <&vreg_pmu_pcie_0p9>;
+		vddpcie1p8-supply = <&vreg_pmu_pcie_1p8>;
+	};
 };
 
 &remoteproc_adsp {
@@ -744,6 +997,20 @@
 	pinctrl-0 = <&qup_uart17_default>;
 	pinctrl-names = "default";
 	status = "okay";
+
+	bluetooth {
+		compatible = "qcom,wcn6855-bt";
+		pinctrl-names = "default";
+		pinctrl-0 = <&bt_en_state>;
+		enable-gpios = <&pmm8654au_1_gpios 8 GPIO_ACTIVE_HIGH>; /* BT_EN */
+
+		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
+		vddaon-supply = <&vreg_pmu_aon_0p59>;
+		vddbtcmx-supply = <&vreg_pmu_btcmx_0p85>;
+		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
+		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
+		vddrfa1p7-supply = <&vreg_pmu_rfa_1p7>;
+	};
 };
 
 &ufs_mem_hc {
@@ -771,6 +1038,11 @@
 };
 
 &usb_0_dwc3 {
+	snps,dis-u2-entry-quirk;
+	snps,dis-u1-entry-quirk;
+	snps,dis_u2_susphy_quirk;
+	snps,dis_u3_susphy_quirk;
+
 	dr_mode = "peripheral";
 };
 
@@ -823,6 +1095,7 @@
 };
 
 &usb_2_dwc3 {
+	snps,dwc3_guctl_resbwhseps_quirk;
 	dr_mode = "host";
 };
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, 2017-2018, 2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -511,7 +512,7 @@ int gdsc_register(struct gdsc_desc *desc,
 {
 	int i, ret;
 	struct genpd_onecell_data *data;
-	struct device *dev = desc->dev;
+	struct device *dev = desc->dev, *pd_dev;
 	struct gdsc **scs = desc->scs;
 	size_t num = desc->num;
 
@@ -558,6 +559,16 @@ int gdsc_register(struct gdsc_desc *desc,
 			pm_genpd_add_subdomain(scs[i]->parent, &scs[i]->pd);
 		else if (!IS_ERR_OR_NULL(dev->pm_domain))
 			pm_genpd_add_subdomain(pd_to_genpd(dev->pm_domain), &scs[i]->pd);
+		else if (desc->pmdomains) {
+			for (int j = 0; j < desc->pmdomains->num_pds; j++) {
+				pd_dev = desc->pmdomains->pd_devs[j];
+				if (!IS_ERR_OR_NULL(pd_dev)) {
+					struct generic_pm_domain *genpd =
+						pd_to_genpd(pd_dev->pm_domain);
+					pm_genpd_add_subdomain(genpd, &scs[i]->pd);
+				}
+			}
+		}
 	}
 
 	return of_genpd_add_provider_onecell(dev->of_node, data);
@@ -566,7 +577,7 @@ int gdsc_register(struct gdsc_desc *desc,
 void gdsc_unregister(struct gdsc_desc *desc)
 {
 	int i;
-	struct device *dev = desc->dev;
+	struct device *dev = desc->dev, *pd_dev;
 	struct gdsc **scs = desc->scs;
 	size_t num = desc->num;
 
@@ -578,6 +589,16 @@ void gdsc_unregister(struct gdsc_desc *desc)
 			pm_genpd_remove_subdomain(scs[i]->parent, &scs[i]->pd);
 		else if (!IS_ERR_OR_NULL(dev->pm_domain))
 			pm_genpd_remove_subdomain(pd_to_genpd(dev->pm_domain), &scs[i]->pd);
+		else if (desc->pmdomains) {
+			for (int j = 0; j < desc->pmdomains->num_pds; j++) {
+				pd_dev = desc->pmdomains->pd_devs[j];
+				if (!IS_ERR_OR_NULL(pd_dev)) {
+					struct generic_pm_domain *genpd =
+						pd_to_genpd(pd_dev->pm_domain);
+					pm_genpd_remove_subdomain(genpd, &scs[i]->pd);
+				}
+			}
+		}
 	}
 	of_genpd_del_provider(dev->of_node);
 }

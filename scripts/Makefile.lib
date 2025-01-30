@@ -237,6 +237,11 @@ cpp_flags      = -Wp,-MMD,$(depfile) $(NOSTDINC_FLAGS) $(LINUXINCLUDE)     \
 
 ld_flags       = $(KBUILD_LDFLAGS) $(ldflags-y) $(LDFLAGS_$(@F))
 
+
+ifdef CONFIG_QCOM_KVM_ENABLED
+dtc_cpp_flags += -DQCOM_KVM_ENABLED
+endif
+
 ifdef CONFIG_OBJTOOL
 
 objtool := $(objtree)/tools/objtool/objtool

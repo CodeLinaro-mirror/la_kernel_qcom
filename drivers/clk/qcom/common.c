@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/export.h>
@@ -318,6 +319,7 @@ int qcom_cc_really_probe(struct device *dev,
 		scd->dev = dev;
 		scd->scs = desc->gdscs;
 		scd->num = desc->num_gdscs;
+		scd->pmdomains = desc->pmdomains;
 		ret = gdsc_register(scd, &reset->rcdev, regmap);
 		if (ret)
 			return ret;
@@ -384,6 +386,25 @@ int qcom_cc_probe_by_index(struct platform_device *pdev, int index,
 	return qcom_cc_really_probe(&pdev->dev, desc, regmap);
 }
 EXPORT_SYMBOL_GPL(qcom_cc_probe_by_index);
+
+static void qcom_cc_detach_pds(void *data)
+{
+	struct qcom_cc_desc *desc = (struct qcom_cc_desc *)data;
+
+	dev_pm_domain_detach_list(desc->pmdomains);
+}
+
+int qcom_cc_attach_pds(struct device *dev, struct qcom_cc_desc *desc)
+{
+	int ret;
+
+	ret = dev_pm_domain_attach_list(dev, NULL, &desc->pmdomains);
+	if (ret < 0 && ret != -EEXIST)
+		return ret;
+
+	return devm_add_action_or_reset(dev, qcom_cc_detach_pds, desc);
+}
+EXPORT_SYMBOL_GPL(qcom_cc_attach_pds);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("QTI Common Clock module");

@@ -154,6 +154,8 @@ enum arm_smmu_cbar_type {
 #define ARM_SMMU_SCTLR_M		BIT(0)
 
 #define ARM_SMMU_CB_ACTLR		0x4
+#define ARM_SMMU_GFX_PRR_CFG_LADDR	0x6008
+#define ARM_SMMU_GFX_PRR_CFG_UADDR	0x600C
 
 #define ARM_SMMU_CB_RESUME		0x8
 #define ARM_SMMU_RESUME_TERMINATE	BIT(0)
@@ -383,6 +385,14 @@ struct arm_smmu_domain {
 	struct mutex			init_mutex; /* Protects smmu pointer */
 	spinlock_t			cb_lock; /* Serialises ATS1* ops and TLB syncs */
 	struct iommu_domain		domain;
+	/*
+	 * Use to store parse vmid value for those clients which want HLOS
+	 * to share pgtable to different entity(VMID).
+	 * Fix Me: Ideally this should be implemented on arm-smmu vendor implementation
+	 * driver, but as per current design of arm_smmu_domain_alloc there is no way
+	 * to call implementation callbacks.
+	 */
+	u32				secure_vmid;
 };
 
 struct arm_smmu_master_cfg {

@@ -62,6 +62,14 @@ config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
 
+config QCOM_MEMORY_DUMP_V2
+	tristate "QCOM Memory Dump V2 Support"
+	help
+	  This enables memory dump feature. It allows various client
+	  subsystems to register respective dump regions. At the time
+	  of deadlocks or cpu hangs these dump regions are captured to
+	  give a snapshot of the system at the time of the crash.
+
 config QCOM_OCMEM
 	tristate "Qualcomm On Chip Memory (OCMEM) driver"
 	depends on ARCH_QCOM
@@ -84,6 +92,16 @@ config QCOM_PD_MAPPER
 	  and instances handled by the remote DSPs. This is a kernel-space
 	  implementation of the service. It is a simpler alternative to the
 	  userspace daemon.
+
+config QCOM_PANEL_EVENT_NOTIFIER
+        tristate "panel event notifier"
+        depends on DRM
+        help
+          Enabling this option adds panel event notifier driver.
+          This driver is responsible for notifying clients interested in display
+          panel events such as panel on , panel off, fps change etc.  Clients
+          can use these notifications for power saving or align its operations
+          with display panel power state.
 
 config QCOM_PDR_HELPERS
 	tristate
@@ -219,6 +237,16 @@ config QCOM_SMSM
 	  Say yes here to support the Qualcomm Shared Memory State Machine.
 	  The state machine is represented by bits in shared memory.
 
+config QCOM_SMP2P_SLEEPSTATE
+	tristate "SMP2P Sleepstate notifier"
+	depends on QCOM_SMP2P
+	help
+	  When this option is enabled, notifications are sent to remote procs
+	  for the power state changes on the local processor. The notifications
+	  are sent through the smp2p framework. This driver can also receive
+	  notifications from the remote to prevent suspend on the local
+	  processor.
+
 config QCOM_SOCINFO
 	tristate "Qualcomm socinfo driver"
 	depends on QCOM_SMEM
@@ -294,5 +322,103 @@ config QCOM_PBS
 	  trigger event through PBS RAM on Qualcomm Technologies, Inc. PMICs.
 	  This module provides the APIs to the client drivers that wants to send the
 	  PBS trigger event to the PBS RAM.
+
+config QCOM_WDT_CORE
+       tristate "Qualcomm Technologies, Inc. Watchdog Support"
+       depends on ARCH_QCOM
+       help
+          This enables the watchdog framework for Qualcomm Technologies, Inc.
+          devices. It causes a kernel panic if the watchdog times out. It allows
+          for the detection of cpu hangs and deadlocks. It does not run during the
+          bootup process, so it will not catch any early lockups. Enabling this
+          only enables the framework, an individual Qualcomm Technologies, Inc.
+          watchdog module must be loaded along with this for watchdog
+          functionality.
+
+config QCOM_FORCE_WDOG_BITE_ON_PANIC
+       bool "QCOM force watchdog bite on panic"
+       depends on QCOM_WDT_CORE
+       help
+         This forces a watchdog bite when the device restarts
+         due to a kernel panic. On certain MSM SoCs,
+         this provides additional debugging
+         information.
+
+config QCOM_WDOG_BITE_EARLY_PANIC
+       bool "QCOM early panic watchdog bite"
+       depends on QCOM_WDT_CORE && QCOM_FORCE_WDOG_BITE_ON_PANIC
+       help
+         This forces a watchdog bite early in panic sequence. On certain
+         MSM SoCs, this provides us additional debugging information at the
+         context of the crash. If this option is disabled, then bite occurs
+         later in panic, which permits more of the restart sequence to run
+         (e.g. more dmesg to flushed to console).
+
+config QCOM_WATCHDOG_BARK_TIME
+       depends on QCOM_WDT_CORE
+       int "Qualcomm Technologies, Inc. Watchdog bark time in ms"
+       default 11000
+       range 11000 11000
+       help
+         The amount of time, in milliseconds, that should elapse after
+         a watchdog timer reset before a bark interrupt is sent from the
+         watchdog.
+
+config QCOM_WATCHDOG_PET_TIME
+       depends on QCOM_WDT_CORE
+       int "Qualcomm Technologies, Inc. Watchdog pet time in ms"
+       default 9360
+       range 9360 9360
+       help
+         The amount of time, in milliseconds, that should elapse before
+         a watchdog pet is initiated to reset the watchdog timer to 0.
+
+config QCOM_WATCHDOG_IPI_PING
+       depends on QCOM_WDT_CORE
+       bool "Qualcomm Technologies, Inc. Watchdog ipi ping"
+       default y
+       help
+         This boolean flag gives the watchdog driver the ability to send a
+         keep-alive ping to other cpu's if it is set to 1. Otherwise, when
+         it is set to 0 no keep alive pings will be sent.
+
+config QCOM_SOC_DEBUG
+       depends on RANDOMIZE_BASE
+       bool "SOC Debug Module"
+       help
+	 This module will write kaslr address to imem to enable debug of
+	 crashes which require loading of vmlinux and ramdumps. It also
+	 keeps SoC watchdog device node enabled when Linux is booted in
+	 hyp mode.
+
+config QCOM_SECURE_BUFFER
+	tristate "Helper functions for secure buffers through TZ"
+	depends on QCOM_SCM
+	help
+	 Enable for targets that need to call into TZ to secure
+	 memory buffers. This ensures that only the correct clients can
+	 use this memory and no unauthorized access is made to the
+	 buffer.
+
+config QCOM_KVM_ENABLED
+       bool "ENABLE KVM support"
+       help
+	 During the build process difference between Gunyah and KVM hypervisors
+	 isn't necessary, but exception like watchdog and PIL loading demand
+	 device tree adjustments based on the hypervisor.
+	 To address this, the QCOM_KVM_ENABLED config is introduced since the
+	 device tree cannot detect Kbuild configurations.
+
+source "drivers/soc/qcom/mem_buf/Kconfig"
+source "drivers/soc/qcom/smcinvoke/Kconfig"
+
+config USB_F_QDSS
+	tristate "QDSS driver"
+	depends on USB_CONFIGFS
+	help
+	  QDSS is a usb function driver aimed for faster debug
+	  functionality by merging interleaving traces and
+	  application SW messaging and transferring it to the host machine
+	  to which the device is connected.
 
 endmenu

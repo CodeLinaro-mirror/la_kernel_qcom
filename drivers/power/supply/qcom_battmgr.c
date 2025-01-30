@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022, Linaro Ltd
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/auxiliary_bus.h>
 #include <linux/module.h>
@@ -11,6 +12,7 @@
 #include <linux/soc/qcom/pdr.h>
 #include <linux/soc/qcom/pmic_glink.h>
 #include <linux/math.h>
+#include <linux/thermal.h>
 #include <linux/units.h>
 
 #define BATTMGR_CHEMISTRY_LEN	4
@@ -256,6 +258,7 @@ struct qcom_battmgr_status {
 
 	unsigned int discharge_time;
 	unsigned int charge_time;
+	unsigned int max_charge_ctl_limit;
 };
 
 struct qcom_battmgr_ac {
@@ -294,9 +297,20 @@ struct qcom_battmgr {
 	enum qcom_battmgr_unit unit;
 
 	int error;
+
+	int curr_thermal_level;
+	int num_thermal_levels;
+
+	u32 *thermal_levels;
+	u32 thermal_fcc_ua;
+	u32 last_fcc_ua;
+
+	u32 usb_icl_ua;
+
 	struct completion ack;
 
 	bool service_up;
+	bool thermal_dev_registered;
 
 	struct qcom_battmgr_info info;
 	struct qcom_battmgr_status status;
@@ -418,6 +432,8 @@ static const u8 sm8350_bat_prop_map[] = {
 	[POWER_SUPPLY_PROP_TIME_TO_FULL_AVG] = BATT_TTF_AVG,
 	[POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG] = BATT_TTE_AVG,
 	[POWER_SUPPLY_PROP_POWER_NOW] = BATT_POWER_NOW,
+	[POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT] = BATT_CHG_CTRL_LIM,
+	[POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX] = BATT_CHG_CTRL_LIM_MAX,
 };
 
 static int qcom_battmgr_bat_sm8350_update(struct qcom_battmgr *battmgr,
@@ -578,6 +594,12 @@ static int qcom_battmgr_bat_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = battmgr->status.percent;
 		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		val->intval = battmgr->curr_thermal_level;
+		break;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+		val->intval = battmgr->num_thermal_levels;
+		break;
 	case POWER_SUPPLY_PROP_TEMP:
 		val->intval = battmgr->status.temperature;
 		break;
@@ -607,6 +629,82 @@ static int qcom_battmgr_bat_get_property(struct power_supply *psy,
 		break;
 	default:
 		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int __battery_psy_set_charge_current(struct qcom_battmgr *battmgr,
+					    u32 fcc_ua)
+{
+	int rc;
+
+	rc = qcom_battmgr_request_property(battmgr, BATTMGR_BAT_PROPERTY_SET,
+					   BATT_CHG_CTRL_LIM, fcc_ua);
+	if (rc < 0) {
+		dev_err(battmgr->dev, "Failed to set FCC %u, rc=%d\n", fcc_ua, rc);
+	} else {
+		dev_dbg(battmgr->dev, "Set FCC to %u uA\n", fcc_ua);
+		battmgr->last_fcc_ua = fcc_ua;
+	}
+
+	return rc;
+}
+
+static int battery_psy_set_charge_current(struct qcom_battmgr *battmgr,
+					  int val)
+{
+	u32 fcc_ua, prev_fcc_ua;
+	int rc;
+
+	if (!battmgr->num_thermal_levels)
+		return 0;
+
+	if (battmgr->num_thermal_levels < 0) {
+		dev_err(battmgr->dev, "Incorrect num_thermal_levels\n");
+		return -EINVAL;
+	}
+
+	if (val < 0 || val > battmgr->num_thermal_levels)
+		return -EINVAL;
+
+	fcc_ua = battmgr->thermal_levels[val];
+	prev_fcc_ua = battmgr->thermal_fcc_ua;
+	battmgr->thermal_fcc_ua = fcc_ua;
+
+	rc = __battery_psy_set_charge_current(battmgr, fcc_ua);
+	if (!rc)
+		battmgr->curr_thermal_level = val;
+	else
+		battmgr->thermal_fcc_ua = prev_fcc_ua;
+
+	return rc;
+}
+
+static int qcom_battmgr_bat_set_property(struct power_supply *psy,
+					 enum power_supply_property prop,
+					 const union power_supply_propval *pval)
+{
+	struct qcom_battmgr *battmgr = power_supply_get_drvdata(psy);
+
+	switch (prop) {
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		return battery_psy_set_charge_current(battmgr, pval->intval);
+	default:
+		break;
+	}
+
+	return -EINVAL;
+}
+
+static int qcom_battmgr_prop_is_writeable(struct power_supply *psy,
+					  enum power_supply_property prop)
+{
+	switch (prop) {
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+		return 1;
+	default:
+		break;
 	}
 
 	return 0;
@@ -655,6 +753,8 @@ static const enum power_supply_property sm8350_bat_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CHARGE_COUNTER,
@@ -673,6 +773,8 @@ static const struct power_supply_desc sm8350_bat_psy_desc = {
 	.properties = sm8350_bat_props,
 	.num_properties = ARRAY_SIZE(sm8350_bat_props),
 	.get_property = qcom_battmgr_bat_get_property,
+	.set_property = qcom_battmgr_bat_set_property,
+	.property_is_writeable = qcom_battmgr_prop_is_writeable,
 };
 
 static int qcom_battmgr_ac_get_property(struct power_supply *psy,
@@ -740,6 +842,51 @@ static int qcom_battmgr_usb_sm8350_update(struct qcom_battmgr *battmgr,
 	return ret;
 }
 
+static int usb_psy_set_icl(struct qcom_battmgr *battmgr, u32 prop_id, int val)
+{
+	u32 temp;
+	int ret;
+
+	ret = qcom_battmgr_request_property(battmgr, BATTMGR_USB_PROPERTY_GET,
+					    USB_ADAP_TYPE, 0);
+	if (ret < 0) {
+		dev_err(battmgr->dev, "Failed to read prop USB_ADAP_TYPE, ret=%d\n", ret);
+		return ret;
+	}
+
+	/* Allow this only for SDP, CDP or USB_PD and not for other charger types */
+	switch (battmgr->usb.usb_type) {
+	case POWER_SUPPLY_USB_TYPE_SDP:
+	case POWER_SUPPLY_USB_TYPE_PD:
+	case POWER_SUPPLY_USB_TYPE_CDP:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/*
+	 * Input current limit (ICL) can be set by different clients. E.g. USB
+	 * driver can request for a current of 500/900 mA depending on the
+	 * port type. Also, clients like EUD driver can pass 0 or -22 to
+	 * suspend or unsuspend the input for its use case.
+	 */
+
+	temp = val;
+	if (val < 0)
+		temp = UINT_MAX;
+
+	ret = qcom_battmgr_request_property(battmgr, BATTMGR_USB_PROPERTY_SET, USB_INPUT_CURR_LIMIT,
+					   temp);
+	if (ret < 0) {
+		dev_err(battmgr->dev, "Failed to set ICL %u, ret=%d\n", val, ret);
+	} else {
+		dev_dbg(battmgr->dev, "Set ICL to %u uA\n", val);
+		battmgr->usb_icl_ua = val;
+	}
+
+	return ret;
+}
+
 static int qcom_battmgr_usb_get_property(struct power_supply *psy,
 					 enum power_supply_property psp,
 					 union power_supply_propval *val)
@@ -781,6 +928,37 @@ static int qcom_battmgr_usb_get_property(struct power_supply *psy,
 		break;
 	default:
 		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int qcom_battmgr_usb_set_property(struct power_supply *psy,
+					 enum power_supply_property prop,
+					 const union power_supply_propval *pval)
+{
+	struct qcom_battmgr *battmgr = power_supply_get_drvdata(psy);
+	int rc = -EINVAL;
+
+	switch (prop) {
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		rc = usb_psy_set_icl(battmgr, USB_INPUT_CURR_LIMIT, pval->intval);
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
+
+static int qcom_battmgr_usb_prop_is_writeable(struct power_supply *psy,
+					      enum power_supply_property prop)
+{
+	switch (prop) {
+	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
+		return 1;
+	default:
+		break;
 	}
 
 	return 0;
@@ -834,6 +1012,8 @@ static const struct power_supply_desc sm8350_usb_psy_desc = {
 		     BIT(POWER_SUPPLY_USB_TYPE_PD_DRP)  |
 		     BIT(POWER_SUPPLY_USB_TYPE_PD_PPS)  |
 		     BIT(POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID),
+	.set_property = qcom_battmgr_usb_set_property,
+	.property_is_writeable  = qcom_battmgr_usb_prop_is_writeable,
 };
 
 static const u8 sm8350_wls_prop_map[] = {
@@ -1145,6 +1325,11 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 		case BATT_CURR_NOW:
 			battmgr->status.current_now = le32_to_cpu(resp->intval.value);
 			break;
+		case BATT_CHG_CTRL_LIM:
+			break;
+		case BATT_CHG_CTRL_LIM_MAX:
+			battmgr->status.max_charge_ctl_limit = le32_to_cpu(resp->intval.value);
+			break;
 		case BATT_TEMP:
 			val = le32_to_cpu(resp->intval.value);
 			battmgr->status.temperature = DIV_ROUND_CLOSEST(val, 10);
@@ -1181,6 +1366,26 @@ static void qcom_battmgr_sm8350_callback(struct qcom_battmgr *battmgr,
 			break;
 		}
 		break;
+
+	case BATTMGR_BAT_PROPERTY_SET:
+	case BATTMGR_USB_PROPERTY_SET:
+		property = le32_to_cpu(resp->intval.property);
+		if (payload_len != sizeof(resp->intval)) {
+			dev_warn(battmgr->dev,
+				 "invalid payload length for %#x request: %zd\n",
+				 property, payload_len);
+			battmgr->error = -ENODATA;
+			return;
+		}
+
+		battmgr->error = le32_to_cpu(resp->intval.result);
+		if (battmgr->error) {
+			dev_err(battmgr->dev, "Error in response for opcode :%#x prop_id :%u, rc :%d\n",
+				opcode, property, battmgr->error);
+			goto out_complete;
+		}
+		break;
+
 	case BATTMGR_USB_PROPERTY_GET:
 		property = le32_to_cpu(resp->intval.property);
 		if (payload_len != sizeof(resp->intval)) {
@@ -1283,6 +1488,130 @@ static void qcom_battmgr_callback(const void *data, size_t len, void *priv)
 		qcom_battmgr_sm8350_callback(battmgr, data, len);
 }
 
+static int
+qcom_battmgr_chg_get_max_charge_cntl_limit(struct thermal_cooling_device *tcd,
+					   unsigned long *state)
+{
+	struct qcom_battmgr *battmgr = tcd->devdata;
+
+	*state = battmgr->num_thermal_levels;
+
+	return 0;
+}
+
+static int
+qcom_battmgr_chg_get_cur_charge_cntl_limit(struct thermal_cooling_device *tcd,
+					   unsigned long *state)
+{
+	struct qcom_battmgr *battmgr = tcd->devdata;
+
+	*state = battmgr->curr_thermal_level;
+
+	return 0;
+}
+
+static int
+qcom_battmgr_set_cur_charge_cntl_limit(struct thermal_cooling_device *tcd,
+				       unsigned long state)
+{
+	struct qcom_battmgr *battmgr = tcd->devdata;
+
+	return battery_psy_set_charge_current(battmgr, (int)state);
+}
+
+static const struct thermal_cooling_device_ops battery_tcd_ops = {
+	.get_max_state = qcom_battmgr_chg_get_max_charge_cntl_limit,
+	.get_cur_state = qcom_battmgr_chg_get_cur_charge_cntl_limit,
+	.set_cur_state = qcom_battmgr_set_cur_charge_cntl_limit,
+};
+
+static int qcom_battmgr_register_thermal_cooling_device(struct qcom_battmgr *battmgr)
+{
+	struct thermal_cooling_device *tcd;
+	u32 prev, val;
+	int rc, i;
+
+	/* Skip registering thermal cooling device if thermal levels are not defined */
+	if (!battmgr->num_thermal_levels)
+		return 0;
+
+	if (battmgr->thermal_dev_registered)
+		return 0;
+
+	mutex_lock(&battmgr->lock);
+	rc = qcom_battmgr_request_property(battmgr, BATTMGR_BAT_PROPERTY_GET,
+					   BATT_CHG_CTRL_LIM_MAX, 0);
+	mutex_unlock(&battmgr->lock);
+
+	if (rc < 0) {
+		dev_err(battmgr->dev, "Unable to read CHG_CTRL_LIMIT_MAX rc :%d\n", rc);
+		return rc;
+	}
+
+	prev = battmgr->status.max_charge_ctl_limit;
+
+	for (i = 1; i < battmgr->num_thermal_levels; i++) {
+		if (battmgr->thermal_levels[i] > prev) {
+			dev_err(battmgr->dev, "Thermal values not defined as expected\n");
+			return -EINVAL;
+		}
+		prev = val;
+	}
+
+	battmgr->thermal_levels[0] = battmgr->status.max_charge_ctl_limit;
+	battmgr->thermal_fcc_ua = battmgr->status.max_charge_ctl_limit;
+
+	/* Register Thermal Cooling Device */
+	tcd = devm_thermal_of_cooling_device_register(battmgr->dev,
+						      battmgr->dev->of_node,
+						      (char *)battmgr->bat_psy->desc->name,
+						      battmgr, &battery_tcd_ops);
+	if (IS_ERR_OR_NULL(tcd)) {
+		rc = PTR_ERR_OR_ZERO(tcd);
+		dev_err(battmgr->dev, "Failed to register thermal cooling device rc=%d\n", rc);
+	}
+
+	battmgr->thermal_dev_registered = true;
+
+	return rc;
+}
+
+static int qcom_battmgr_parse_dt(struct qcom_battmgr *battmgr)
+{
+	struct device_node *node = battmgr->dev->of_node;
+	int len, rc;
+
+	rc = of_property_count_elems_of_size(node, "qcom,thermal-mitigation", sizeof(u32));
+	if (rc <= 0)
+		return 0;
+
+	len = rc;
+
+	battmgr->thermal_levels = devm_kcalloc(battmgr->dev, len + 1,
+					       sizeof(*battmgr->thermal_levels),
+					       GFP_KERNEL);
+	if (!battmgr->thermal_levels)
+		return -ENOMEM;
+
+	/*
+	 * Element 0 is for normal charging current. Elements from index 1
+	 * onwards is for thermal mitigation charging currents.
+	 */
+
+	rc = of_property_read_u32_array(node, "qcom,thermal-mitigation",
+					&battmgr->thermal_levels[1], len);
+	if (rc < 0) {
+		dev_err(battmgr->dev, "Error in reading qcom,thermal-mitigation, rc=%d\n",
+			rc);
+
+		return rc;
+	}
+
+	battmgr->num_thermal_levels = len;
+
+	return rc;
+}
+
 static void qcom_battmgr_enable_worker(struct work_struct *work)
 {
 	struct qcom_battmgr *battmgr = container_of(work, struct qcom_battmgr, enable_work);
@@ -1296,6 +1625,25 @@ static void qcom_battmgr_enable_worker(struct work_struct *work)
 	ret = qcom_battmgr_request(battmgr, &req, sizeof(req));
 	if (ret)
 		dev_err(battmgr->dev, "failed to request power notifications\n");
+
+	if (!battmgr->thermal_dev_registered) {
+		ret = qcom_battmgr_register_thermal_cooling_device(battmgr);
+		if (ret < 0)
+			dev_err(battmgr->dev, "failed to register thermal cooling device ret:%d\n",
+				ret);
+	} else if (battmgr->last_fcc_ua) {
+		ret = __battery_psy_set_charge_current(battmgr, battmgr->last_fcc_ua);
+		if (ret < 0)
+			dev_err(battmgr->dev, "Failed to set FCC (%u uA), ret:%d\n",
+				battmgr->last_fcc_ua, ret);
+	}
+
+	if (battmgr->usb_icl_ua) {
+		ret = usb_psy_set_icl(battmgr, USB_INPUT_CURR_LIMIT, battmgr->usb_icl_ua);
+		if (ret < 0)
+			dev_err(battmgr->dev, "failed to set ICL (%u uA), ret:%d\n",
+				battmgr->usb_icl_ua, ret);
+	}
 }
 
 static void qcom_battmgr_pdr_notify(void *priv, int state)
@@ -1328,6 +1676,7 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	const struct of_device_id *match;
 	struct qcom_battmgr *battmgr;
 	struct device *dev = &adev->dev;
+	int ret;
 
 	battmgr = devm_kzalloc(dev, sizeof(*battmgr), GFP_KERNEL);
 	if (!battmgr)
@@ -1374,6 +1723,12 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 			return dev_err_probe(dev, PTR_ERR(battmgr->wls_psy),
 					     "failed to register wireless charing power supply\n");
 	} else {
+		ret = qcom_battmgr_parse_dt(battmgr);
+		if (ret < 0) {
+			dev_err(dev, "Failed to parse thermal mitigation levels rc:%d\n", ret);
+			return ret;
+		}
+
 		battmgr->bat_psy = devm_power_supply_register(dev, &sm8350_bat_psy_desc, &psy_cfg);
 		if (IS_ERR(battmgr->bat_psy))
 			return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),

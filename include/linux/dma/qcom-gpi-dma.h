@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2020, Linaro Limited
+ * Copyright (c) 2023-24 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef QCOM_GPI_DMA_H
@@ -14,6 +15,11 @@ enum spi_transfer_cmd {
 	SPI_RX,
 	SPI_DUPLEX,
 };
+
+#define QCOM_GPI_BLOCK_EVENT_IRQ	BIT(0)
+#define QCOM_GPI_IMMEDIATE_DMA		BIT(1)
+
+#define QCOM_GPI_IMMEDIATE_DMA_LEN	8
 
 /**
  * struct gpi_spi_config - spi config for peripheral
@@ -30,6 +36,7 @@ enum spi_transfer_cmd {
  * @cs: chip select toggle
  * @set_config: set peripheral config
  * @rx_len: receive length for buffer
+ * @flags: flags for immediate dma and block event interrupt support
  */
 struct gpi_spi_config {
 	u8 set_config;
@@ -44,6 +51,7 @@ struct gpi_spi_config {
 	u32 clk_src;
 	enum spi_transfer_cmd cmd;
 	u32 rx_len;
+	u8 flags;
 };
 
 enum i2c_op {
@@ -65,6 +73,8 @@ enum i2c_op {
  * @rx_len: receive length for buffer
  * @op: i2c cmd
  * @muli-msg: is part of multi i2c r-w msgs
+ * @status: gpi event status
+ * @gi2c: pointer to qcom i2c structure
  */
 struct gpi_i2c_config {
 	u8 set_config;
@@ -78,6 +88,11 @@ struct gpi_i2c_config {
 	u32 rx_len;
 	enum i2c_op op;
 	bool multi_msg;
+	bool shared_se;
+	bool first_msg;
+	bool last_msg;
+	u32 status;
+	struct geni_i2c_dev *gi2c;
 };
 
 #endif /* QCOM_GPI_DMA_H */
