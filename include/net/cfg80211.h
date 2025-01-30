@@ -9453,6 +9453,15 @@ bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
  */
 void cfg80211_links_removed(struct net_device *dev, u16 link_mask);
 
+/**
+ * cfg80211_stop_interface_recovery - issue stop interface of the specified link
+ * @dev: MLO network device.
+ * @link_id: link id of the interface to be stopped
+ *
+ * Stop the AP interface/disconnect the STA interface
+ */
+void cfg80211_stop_interface_recovery(struct net_device *dev, int link_id);
+
 enum ieee80211_link_reconfig_remove_state {
 	IEEE80211_LINK_RECONFIG_START,
 	IEEE80211_LINK_RECONFIG_COMPLETE,
