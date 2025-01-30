@@ -821,11 +821,12 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_BSS_DUMP_INCLUDE_USE_DATA] = { .type = NLA_FLAG },
 	[NL80211_ATTR_MLO_TTLM_DLINK] = NLA_POLICY_EXACT_LEN(sizeof(u16) * 8),
 	[NL80211_ATTR_MLO_TTLM_ULINK] = NLA_POLICY_EXACT_LEN(sizeof(u16) * 8),
-	[NL80211_ATTR_RADIO_IFACE] = { .type = NLA_BINARY, .len = IFNAMSIZ - 1 },
 	[NL80211_ATTR_MLD_IFACE_NAME] = { .type = NLA_BINARY, .len = IFNAMSIZ - 1 },
 	[NL80211_ATTR_AP_REMOVAL_COUNT] = { .type = NLA_U16 },
 	[NL80211_ATTR_TSF] = { .type = NLA_U64 },
+	[NL80211_ATTR_RADIO_IFACE] = { .type = NLA_BINARY, .len = IFNAMSIZ - 1 },
 	[NL80211_ATTR_MLO_AP_RECONFIG] = { .type = NLA_FLAG },
+	[NL80211_ATTR_MLO_AP_AFC] = { .type = NLA_FLAG },
 };
 
 /* policy for the key attributes */
@@ -6182,6 +6183,9 @@ static int nl80211_start_ap(struct sk_buff *skb, struct genl_info *info)
 		if (info->attrs[NL80211_ATTR_MLO_AP_RECONFIG])
 			params->reconfig =
 				nla_get_flag(info->attrs[NL80211_ATTR_MLO_AP_RECONFIG]);
+		if (info->attrs[NL80211_ATTR_MLO_AP_AFC])
+			params->afc =
+				nla_get_flag(info->attrs[NL80211_ATTR_MLO_AP_AFC]);
 	}
 
 	err = cfg80211_validate_beacon_int(rdev, dev->ieee80211_ptr->iftype,

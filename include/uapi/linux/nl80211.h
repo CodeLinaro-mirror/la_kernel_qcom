@@ -2870,7 +2870,6 @@ enum nl80211_commands {
  *	nested item, it contains attributes defined in
  *	&enum nl80211_if_combination_attrs.
  *
- * @NL80211_ATTR_RADIO_IFACE: radio interface name of vif
  * @NL80211_ATTR_MLD_IFACE_NAME: mld interface name
  *
  * @NL80211_ATTR_AP_REMOVAL_COUNT: (u16) TBTT count up-to which reconfiguration
@@ -2880,7 +2879,9 @@ enum nl80211_commands {
  * @NL80211_ATTR_TSF: (u64) TSF value when the first beacon with reconfiguration
  *	MLE is sent.
  *
+ * @NL80211_ATTR_RADIO_IFACE: radio interface name of vif
  * @NL80211_ATTR_MLO_AP_RECONFIG: whether the operation is MLO reconfiguration or not
+ * @NL80211_ATTR_MLO_AP_AFC: whether ap is start/stopped for afc or not
  *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
@@ -3433,6 +3434,7 @@ enum nl80211_attrs {
 	NL80211_ATTR_RADIO_IFACE = 350,
 
 	NL80211_ATTR_MLO_AP_RECONFIG,
+	NL80211_ATTR_MLO_AP_AFC,
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
