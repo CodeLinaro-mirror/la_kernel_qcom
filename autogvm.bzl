@@ -1,6 +1,6 @@
-load(":target_variants.bzl", "la_variants")
-load(":msm_kernel_la.bzl", "define_msm_la")
 load(":image_opts.bzl", "boot_image_opts")
+load(":msm_kernel_la.bzl", "define_msm_la")
+load(":target_variants.bzl", "la_variants")
 
 target_name = "autogvm"
 
@@ -37,7 +37,6 @@ def define_autogvm():
         "drivers/irqchip/qcom-pdc.ko",
         "drivers/mailbox/msm_qmp.ko",
         "drivers/mailbox/qcom-ipcc.ko",
-        "drivers/md/dm-bow.ko",
         "drivers/media/platform/msm/npu/virtio_npu.ko",
         "drivers/mfd/qcom-spmi-pmic.ko",
         "drivers/misc/bootmarker_proxy.ko",
