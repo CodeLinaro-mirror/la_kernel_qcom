@@ -2880,6 +2880,8 @@ enum nl80211_commands {
  * @NL80211_ATTR_TSF: (u64) TSF value when the first beacon with reconfiguration
  *	MLE is sent.
  *
+ * @NL80211_ATTR_MLO_AP_RECONFIG: whether the operation is MLO reconfiguration or not
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3430,6 +3432,7 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_RADIO_IFACE = 350,
 
+	NL80211_ATTR_MLO_AP_RECONFIG,
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
