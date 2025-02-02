@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/atomic.h>
@@ -711,8 +711,13 @@ static inline u32 gpi_read_reg(struct gpii *gpii, void __iomem *addr)
 	(gpii->dbg_log + index)->time = time;
 	(gpii->dbg_log + index)->val = val;
 	(gpii->dbg_log + index)->read = true;
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 	GPII_REG(gpii, GPI_DBG_COMMON, "offset:0x%lx val:0x%x\n",
 		 addr - gpii->regs, val);
+#else
+	GPII_REG(gpii, GPI_DBG_COMMON, "offset:0x%zx val:0x%x\n",
+		 addr - gpii->regs, val);
+#endif
 	return val;
 }
 static inline void gpi_write_reg(struct gpii *gpii, void __iomem *addr, u32 val)
@@ -725,24 +730,37 @@ static inline void gpi_write_reg(struct gpii *gpii, void __iomem *addr, u32 val)
 	(gpii->dbg_log + index)->time = time;
 	(gpii->dbg_log + index)->val = val;
 	(gpii->dbg_log + index)->read = false;
-
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 	GPII_REG(gpii, GPI_DBG_COMMON, "offset:0x%lx  val:0x%x\n",
 		 addr - gpii->regs, val);
+#else
+	GPII_REG(gpii, GPI_DBG_COMMON, "offset:0x%zx  val:0x%x\n",
+		 addr - gpii->regs, val);
+#endif
 	writel_relaxed(val, addr);
 }
 #else
 static inline u32 gpi_read_reg(struct gpii *gpii, void __iomem *addr)
 {
 	u32 val = readl_relaxed(addr);
-
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 	GPII_REG(gpii, GPI_DBG_COMMON, "offset:0x%lx val:0x%x\n",
 		 addr - gpii->regs, val);
+#else
+	GPII_REG(gpii, GPI_DBG_COMMON, "offset:0x%zx val:0x%x\n",
+		 addr - gpii->regs, val);
+#endif
 	return val;
 }
 static inline void gpi_write_reg(struct gpii *gpii, void __iomem *addr, u32 val)
 {
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 	GPII_REG(gpii, GPI_DBG_COMMON, "offset:0x%lx  val:0x%x\n",
 		 addr - gpii->regs, val);
+#else
+	GPII_REG(gpii, GPI_DBG_COMMON, "offset:0x%zx  val:0x%x\n",
+		 addr - gpii->regs, val);
+#endif
 	writel_relaxed(val, addr);
 }
 #endif
@@ -3077,7 +3095,7 @@ static int gpi_alloc_ring(struct gpi_ring *ring,
 	len = 1 << bit;
 	ring->alloc_size = (len + (len - 1));
 	GPII_INFO(gpii, GPI_DBG_COMMON,
-		  "#el:%u el_size:%u len:%u actual_len:%llu alloc_size:%lu\n",
+		  "#el:%u el_size:%u len:%u actual_len:%llu alloc_size:%zu\n",
 		  elements, el_size, (elements * el_size), len,
 		  ring->alloc_size);
 	ring->pre_aligned = dma_alloc_coherent(gpii->gpi_dev->dev,
@@ -3085,7 +3103,7 @@ static int gpi_alloc_ring(struct gpi_ring *ring,
 					       &ring->dma_handle, GFP_KERNEL);
 	if (!ring->pre_aligned) {
 		GPII_CRITIC(gpii, GPI_DBG_COMMON,
-			    "could not alloc size:%lu mem for ring\n",
+			    "could not alloc size:%zu mem for ring\n",
 			    ring->alloc_size);
 		return -ENOMEM;
 	}
@@ -3103,12 +3121,17 @@ static int gpi_alloc_ring(struct gpi_ring *ring,
 
 	/* update to other cores */
 	smp_wmb();
-
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 	GPII_INFO(gpii, GPI_DBG_COMMON,
 		  "phy_pre:0x%0llx phy_alig:0x%0llx len:%u el_size:%u elements:%u\n",
 		  ring->dma_handle, ring->phys_addr, ring->len, ring->el_size,
 		  ring->elements);
-
+#else
+	GPII_INFO(gpii, GPI_DBG_COMMON,
+		  "phy_pre:0x%0zx phy_alig:0x%0zx len:%u el_size:%u elements:%u\n",
+		  ring->dma_handle, ring->phys_addr, ring->len, ring->el_size,
+		  ring->elements);
+#endif
 	return 0;
 }
 
@@ -3315,19 +3338,28 @@ static void gpi_noop_tre(struct gpii_chan *gpii_chan)
 	local_rp = to_physical(ch_ring, ch_ring->rp);
 	local_wp = to_physical(ch_ring, ch_ring->wp);
 	cntxt_rp = ch_ring->rp;
-
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 	GPII_INFO(gpii, gpii_chan->chid,
-		"local_rp:0x%0llx local_wp:0x%0llx\n", local_rp, local_wp);
-
+		  "local_rp:0x%0llx local_wp:0x%0llx\n", local_rp, local_wp);
+#else
+	GPII_INFO(gpii, gpii_chan->chid,
+		  "local_rp:0x%0zx local_wp:0x%0zx\n", local_rp, local_wp);
+#endif
 	noop_mask = NOOP_TRE_MASK(1, 0, 0, 0, 1);
 	noop_tre = NOOP_TRE;
 
 	while (local_rp != local_wp) {
 		/* dump the channel ring at the time of error */
 		tre = (struct msm_gpi_tre *)cntxt_rp;
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 		GPII_ERR(gpii, gpii_chan->chid, "local_rp:%llu TRE: %08x %08x %08x %08x\n",
-			local_rp, tre->dword[0], tre->dword[1],
+			 local_rp, tre->dword[0], tre->dword[1],
 			 tre->dword[2], tre->dword[3]);
+#else
+		GPII_ERR(gpii, gpii_chan->chid, "local_rp:%zu TRE: %08x %08x %08x %08x\n",
+			 local_rp, tre->dword[0], tre->dword[1],
+			 tre->dword[2], tre->dword[3]);
+#endif
 		tre->dword[3] &= noop_mask;
 		tre->dword[3] |= noop_tre;
 		local_rp += ch_ring->el_size;
@@ -3336,8 +3368,11 @@ static void gpi_noop_tre(struct gpii_chan *gpii_chan)
 			cntxt_rp = ch_ring->base;
 			local_rp = to_physical(ch_ring, ch_ring->base);
 		}
-		GPII_INFO(gpii, gpii_chan->chid,
-			"local_rp:0x%0llx\n", local_rp);
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
+		GPII_INFO(gpii, gpii_chan->chid, "local_rp:0x%0llx\n", local_rp);
+#else
+		GPII_INFO(gpii, gpii_chan->chid, "local_rp:0x%0zx\n", local_rp);
+#endif
 	}
 
 	GPII_INFO(gpii, gpii_chan->chid, "exit\n");
@@ -3599,10 +3634,15 @@ struct dma_async_tx_descriptor *gpi_prep_slave_sg(struct dma_chan *chan,
 	gpi_desc->db = ch_ring->wp;
 	gpi_desc->wp = wp;
 	gpi_desc->gpii_chan = gpii_chan;
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
 	GPII_VERB(gpii, gpii_chan->chid, "exit wp:0x%0llx rp:0x%0llx\n",
 		  to_physical(ch_ring, ch_ring->wp),
 		  to_physical(ch_ring, ch_ring->rp));
-
+#else
+	GPII_VERB(gpii, gpii_chan->chid, "exit wp:0x%0zx rp:0x%0zx\n",
+		  to_physical(ch_ring, ch_ring->wp),
+		  to_physical(ch_ring, ch_ring->rp));
+#endif
 	return vchan_tx_prep(&gpii_chan->vc, &gpi_desc->vd, flags);
 }
 
