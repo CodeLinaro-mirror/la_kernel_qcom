@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+//Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 /*
  * MSM MHI device core driver.
@@ -4635,9 +4635,9 @@ static void mhi_ring_init_cb(void *data)
 		return;
 
 	mutex_lock(&mhi->mhi_lock);
+	mhi->mhi_dma_ready = true;
 	if (!mhi->init_done) {
 		mhi_log(mhi->vf_id, MHI_MSG_INFO, "mhi init is not done, returning\n");
-		mhi->mhi_dma_ready = true;
 		mutex_unlock(&mhi->mhi_lock);
 		return;
 	}
