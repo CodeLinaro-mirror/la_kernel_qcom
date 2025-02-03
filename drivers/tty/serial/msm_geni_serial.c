@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitmap.h>
@@ -3472,13 +3472,13 @@ static int msm_geni_serial_handle_dma_tx(struct uart_port *uport)
 		exec_time = comp_time - sw_time;
 		UART_LOG_DBG(msm_port->ipc_log_kpi, uport->dev,
 			     "%s:TX transfer time %llu nsec(%llu usec) for %d bytes with freq %d index:%d\n",
-			     __func__, exec_time, (exec_time / 1000), len,
+			     __func__, exec_time, div_u64(exec_time, NSEC_PER_USEC), len,
 			     msm_port->cur_baud, msm_port->kpi_comp_idx);
 		sw_time = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_hw.time_stamp;
 		exec_time = comp_time - sw_time;
 		UART_LOG_DBG(msm_port->ipc_log_kpi, uport->dev,
 			     "%s:TX Hardware time %llu nsec(%llu usec) for %d bytes with freq %d index:%d\n",
-			     __func__, exec_time, (exec_time / 1000), len,
+			     __func__, exec_time, div_u64(exec_time, NSEC_PER_USEC), len,
 			     msm_port->cur_baud, msm_port->kpi_comp_idx);
 		msm_port->kpi_comp_idx++;
 		if (msm_port->kpi_comp_idx >= UART_KPI_TX_RX_INSTANCES)
