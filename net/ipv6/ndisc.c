@@ -1001,6 +1001,7 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 	struct inet6_dev *idev = __in6_dev_get(dev);
 	struct inet6_ifaddr *ifp;
 	struct neighbour *neigh;
+	int check = 0;
 	SKB_DR(reason);
 	u8 new_state;
 
@@ -1082,6 +1083,8 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 	new_state = msg->icmph.icmp6_solicited ? NUD_REACHABLE : NUD_STALE;
 	if (!neigh && lladdr && idev && idev->cnf.forwarding) {
 		if (accept_untracked_na(dev, saddr)) {
+			check = (!msg->icmph.icmp6_solicited && lladdr &&
+				 idev && idev->cnf.forwarding);
 			neigh = neigh_create(&nd_tbl, &msg->target, dev);
 			new_state = NUD_STALE;
 		}
@@ -1113,6 +1116,9 @@ static enum skb_drop_reason ndisc_recv_na(struct sk_buff *skb)
 			     NEIGH_UPDATE_F_OVERRIDE_ISROUTER|
 			     (msg->icmph.icmp6_router ? NEIGH_UPDATE_F_ISROUTER : 0),
 			     NDISC_NEIGHBOUR_ADVERTISEMENT, &ndopts);
+
+		if (!msg->icmph.icmp6_solicited && check)
+			neigh_event_send(neigh, NULL);
 
 		if ((old_flags & ~neigh->flags) & NTF_ROUTER) {
 			/*
