@@ -22,6 +22,7 @@
 #include <linux/scatterlist.h>
 #include <linux/string.h>
 #include <linux/jump_label.h>
+#include <linux/delay.h>
 
 #define DM_MSG_PREFIX			"verity"
 
@@ -41,6 +42,9 @@
 
 #define DM_VERITY_OPTS_MAX		(4 + DM_VERITY_OPTS_FEC + \
 					 DM_VERITY_ROOT_HASH_VERIFICATION_OPTS)
+
+#define DM_DEFAULT_MAX_PROBE_DELAY_SEC 1
+#define DM_DEFAULT_PROBE_FACTOR 5
 
 static unsigned int dm_verity_prefetch_cluster = DM_VERITY_DEFAULT_PREFETCH_SIZE;
 
@@ -1351,6 +1355,7 @@ static int verity_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	sector_t hash_position;
 	char dummy;
 	char *root_hash_digest_to_validate;
+	int loopcntr = DM_DEFAULT_MAX_PROBE_DELAY_SEC * 1000 / DM_DEFAULT_PROBE_FACTOR;
 
 	v = kzalloc(sizeof(struct dm_verity), GFP_KERNEL);
 	if (!v) {
@@ -1393,7 +1398,16 @@ static int verity_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 	v->version = num;
 
-	r = dm_get_device(ti, argv[1], BLK_OPEN_READ, &v->data_dev);
+	/*
+	 * Some time we see race condition of early_device probe to
+	 * dm_get_device() leading to failure leading to  mount
+	 * failure of data device specaially when data device is
+	 * eMMC devices (with rootfs)
+	 */
+	while ((r = dm_get_device(ti, argv[1], BLK_OPEN_READ, &v->data_dev)) && loopcntr) {
+		loopcntr--;
+		msleep_interruptible(5);
+	}
 	if (r) {
 		ti->error = "Data device lookup failed";
 		goto bad;

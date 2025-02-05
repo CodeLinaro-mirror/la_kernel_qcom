@@ -15,6 +15,9 @@
 #include "core.h"
 #include "rdev-ops.h"
 
+/* 5GHz 320MHz support */
+#define FIXED_PUNCTURE_PATTERN 0xF000
+
 static bool cfg80211_valid_60g_freq(u32 freq)
 {
 	return freq >= 58320 && freq <= 70200;
@@ -1042,9 +1045,11 @@ cfg80211_chandef_dfs_cac_time(struct wiphy *wiphy,
 	return max(t1, t2);
 }
 
+#ifndef CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 static bool cfg80211_secondary_chans_ok(struct wiphy *wiphy,
 					u32 center_freq, u32 bandwidth,
-					u32 prohibited_flags)
+					u32 prohibited_flags,
+					enum nl80211_band band)
 {
 	struct ieee80211_channel *c;
 	u32 freq, start_freq, end_freq;
@@ -1060,6 +1065,34 @@ static bool cfg80211_secondary_chans_ok(struct wiphy *wiphy,
 
 	return true;
 }
+#else
+static bool cfg80211_secondary_chans_ok(struct wiphy *wiphy,
+					u32 center_freq, u32 bandwidth,
+					u32 prohibited_flags,
+					enum nl80211_band band)
+{
+	struct ieee80211_channel *c;
+	u32 freq, start_freq, end_freq;
+	u16 puncture_bitmap = 0;
+
+	start_freq = cfg80211_get_start_freq(center_freq, bandwidth);
+	end_freq = cfg80211_get_end_freq(center_freq, bandwidth);
+
+	if (band == NL80211_BAND_5GHZ && bandwidth == 320)
+		puncture_bitmap = FIXED_PUNCTURE_PATTERN;
+
+	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
+		if ((1 << (freq - start_freq) / MHZ_TO_KHZ(20)) & puncture_bitmap)
+			continue;
+
+		c = ieee80211_get_channel_khz(wiphy, freq);
+		if (!c || c->flags & prohibited_flags)
+			return false;
+	}
+
+	return true;
+}
+#endif
 
 /* check if the operating channels are valid and supported */
 static bool cfg80211_edmg_usable(struct wiphy *wiphy, u8 edmg_channels,
@@ -1231,8 +1264,16 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 		prohibited_flags |= IEEE80211_CHAN_NO_320MHZ;
 		width = 320;
 
-		if (chandef->chan->band != NL80211_BAND_6GHZ)
+		if ((!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT)) &&
+		    chandef->chan->band != NL80211_BAND_6GHZ)
 			return false;
+
+		if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT)) {
+			if (chandef->chan->band == NL80211_BAND_5GHZ)
+				sband = wiphy->bands[NL80211_BAND_5GHZ];
+			else if (chandef->chan->band == NL80211_BAND_6GHZ)
+				sband = wiphy->bands[NL80211_BAND_6GHZ];
+		}
 
 		sband = wiphy->bands[NL80211_BAND_6GHZ];
 		if (!sband)
@@ -1276,17 +1317,19 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 	if (width < 20)
 		prohibited_flags |= IEEE80211_CHAN_NO_OFDM;
 
-
 	if (!cfg80211_secondary_chans_ok(wiphy,
 					 ieee80211_chandef_to_khz(chandef),
-					 width, prohibited_flags))
+					 width, prohibited_flags,
+					 chandef->chan->band))
 		return false;
 
 	if (!chandef->center_freq2)
 		return true;
+
 	return cfg80211_secondary_chans_ok(wiphy,
 					   MHZ_TO_KHZ(chandef->center_freq2),
-					   width, prohibited_flags);
+					   width, prohibited_flags,
+					   chandef->chan->band);
 }
 EXPORT_SYMBOL(cfg80211_chandef_usable);
 

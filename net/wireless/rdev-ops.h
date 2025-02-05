@@ -606,6 +606,18 @@ static inline int rdev_get_tx_power(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
+static inline int rdev_get_tx_power_mlo(struct cfg80211_registered_device *rdev,
+					struct wireless_dev *wdev,
+					unsigned int link_id, int *dbm)
+{
+	int ret;
+
+	trace_rdev_get_tx_power(&rdev->wiphy, wdev);
+	ret = rdev->ops->get_tx_power_link(&rdev->wiphy, wdev, link_id, dbm);
+	trace_rdev_return_int_int(&rdev->wiphy, ret, *dbm);
+	return ret;
+}
+
 static inline int
 rdev_set_multicast_to_unicast(struct cfg80211_registered_device *rdev,
 			      struct net_device *dev,
@@ -1457,6 +1469,23 @@ rdev_del_intf_link(struct cfg80211_registered_device *rdev,
 	if (rdev->ops->del_intf_link)
 		rdev->ops->del_intf_link(&rdev->wiphy, wdev, link_id);
 	trace_rdev_return_void(&rdev->wiphy);
+}
+
+static inline int
+rdev_link_reconfig_remove(struct cfg80211_registered_device *rdev,
+			  struct net_device *dev,
+			  const struct cfg80211_link_reconfig_removal_params *params)
+{
+	int ret = -EOPNOTSUPP;
+
+	trace_rdev_link_reconfig_remove(&rdev->wiphy, dev, params);
+
+	if (rdev->ops->link_reconfig_remove)
+		ret = rdev->ops->link_reconfig_remove(&rdev->wiphy, dev,
+						      params);
+
+	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
 }
 
 static inline int

@@ -2643,6 +2643,24 @@ bool cfg80211_iftype_allowed(struct wiphy *wiphy, enum nl80211_iftype iftype,
 }
 EXPORT_SYMBOL(cfg80211_iftype_allowed);
 
+int cfg80211_link_reconfig_remove(struct wireless_dev *wdev,
+				  const struct cfg80211_link_reconfig_removal_params *params)
+{
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
+	int ret = -EINVAL;
+
+	lockdep_assert_wiphy(wdev->wiphy);
+
+	/* Currently, removal of link from MLD is supported for AP BSS only, it
+	 * can be extended for non-AP/STA MLD as well but that shall use
+	 * action frame to update about its link reconfiguration.
+	 */
+	if (wdev->iftype == NL80211_IFTYPE_AP)
+		ret = rdev_link_reconfig_remove(rdev, wdev->netdev, params);
+
+	return ret;
+}
+
 void cfg80211_remove_link(struct wireless_dev *wdev, unsigned int link_id)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wdev->wiphy);
@@ -2658,6 +2676,7 @@ void cfg80211_remove_link(struct wireless_dev *wdev, unsigned int link_id)
 		/* per-link not relevant */
 		break;
 	}
+
 	if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
 		wdev->valid_links &= ~BIT(link_id);
 
@@ -2665,6 +2684,8 @@ void cfg80211_remove_link(struct wireless_dev *wdev, unsigned int link_id)
 
 	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
 		wdev->valid_links &= ~BIT(link_id);
+
+	wdev->fallback_valid_links &= ~BIT(link_id);
 
 	eth_zero_addr(wdev->links[link_id].addr);
 }
@@ -2704,6 +2725,9 @@ void cfg80211_remove_links(struct wireless_dev *wdev)
 	wdev_lock(wdev);
 	if (wdev->valid_links) {
 		for_each_valid_link(wdev, link_id)
+			cfg80211_remove_link(wdev, link_id);
+	} else if (wdev->fallback_valid_links) {
+		for_each_fallback_valid_link(wdev, link_id)
 			cfg80211_remove_link(wdev, link_id);
 	}
 	wdev_unlock(wdev);

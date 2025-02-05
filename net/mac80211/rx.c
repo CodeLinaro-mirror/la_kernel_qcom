@@ -1824,10 +1824,17 @@ ieee80211_rx_h_sta_process(struct ieee80211_rx_data *rx)
 		    (rx->sdata->vif.type == NL80211_IFTYPE_AP ||
 		     (rx->sdata->vif.type == NL80211_IFTYPE_AP_VLAN &&
 		      !rx->sdata->u.vlan.sta))) {
-			if (!test_and_set_sta_flag(sta, WLAN_STA_4ADDR_EVENT))
-				cfg80211_rx_unexpected_4addr_frame(
-					rx->sdata->dev, sta->sta.addr,
-					GFP_ATOMIC);
+			if (!test_and_set_sta_flag(sta, WLAN_STA_4ADDR_EVENT)) {
+				if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+					cfg80211_rx_unexpected_4addr_frame(rx->sdata->dev,
+									   sta->sta.addr,
+									   GFP_ATOMIC);
+				else
+					cfg80211_rx_unexpected_4addr_frame_mlo(rx->sdata->dev,
+									       sta->sta.addr,
+									       GFP_ATOMIC,
+									       rx->link_id);
+			}
 			return RX_DROP_M_UNEXPECTED_4ADDR_FRAME;
 		}
 		/*
@@ -3145,9 +3152,17 @@ ieee80211_rx_h_data(struct ieee80211_rx_data *rx)
 	if (ieee80211_has_a4(hdr->frame_control) &&
 	    sdata->vif.type == NL80211_IFTYPE_AP) {
 		if (rx->sta &&
-		    !test_and_set_sta_flag(rx->sta, WLAN_STA_4ADDR_EVENT))
-			cfg80211_rx_unexpected_4addr_frame(
-				rx->sdata->dev, rx->sta->sta.addr, GFP_ATOMIC);
+		    !test_and_set_sta_flag(rx->sta, WLAN_STA_4ADDR_EVENT)) {
+			if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+				cfg80211_rx_unexpected_4addr_frame(rx->sdata->dev,
+								   rx->sta->sta.addr,
+								   GFP_ATOMIC);
+			else
+				cfg80211_rx_unexpected_4addr_frame_mlo(rx->sdata->dev,
+								       rx->sta->sta.addr,
+								       GFP_ATOMIC,
+								       rx->link_id);
+		}
 		return RX_DROP_MONITOR;
 	}
 

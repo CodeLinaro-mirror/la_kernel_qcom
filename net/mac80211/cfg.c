@@ -2176,14 +2176,56 @@ static int ieee80211_change_station(struct wiphy *wiphy,
 		vlansdata = IEEE80211_DEV_TO_SUB_IF(params->vlan);
 
 		if (params->vlan->ieee80211_ptr->use_4addr) {
+			struct ieee80211_sub_if_data *master;
+			struct ieee80211_vif *mvif;
+			struct wireless_dev *wdev;
+
 			if (vlansdata->u.vlan.sta) {
 				err = -EBUSY;
 				goto out_err;
 			}
 
+			if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT)) {
+				wdev = &vlansdata->wdev;
+				master = container_of(vlansdata->bss,
+						      struct ieee80211_sub_if_data,
+						      u.ap);
+				mvif = &master->vif;
+			}
+
 			rcu_assign_pointer(vlansdata->u.vlan.sta, sta);
 			__ieee80211_check_fast_rx_iface(vlansdata);
 			drv_sta_set_4addr(local, sta->sdata, &sta->sta, true);
+			if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+			    sta->sta.valid_links) {
+				int link_id;
+				struct ieee80211_vif *vif = &vlansdata->vif;
+
+				for_each_set_bit(link_id,
+						 (const unsigned long *)&mvif->valid_links,
+						 IEEE80211_MLD_MAX_NUM_LINKS) {
+					if (!(sta->sta.valid_links & BIT(link_id))) {
+						rcu_assign_pointer(vif->link_conf[link_id],
+								   NULL);
+						rcu_assign_pointer(vlansdata->link[link_id],
+								   NULL);
+						memset(wdev->links[link_id].addr,
+						       0, ETH_ALEN);
+						vif->valid_links &= ~BIT(link_id);
+						wdev->valid_links &= ~BIT(link_id);
+					} else {
+						rcu_assign_pointer(vif->link_conf[link_id],
+								   mvif->link_conf[link_id]);
+						rcu_assign_pointer(vlansdata->link[link_id],
+								   master->link[link_id]);
+						memcpy(wdev->links[link_id].addr,
+						       vif->link_conf[link_id]->bssid,
+						       ETH_ALEN);
+						vif->valid_links |= BIT(link_id);
+						wdev->valid_links |= BIT(link_id);
+					}
+				}
+			}
 		}
 
 		if (sta->sdata->vif.type == NL80211_IFTYPE_AP_VLAN &&
@@ -4898,6 +4940,7 @@ static void ieee80211_del_intf_link(struct wiphy *wiphy,
 
 	mutex_lock(&sdata->local->mtx);
 	ieee80211_vif_set_links(sdata, wdev->valid_links, 0);
+	ieee80211_vif_set_links(sdata, wdev->fallback_valid_links, 0);
 	mutex_unlock(&sdata->local->mtx);
 }
 

@@ -17,7 +17,6 @@ le_targets = [
     "sdxkova",
     "sdxkova.512",
     "sdxkova.cpe.wkk",
-    "sun-allyes",
 ]
 
 le_32_targets = [

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "qcom-pmu: " fmt
@@ -847,6 +847,7 @@ static void unload_pmu_counters(void)
 	pmu_counters_enabled = false;
 }
 
+#define PMU_INIT_RETRY_COUNT	5
 static int setup_events(void)
 {
 	struct perf_event_attr *attr = alloc_attr();
@@ -855,6 +856,7 @@ static int setup_events(void)
 	unsigned int cpu;
 	struct event_data *event;
 	unsigned long flags;
+	static int pmu_init_retry;
 
 	if (!attr)
 		return -ENOMEM;
@@ -876,8 +878,14 @@ static int setup_events(void)
 				 */
 				if (ret == -EPROBE_DEFER)
 					goto cleanup_events;
-				else
-					ret = 0;
+				else {
+					if (!qcom_pmu_inited && (pmu_init_retry++ <
+								PMU_INIT_RETRY_COUNT)) {
+						ret = -EPROBE_DEFER;
+						goto cleanup_events;
+					} else
+						ret = 0;
+				}
 			}
 		}
 		spin_lock_irqsave(&cpu_data->read_lock, flags);

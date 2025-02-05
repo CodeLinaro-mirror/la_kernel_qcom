@@ -714,6 +714,9 @@ static inline void wiphy_read_of_freq_limits(struct wiphy *wiphy)
  *	belonging to that MU-MIMO groupID; %NULL if not changed
  * @vht_mumimo_follow_addr: MU-MIMO follow address, used for monitoring
  *	MU-MIMO packets going to the specified station; %NULL if not changed
+ * @radio_iface: Radio iface name
+ * @mld_macaddr: MLO address to use for this virtual interface.
+ * @mld_iface_name: MLO interface name to use for this virtual interface.
  */
 struct vif_params {
 	u32 flags;
@@ -721,6 +724,9 @@ struct vif_params {
 	u8 macaddr[ETH_ALEN];
 	const u8 *vht_mumimo_groups;
 	const u8 *vht_mumimo_follow_addr;
+	char *radio_iface;
+	u8 mld_macaddr[ETH_ALEN];
+	char *mld_iface_name;
 };
 
 /**
@@ -1436,6 +1442,8 @@ struct cfg80211_ap_settings {
  * @punct_bitmap: Preamble puncturing bitmap. Each bit represents
  *	a 20 MHz channel, lowest bit corresponding to the lowest channel.
  *	Bit set to 1 indicates that the channel is punctured.
+ * @link_id: defines the link on which channel switch is expected during
+ *	MLO. 0 in case of non-MLO.
  */
 struct cfg80211_csa_settings {
 	struct cfg80211_chan_def chandef;
@@ -1449,6 +1457,7 @@ struct cfg80211_csa_settings {
 	bool block_tx;
 	u8 count;
 	u16 punct_bitmap;
+	u8 link_id;
 
 	ANDROID_KABI_RESERVE(1);
 };
@@ -2947,6 +2956,8 @@ struct cfg80211_auth_request {
  * struct cfg80211_assoc_link - per-link information for MLO association
  * @bss: the BSS pointer, see also &struct cfg80211_assoc_request::bss;
  *	if this is %NULL for a link, that link is not requested
+ * @bssid: AP BSSID
+ * @freq: frequency of the link
  * @elems: extra elements for the per-STA profile for this link
  * @elems_len: length of the elements
  * @disabled: If set this link should be included during association etc. but it
@@ -2954,6 +2965,8 @@ struct cfg80211_auth_request {
  */
 struct cfg80211_assoc_link {
 	struct cfg80211_bss *bss;
+	const u8 *bssid;
+	unsigned int freq;
 	const u8 *elems;
 	size_t elems_len;
 	bool disabled;
@@ -3225,6 +3238,11 @@ struct cfg80211_bss_selection {
  * @edmg: define the EDMG channels.
  *	This may specify multiple channels and bonding options for the driver
  *	to choose from, based on BSS configuration.
+ * @links: per-link information for MLO connections
+ * @link_id: >= 0 for MLO connections, where links are given, and indicates
+ *	the link on which the connection is being done
+ * @ap_mld_addr: AP MLD address in case of MLO association request,
+ *	valid iff @link_id >= 0
  */
 struct cfg80211_connect_params {
 	struct ieee80211_channel *channel;
@@ -3259,6 +3277,9 @@ struct cfg80211_connect_params {
 	size_t fils_erp_rrk_len;
 	bool want_1x;
 	struct ieee80211_edmg edmg;
+	struct cfg80211_assoc_link links[IEEE80211_MLD_MAX_NUM_LINKS];
+	const u8 *ap_mld_addr;
+	s8 link_id;
 
 	ANDROID_KABI_RESERVE(1);
 };
@@ -4072,6 +4093,23 @@ struct mgmt_frame_regs {
 };
 
 /**
+ * struct cfg80211_link_reconfig_removal_params - Contains params needed for
+ * link reconfig removal
+ * @link_removal_cntdown: TBTT countdown value until which the beacon with ML
+ *	reconfigure IE will be sent.
+ * @ie: ML reconfigure IE to be updated in beacon in the link going to be
+ *	removed and in all affiliated links.
+ * @ie_len: ML reconfigure IE length
+ * @link_id: Link id of the link to be removed.
+ */
+struct cfg80211_link_reconfig_removal_params {
+	u16 link_removal_cntdown;
+	const u8 *ie;
+	size_t ie_len;
+	unsigned int link_id;
+};
+
+/**
  * struct cfg80211_ops - backend description for wireless configuration
  *
  * This struct is registered by fullmac card drivers and/or wireless stacks
@@ -4472,6 +4510,11 @@ struct mgmt_frame_regs {
  *
  * @set_hw_timestamp: Enable/disable HW timestamping of TM/FTM frames.
  * @set_ttlm: set the TID to link mapping.
+ *
+ * @link_reconfig_remove: Notifies the driver about the link to be
+ *	scheduled for removal with ML reconfigure IE built for that particular
+ *	link along with the TBTT count until which the beacon with ML
+ *	reconfigure IE should be sent.
  */
 struct cfg80211_ops {
 	int	(*suspend)(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
@@ -4619,8 +4662,12 @@ struct cfg80211_ops {
 
 	int	(*set_tx_power)(struct wiphy *wiphy, struct wireless_dev *wdev,
 				enum nl80211_tx_power_setting type, int mbm);
+
 	int	(*get_tx_power)(struct wiphy *wiphy, struct wireless_dev *wdev,
 				int *dbm);
+
+	int	(*get_tx_power_link)(struct wiphy *wiphy, struct wireless_dev *wdev,
+				unsigned int link_id, int *dbm);
 
 	void	(*rfkill_poll)(struct wiphy *wiphy);
 
@@ -4833,6 +4880,9 @@ struct cfg80211_ops {
 				    struct cfg80211_set_hw_timestamp *hwts);
 	int	(*set_ttlm)(struct wiphy *wiphy, struct net_device *dev,
 			    struct cfg80211_ttlm_params *params);
+	int	(*link_reconfig_remove)(struct wiphy *wiphy,
+		struct net_device *dev,
+		const struct cfg80211_link_reconfig_removal_params *params);
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
@@ -6176,6 +6226,7 @@ struct wireless_dev {
 		};
 	} links[IEEE80211_MLD_MAX_NUM_LINKS];
 	u16 valid_links;
+	u16 fallback_valid_links;
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
@@ -6224,6 +6275,14 @@ static inline void WARN_INVALID_LINK_ID(struct wireless_dev *wdev,
 	WARN_ON(wdev->valid_links &&
 		!(wdev->valid_links & BIT(link_id)));
 }
+
+#define for_each_fallback_valid_link(link_info, link_id)		\
+	for ((link_id) = 0;						\
+	     (link_id) < ((link_info)->fallback_valid_links ?		\
+			ARRAY_SIZE((link_info)->links) : 0);		\
+	     (link_id)++)						\
+		if (!(link_info)->fallback_valid_links ||		\
+		    ((link_info)->fallback_valid_links & BIT(link_id)))
 
 #define for_each_valid_link(link_info, link_id)			\
 	for (link_id = 0;					\
@@ -7849,6 +7908,7 @@ struct cfg80211_connect_resp_params {
 
 	const u8 *ap_mld_addr;
 	u16 valid_links;
+	u16 fallback_valid_links;
 	struct {
 		const u8 *addr;
 		const u8 *bssid;
@@ -8312,6 +8372,7 @@ static inline bool cfg80211_rx_mgmt(struct wireless_dev *wdev, int freq,
  * @buf: Management frame (header + body)
  * @len: length of the frame data
  * @ack: Whether frame was acknowledged
+ * @link_id: mlo link id
  */
 struct cfg80211_tx_status {
 	u64 cookie;
@@ -8320,6 +8381,7 @@ struct cfg80211_tx_status {
 	const u8 *buf;
 	size_t len;
 	bool ack;
+	int link_id;
 };
 
 /**
@@ -8348,6 +8410,7 @@ void cfg80211_mgmt_tx_status_ext(struct wireless_dev *wdev,
  * transmitted with cfg80211_ops::mgmt_tx() to report the TX status of the
  * transmission attempt.
  */
+#ifndef CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 static inline void cfg80211_mgmt_tx_status(struct wireless_dev *wdev,
 					   u64 cookie, const u8 *buf,
 					   size_t len, bool ack, gfp_t gfp)
@@ -8361,6 +8424,23 @@ static inline void cfg80211_mgmt_tx_status(struct wireless_dev *wdev,
 
 	cfg80211_mgmt_tx_status_ext(wdev, &status, gfp);
 }
+#else
+static inline void cfg80211_mgmt_tx_status(struct wireless_dev *wdev,
+					   u64 cookie, const u8 *buf,
+					   size_t len, bool ack, int link_id,
+					   gfp_t gfp)
+{
+	struct cfg80211_tx_status status = {
+		.cookie = cookie,
+		.buf = buf,
+		.len = len,
+		.ack = ack,
+		.link_id = link_id
+	};
+
+	cfg80211_mgmt_tx_status_ext(wdev, &status, gfp);
+}
+#endif
 
 /**
  * cfg80211_control_port_tx_status - notification of TX status for control
@@ -8571,6 +8651,24 @@ bool cfg80211_rx_spurious_frame(struct net_device *dev,
  */
 bool cfg80211_rx_unexpected_4addr_frame(struct net_device *dev,
 					const u8 *addr, gfp_t gfp);
+
+/**
+ * cfg80211_rx_unexpected_4addr_frame_mlo - inform about unexpected WDS frame in mlo
+ * @dev: The device the frame matched to
+ * @addr: the transmitter address
+ * @gfp: context flags
+ * @link_id: link id
+ *
+ * This function is used in AP mode (only!) to inform userspace that
+ * an associated station sent a 4addr frame but that wasn't expected.
+ * It is allowed and desirable to send this event only once for each
+ * station to avoid event flooding.
+ * Return: %true if the frame was passed to userspace (or this failed
+ * for a reason other than not having a subscription.)
+ */
+bool cfg80211_rx_unexpected_4addr_frame_mlo(struct net_device *dev,
+					const u8 *addr, gfp_t gfp,
+					const int link_id);
 
 /**
  * cfg80211_probe_status - notify userspace about probe status
@@ -9310,4 +9408,42 @@ bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
  */
 void cfg80211_links_removed(struct net_device *dev, u16 link_mask);
 
+enum ieee80211_link_reconfig_remove_state {
+	IEEE80211_LINK_RECONFIG_START,
+	IEEE80211_LINK_RECONFIG_COMPLETE,
+};
+
+/**
+ * cfg80211_update_link_reconfig_remove_status - Inform userspace about
+ *	the removal status of link which is scheduled for removal
+ * @dev: the device on which the operation is requested
+ * @link_id: Link which is undergoing removal
+ * @tbtt_count: Current tbtt_count to be updated.
+ * @tsf: Beacon's timestamp value
+ * @bcn_intr: Beacon interval value
+ * @status: Inform started or completed action to userspace based on the value
+ *	received,
+ *	i) 0 (IEEE80211_LINK_RECONFIG_START) - Send
+ *		NL80211_CMD_LINK_REMOVAL_STARTED
+ *	ii) 1 (IEEE80211_LINK_RECONFIG_COMPLETE) - Send
+ *		NL80211_CMD_LINK_REMOVAL_COMPLETED
+ *
+ *
+ * This function is used to inform userspace about the ongoing link removal
+ * status. 'IEEE80211_LINK_RECONFIG_START' is issued when the first beacon with
+ * ML reconfigure IE is sent out. This event can be used by userspace to start
+ * the BTM in case of AP mode. And, IEEE80211_LINK_RECONFIG_COMPLETE is issued
+ * when the last beacon is sent with ML reconfigure IE. This is used to
+ * initiate the deletion of that link, also to trigger deauth/disassoc for the
+ * associated peer(s).
+ *
+ * Note: This API is currently used by drivers which supports offloaded
+ * Multi-Link reconfigure link removal. Returns failure if FEATURE FLAG is not
+ * set or success if NL message is sent.
+ */
+int
+cfg80211_update_link_reconfig_remove_status(struct net_device *dev,
+					    unsigned int link_id,
+					    u16 tbtt_count, u64 tsf, u32 bcn_intr,
+					    enum ieee80211_link_reconfig_remove_state action);
 #endif /* __NET_CFG80211_H */
