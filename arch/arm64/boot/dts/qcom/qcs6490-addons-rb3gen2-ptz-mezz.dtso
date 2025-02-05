@@ -4,13 +4,17 @@
  */
 
 /dts-v1/;
+/plugin/;
 
-#include "qcs6490-rb3gen2.dts"
-#include "qcs6490-addons-rb3gen2.dtsi"
+/* PM7250B is configured to use SID8/9 */
+#define PM7250B_SID 8
+#define PM7250B_SID1 9
 
-/ {
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/thermal/thermal.h>
+
+&{/} {
 	model = "Qualcomm Technologies, Inc. Robotics RB3gen2 addons ptz mezz platform";
-	compatible = "qcom,qcs6490-addons-rb3gen2-ptz-mezz", "qcom,qcm6490";
 };
 
 &spmi_bus {

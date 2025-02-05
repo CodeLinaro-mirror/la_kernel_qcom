@@ -4,19 +4,24 @@
  */
 
 /dts-v1/;
+/plugin/;
 
-#include "qcs6490-rb3gen2.dts"
-#include "qcs6490-addons-rb3gen2.dtsi"
+/* PM7250B is configured to use SID8/9 */
+#define PM7250B_SID 8
+#define PM7250B_SID1 9
 
-/ {
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
+#include <dt-bindings/thermal/thermal.h>
+
+&{/} {
 	model = "Qualcomm Technologies, Inc. Robotics RB3gen2 addons ia mezz platform";
-	compatible = "qcom,qcs6490-addons-rb3gen2-ia-mezz", "qcom,qcm6490";
-
-	qcom,msm-id = <497 0x10000>, <498 0x10000>, <475 0x10000>, <515 0x10000>;
 	qcom,board-id = <32 0x9>, <32 0x609>;
 
 	aliases {
-		hsuart0 = &uart4;
+		hsuart0 = "/soc@0/serial@990000";
 	};
 
 	wcd9375: audio-codec-0 {
@@ -381,6 +386,22 @@
 	status = "okay";
 };
 
+&soc {
+	leds {
+		compatible = "gpio-leds";
+
+		led-0 {
+			label = "blue:user1";
+			function = LED_FUNCTION_INDICATOR;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&pm8350c_gpios 9 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+			panic-indicator;
+			status = "okay";
+		};
+	};
+};
+
 &sound {
 	compatible = "qcom,qcs6490-rb3gen2-ia-sndcard";
 	model = "qcm6490-rb3-ia-snd-card";
@@ -435,22 +456,6 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&gpio5_dig_out_default>;
 		status = "okay";
-	};
-};
-
-&spmi_bus {
-	pmic@PM7250B_SID {
-		pm7250b_bcl: bcl@1d00 {
-			compatible = "qcom,bcl-v5";
-			reg = <0x1d00>;
-			interrupts = <PM7250B_SID 0x1d 0x0 IRQ_TYPE_EDGE_RISING>,
-					<PM7250B_SID 0x1d 0x1 IRQ_TYPE_EDGE_RISING>,
-					<PM7250B_SID 0x1d 0x2 IRQ_TYPE_EDGE_RISING>;
-			interrupt-names = "bcl-lvl0",
-						"bcl-lvl1",
-						"bcl-lvl2";
-			#thermal-sensor-cells = <1>;
-		};
 	};
 };
 
@@ -647,20 +652,4 @@
 
 &uart4 {
 	status = "okay";
-};
-
-&soc {
-	leds {
-		compatible = "gpio-leds";
-
-		led-0 {
-			label = "blue:user1";
-			function = LED_FUNCTION_INDICATOR;
-			color = <LED_COLOR_ID_BLUE>;
-			gpios = <&pm8350c_gpios 9 GPIO_ACTIVE_HIGH>;
-			default-state = "off";
-			panic-indicator;
-			status = "okay";
-		};
-	};
 };
