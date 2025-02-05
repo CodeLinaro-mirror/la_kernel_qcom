@@ -17,6 +17,8 @@
 #include <linux/dma-direct.h>
 #include <linux/dma-map-ops.h>
 #include <linux/highmem.h>
+#include <linux/iommu.h>
+#include <linux/dma-mapping-fast.h>
 #include <linux/memblock.h>
 #include <linux/slab.h>
 #include <linux/iommu.h>
@@ -1712,7 +1714,8 @@ void arm_iommu_detach_device(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(arm_iommu_detach_device);
 
-static void arm_setup_iommu_dma_ops(struct device *dev, u64 dma_base, u64 size,
+static void __maybe_unused
+arm_setup_iommu_dma_ops(struct device *dev, u64 dma_base, u64 size,
 				    const struct iommu_ops *iommu, bool coherent)
 {
 	struct dma_iommu_mapping *mapping;
@@ -1747,7 +1750,8 @@ static void arm_teardown_iommu_dma_ops(struct device *dev)
 
 #else
 
-static void arm_setup_iommu_dma_ops(struct device *dev, u64 dma_base, u64 size,
+static void __maybe_unused
+arm_setup_iommu_dma_ops(struct device *dev, u64 dma_base, u64 size,
 				    const struct iommu_ops *iommu, bool coherent)
 {
 }
@@ -1776,8 +1780,10 @@ void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
 	if (dev->dma_ops)
 		return;
 
-	if (iommu)
-		arm_setup_iommu_dma_ops(dev, dma_base, size, iommu, coherent);
+	if (iommu) {
+		iommu_setup_dma_ops(dev, dma_base, dma_base + size - 1);
+		fast_smmu_setup_dma_ops(dev, dma_base, dma_base + size - 1);
+	}
 
 	xen_setup_dma_ops(dev);
 	dev->archdata.dma_ops_setup = true;
