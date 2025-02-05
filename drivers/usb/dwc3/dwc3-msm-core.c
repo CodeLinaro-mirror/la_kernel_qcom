@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -4864,6 +4864,14 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 		}
 
 		if (!spoof && mdwc->drd_state != DRD_STATE_UNDEFINED) {
+		/*
+		 * If bus suspend feature is enabled, increase the autosuspend delay to default,
+		 * so that the HS-USB re-enumeration isn't interrupted by dwc3 RT suspend.
+		 */
+			if (!event && dwc->runtime_suspend_on_usb_suspend)
+				pm_runtime_set_autosuspend_delay(dwc->dev,
+						DWC3_DEFAULT_AUTOSUSPEND_DELAY);
+
 			dwc3_override_vbus_status(mdwc, !!event);
 			return NOTIFY_DONE;
 		}
