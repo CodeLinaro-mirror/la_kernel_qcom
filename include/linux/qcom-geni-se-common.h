@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _LINUX_QCOM_GENI_SE_COMMON
@@ -12,6 +12,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/sched/clock.h>
 #include <linux/ipc_logging.h>
+#include <linux/math64.h>
 
 #ifdef CONFIG_ARM64
 #define GENI_SE_DMA_PTR_L(ptr) ((u32)ptr)
@@ -495,7 +496,7 @@ static inline unsigned long long geni_capture_start_time(struct geni_se *se, voi
 		start_time = sched_clock();
 		GENI_SE_ERR(ipc, false, dev,
 			    "%s:start at %llu nsec(%llu usec)\n", func,
-			    start_time, (start_time / 1000));
+			    start_time, div_u64(start_time, NSEC_PER_USEC));
 	}
 	return start_time;
 }
@@ -527,15 +528,15 @@ static inline void geni_capture_stop_time(struct geni_se *se, void *ipc,
 		if (!len)
 			GENI_SE_ERR(ipc, false, dev,
 				    "%s:took %llu nsec(%llu usec)\n",
-				    func, exec_time, (exec_time / 1000));
+				    func, exec_time, div_u64(exec_time, NSEC_PER_USEC));
 		else if (len != 0 && freq != 0)
 			GENI_SE_ERR(ipc, false, dev,
 				    "%s:took %llu nsec(%llu usec) for %u bytes with freq %u\n",
-				    func, exec_time, (exec_time / 1000), len, freq);
+				    func, exec_time, div_u64(exec_time, NSEC_PER_USEC), len, freq);
 		else
 			GENI_SE_ERR(ipc, false, dev,
 				    "%s:took %llu nsec(%llu usec) for %u bytes\n", func,
-				    exec_time, (exec_time / 1000), len);
+				    exec_time, div_u64(exec_time, NSEC_PER_USEC), len);
 	}
 }
 #endif
