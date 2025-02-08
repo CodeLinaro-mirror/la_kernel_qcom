@@ -150,6 +150,10 @@ qcs615-addons-ride-dtbs:= qcs615-ride.dtb qcs615-addons-ride.dtbo
 dtb-$(CONFIG_ARCH_QCOM) += qcs615-addons-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs615-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-rb3gen2.dtb
+
+qcs6490-rb3gen2-vision-mezzanine-dtbs := qcs6490-rb3gen2.dtb qcs6490-rb3gen2-vision-mezzanine.dtbo
+
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-rb3gen2-vision-mezzanine.dtb
 qcs8300-addons-ride-dtbs:= qcs8300-ride.dtb qcs8300-addons-ride.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-addons-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-ride.dtb
