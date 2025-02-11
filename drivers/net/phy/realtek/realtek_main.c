@@ -104,6 +104,13 @@
 
 #define RTL8211F_LED_COUNT			3
 
+#define RTL822x_INER			0xa4d2
+#define RTL822x_INSR			0xa4d4
+#define RTL8221x_ISR_ANEG			BIT(3)
+#define RTL8221x_ISR_LINK			BIT(4)
+#define RTL8221x_ISR_MASK			(RTL8221x_ISR_ANEG | \
+							RTL8221x_ISR_LINK)
+
 MODULE_DESCRIPTION("Realtek PHY driver");
 MODULE_AUTHOR("Johnson Leung");
 MODULE_LICENSE("GPL");
@@ -1003,6 +1010,54 @@ static int rtl822xb_read_status(struct phy_device *phydev)
 	return 0;
 }
 
+static int rtl822x_ack_interrupt(struct phy_device *phydev)
+{
+	int err;
+
+	err = phy_read_mmd(phydev, MDIO_MMD_VEND2, RTL822x_INSR);
+
+	return (err < 0) ? err : 0;
+}
+
+static int rtl822x_config_intr(struct phy_device *phydev)
+{
+	int ret = 0;
+
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		ret = rtl822x_ack_interrupt(phydev);
+		if (ret)
+			return ret;
+
+		ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, RTL822x_INER, RTL8221x_ISR_MASK);
+	} else {
+		ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, RTL822x_INER, 0);
+		if (ret < 0)
+			return ret;
+
+		ret = rtl822x_ack_interrupt(phydev);
+	}
+
+	return ret;
+}
+
+static irqreturn_t rtl822x_handle_interrupt(struct phy_device *phydev)
+{
+	int irq_status;
+
+	irq_status = phy_read_mmd(phydev, MDIO_MMD_VEND2, RTL822x_INSR);
+	if (irq_status < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	if (!(irq_status & RTL8221x_ISR_MASK))
+		return IRQ_NONE;
+
+	phy_trigger_machine(phydev);
+
+	return IRQ_HANDLED;
+}
+
 static int rtl822x_c45_get_features(struct phy_device *phydev)
 {
 	linkmode_set_bit(ETHTOOL_LINK_MODE_TP_BIT,
@@ -1513,6 +1568,8 @@ static struct phy_driver realtek_drvs[] = {
 		.name           = "RTL8221B-VN-CG 2.5Gbps PHY (C45)",
 		.probe		= rtl822x_probe,
 		.config_init    = rtl822xb_config_init,
+		.config_intr  = rtl822x_config_intr,
+		.handle_interrupt = rtl822x_handle_interrupt,
 		.get_rate_matching = rtl822xb_get_rate_matching,
 		.get_features   = rtl822x_c45_get_features,
 		.config_aneg    = rtl822x_c45_config_aneg,
