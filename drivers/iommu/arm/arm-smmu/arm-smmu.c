@@ -14,7 +14,7 @@
  *	- Context fault reporting
  *	- Extended Stream ID (16 bit)
  *
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "arm-smmu: " fmt
@@ -1480,7 +1480,7 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 			if (smmu->options & ARM_SMMU_OPT_3LVL_TABLES)
 				ias = min(ias, 39UL);
 		} else if (cfg->fmt == ARM_SMMU_CTX_FMT_AARCH32_L) {
-			fmt = ARM_32_LPAE_S1;
+			fmt = QCOM_ARM_32_LPAE_S1;
 			ias = min(ias, 32UL);
 			oas = min(oas, 40UL);
 		} else {
