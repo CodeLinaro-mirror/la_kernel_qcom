@@ -188,6 +188,7 @@ arch/arm64/include/asm/tlb.h
 arch/arm64/include/asm/tlbbatch.h
 arch/arm64/include/asm/tlbflush.h
 arch/arm64/include/asm/topology.h
+arch/arm64/include/asm/trans_pgd.h
 arch/arm64/include/asm/traps.h
 arch/arm64/include/asm/uaccess.h
 arch/arm64/include/asm/unistd.h
@@ -248,6 +249,8 @@ arch/arm64/kernel/entry-fpsimd.S
 arch/arm64/kernel/entry.S
 arch/arm64/kernel/fpsimd.c
 arch/arm64/kernel/head.S
+arch/arm64/kernel/hibernate-asm.S
+arch/arm64/kernel/hibernate.c
 arch/arm64/kernel/hw_breakpoint.c
 arch/arm64/kernel/hyp-stub.S
 arch/arm64/kernel/idle.c
@@ -474,6 +477,8 @@ arch/arm64/mm/pageattr.c
 arch/arm64/mm/pgd.c
 arch/arm64/mm/proc.S
 arch/arm64/mm/ptdump.c
+arch/arm64/mm/trans_pgd-asm.S
+arch/arm64/mm/trans_pgd.c
 arch/arm64/net/bpf_jit.h
 arch/arm64/net/bpf_jit_comp.c
 arch/arm64/tools/gen-hyprel.c
@@ -1228,6 +1233,7 @@ drivers/mailbox/mailbox.h
 drivers/mailbox/sun6i-msgbox.c
 drivers/mailbox/tegra-hsp.c
 drivers/md/dm-audit.h
+drivers/md/dm-bow.c
 drivers/md/dm-bufio.c
 drivers/md/dm-builtin.c
 drivers/md/dm-core.h
@@ -2937,6 +2943,7 @@ include/linux/crc8.h
 include/linux/cred.h
 include/linux/crypto.h
 include/linux/ctype.h
+include/linux/damon.h
 include/linux/dax.h
 include/linux/dcache.h
 include/linux/dccp.h
@@ -4374,6 +4381,7 @@ include/trace/events/cma.h
 include/trace/events/compaction.h
 include/trace/events/cpuhp.h
 include/trace/events/csd.h
+include/trace/events/damon.h
 include/trace/events/devfreq.h
 include/trace/events/devlink.h
 include/trace/events/dma_fence.h
@@ -4485,6 +4493,7 @@ include/trace/hooks/futex.h
 include/trace/hooks/gic.h
 include/trace/hooks/gic_v3.h
 include/trace/hooks/gzvm.h
+include/trace/hooks/huge_memory.h
 include/trace/hooks/hung_task.h
 include/trace/hooks/iommu.h
 include/trace/hooks/logbuf.h
@@ -4624,6 +4633,7 @@ include/uapi/linux/ethtool.h
 include/uapi/linux/ethtool_netlink.h
 include/uapi/linux/eventfd.h
 include/uapi/linux/eventpoll.h
+include/uapi/linux/exfat.h
 include/uapi/linux/ext4.h
 include/uapi/linux/f2fs.h
 include/uapi/linux/fadvise.h
@@ -5300,12 +5310,16 @@ kernel/panic.c
 kernel/params.c
 kernel/pid.c
 kernel/power/energy_model.c
+kernel/power/hibernate.c
 kernel/power/main.c
 kernel/power/power.h
 kernel/power/poweroff.c
 kernel/power/process.c
 kernel/power/qos.c
+kernel/power/snapshot.c
 kernel/power/suspend.c
+kernel/power/swap.c
+kernel/power/user.c
 kernel/power/wakelock.c
 kernel/power/wakeup_reason.c
 kernel/printk/braille.h
@@ -5761,6 +5775,16 @@ mm/cma.c
 mm/cma.h
 mm/cma_debug.c
 mm/compaction.c
+mm/damon/core-test.h
+mm/damon/core.c
+mm/damon/ops-common.c
+mm/damon/ops-common.h
+mm/damon/sysfs-common.c
+mm/damon/sysfs-common.h
+mm/damon/sysfs-schemes.c
+mm/damon/sysfs.c
+mm/damon/vaddr-test.h
+mm/damon/vaddr.c
 mm/debug.c
 mm/dmapool.c
 mm/early_ioremap.c

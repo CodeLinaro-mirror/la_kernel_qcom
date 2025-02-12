@@ -469,6 +469,8 @@ static void etm_event_start(struct perf_event *event, int flags)
 	if (!event_data)
 		goto fail;
 
+	/* Save the event_data for this ETM */
+	ctxt->event_data = event_data;
 	/*
 	 * Check if this ETM is allowed to trace, as decided
 	 * at etm_setup_aux(). This could be due to an unreachable
@@ -489,9 +491,6 @@ static void etm_event_start(struct perf_event *event, int flags)
 	sink = coresight_get_sink(path);
 	if (WARN_ON_ONCE(!sink))
 		goto fail_end_stop;
-
-	/* Save the event_data for this ETM */
-	ctxt->event_data = event_data;
 
 	/* Nothing will happen without a path */
 	if (coresight_enable_path(path, CS_MODE_PERF, handle))
@@ -532,6 +531,9 @@ fail_end_stop:
 		perf_aux_output_flag(handle, PERF_AUX_FLAG_TRUNCATED);
 		perf_aux_output_end(handle, 0);
 	}
+
+	ctxt->event_data = NULL;
+
 fail:
 	event->hw.state = PERF_HES_STOPPED;
 	return;
@@ -558,11 +560,11 @@ static void etm_event_stop(struct perf_event *event, int mode)
 	event_data = ctxt->event_data;
 
 	if (event->hw.state == PERF_HES_STOPPED)
-		return;
+		goto out;
 
 	/* We must have a valid event_data for a running event */
 	if (WARN_ON(!event_data))
-		return;
+		goto out;
 
 	/*
 	 * Check if this ETM was allowed to trace, as decided at
@@ -574,28 +576,25 @@ static void etm_event_stop(struct perf_event *event, int mode)
 	    !cpumask_test_cpu(cpu, &event_data->mask)) {
 		event->hw.state = PERF_HES_STOPPED;
 		perf_aux_output_end(handle, 0);
-		return;
+		goto out;
 	}
 
 	if (!csdev)
-		return;
+		goto out;
 
 	path = etm_event_cpu_path(event_data, cpu);
 	if (!path)
-		return;
+		goto out;
 
 	sink = coresight_get_sink(path);
 	if (!sink)
-		return;
+		goto out;
 
 	/* stop tracer */
 	coresight_disable_source(csdev, event);
 
 	/* tell the core */
 	event->hw.state = PERF_HES_STOPPED;
-
-	/* Clear the event_data as this ETM is stopping the trace. */
-	ctxt->event_data = NULL;
 
 	/*
 	 * If the handle is not bound to an event anymore
@@ -605,11 +604,11 @@ static void etm_event_stop(struct perf_event *event, int mode)
 	 */
 	if (handle->event && (mode & PERF_EF_UPDATE)) {
 		if (WARN_ON_ONCE(handle->event != event))
-			return;
+			goto out;
 
 		/* update trace information */
 		if (!sink_ops(sink)->update_buffer)
-			return;
+			goto out;
 
 		size = sink_ops(sink)->update_buffer(sink, handle,
 					      event_data->snk_config);
@@ -632,6 +631,10 @@ static void etm_event_stop(struct perf_event *event, int mode)
 
 	/* Disabling the path make its elements available to other sessions */
 	coresight_disable_path(path);
+
+out:
+	/* Clear the event_data as this ETM is stopping the trace. */
+	ctxt->event_data = NULL;
 }
 
 static int etm_event_add(struct perf_event *event, int mode)

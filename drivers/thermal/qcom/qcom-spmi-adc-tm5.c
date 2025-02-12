@@ -5,7 +5,7 @@
  * Based on original driver:
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -660,13 +660,22 @@ static int adc_tm5_set_trips(struct thermal_zone_device *tz, int low, int high)
 	return ret;
 }
 
+/* WA to add writable trip_temp_*_hyst sysfs node till core has proper fix */
+static int adc_tm5_set_trip_hyst(struct thermal_zone_device *tz,
+			int trip, int hysteresis)
+{
+	return 0;
+};
+
 static const struct thermal_zone_device_ops adc_tm5_thermal_ops = {
 	.get_temp = adc_tm5_get_temp,
 	.set_trips = adc_tm5_set_trips,
+	.set_trip_hyst = adc_tm5_set_trip_hyst,
 };
 
 static const struct thermal_zone_device_ops adc_tm5_thermal_iio_ops = {
 	.get_temp = adc_tm5_get_temp,
+	.set_trip_hyst = adc_tm5_set_trip_hyst,
 };
 
 static int adc_tm5_register_tzd(struct adc_tm5_chip *adc_tm, bool set_trips)

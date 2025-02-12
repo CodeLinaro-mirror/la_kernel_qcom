@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -300,7 +300,6 @@ static struct clk_rcg2 cam_bist_mclk_cc_sleep_clk_src = {
 	.hid_width = 5,
 	.parent_map = cam_bist_mclk_cc_parent_map_1,
 	.freq_tbl = ftbl_cam_bist_mclk_cc_sleep_clk_src,
-	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "cam_bist_mclk_cc_sleep_clk_src",

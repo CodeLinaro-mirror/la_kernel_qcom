@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
 // Copyright (c) 2018, Linaro Limited
-// Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/irq.h>
 #include <linux/kernel.h>
@@ -1656,6 +1656,11 @@ static int qcom_slim_ngd_runtime_resume(struct device *dev)
 		mutex_unlock(&ctrl->suspend_resume_lock);
 		return 0;
 	}
+	if (ctrl->state == QCOM_SLIM_NGD_CTRL_SSR_GOING_DOWN) {
+		SLIM_WARN(ctrl, "%s: Cannot resume as pdr/ssr is initiated\n", __func__);
+		mutex_unlock(&ctrl->suspend_resume_lock);
+		return -EAGAIN;
+	}
 
 	qcom_slim_ngd_enable_irq(ctrl);
 
@@ -1822,6 +1827,11 @@ static int qcom_slim_ngd_ssr_pdr_notify(struct qcom_slim_ngd_ctrl *ctrl,
 {
 	SLIM_INFO(ctrl, "SLIM DSP SSR/PDR notify cb:0x%lx\n", action);
 	switch (action) {
+	case SERVREG_SERVICE_STATE_EARLY_DOWN:
+		mutex_lock(&ctrl->suspend_resume_lock);
+		ctrl->state = QCOM_SLIM_NGD_CTRL_SSR_GOING_DOWN;
+		mutex_unlock(&ctrl->suspend_resume_lock);
+		break;
 	case QCOM_SSR_BEFORE_SHUTDOWN:
 	case SERVREG_SERVICE_STATE_DOWN:
 		SLIM_INFO(ctrl, "SLIM SSR Before Shutdown\n");
@@ -1831,7 +1841,6 @@ static int qcom_slim_ngd_ssr_pdr_notify(struct qcom_slim_ngd_ctrl *ctrl,
 			/* Make sure the last dma xfer is finished */
 			mutex_lock(&ctrl->suspend_resume_lock);
 			mutex_lock(&ctrl->tx_lock);
-			ctrl->state = QCOM_SLIM_NGD_CTRL_SSR_GOING_DOWN;
 			/*
 			 * Mark capability_timeout to false here to handle
 			 * BAM IRQ's from clean state.

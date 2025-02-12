@@ -165,6 +165,7 @@ obj-$(CONFIG_SM_GPUCC_SUN) += gpucc-sun.o
 obj-$(CONFIG_SM_DISPCC_SUN) += dispcc-sun.o
 obj-$(CONFIG_SM_CAMBISTMCLKCC_SUN) += cambistmclkcc-sun.o
 obj-$(CONFIG_SM_TCSRCC_SUN) += tcsrcc-sun.o
+obj-$(CONFIG_SM_DEBUGCC_KERA) += debugcc-kera.o
 obj-$(CONFIG_SM_DEBUGCC_SUN) += debugcc-sun.o
 obj-$(CONFIG_SM_DEBUGCC_TUNA) += debugcc-tuna.o
 obj-$(CONFIG_SM_GPUCC_4450) += gpucc-sm4450.o

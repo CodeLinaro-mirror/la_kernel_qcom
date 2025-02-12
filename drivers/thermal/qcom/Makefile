@@ -16,6 +16,7 @@ qti_qmi_cdev-y += thermal_mitigation_device_service_v01.o qmi_cooling.o
 
 obj-$(CONFIG_QTI_POLICY_ENGINE_SENSOR) += policy_engine.o
 obj-$(CONFIG_QTI_BCL_PMIC5) += bcl_pmic5.o
+bcl_pmic5-y +=  qti_bcl_pmic5.o qti_bcl_stats.o
 obj-$(CONFIG_QTI_BCL_SOC_DRIVER) += bcl_soc.o
 obj-$(CONFIG_QTI_USERSPACE_CDEV) += qti_userspace_cdev.o
 obj-$(CONFIG_QTI_CPU_HOTPLUG_COOLING_DEVICE) += cpu_hotplug.o

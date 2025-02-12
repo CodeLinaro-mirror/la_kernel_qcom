@@ -326,10 +326,16 @@ static int funnel_probe(struct device *dev, struct resource *res)
 		return -ENOMEM;
 
 	drvdata->atclk = devm_clk_get(dev, "atclk"); /* optional */
+	if (IS_ERR(drvdata->atclk) &&
+			of_property_read_bool(dev->of_node, "qcom,atclk-dependence")) {
+		dev_err(dev, "get atclk fail %ld\n",  PTR_ERR(drvdata->atclk));
+		return  PTR_ERR(drvdata->atclk);
+	}
+
 	if (!IS_ERR(drvdata->atclk)) {
 		ret = clk_prepare_enable(drvdata->atclk);
 		if (ret)
-			return ret;
+			return ret == -ETIMEDOUT ? -EPROBE_DEFER : ret;
 	}
 
 	if (of_property_read_bool(np, "qcom,duplicate-funnel")) {

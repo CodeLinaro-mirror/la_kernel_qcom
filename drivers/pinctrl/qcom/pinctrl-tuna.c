@@ -2103,9 +2103,9 @@ static const struct msm_pingroup tuna_groups[] = {
 			 -1),
 	[110] = PINGROUP(110, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			 -1),
-	[111] = PINGROUP(111, NA, coex_uart2_rx, NA, NA, NA, NA, NA, NA, NA, NA,
+	[111] = PINGROUP(111, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			 NA, 0, -1),
-	[112] = PINGROUP(112, NA, coex_uart2_tx, NA, NA, NA, NA, NA, NA, NA, NA,
+	[112] = PINGROUP(112, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			 NA, 0, -1),
 	[113] = PINGROUP(113, nav_gpio0, vfr_1, NA, NA, NA, NA, NA, NA, NA, NA,
 			 NA, 0, -1),
@@ -2320,7 +2320,7 @@ static const struct msm_pinctrl_soc_data tuna_vm_pinctrl = {
 	.nfunctions = ARRAY_SIZE(tuna_functions),
 	.groups = tuna_groups,
 	.ngroups = ARRAY_SIZE(tuna_groups),
-	.ngpios = 188,
+	.ngpios = 192,
 	.egpio_func = 11,
 };
 

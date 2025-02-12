@@ -2031,8 +2031,7 @@ static int q2spi_transfer_with_retries(struct q2spi_geni *q2spi, struct q2spi_re
 				goto transfer_exit;
 			}
 
-			if (i == 0 && !atomic_read(&q2spi->doorbell_pending) &&
-			    q2spi->is_start_seq_fail) {
+			if (!atomic_read(&q2spi->doorbell_pending) && q2spi->is_start_seq_fail) {
 				q2spi->is_start_seq_fail = false;
 				ret = q2spi_wakeup_hw_from_sleep(q2spi);
 				if (ret) {
@@ -2828,6 +2827,10 @@ static int q2spi_gsi_submit(struct q2spi_packet *q2spi_pkt)
 
 	Q2SPI_DBG_2(q2spi, "%s PID:%d q2spi:%p xfer:%p wait for gsi_lock 2\n",
 		    __func__, current->pid, q2spi, xfer);
+	if (q2spi->port_release) {
+		Q2SPI_DEBUG(q2spi, "%s Err Port in closed state, return\n", __func__);
+		return -ENOENT;
+	}
 	mutex_lock(&q2spi->gsi_lock);
 	Q2SPI_DBG_2(q2spi, "%s PID=%d acquired gsi_lock 2\n", __func__, current->pid);
 	ret = q2spi_setup_gsi_xfer(q2spi_pkt);

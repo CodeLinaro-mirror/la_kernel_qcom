@@ -30,6 +30,13 @@ struct gh_vcpu {
 	struct gh_vm *vm;
 };
 
+struct gh_ext_reg {
+	u32 ext_label;
+	phys_addr_t ext_phys;
+	ssize_t ext_size;
+	gh_memparcel_handle_t ext_mem_handle;
+};
+
 struct gh_vm {
 	bool is_secure_vm; /* is true for Qcom authenticated secure VMs */
 	bool vm_run_once;
@@ -46,6 +53,7 @@ struct gh_vm {
 	int exit_type;
 	refcount_t users_count;
 	gh_memparcel_handle_t mem_handle;
+	struct gh_ext_reg *ext_region;
 	struct mutex vm_lock;
 	struct gh_vm_user_mem *memory_mapping;
 	struct mm_struct *mm; /* userspace tied to this vm */
@@ -64,6 +72,7 @@ long gh_vm_configure(u16 auth_mech, u64 image_offset,
 			u64 image_size, u64 dtb_offset, u64 dtb_size,
 			u32 pas_id, struct gh_vm *vm);
 long gh_vm_init(const char *fw_name, struct gh_vm *vm);
+int gh_vm_alloc_ext_region(struct gh_vm *vm);
 void gh_uevent_notify_change(unsigned int type, struct gh_vm *vm);
 bool gh_firmware_is_legacy(void);
 

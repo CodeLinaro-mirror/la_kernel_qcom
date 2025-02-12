@@ -12,5 +12,6 @@
 #define TCSR_USB2_CLKREF_EN					2
 #define TCSR_USB3_CLKREF_EN					3
 #define TCSR_PCIE_1_CLKREF_EN					4
+#define TCSR_HDMI_CLKREF_EN					5
 
 #endif

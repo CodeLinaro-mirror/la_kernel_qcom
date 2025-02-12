@@ -47,6 +47,7 @@
 #define HAP_CFG_V5				0x5
 #define MAJOR_REV(rev)				((rev) >> 8)
 
+#define HAP_CFG_REV_LSB_MASK			GENMASK(7, 0)
 #define HAP_CFG_STATUS_DATA_MSB_REG		0x09
 /* STATUS_DATA_MSB definitions while MOD_STATUS_SEL is 0 */
 #define AUTO_RES_CAL_DONE_BIT			BIT(5)
@@ -485,6 +486,7 @@
 
 /* below definitions are only for HAP530_HV */
 #define HAP530_MMAP_NUM_BYTES			8192
+#define VMAX_HDRM_MV_DEFAULT			1500
 
 #define is_between(val, min, max)	\
 	(((min) <= (max)) && ((min) <= (val)) && ((val) <= (max)))
@@ -592,10 +594,12 @@ enum wa_flags {
 	SLEEP_CLK_32K_SCALE = BIT(2),
 	TOGGLE_EN_TO_FLUSH_FIFO = BIT(3),
 	RECOVER_SWR_SLAVE = BIT(4),
-	EN_RUNTIME_PM = BIT(5),
-	VISENSE_RECOVERY_EN = BIT(6),
-	IGNORE_SWR_IN_SPMI_PLAY = BIT(7),
-	DISCHARGE_VNDRV_LDO = BIT(8),
+	TOGGLE_MODULE_EN = BIT(5),
+	EN_RUNTIME_PM = BIT(6),
+	VISENSE_RECOVERY_EN = BIT(7),
+	IGNORE_SWR_IN_SPMI_PLAY = BIT(8),
+	DISCHARGE_VNDRV_LDO = BIT(9),
+	RESTORE_VMAX_HDRM_1P5V = BIT(10),
 };
 
 static const char * const src_str[] = {
@@ -2129,6 +2133,9 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 		}
 	}
 
+	if ((chip->wa_flags & TOGGLE_MODULE_EN) && !en)
+		rc = haptics_toggle_module_enable(chip);
+
 	trace_qcom_haptics_play(en);
 restore:
 	/* Restore SWR play mode after SPMI play mode is done or any faults */
@@ -3418,6 +3425,13 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 	}
 
 restore:
+	/* Restore Vmax headroom to 1.5V after SPMI play is done */
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V) {
+		rc = haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+		if (rc)
+			return rc;
+	}
+
 	/* Restore SWR play mode after SPMI play is done or any faults */
 	if (chip->wa_flags & IGNORE_SWR_IN_SPMI_PLAY)
 		haptics_ignore_swr_play(chip, false);
@@ -3968,6 +3982,9 @@ static int haptics_config_wa(struct haptics_chip *chip)
 			TOGGLE_EN_TO_FLUSH_FIFO | RECOVER_SWR_SLAVE;
 		break;
 	case HAP520_MV:
+		chip->wa_flags |= SLEEP_CLK_32K_SCALE;
+		if (!(chip->cfg_revision & HAP_CFG_REV_LSB_MASK))
+			chip->wa_flags |= TOGGLE_MODULE_EN;
 		break;
 	case HAP525_HV:
 		if (chip->hbst_revision == HAP_BOOST_V0P1)
@@ -3975,7 +3992,8 @@ static int haptics_config_wa(struct haptics_chip *chip)
 		break;
 	case HAP530_HV:
 		chip->wa_flags |= EN_RUNTIME_PM | VISENSE_RECOVERY_EN |
-			IGNORE_SWR_IN_SPMI_PLAY | DISCHARGE_VNDRV_LDO;
+			IGNORE_SWR_IN_SPMI_PLAY | DISCHARGE_VNDRV_LDO |
+			RESTORE_VMAX_HDRM_1P5V;
 		break;
 	default:
 		dev_err(chip->dev, "HW type %d does not match\n",
@@ -4072,6 +4090,12 @@ static int haptics_hw_init(struct haptics_chip *chip)
 	rc = haptics_init_vmax_config(chip);
 	if (rc < 0)
 		return rc;
+
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V) {
+		rc = haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+		if (rc)
+			return rc;
+	}
 
 	rc = haptics_init_drive_config(chip);
 	if (rc < 0)
@@ -5117,7 +5141,6 @@ static u32 get_lra_impedance_capable_max(struct haptics_chip *chip)
 static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 {
 	u32 vmax_mv, nominal_ohm, current_ma, vmax_margin_mv, play_length_us, lsb_mohm;
-	u8 samples[4] = {0x7f, 0x7f, 0x7f, 0x7f};
 	struct pattern_cfg pattern = {
 		.samples = {
 			    {0xff, T_LRA, false},
@@ -5133,11 +5156,13 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 		.play_length_us = chip->config.t_lra_us + 2000, /* drive it at least 1 cycle */
 		.preload = false,
 	};
+	u8 samples[4] = {0x7f, 0x7f, 0, 0};
+	u32 t_lra_us = (chip->config.cl_t_lra_us * 3) / 2; /* drive off resonance in FIFO mode */
 	struct fifo_cfg fifo = {
 		.samples = samples,
 		.num_s = ARRAY_SIZE(samples),
-		.period_per_s = T_LRA_DIV_2,	/* drive off resonance of the LRA */
-		.play_length_us = chip->config.t_lra_us * ARRAY_SIZE(samples) / 2 + 2000,
+		.period_per_s = T_LRA_DIV_2, /* half cycle with T_LRA */
+		.play_length_us = t_lra_us + 2000,
 		.preload = false,
 	};
 	u8 val, current_sel;
@@ -5195,6 +5220,11 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 		goto restore;
 
 	if (chip->hw_type >= HAP530_HV) {
+		/* drive off resonance of the LRA */
+		rc = haptics_config_openloop_lra_period(chip, t_lra_us);
+		if (rc < 0)
+			goto restore;
+
 		rc = haptics_enable_autores(chip, false);
 		if (rc < 0)
 			goto restore;
@@ -5260,6 +5290,13 @@ static int haptics_measure_realtime_lra_impedance(struct haptics_chip *chip)
 restore:
 	if (rc < 0)
 		dev_err(chip->dev, "measure LRA impedance failed, rc=%d\n", rc);
+
+	/* restore T_LRA */
+	if (chip->hw_type >= HAP530_HV) {
+		rc = haptics_config_openloop_lra_period(chip, chip->config.cl_t_lra_us);
+		if (rc)
+			return rc;
+	}
 
 	return haptics_masked_write(chip, chip->cfg_addr_base,
 			HAP_CFG_RT_LRA_IMPD_MEAS_CFG_REG,
@@ -5953,8 +5990,8 @@ static int haptics_start_lra_calibrate(struct haptics_chip *chip)
 		goto unlock;
 	}
 
-	/* Sleep at least 4ms to stabilize the LRA from frequency detection */
-	usleep_range(4000, 5000);
+	/* Sleep 50ms to stabilize the LRA from frequency detection */
+	msleep(50);
 	if (chip->config.measure_lra_impedance)
 		rc = haptics_measure_realtime_lra_impedance(chip);
 	else
@@ -5974,6 +6011,9 @@ static int haptics_start_lra_calibrate(struct haptics_chip *chip)
 	}
 
 unlock:
+	if (chip->wa_flags & RESTORE_VMAX_HDRM_1P5V)
+		haptics_set_vmax_headroom_mv(chip, VMAX_HDRM_MV_DEFAULT);
+
 	haptics_clear_fault(chip);
 	chip->play.in_calibration = false;
 	mutex_unlock(&chip->play.lock);
@@ -6195,8 +6235,22 @@ static int haptics_lpass_ssr_notifier(struct notifier_block *nb, unsigned long e
 	if (!(chip->wa_flags & VISENSE_RECOVERY_EN))
 		return NOTIFY_DONE;
 
+	if (!is_swr_play_enabled(chip)) {
+		dev_dbg(chip->dev, "ignore VISENSE recovery if not in SWR play\n");
+		return NOTIFY_DONE;
+	}
+
 	switch (event) {
 	case QCOM_SSR_BEFORE_SHUTDOWN:
+		/*
+		 * Enable HAPTICS_EN to keep haptics module clock on during ADSP
+		 * SSR. It's needed for keeping haptics SPMI and SWR data port in
+		 * correct state, and it could be disabled after ADSP SSR.
+		 */
+		rc = haptics_runtime_resume_get(chip);
+		if (rc < 0)
+			return rc;
+
 		val = 0;
 		rc = haptics_write(chip, chip->cfg_addr_base, HAP_CFG_SWR_ACCESS_REG,  &val, 1);
 		if (rc < 0)
@@ -6214,6 +6268,7 @@ static int haptics_lpass_ssr_notifier(struct notifier_block *nb, unsigned long e
 		if (rc < 0)
 			return rc;
 
+		haptics_runtime_autosuspend_put(chip);
 		dev_dbg(chip->dev, "QCOM_SSR_BEFORE_POWERUP is handled\n");
 		break;
 	default:

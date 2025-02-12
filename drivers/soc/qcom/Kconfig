@@ -914,6 +914,16 @@ config QCOM_MINIDUMP_PANIC_CPUFREQ_INFO
 	  for each cluster.
 	  Say N if unsure or cpufreq vendor hooks undefined.
 
+config QCOM_MINIDUMP_PANIC_KTASK_STACK
+	bool "QCOM Minidump Panic dumps Kernel Task Stack"
+	depends on QCOM_MINIDUMP_PANIC_DUMP && DETECT_HUNG_TASK
+	default y
+	help
+	  This enables kernel task call stack dump in minidump
+	  table, on panic. Only the kernel tasks that in
+	  TASK_UNINTERRUPTIBLE (D) state will be dumped, also
+	  the time it stuck will be printed.
+
 config QCOM_MINIDUMP_PSTORE
 	bool "QCOM Minidump Pstore dumps Support"
 	depends on ARM64 && QCOM_MINIDUMP
@@ -1179,15 +1189,16 @@ config QCOM_DYNAMIC_RAMOOPS
 	  awareness and it reads all ramoops property from device tree and registers
 	  ramoops platform device and driver for this device will still be fs/pstore/ram.c .
 
-config QTI_FCTL_SCMI
-	tristate "Qualcomm Technologies Inc. SCMI client driver for Feature Control"
+config QTI_DMOF_SCMI
+	tristate "QTI SCMI client driver to Disable Memcpy Optimization Feature"
 	depends on QTI_SCMI_VENDOR_PROTOCOL
 	default n
 	help
-	  Driver to expose feature control configuration APIs to userspace via sysfs.
+	  Driver to Disable Memcpy Optimization Feature (DMOF) from userspace via sysfs.
 
-	  This driver gathers configuration parameters from sysfs
-	  userspace and relays them to CPUCP via SCMI communication.
-	  It is intended to be used by clients familiar with modifying
-	  the feature control settings.
+	  This driver gathers configuration parameters from user space
+	  via sysfs interface and relays them to CPUCP via SCMI communication.
+
+	  It is intended to be used by clients familiar with
+	  Memcpy Optimization Feature on Qualcomm Technologies, Inc. SOCs.
 endmenu

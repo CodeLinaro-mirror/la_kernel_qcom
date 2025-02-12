@@ -90,12 +90,26 @@ static struct clk_branch tcsr_usb3_clkref_en = {
 	},
 };
 
+static struct clk_branch tcsr_hdmi_clkref_en = {
+	.halt_reg = 0x14,
+	.halt_check = BRANCH_HALT_DELAY,
+	.clkr = {
+		.enable_reg = 0x14,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "tcsr_hdmi_clkref_en",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_regmap *tcsr_cc_tuna_clocks[] = {
 	[TCSR_PCIE_0_CLKREF_EN] = &tcsr_pcie_0_clkref_en.clkr,
 	[TCSR_PCIE_1_CLKREF_EN] = &tcsr_pcie_1_clkref_en.clkr,
 	[TCSR_UFS_CLKREF_EN] = &tcsr_ufs_clkref_en.clkr,
 	[TCSR_USB2_CLKREF_EN] = &tcsr_usb2_clkref_en.clkr,
 	[TCSR_USB3_CLKREF_EN] = &tcsr_usb3_clkref_en.clkr,
+	[TCSR_HDMI_CLKREF_EN] = &tcsr_hdmi_clkref_en.clkr,
 };
 
 static const struct regmap_config tcsr_cc_tuna_regmap_config = {
@@ -132,6 +146,7 @@ static int tcsr_cc_tuna_fixup(struct platform_device *pdev)
 		return 0;
 
 	tcsr_cc_tuna_clocks[TCSR_PCIE_1_CLKREF_EN] = NULL;
+	tcsr_cc_tuna_clocks[TCSR_HDMI_CLKREF_EN] = NULL;
 
 	return 0;
 }

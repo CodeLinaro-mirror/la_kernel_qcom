@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)    "%s: " fmt, __func__
@@ -609,7 +609,7 @@ static int slate_start(struct rproc *rproc)
 	int ret = 0;
 
 	if (!slate_data) {
-		dev_err(slate_data->dev, "%s Invalid slate pointer !!\n",
+		pr_err("%s - Invalid slate pointer !!\n",
 			__func__);
 		return -EINVAL;
 	}
@@ -839,7 +839,7 @@ static int slate_prepare(struct rproc *rproc)
 	int ret = 0;
 
 	if (!slate_data) {
-		dev_err(slate_data->dev, "%s Invalid slate pointer !!\n",
+		pr_err("%s - Invalid slate pointer !!\n",
 			__func__);
 		return -EINVAL;
 	}
@@ -1012,7 +1012,7 @@ static int slate_load(struct rproc *rproc, const struct firmware *fw)
 	const struct pil_mdt *mdt;
 
 	if (!slate_data) {
-		dev_err(slate_data->dev, "%s Invalid slate pointer !!\n",
+		pr_err("%s - Invalid slate pointer !!\n",
 			__func__);
 		return -EINVAL;
 	}
@@ -1069,7 +1069,7 @@ static int slate_stop(struct rproc *rproc)
 	int ret = RESULT_FAILURE;
 
 	if (!slate_data) {
-		dev_err(slate_data->dev, "%s Invalid slate pointer !!\n",
+		pr_err("%s - Invalid slate pointer !!\n",
 			__func__);
 		return -EINVAL;
 	}

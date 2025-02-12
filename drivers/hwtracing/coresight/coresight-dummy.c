@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/coresight.h>
@@ -104,10 +104,12 @@ static int dummy_source_enable(struct coresight_device *csdev,
 			return ret;
 		}
 	} else {
-		ret = coresight_trace_id_reserve_id(drvdata->traceid);
-		if (ret) {
-			dev_err(drvdata->dev, "Reserve atid: %d fail\n", drvdata->traceid);
-			return ret;
+		if (drvdata->traceid < CORESIGHT_TRACE_ID_RES_TOP) {
+			ret = coresight_trace_id_reserve_id(drvdata->traceid);
+			if (ret) {
+				dev_err(drvdata->dev, "Reserve atid: %d fail\n", drvdata->traceid);
+				return ret;
+			}
 		}
 	}
 
@@ -123,7 +125,7 @@ static void dummy_source_disable(struct coresight_device *csdev,
 	struct dummy_drvdata *drvdata =
 		 dev_get_drvdata(csdev->dev.parent);
 	coresight_csr_set_etr_atid(csdev, drvdata->traceid, false, NULL);
-	if (drvdata->static_atid)
+	if (drvdata->static_atid && drvdata->traceid < CORESIGHT_TRACE_ID_RES_TOP)
 		coresight_trace_id_free_reserved_id(drvdata->traceid);
 	else
 		coresight_trace_id_put_system_id(drvdata->traceid);

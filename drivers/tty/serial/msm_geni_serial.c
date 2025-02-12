@@ -190,6 +190,9 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 /* Required for polling for 100 msecs */
 #define POLL_WAIT_TIMEOUT_MSEC	100
 
+/* Required for polling for 25 msecs */
+#define CMD_DONE_TIMEOUT_MSEC	25
+
 /*
  * Number of iterrations required while polling
  * where each iterration has a delay of 100 usecs
@@ -948,15 +951,15 @@ static bool geni_wait_for_cmd_done(struct uart_port *uport, bool is_irq_masked)
 			}
 		}
 	} else {
-		/* Waiting for 10 milli second for interrupt to be fired */
+		/* Waiting for 25 milli second for interrupt to be fired */
 		if (msm_port->m_cmd)
 			timeout = wait_for_completion_timeout
 					(&msm_port->m_cmd_timeout,
-				msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC));
+				msecs_to_jiffies(CMD_DONE_TIMEOUT_MSEC));
 		else if (msm_port->s_cmd)
 			timeout = wait_for_completion_timeout
 					(&msm_port->s_cmd_timeout,
-				msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC));
+				msecs_to_jiffies(CMD_DONE_TIMEOUT_MSEC));
 	}
 	return timeout ? 0 : 1;
 }
@@ -1339,8 +1342,9 @@ static int msm_geni_serial_ioctl(struct uart_port *uport, unsigned int cmd,
 			__func__, uart_error, port->uart_error);
 		ret = uart_error;
 
+		if (port->ioctl_count)
+			geni_se_dump_dbg_regs(uport);
 		/* Do not use previous log file from this issue point */
-		geni_se_dump_dbg_regs(uport);
 		port->ipc_log_rx = port->ipc_log_new;
 		port->ipc_log_tx = port->ipc_log_new;
 		port->ipc_log_misc = port->ipc_log_new;
@@ -5366,6 +5370,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	struct uart_driver *drv;
 	const struct of_device_id *id;
 	bool is_console = false;
+	unsigned char prev_line_id;
 
 	id = of_match_device(msm_geni_device_tbl, &pdev->dev);
 	if (!id) {
@@ -5376,6 +5381,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "%s: %s\n", __func__, id->compatible);
 	drv = (struct uart_driver *)id->data;
 
+	prev_line_id = uart_line_id;
 	if (pdev->dev.of_node) {
 		if (drv->cons) {
 			line = of_alias_get_id(pdev->dev.of_node, "serial");
@@ -5450,6 +5456,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		goto exit_geni_serial_probe;
 
+	msm_geni_serial_debug_init(uport, is_console);
 	ret = msm_geni_serial_port_init(pdev, dev_port);
 	if (ret)
 		goto exit_geni_serial_probe;
@@ -5457,7 +5464,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "Serial port: %d added.FifoSize: %d is_console: %d\n",
 		 line, uport->fifosize, is_console);
 
-	msm_geni_serial_debug_init(uport, is_console);
 	dev_port->port_setup = false;
 
 	dev_port->uart_error = UART_ERROR_DEFAULT;
@@ -5502,6 +5508,8 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		pr_info("boot_kpi: M - DRIVER GENI_HS_UART_%d Ready\n", line);
 
 exit_geni_serial_probe:
+	if (ret)
+		uart_line_id = prev_line_id;
 	UART_LOG_DBG(dev_port->ipc_log_misc, &pdev->dev, "%s: ret:%d\n",
 		__func__, ret);
 	return ret;

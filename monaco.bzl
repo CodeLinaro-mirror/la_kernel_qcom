@@ -1,6 +1,6 @@
-load(":target_variants.bzl", "la_variants")
-load(":msm_kernel_la.bzl", "define_msm_la")
 load(":image_opts.bzl", "boot_image_opts")
+load(":msm_kernel_la.bzl", "define_msm_la")
+load(":target_variants.bzl", "la_variants")
 
 target_name = "monaco"
 
@@ -54,7 +54,6 @@ def define_monaco():
         "drivers/iommu/arm/arm-smmu/arm_smmu.ko",
         "drivers/iommu/iommu-logger.ko",
         "drivers/iommu/msm_dma_iommu_mapping.ko",
-        "drivers/iommu/qcom_iommu_debug.ko",
         "drivers/iommu/qcom_iommu_util.ko",
         "drivers/irqchip/msm_show_resume_irq.ko",
         "drivers/irqchip/qcom-mpm.ko",
@@ -117,6 +116,7 @@ def define_monaco():
         "drivers/soc/qcom/memory_dump_v2.ko",
         "drivers/soc/qcom/memshare/heap_mem_ext_v01.ko",
         "drivers/soc/qcom/memshare/msm_memshare.ko",
+        "drivers/soc/qcom/minidump.ko",
         "drivers/soc/qcom/msm_performance.ko",
         "drivers/soc/qcom/msm_show_epoch.ko",
         "drivers/soc/qcom/panel_event_notifier.ko",
@@ -146,6 +146,7 @@ def define_monaco():
         "drivers/soc/qcom/smp2p.ko",
         "drivers/soc/qcom/socinfo.ko",
         "drivers/soc/qcom/sps/sps_drv.ko",
+        "drivers/soc/qcom/sysmon_subsystem_stats.ko",
         "drivers/soc/qcom/wcd_usbss_i2c.ko",
         "drivers/spi/spi-msm-geni.ko",
         "drivers/spmi/spmi-pmic-arb.ko",
@@ -185,6 +186,7 @@ def define_monaco():
     _monaco_consolidate_in_tree_modules = _monaco_in_tree_modules + [
         # keep sorted
         "drivers/hwtracing/coresight/coresight-etm4x.ko",
+        "drivers/iommu/qcom_iommu_debug.ko",
         "drivers/misc/lkdtm/lkdtm.ko",
         "kernel/locking/locktorture.ko",
         "kernel/rcu/rcutorture.ko",

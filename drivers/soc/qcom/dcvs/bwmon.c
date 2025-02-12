@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "qcom-bwmon: " fmt
@@ -283,7 +283,7 @@ static ssize_t store_max_low_power_cluster_freqs(struct kobject *kobj,
 			size_t count)
 {
 	struct hwmon_node *node = to_hwmon_node(kobj);
-	int ret, numvals, numcpus;
+	int ret = 0, numvals = 0, numcpus;
 	unsigned int i = 0, val;
 	char **strlist;
 

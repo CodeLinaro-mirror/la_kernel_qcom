@@ -31,6 +31,7 @@ static struct mpam_config_val mpam_default_val;
 static struct monitors_value *mpam_mon_base;
 static struct cpu_mpam_msc *mpam_mscs;
 static int mpam_msc_cnt;
+static bool can_monitor;
 
 static inline struct cpu_mpam_partition *to_partition(
 					   struct config_item *item)
@@ -174,10 +175,14 @@ static ssize_t cpu_mpam_schemata_show(struct config_item *item,
 	for (i = 0; i < mpam_msc_cnt; i++) {
 		msc_id = mpam_mscs[i].msc_id;
 		mpam_val = &partition->val[msc_id];
-		ret += scnprintf(page + ret, PAGE_SIZE,
-			"%s:cmax=%d,cpbm=0x%x,prio=%d,slc_partid=%d\n",
-			mpam_mscs[i].msc_name, mpam_val->capacity,
-			mpam_val->cpbm, mpam_val->dspri, mpam_val->slc_partition_id);
+		if (can_monitor)
+			ret += scnprintf(page + ret, PAGE_SIZE,
+				"%s:cmax=%d,cpbm=0x%x,prio=%d,slc_partid=%d\n",
+				mpam_mscs[i].msc_name, mpam_val->capacity,
+				mpam_val->cpbm, mpam_val->dspri, mpam_val->slc_partition_id);
+		else
+			ret += scnprintf(page + ret, PAGE_SIZE, "%s:cpbm=0x%x,slc_partid=%d\n",
+				mpam_mscs[i].msc_name, mpam_val->cpbm, mpam_val->slc_partition_id);
 	}
 
 	return ret;
@@ -411,6 +416,13 @@ static struct configfs_attribute *cpu_mpam_attrs[] = {
 	NULL,
 };
 
+static struct configfs_attribute *cpu_mpam_attrs_legacy[] = {
+	&cpu_mpam_attr_part_id,
+	&cpu_mpam_attr_schemata,
+	&cpu_mpam_attr_tasks,
+	NULL,
+};
+
 static void cpu_mpam_reset_param(int part_id)
 {
 	int i;
@@ -454,6 +466,10 @@ static const struct config_item_type cpu_mpam_item_type = {
 	.ct_attrs	= cpu_mpam_attrs,
 };
 
+static const struct config_item_type cpu_mpam_item_type_legacy = {
+	.ct_attrs	= cpu_mpam_attrs_legacy,
+};
+
 static struct config_group *cpu_mpam_make_group(
 		struct config_group *group, const char *name)
 {
@@ -483,8 +499,12 @@ static struct config_group *cpu_mpam_make_group(
 
 	cpu_mpam_reset_param(part_id);
 
-	config_group_init_type_name(&partition->group, name,
+	if (can_monitor)
+		config_group_init_type_name(&partition->group, name,
 				   &cpu_mpam_item_type);
+	else
+		config_group_init_type_name(&partition->group, name,
+			&cpu_mpam_item_type_legacy);
 
 	return &partition->group;
 }
@@ -613,14 +633,21 @@ static int cpu_mpam_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Error getting default value %d\n", ret);
 		mpam_default_val.cpbm = UINT_MAX;
 	}
-	mpam_default_val.capacity = 100;
-	mpam_default_val.dspri = 0;
-
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mon-base");
-	mpam_mon_base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR_OR_NULL(mpam_mon_base)) {
-		dev_err(&pdev->dev, "Error ioremap mpam_mon_base\n");
-		return -ENODEV;
+	if (!res) {
+		dev_err(&pdev->dev, "cpu mpam does not have monitoring support\n");
+		can_monitor = false;
+	} else {
+		mpam_mon_base = devm_ioremap_resource(&pdev->dev, res);
+		if (IS_ERR_OR_NULL(mpam_mon_base)) {
+			dev_err(&pdev->dev, "Error ioremap mpam_mon_base\n");
+			return -ENODEV;
+		}
+		can_monitor = true;
+	}
+	if (can_monitor) {
+		mpam_default_val.capacity = 100;
+		mpam_default_val.dspri = 0;
 	}
 
 	ret = cpu_mpam_configfs_init();

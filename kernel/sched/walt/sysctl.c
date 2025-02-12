@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kmemleak.h>
@@ -11,6 +11,7 @@
 #include "trace.h"
 
 static int neg_five = -5;
+static int three = 3;
 static int four = 4;
 static int five = 5;
 static int two_hundred_fifty_five = 255;
@@ -53,7 +54,7 @@ unsigned int sysctl_sched_boost_on_input;
 unsigned int sysctl_sched_early_up[MAX_MARGIN_LEVELS];
 unsigned int sysctl_sched_early_down[MAX_MARGIN_LEVELS];
 
-/* sysctl nodes accesed by other files */
+/* sysctl nodes accessed by other files */
 unsigned int __read_mostly sysctl_sched_coloc_downmigrate_ns;
 unsigned int __read_mostly sysctl_sched_group_downmigrate_pct;
 unsigned int __read_mostly sysctl_sched_group_upmigrate_pct;
@@ -98,6 +99,10 @@ unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];
 unsigned int sysctl_ipc_freq_levels_cluster3[SMART_FMAX_IPC_MAX];
+unsigned int sysctl_legacy_freq_levels_cluster0[LEGACY_SMART_FREQ*2];
+unsigned int sysctl_legacy_freq_levels_cluster1[LEGACY_SMART_FREQ*2];
+unsigned int sysctl_legacy_freq_levels_cluster2[LEGACY_SMART_FREQ*2];
+unsigned int sysctl_legacy_freq_levels_cluster3[LEGACY_SMART_FREQ*2];
 unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
 unsigned int sysctl_pipeline_busy_boost_pct;
 unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
@@ -125,6 +130,8 @@ unsigned int sysctl_pipeline_special_task_util_thres;
 unsigned int sysctl_pipeline_non_special_task_util_thres;
 unsigned int sysctl_pipeline_pin_thres_low_pct;
 unsigned int sysctl_pipeline_pin_thres_high_pct;
+unsigned int sysctl_pipeline_rearrange_delay_ms[2] = {100, 4};
+unsigned int sysctl_single_thread_pipeline;
 
 /* range is [1 .. INT_MAX] */
 static int sysctl_task_read_pid = 1;
@@ -322,6 +329,32 @@ unlock:
 	return ret;
 }
 
+static int walt_single_thread_pipeline_handler(struct ctl_table *table,
+					   int write, void __user *buffer, size_t *lenp,
+					   loff_t *ppos)
+{
+	int ret = 0;
+	unsigned int val;
+
+	struct ctl_table tmp = {
+		.data	= &val,
+		.maxlen	= sizeof(val),
+		.mode	= table->mode,
+	};
+	static DEFINE_MUTEX(mutex);
+
+	mutex_lock(&mutex);
+
+	val = sysctl_single_thread_pipeline;
+	ret = proc_dointvec_minmax(&tmp, write, buffer, lenp, ppos);
+	if (ret || !write || val ==  sysctl_single_thread_pipeline)
+		goto unlock;
+
+	walt_configure_single_thread_pipeline(val);
+unlock:
+	mutex_unlock(&mutex);
+	return ret;
+}
 
 static int sched_ravg_window_handler(struct ctl_table *table,
 				int write, void __user *buffer, size_t *lenp,
@@ -1007,6 +1040,28 @@ unlock_mutex:
 
 #endif /* CONFIG_PROC_SYSCTL */
 
+static int sysctl_sched_sibling_cluster_map[4] = {-1, -1, -1, -1};
+static int sched_sibling_cluster_handler(struct ctl_table *table, int write,
+				       void __user *buffer, size_t *lenp,
+				       loff_t *ppos)
+{
+	int ret = -EACCES, i = 0;
+	static bool initialized;
+	struct walt_sched_cluster *cluster;
+
+	if (write && initialized)
+		return ret;
+
+	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	if (!ret && write) {
+		initialized = true;
+		for_each_sched_cluster(cluster)
+			cluster->sibling_cluster = sysctl_sched_sibling_cluster_map[i++];
+	}
+
+	return ret;
+}
+
 static struct ctl_table cluster_01[] = {
 	{
 		.procname	= "load_sync_settings",
@@ -1164,6 +1219,13 @@ static struct ctl_table smart_freq_cluster0[] = {
 		.mode		= 0444,
 		.proc_handler	= sched_smart_freq_ipc_dump_handler,
 	},
+	{
+		.procname	= "legacy_freq_levels",
+		.data		= &sysctl_legacy_freq_levels_cluster0,
+		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_legacy_freq_handler,
+	},
 };
 
 static struct ctl_table smart_freq_cluster1[] = {
@@ -1187,6 +1249,13 @@ static struct ctl_table smart_freq_cluster1[] = {
 		.maxlen		= 1024 * sizeof(char),
 		.mode		= 0444,
 		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+	{
+		.procname	= "legacy_freq_levels",
+		.data		= &sysctl_legacy_freq_levels_cluster1,
+		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_legacy_freq_handler,
 	},
 };
 
@@ -1212,6 +1281,13 @@ static struct ctl_table smart_freq_cluster2[] = {
 		.mode		= 0444,
 		.proc_handler	= sched_smart_freq_ipc_dump_handler,
 	},
+	{
+		.procname	= "legacy_freq_levels",
+		.data		= &sysctl_legacy_freq_levels_cluster2,
+		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_legacy_freq_handler,
+	},
 };
 
 static struct ctl_table smart_freq_cluster3[] = {
@@ -1235,6 +1311,13 @@ static struct ctl_table smart_freq_cluster3[] = {
 		.maxlen		= 1024 * sizeof(char),
 		.mode		= 0444,
 		.proc_handler	= sched_smart_freq_ipc_dump_handler,
+	},
+	{
+		.procname	= "legacy_freq_levels",
+		.data		= &sysctl_legacy_freq_levels_cluster3,
+		.maxlen		= (LEGACY_SMART_FREQ*2) * sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sched_smart_freq_legacy_freq_handler,
 	},
 };
 
@@ -1817,7 +1900,7 @@ static struct ctl_table walt_table[] = {
 		.procname	= "mpam_part_id",
 		.data		= (int *) MPAM_PART_ID,
 		.maxlen		= sizeof(unsigned int) * 2,
-		.mode		= 0644,
+		.mode		= 0444,
 		.proc_handler	= sched_task_handler,
 	},
 	{
@@ -1864,6 +1947,21 @@ static struct ctl_table walt_table[] = {
 		.extra2		= SYSCTL_INT_MAX,
 	},
 	{
+		/*
+		 * A tuple to configure following delay:
+		 * 1st val: delay between re-evaluation of pipeline tasks.
+		 * 2nd val: number of windows to skip before re-arranging pipeline tasks
+		 *          between prime and gold.
+		 */
+		.procname	= "sched_pipeline_rearrange_delay_ms",
+		.data		= &sysctl_pipeline_rearrange_delay_ms,
+		.maxlen		= sizeof(int) * 2,
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ONE,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
 		.procname	= "sched_pipeline_special_task_util_thres",
 		.data		= &sysctl_pipeline_special_task_util_thres,
 		.maxlen		= sizeof(unsigned int),
@@ -1882,6 +1980,15 @@ static struct ctl_table walt_table[] = {
 		.extra2		= SYSCTL_INT_MAX,
 	},
 	{
+		.procname	= "sched_single_thread_pipeline",
+		.data		= &sysctl_single_thread_pipeline,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= walt_single_thread_pipeline_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
 		.procname	= "sched_pipeline_pin_thres_low_pct",
 		.data		= &sysctl_pipeline_pin_thres_low_pct,
 		.maxlen		= sizeof(unsigned int),
@@ -1898,6 +2005,15 @@ static struct ctl_table walt_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_sibling_cluster",
+		.data		= &sysctl_sched_sibling_cluster_map,
+		.maxlen		= sizeof(int) * 4,
+		.mode		= 0644,
+		.proc_handler	= sched_sibling_cluster_handler,
+		.extra1		= SYSCTL_NEG_ONE,
+		.extra2		= &three,
 	},
 	{ }
 };

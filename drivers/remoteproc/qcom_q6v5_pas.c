@@ -208,7 +208,7 @@ static int adsp_custom_segment_dump(struct qcom_adsp *adsp,
 		return -EINVAL;
 
 custom_segment_dump:
-	base = ioremap((unsigned long)le64_to_cpu(segment->da), size);
+	base = ioremap((unsigned long)le64_to_cpu(segment->da) + offset, size);
 	if (!base) {
 		dev_err(adsp->dev, "failed to map custom_segment region\n");
 		return -EINVAL;
@@ -2053,7 +2053,7 @@ static const struct adsp_data tuna_adsp_resource = {
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
 	.uses_elf64 = true,
-	.auto_boot = false,
+	.auto_boot = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
 };
@@ -2074,7 +2074,7 @@ static const struct adsp_data tuna_cdsp_resource = {
 	.region_assign_count = 1,
 	.region_assign_shared = true,
 	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
-	.auto_boot = false,
+	.auto_boot = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 5,
 };
@@ -2112,7 +2112,7 @@ static const struct adsp_data kera_adsp_resource = {
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
 	.uses_elf64 = true,
-	.auto_boot = false,
+	.auto_boot = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
 };
@@ -2133,7 +2133,7 @@ static const struct adsp_data kera_cdsp_resource = {
 	.region_assign_count = 1,
 	.region_assign_shared = true,
 	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
-	.auto_boot = false,
+	.auto_boot = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 5,
 };
@@ -2153,7 +2153,7 @@ static const struct adsp_data kera_mpss_resource = {
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
 	.region_assign_idx = 3,
-	.region_assign_count = 2,
+	.region_assign_count = 1,
 	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
 	.dma_phys_below_32b = true,
 	.both_dumps = true,
@@ -2334,6 +2334,7 @@ static const struct adsp_data tuna_wpss_resource = {
 	.firmware_name = "wpss.mdt",
 	.pas_id = 6,
 	.minidump_id = 4,
+	.load_state = "wpss",
 	.uses_elf64 = true,
 	.ssr_name = "wpss",
 	.sysmon_name = "wpss",
@@ -2345,6 +2346,7 @@ static const struct adsp_data kera_wpss_resource = {
 	.firmware_name = "wpss.mdt",
 	.pas_id = 6,
 	.minidump_id = 4,
+	.load_state = "wpss",
 	.uses_elf64 = true,
 	.ssr_name = "wpss",
 	.sysmon_name = "wpss",

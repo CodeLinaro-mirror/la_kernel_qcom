@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "walt.h"
@@ -109,6 +109,9 @@ void walt_config(void)
 	sysctl_pipeline_pin_thres_low_pct = 50;
 	sysctl_pipeline_pin_thres_high_pct = 60;
 
+	/* Initialize smart freq configurations */
+	smart_freq_init(name);
+
 	/* return if socinfo is not available */
 	if (!name)
 		return;
@@ -195,22 +198,11 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
 
-		sysctl_cluster23_load_sync[0]	= 350;
-		sysctl_cluster23_load_sync[1]	= 100;
-		sysctl_cluster23_load_sync[2]	= 100;
-		sysctl_cluster32_load_sync[0]	= 512;
-		sysctl_cluster32_load_sync[1]	= 90;
-		sysctl_cluster32_load_sync[2]	= 90;
-		load_sync_util_thres[2][3]	= sysctl_cluster23_load_sync[0];
-		load_sync_low_pct[2][3]		= sysctl_cluster23_load_sync[1];
-		load_sync_high_pct[2][3]	= sysctl_cluster23_load_sync[2];
-		load_sync_util_thres[3][2]	= sysctl_cluster32_load_sync[0];
-		load_sync_low_pct[3][2]		= sysctl_cluster32_load_sync[1];
-		load_sync_high_pct[3][2]	= sysctl_cluster32_load_sync[2];
 	} else if (!strcmp(name, "TUNA")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
-
+		soc_feat_set(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING);
+		soc_sched_lib_name_capacity = 2;
 		/*
 		 * Treat Golds and Primes as candidates for load sync under pipeline usecase.
 		 * However, it is possible that a single CPU is not present. As prime is the
@@ -222,27 +214,23 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][2]);
 			cpumask_or(&pipeline_sync_cpus,
 				&pipeline_sync_cpus, &cpu_array[0][3]);
-			sysctl_cluster23_load_sync[0]	= 350;
-			sysctl_cluster23_load_sync[1]	= 100;
-			sysctl_cluster23_load_sync[2]	= 100;
-			sysctl_cluster32_load_sync[0]	= 512;
-			sysctl_cluster32_load_sync[1]	= 90;
-			sysctl_cluster32_load_sync[2]	= 90;
-			load_sync_util_thres[2][3]	= sysctl_cluster23_load_sync[0];
-			load_sync_low_pct[2][3]		= sysctl_cluster23_load_sync[1];
-			load_sync_high_pct[2][3]	= sysctl_cluster23_load_sync[2];
-			load_sync_util_thres[3][2]	= sysctl_cluster32_load_sync[0];
-			load_sync_low_pct[3][2]		= sysctl_cluster32_load_sync[1];
-			load_sync_high_pct[3][2]	= sysctl_cluster32_load_sync[2];
-
-			/* T + G */
-			cpumask_or(&asym_cap_sibling_cpus,
-					&asym_cap_sibling_cpus, &cpu_array[0][1]);
-			cpumask_or(&asym_cap_sibling_cpus,
-					&asym_cap_sibling_cpus, &cpu_array[0][2]);
 		}
 
-	}
+		/*
+		 * Trailblazer settings
+		 */
+		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[1] = 1000000;
+		trailblazer_floor_freq[2] = 1000000;
+		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 
-	smart_freq_init(name);
+	} else if (!strcmp(name, "KERA")) {
+		/*
+		 * Trailblazer settings
+		 */
+		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[1] = 1000000;
+		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+
+	}
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -413,8 +413,8 @@ MODULE_DEVICE_TABLE(of, eva_cc_tuna_match_table);
 
 static int eva_cc_tuna_probe(struct platform_device *pdev)
 {
-	unsigned int dly_accu_mask = 0xf << 21;
-	unsigned int dly_accu_val = 0xd << 21;
+	unsigned int dly_accu_mask = 0x1f << 21;
+	unsigned int dly_accu_val = 0x1d << 21;
 	struct regmap *regmap;
 	int ret;
 

@@ -327,6 +327,13 @@ EXPORT_SYMBOL_GPL(devm_clk_regmap_list_node);
 int clk_runtime_get_regmap(struct clk_regmap *rclk)
 {
 	int ret;
+	struct device *parent_dev = rclk->dev->parent;
+
+	if (parent_dev && pm_runtime_enabled(parent_dev)) {
+		ret = pm_runtime_get_sync(parent_dev);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (pm_runtime_enabled(rclk->dev)) {
 		ret = pm_runtime_get_sync(rclk->dev);
@@ -340,8 +347,13 @@ EXPORT_SYMBOL_GPL(clk_runtime_get_regmap);
 
 void clk_runtime_put_regmap(struct clk_regmap *rclk)
 {
+	struct device *parent_dev = rclk->dev->parent;
+
 	if (pm_runtime_enabled(rclk->dev))
 		pm_runtime_put_sync(rclk->dev);
+
+	if (parent_dev && pm_runtime_enabled(parent_dev))
+		pm_runtime_put_sync(parent_dev);
 }
 EXPORT_SYMBOL_GPL(clk_runtime_put_regmap);
 

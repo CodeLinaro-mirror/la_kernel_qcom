@@ -2449,10 +2449,10 @@ static int qcom_scm_do_restart(struct notifier_block *this, unsigned long event,
 	if (reboot_mode == REBOOT_WARM &&
 		qcom_scm_custom_reset_type == QCOM_SCM_RST_NONE)
 		qcom_scm_reboot(scm->dev);
-	else if (!strcmp(cmd, "rtc"))
+	else if (cmd && !strcmp(cmd, "rtc"))
 		qcom_scm_custom_reset_type = QCOM_SCM_RST_SHUTDOWN_TO_RTC_MODE;
 
-	else if (!strcmp(cmd, "twm"))
+	else if (cmd && !strcmp(cmd, "twm"))
 		qcom_scm_custom_reset_type = QCOM_SCM_RST_SHUTDOWN_TO_TWM_MODE;
 
 	if (qcom_scm_custom_reset_type > QCOM_SCM_RST_NONE &&
@@ -2553,6 +2553,7 @@ static void scm_irq_work(struct work_struct *work)
 	struct completion *wq_to_wake;
 	struct qcom_scm_waitq *w = container_of(work, struct qcom_scm_waitq, scm_irq_work);
 	struct qcom_scm *scm = container_of(w, struct qcom_scm, waitq);
+	bool multi_smc = (scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW);
 
 	if (qcom_scm_convention != SMC_CONVENTION_ARM_64) {
 		/* Unsupported */
@@ -2560,7 +2561,7 @@ static void scm_irq_work(struct work_struct *work)
 	}
 
 	do {
-		ret = scm_get_wq_ctx(&wq_ctx, &flags, &more_pending);
+		ret = scm_get_wq_ctx(&wq_ctx, &flags, &more_pending, multi_smc);
 		if (ret) {
 			pr_err("GET_WQ_CTX SMC call failed: %d\n", ret);
 			return;

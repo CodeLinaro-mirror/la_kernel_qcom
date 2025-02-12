@@ -594,7 +594,7 @@ static const char * const
 /* gpio info structure */
 struct msm_pcie_gpio_info_t {
 	char *name;
-	uint32_t num;
+	int32_t num;
 	bool out;
 	uint32_t on;
 	uint32_t init;
@@ -1074,7 +1074,6 @@ struct msm_pcie_dev_t {
 
 	uint32_t wake_n;
 	uint32_t vreg_n;
-	uint32_t gpio_n;
 	uint32_t parf_deemph;
 	uint32_t parf_swing;
 
@@ -1296,9 +1295,9 @@ static struct msm_pcie_vreg_info_t msm_pcie_vreg_info[MSM_PCIE_MAX_VREG] = {
 
 /* GPIOs */
 static struct msm_pcie_gpio_info_t msm_pcie_gpio_info[MSM_PCIE_MAX_GPIO] = {
-	{"perst-gpio", 0, 1, 0, 0, 1},
-	{"wake-gpio", 0, 0, 0, 0, 0},
-	{"qcom,ep-gpio", 0, 1, 1, 0, 0}
+	{"perst-gpio", -EINVAL, 1, 0, 0, 1},
+	{"wake-gpio", -EINVAL, 0, 0, 0, 0},
+	{"qcom,ep-gpio", -EINVAL, 1, 1, 0, 0}
 };
 
 /* resets */
@@ -4049,11 +4048,10 @@ static int msm_pcie_gpio_init(struct msm_pcie_dev_t *dev)
 	struct msm_pcie_gpio_info_t *info;
 
 	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
-
-	for (i = 0; i < dev->gpio_n; i++) {
+	for (i = 0; i < MSM_PCIE_MAX_GPIO; i++) {
 		info = &dev->gpio[i];
 
-		if (!info->num)
+		if (info->num < 0)
 			continue;
 
 		rc = gpio_request(info->num, info->name);
@@ -4078,7 +4076,8 @@ static int msm_pcie_gpio_init(struct msm_pcie_dev_t *dev)
 
 	if (rc)
 		while (i--)
-			gpio_free(dev->gpio[i].num);
+			if (dev->gpio[i].num >= 0)
+				gpio_free(dev->gpio[i].num);
 
 	return rc;
 }
@@ -4089,8 +4088,10 @@ static void msm_pcie_gpio_deinit(struct msm_pcie_dev_t *dev)
 
 	PCIE_DBG(dev, "RC%d\n", dev->rc_idx);
 
-	for (i = 0; i < dev->gpio_n; i++)
-		gpio_free(dev->gpio[i].num);
+	for (i = 0; i < MSM_PCIE_MAX_GPIO; i++) {
+		if (dev->gpio[i].num >= 0)
+			gpio_free(dev->gpio[i].num);
+	}
 }
 
 static int msm_pcie_vreg_init(struct msm_pcie_dev_t *dev)
@@ -5551,7 +5552,6 @@ static int msm_pcie_get_gpio(struct msm_pcie_dev_t *pcie_dev)
 {
 	int i, ret;
 
-	pcie_dev->gpio_n = 0;
 	for (i = 0; i < MSM_PCIE_MAX_GPIO; i++) {
 		struct msm_pcie_gpio_info_t *gpio_info = &pcie_dev->gpio[i];
 
@@ -5559,7 +5559,6 @@ static int msm_pcie_get_gpio(struct msm_pcie_dev_t *pcie_dev)
 					gpio_info->name, 0);
 		if (ret >= 0) {
 			gpio_info->num = ret;
-			pcie_dev->gpio_n++;
 			PCIE_DBG(pcie_dev, "GPIO num for %s is %d\n",
 				gpio_info->name, gpio_info->num);
 		} else {
