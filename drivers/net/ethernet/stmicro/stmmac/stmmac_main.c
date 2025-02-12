@@ -1266,6 +1266,9 @@ static void stmmac_validate(struct phylink_config *config,
 
 	if (priv->hw->qxpcs)
 		qcom_xpcs_validate(priv->hw->qxpcs, supported, state);
+
+	phy_speeds(&priv->plat->max_supported_speed, 1, supported);
+
 }
 
 static void stmmac_mac_config(struct phylink_config *config, unsigned int mode,
