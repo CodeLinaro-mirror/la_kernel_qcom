@@ -21,6 +21,7 @@
 #include <linux/spi/spi.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/suspend.h>
+#include <linux/bootmarker_kernel.h>
 
 #define SPI_NUM_CHIPSELECT	(4)
 #define SPI_XFER_TIMEOUT_MS	(250)
@@ -128,6 +129,8 @@ if (dev) \
 
 #define CREATE_TRACE_POINTS
 #include "spi-qup-trace.h"
+
+#define BOOT_MARKER_SIZE	50
 
 /* FTRACE Logging */
 void spi_trace_log(struct device *dev, const char *fmt, ...)
@@ -238,6 +241,7 @@ struct spi_geni_master {
 	bool is_deep_sleep; /* For deep sleep restore the config similar to the probe. */
 	struct spi_geni_ssr spi_ssr;
 	struct geni_se_rsc rsc;
+	bool is_hib_done;
 };
 
 /**
@@ -2474,6 +2478,9 @@ static int spi_geni_probe(struct platform_device *pdev)
 	bool slave_en;
 	struct device *dev = &pdev->dev;
 	struct geni_se *spi_rsc;
+	#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+	char boot_marker[BOOT_MARKER_SIZE];
+	#endif
 
 	slave_en  = of_property_read_bool(pdev->dev.of_node,
 			 "qcom,slv-ctrl");
@@ -2488,7 +2495,13 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (slave_en)
 		spi->slave_abort = spi_slv_abort;
 
-	pr_info("boot_kpi: M - DRIVER GENI_SPI Init\n");
+	#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+		snprintf(boot_marker, sizeof(boot_marker),
+				"M - DRIVER GENI_SPI Init");
+		bootmarker_place_marker(boot_marker);
+	#else
+		dev_dbg(&pdev->dev, "M - DRIVER GENI_SPI Init\n");
+	#endif
 
 	platform_set_drvdata(pdev, spi);
 	geni_mas = spi_master_get_devdata(spi);
@@ -2646,6 +2659,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	geni_mas->spi_rsc.base = geni_mas->base;
 
 	geni_mas->is_deep_sleep = false;
+	geni_mas->is_hib_done = false;
 	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
 	spi->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
 	spi->num_chipselect = SPI_NUM_CHIPSELECT;
@@ -2710,7 +2724,13 @@ static int spi_geni_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "%s: completed %d\n", __func__, ret);
 
-	pr_info("boot_kpi: M - DRIVER GENI_SPI_%d Ready\n", spi->bus_num);
+	#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+		snprintf(boot_marker, sizeof(boot_marker),
+				"M - DRIVER GENI_SPI_%d Ready", spi->bus_num);
+		bootmarker_place_marker(boot_marker);
+	#else
+		dev_dbg(&pdev->dev, "M - DRIVER GENI_SPI_%d Ready\n", spi->bus_num);
+	#endif
 
 	return ret;
 spi_geni_probe_err:
@@ -2989,6 +3009,30 @@ exit_rt_resume:
 			return ret;
 		}
 	}
+
+	if (geni_mas->is_hib_done && !geni_mas->setup) {
+		SPI_LOG_ERR(geni_mas->ipc, false, geni_mas->dev,
+				"%s: perform spi master setup\n", __func__);
+		ret = spi_geni_mas_setup(spi);
+		if (ret) {
+			SPI_LOG_ERR(geni_mas->ipc, false, geni_mas->dev,
+					"%s: Error %d spi master setup\n",
+					__func__, ret);
+			return ret;
+		}
+		geni_mas->is_hib_done = false;
+	}
+
+	if (spi->slave) {
+		if (geni_mas->is_hib_done && !geni_mas->slave_setup) {
+			SPI_LOG_ERR(geni_mas->ipc, false, geni_mas->dev,
+					"%s: perform spi-slv setup\n", __func__);
+			spi_slv_setup(geni_mas);
+			geni_mas->slave_setup = true;
+			geni_mas->is_hib_done = false;
+		}
+	}
+
 	if (geni_mas->gsi_mode)
 		ret = spi_geni_gpi_pause_resume(geni_mas, false);
 
@@ -3098,6 +3142,73 @@ static int spi_geni_suspend(struct device *dev)
 			       geni_mas->spi_kpi, start_time, 0, 0);
 	return ret;
 }
+
+static int spi_geni_hib_suspend(struct device *dev)
+{
+	int ret = 0;
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+	unsigned long long start_time;
+
+	start_time = geni_capture_start_time(&geni_mas->spi_rsc, geni_mas->ipc_log_kpi, __func__,
+					geni_mas->spi_kpi);
+
+	if (geni_mas->is_xfer_in_progress) {
+		if (!pm_runtime_status_suspended(dev)) {
+			SPI_LOG_ERR(geni_mas->ipc, true, dev,
+				    ":%s: runtime PM is active\n", __func__);
+			ret = -EBUSY;
+			return ret;
+		}
+		return ret;
+	}
+
+	/* for GSI mode, GSI channels re-config required for Hibernation */
+	if (geni_mas->gsi_mode) {
+		geni_mas->is_deep_sleep = true;
+		SPI_LOG_ERR(geni_mas->ipc, true, dev,
+			    "%s: GSI channels re-config required for hibernation", __func__);
+	}
+
+	if (!pm_runtime_status_suspended(dev)) {
+		struct spi_master *spi = get_spi_master(dev);
+		struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+		if (list_empty(&spi->queue) && !spi->cur_msg) {
+			SPI_LOG_ERR(geni_mas->ipc, true, dev,
+				    "%s: Force suspend", __func__);
+			ret = spi_geni_runtime_suspend(dev);
+			if (ret) {
+				SPI_LOG_ERR(geni_mas->ipc, true, dev,
+					    "Force suspend Failed:%d", ret);
+			} else {
+				pm_runtime_disable(dev);
+				pm_runtime_set_suspended(dev);
+				pm_runtime_enable(dev);
+			}
+		} else {
+			ret = -EBUSY;
+		}
+	}
+	geni_mas->is_hib_done = false;
+	geni_se_ssc_clk_enable(&geni_mas->rsc, false);
+	geni_capture_stop_time(&geni_mas->spi_rsc, geni_mas->ipc_log_kpi, __func__,
+				geni_mas->spi_kpi, start_time, 0, 0);
+
+	return ret;
+}
+
+static int spi_geni_hib_resume(struct device *dev)
+{
+	struct spi_master *spi = get_spi_master(dev);
+	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
+
+	geni_mas->slave_setup = false;
+	geni_mas->setup = false;
+	geni_se_ssc_clk_enable(&geni_mas->rsc, true);
+	geni_mas->is_hib_done = true;
+	return 0;
+}
 #else
 static int spi_geni_runtime_suspend(struct device *dev)
 {
@@ -3115,6 +3226,15 @@ static int spi_geni_resume(struct device *dev)
 }
 
 static int spi_geni_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int spi_geni_hib_suspend(struct device *dev)
+{
+	return 0;
+}
+static int spi_geni_hib_resume(struct device *dev)
 {
 	return 0;
 }
@@ -3189,7 +3309,12 @@ static void ssr_spi_force_resume(struct device *dev)
 static const struct dev_pm_ops spi_geni_pm_ops = {
 	SET_RUNTIME_PM_OPS(spi_geni_runtime_suspend,
 					spi_geni_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(spi_geni_suspend, spi_geni_resume)
+	.suspend	= spi_geni_suspend,
+	.resume		= spi_geni_resume,
+	.freeze		= spi_geni_hib_suspend,
+	.thaw		= spi_geni_resume,
+	.poweroff	= spi_geni_suspend,
+	.restore	= spi_geni_hib_resume,
 };
 
 static const struct of_device_id spi_geni_dt_match[] = {

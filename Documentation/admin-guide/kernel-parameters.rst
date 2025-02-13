@@ -231,3 +231,5 @@ ermac=	[KNL] Sets mac address at boot up for early ethernet.
 board=  [KNL] Sets Board type of device at boot up for phy detection.
 
 enet=   [KNL] Sets the PHY type on device at boot up for phy detection.
+
+pcs_ane= [KNL] Sets pcs ane flag at boot up for disabling pcs ane.
