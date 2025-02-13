@@ -7,8 +7,11 @@
  */
 
 #include <dt-bindings/arm/qcom_dma_heap_dt_constants.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/thermal/thermal.h>
 
-/{
+&{/} {
 	/* Add overlay for firmware node containing qcom_scm in sc7280.dtsi */
 	firmware {
 		qtee_shmbridge {
