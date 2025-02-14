@@ -19,6 +19,7 @@
 #include <linux/of.h>
 #include <linux/dma-buf.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/firmware/qcom/qcom_scm_addon.h>
 #include <linux/qtee_shmbridge.h>
 #include <linux/proc_fs.h>
 #include <linux/version.h>
