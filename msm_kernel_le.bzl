@@ -26,6 +26,7 @@ load(":msm_abl.bzl", "define_abl_dist")
 load(":image_opts.bzl", "boot_image_opts")
 load(":target_variants.bzl", "le_variants")
 load(":allyes_images.bzl", "gen_allyes_files")
+load(":modules.bzl", "get_gki_modules_list")
 
 def _define_build_config(
         msm_target,
@@ -123,13 +124,18 @@ def _define_kernel_build(
     # Add basic kernel outputs
     out_list += aarch64_outs
 
-    if target_arch == "arm":
+    if target.split("_")[0] == "pineapple-le":
+        out_list += ["utsrelease.h"] + ["certs/signing_key.x509"] + ["certs/signing_key.pem"] + ["scripts/sign-file"]
+    elif target_arch == "arm":
         out_list += ["zImage"] + ["module.lds"] + ["utsrelease.h"]
         out_list += ["scripts/sign-file"] + ["certs/signing_key.x509"] + ["certs/signing_key.pem"]
 
     # LE builds don't build compressed, so remove from list
     out_list.remove("Image.lz4")
     out_list.remove("Image.gz")
+
+    if target.split("_")[0] == "pineapple-le":
+        in_tree_module_list = in_tree_module_list + get_gki_modules_list("arm64")
 
     kernel_build(
         name = target,
@@ -181,7 +187,7 @@ def _define_kernel_dist(target, msm_target, variant):
         ":{}_build_config".format(target),
     ]
 
-    if msm_target == "mdm9607":
+    if msm_target == "mdm9607" or target.split("_")[0] == "pineapple-le":
         msm_dist_targets += [
             ":verity_key",
         ]
@@ -298,7 +304,9 @@ def define_msm_le(
     define_abl_dist(target, msm_target, variant)
 
     define_dtc_dist(target, msm_target, variant)
-
+    if msm_target == "pineapple-le":
+        define_extras(target)
+        return
     gen_allyes_files(le_target, target)
 
     define_extras(target)
