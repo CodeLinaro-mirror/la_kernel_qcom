@@ -1368,7 +1368,7 @@ static int aic3x_regulator_event(struct notifier_block *nb,
 		 * of the supplies was disabled
 		 */
 		if (aic3x->gpio_reset)
-			gpiod_set_value(aic3x->gpio_reset, 1);
+			gpiod_set_value(aic3x->gpio_reset, 0);
 		regcache_mark_dirty(aic3x->regmap);
 	}
 
@@ -1390,7 +1390,7 @@ static int aic3x_set_power(struct snd_soc_component *component, int power)
 
 		if (aic3x->gpio_reset) {
 			udelay(1);
-			gpiod_set_value(aic3x->gpio_reset, 0);
+			gpiod_set_value(aic3x->gpio_reset, 1);
 		}
 
 		/* Sync reg_cache with the hardware */
@@ -1846,7 +1846,7 @@ void aic3x_remove(struct device *dev)
 
 	/* Leave the codec in reset state */
 	if (aic3x->gpio_reset && !aic3x->shared_reset)
-		gpiod_set_value(aic3x->gpio_reset, 1);
+		gpiod_set_value(aic3x->gpio_reset, 0);
 }
 EXPORT_SYMBOL(aic3x_remove);
 
