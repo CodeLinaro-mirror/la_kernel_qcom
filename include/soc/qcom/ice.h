@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2023, Linaro Limited
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_ICE_H__
@@ -9,7 +10,17 @@
 #include <linux/types.h>
 #include <linux/blk-crypto.h>
 
-struct qcom_ice;
+struct qcom_ice {
+	struct device *dev;
+	void __iomem *base;
+	struct device_link *link;
+
+	struct clk *core_clk;
+	u8 hwkm_version;
+	bool use_hwkm;
+	bool hwkm_init_complete;
+	bool handle_clks;
+};
 
 enum qcom_ice_crypto_key_size {
 	QCOM_ICE_CRYPTO_KEY_SIZE_INVALID	= 0x0,

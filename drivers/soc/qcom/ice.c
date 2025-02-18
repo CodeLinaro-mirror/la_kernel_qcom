@@ -5,6 +5,7 @@
  * Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  * Copyright (c) 2019, Google LLC
  * Copyright (c) 2023, Linaro Limited
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -72,18 +73,6 @@
 
 #define qcom_ice_readl(engine, reg)	\
 	readl((engine)->base + (reg))
-
-struct qcom_ice {
-	struct device *dev;
-	void __iomem *base;
-	struct device_link *link;
-
-	struct clk *core_clk;
-	u8 hwkm_version;
-	bool use_hwkm;
-	bool hwkm_init_complete;
-	bool handle_clks;
-};
 
 union crypto_cfg {
 	__le32 regval;
