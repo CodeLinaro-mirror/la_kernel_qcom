@@ -721,20 +721,12 @@ void *qcom_smem_get(unsigned host, unsigned item, size_t *size)
 {
 	struct smem_partition *part;
 	void *ptr = ERR_PTR(-EPROBE_DEFER);
-	unsigned long flags;
-	int ret;
 
 	if (!__smem)
 		return ptr;
 
 	if (WARN_ON(item >= __smem->item_count))
 		return ERR_PTR(-EINVAL);
-
-	ret = hwspin_lock_timeout_irqsave(__smem->hwlock,
-					  HWSPINLOCK_TIMEOUT,
-					  &flags);
-	if (ret)
-		return ERR_PTR(ret);
 
 	part = xa_load(&__smem->partitions, host);
 	if (part) {
