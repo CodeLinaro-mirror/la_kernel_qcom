@@ -1,6 +1,6 @@
-load(":target_variants.bzl", "lxc_variants")
-load(":msm_kernel_lxc.bzl", "define_msm_lxc")
 load(":image_opts.bzl", "boot_image_opts")
+load(":msm_kernel_lxc.bzl", "define_msm_lxc")
+load(":target_variants.bzl", "lxc_variants")
 
 target_name = "autogvm"
 
@@ -9,13 +9,6 @@ def define_autogvm_lxc():
         # keep sorted
         "drivers/rpmsg/qcom_glink_cma.ko",
         "drivers/soc/qcom/hgsl/qcom_hgsl.ko",
-        "drivers/usb/dwc3/dwc3-qcom-mp.ko",
-        "drivers/phy/qualcomm/phy-qcom-qmp-combo.ko",
-        "drivers/phy/qualcomm/phy-qcom-qmp-pcie.ko",
-        "drivers/phy/qualcomm/phy-qcom-qmp-pcie-msm8996.ko",
-        "drivers/phy/qualcomm/phy-qcom-qmp-ufs.ko",
-        "drivers/phy/qualcomm/phy-qcom-qmp-usb.ko",
-        "drivers/phy/qualcomm/phy-qcom-snps-femto-v2.ko",
     ]
 
     for variant in lxc_variants:
