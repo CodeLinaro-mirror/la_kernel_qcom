@@ -1386,6 +1386,7 @@ struct cfg80211_unsol_bcast_probe_resp {
  *	a 20 MHz channel, lowest bit corresponding to the lowest channel.
  *	Bit set to 1 indicates that the channel is punctured.
  * @reconfig: whether reconfiguration or not
+ * @afc: whether ap is start/stopped for afc or not
  */
 struct cfg80211_ap_settings {
 	struct cfg80211_chan_def chandef;
@@ -1422,6 +1423,7 @@ struct cfg80211_ap_settings {
 	struct cfg80211_mbssid_config mbssid_config;
 	u16 punct_bitmap;
 	bool reconfig;
+	bool afc;
 
 	ANDROID_KABI_RESERVE(1);
 };
