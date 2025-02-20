@@ -15,6 +15,10 @@ description:
 
 properties:
   compatible:
+    - items:
+      - enum:
+          - qcom,qcs615-qmp-ufs-phy
+      - const: qcom,sm6115-qmp-ufs-phy
     enum:
       - qcom,msm8996-qmp-ufs-phy
       - qcom,msm8998-qmp-ufs-phy
