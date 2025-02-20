@@ -2,7 +2,7 @@
 
 // Copyright (c) 2018-19, Linaro Limited
 // Copyright (c) 2021, The Linux Foundation. All rights reserved.
-// Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -64,6 +64,7 @@
 #define PHY_USXGMII_LOOPBACK_10	0x0800
 #define TN_SYSFS_DEV_ATTR_PERMS 0644
 #define ETH_RTK_PHY_ID_RTL8261N 0x001CCAF3
+#define EFUSE_MAC_ADDR_MASK 16
 
 static void ethqos_rgmii_io_macro_loopback(struct qcom_ethqos *ethqos,
 					   int mode);
@@ -5568,7 +5569,7 @@ static void read_mac_addr_from_fuse_reg(struct device_node *np)
 			if (!mac_efuse_addr)
 				continue;
 
-			mac_addr = readq(mac_efuse_addr);
+			mac_addr = readq(mac_efuse_addr) >> EFUSE_MAC_ADDR_MASK;
 			ETHQOSINFO("Mac address read: %lx\n", mac_addr);
 
 			/* create byte array out of value read from efuse */
@@ -5585,6 +5586,8 @@ static void read_mac_addr_from_fuse_reg(struct device_node *np)
 				is_valid_ether_addr(pparams.mac_addr);
 			if (pparams.is_valid_mac_addr)
 				return;
+			else
+				ETHQOSERR("Fuse Mac address is invalid\n");
 		}
 	}
 }
@@ -6367,6 +6370,7 @@ static int ethqos_fixed_link_check(struct platform_device *pdev)
 		of_property_read_u32(fixed_phy_node, "speed", &mac2mac_speed);
 		plat_dat->fixed_phy_mode = true;
 		plat_dat->phy_addr = -1;
+		plat_dat->fixed_phy_speed = mac2mac_speed;
 		ETHQOSINFO("mac2mac mode: Fixed-link enabled from dt, Speed = %d\n",
 			   mac2mac_speed);
 		goto out;
@@ -6421,6 +6425,8 @@ static int ethqos_fixed_link_check(struct platform_device *pdev)
 				ETHQOSERR("Fixed-link speed update failed\n");
 				return -ENOENT;
 			}
+
+			plat_dat->fixed_phy_speed = mparams.link_speed;
 
 			ETHQOSINFO("mac2mac mode: Fixed-link speed updated from partition: %u\n",
 				   mparams.link_speed);
