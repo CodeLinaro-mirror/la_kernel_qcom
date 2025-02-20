@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QCOM_QCOM_IO_PGTABLE_H
 #define __QCOM_QCOM_IO_PGTABLE_H
@@ -36,6 +36,7 @@ container_of((x), struct qcom_io_pgtable_info, cfg)
 
 #define ARM_V8L_FAST ((unsigned int)-1)
 #define QCOM_ARM_64_LPAE_S1 ((unsigned int)-2)
+#define QCOM_ARM_32_LPAE_S1 ((unsigned int)-3)
 
 struct io_pgtable_ops *qcom_alloc_io_pgtable_ops(enum io_pgtable_fmt fmt,
 				struct qcom_io_pgtable_info *pgtbl_info,
@@ -80,6 +81,7 @@ extern struct io_pgtable_init_fns io_pgtable_av8l_fast_init_fns;
 #endif
 #ifdef CONFIG_IOMMU_IO_PGTABLE_LPAE
 extern struct io_pgtable_init_fns qcom_io_pgtable_arm_64_lpae_s1_init_fns;
+extern struct io_pgtable_init_fns qcom_io_pgtable_arm_32_lpae_s1_init_fns;
 #endif
 
 int qcom_arm_lpae_map(struct io_pgtable_ops *ops, unsigned long iova,

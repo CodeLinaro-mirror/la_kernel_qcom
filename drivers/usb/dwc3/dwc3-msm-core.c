@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -48,6 +48,7 @@
 #include <linux/usb/composite.h>
 #include <linux/soc/qcom/wcd939x-i2c.h>
 #include <linux/usb/repeater.h>
+#include <linux/nvmem-consumer.h>
 
 #include "core.h"
 #include "gadget.h"
@@ -389,6 +390,7 @@ enum bus_vote {
 	BUS_VOTE_NONE,
 	BUS_VOTE_NOMINAL,
 	BUS_VOTE_SVS,
+	BUS_VOTE_LSVS,
 	BUS_VOTE_MIN,
 	BUS_VOTE_MAX
 };
@@ -404,6 +406,7 @@ static const struct {
 	[BUS_VOTE_NONE]    = { {0, 0}, {0, 0}, {0, 0} },
 	[BUS_VOTE_NOMINAL] = { {1000000, 1250000}, {0, 2400}, {0, 40000}, },
 	[BUS_VOTE_SVS]     = { {240000, 700000}, {0, 2400}, {0, 40000}, },
+	[BUS_VOTE_LSVS]     = { {120000, 380000}, {0, 2400}, {0, 40000}, },
 	[BUS_VOTE_MIN]     = { {1, 1}, {1, 1}, {1, 1}, },
 };
 
@@ -3473,6 +3476,15 @@ void dwc3_msm_notify_event(struct dwc3 *dwc,
 		break;
 	case DWC3_CONTROLLER_PULLUP_ENTER:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_PULLUP_ENTER %d\n", value);
+
+		/*
+		 * Set autosuspend delay back to default value during pullup(0) if cable
+		 * is connected. Events like adb root calls usb_gadget_disconnect which
+		 * causes system to suspend immediately even before adbd restarts.
+		 */
+		if (dwc->runtime_suspend_on_usb_suspend && mdwc->vbus_active && !value)
+			pm_runtime_set_autosuspend_delay(dwc->dev, DWC3_DEFAULT_AUTOSUSPEND_DELAY);
+
 		/* ignore pullup when role switch from device to host */
 		if (mdwc->vbus_active)
 			usb_redriver_gadget_pullup_enter(mdwc->redriver, value);
@@ -3665,6 +3677,10 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc, bool ignore_p3_state)
 			return -EBUSY;
 		}
 	}
+
+	/* Prepare SSPHY for suspend */
+	dwc3_msm_write_reg_field(mdwc->base, DWC3_GUSB3PIPECTL(0),
+					DWC3_GUSB3PIPECTL_SUSPHY, 1);
 
 	/* Clear previous L2 events */
 	dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG,
@@ -4864,6 +4880,14 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 		}
 
 		if (!spoof && mdwc->drd_state != DRD_STATE_UNDEFINED) {
+		/*
+		 * If bus suspend feature is enabled, increase the autosuspend delay to default,
+		 * so that the HS-USB re-enumeration isn't interrupted by dwc3 RT suspend.
+		 */
+			if (!event && dwc->runtime_suspend_on_usb_suspend)
+				pm_runtime_set_autosuspend_delay(dwc->dev,
+						DWC3_DEFAULT_AUTOSUSPEND_DELAY);
+
 			dwc3_override_vbus_status(mdwc, !!event);
 			return NOTIFY_DONE;
 		}
@@ -6073,6 +6097,190 @@ static int dwc3_msm_register_interrupts(struct platform_device *pdev)
 	return ret;
 }
 
+
+#define MAX_FAST_BOOT_VALUES 16
+
+/**
+ * Determine if device HW is of PCIe endpoint flavor based on boot_config info.
+ * BOOT_CONFIG is a FUSE based register. This register allows to read the proper PBL
+ * related values. Use nvmem interface to read boot_config register and use bitmask
+ * which is provided through devicetree for masking fast_boot and pcie_host_bypass.
+ *
+ * @return bool true if device HW is of PCIe endpoint falvor,
+ *         false otherwise
+ */
+static bool dwc3_msm_check_boot_config(struct device *dev)
+{
+	struct nvmem_cell *cell = NULL;
+	struct device_node *node = dev->of_node;
+	u32 fast_boot, host_bypass, fast_boot_mask = 0, host_bypass_mask = 0;
+	u8 *buf;
+	int ret = 0, num_fast_boot_values = 0, i;
+	u32 fast_boot_values[16];
+
+	if (!of_find_property(node, "nvmem-cells", NULL)) {
+		pr_err("nvmem-cells property is not defined in %s node\n", node->name);
+		of_node_put(node);
+		return false;
+	}
+	ret = of_property_read_u32(node, "qcom,fast-boot-mask", &fast_boot_mask);
+	if (ret) {
+		pr_err("qcom,fast-boot-mask property is not defined in %s node\n", node->name);
+		return false;
+	}
+	ret = of_property_read_u32(node, "qcom,host-bypass-mask", &host_bypass_mask);
+	if (ret) {
+		pr_err("qcom,host-bypass-mask property is not defined in %s node\n", node->name);
+		return false;
+	}
+
+	if (!host_bypass_mask || !fast_boot_mask) {
+		dev_err(dev, "host_bypass_mask and fast_boot_mask should be non-zero\n");
+		return false;
+	}
+
+	num_fast_boot_values = of_property_count_elems_of_size(node, "qcom,fast-boot-values",
+		sizeof(u32));
+	if (num_fast_boot_values < 0 || num_fast_boot_values > MAX_FAST_BOOT_VALUES) {
+		dev_err(dev, "qcom,fast-boot-values number of values invalid\n");
+		return false;
+	}
+
+	pr_debug("dwc3-msm: num_fast_boot_values = %d\n", num_fast_boot_values);
+	ret = of_property_read_u32_array(node, "qcom,fast-boot-values", fast_boot_values,
+		num_fast_boot_values);
+	if (ret) {
+		dev_err(dev, "qcom,fast-boot-values array unexpected failure\n");
+		return false;
+	}
+
+	cell = nvmem_cell_get(dev, "boot_conf");
+	if (IS_ERR(cell)) {
+		dev_err(dev, "nvmem_cell_get failed on boot_conf\n");
+		return false;
+	}
+	buf = nvmem_cell_read(cell, NULL);
+	if (IS_ERR(buf)) {
+		dev_err(dev, "nvmem_cell_read failed on boot_conf\n");
+		nvmem_cell_put(cell);
+		return false;
+	}
+
+	fast_boot = (((*buf) & fast_boot_mask) >> ((ffs(fast_boot_mask)) - 1));
+	host_bypass = (((*buf) & host_bypass_mask) >> ((ffs(host_bypass_mask)) - 1));
+	pr_debug("dwc3-msm: boot_conf = %x, fast_boot = %x, host_bypass = %x\n", *buf, fast_boot,
+		 host_bypass);
+
+	kfree(buf);
+	nvmem_cell_put(cell);
+	if (host_bypass)
+		return false;
+
+	for (i = 0; i < num_fast_boot_values; i++) {
+		if (fast_boot == fast_boot_values[i])
+			return true;
+	}
+
+	return false;
+}
+
+static void dt_node_property_destroy(struct property *prop)
+{
+	if (!prop)
+		return;
+
+	kfree(prop->name);
+	kfree(prop->value);
+	prop->name = NULL;
+	prop->value = NULL;
+
+}
+
+static struct property *dt_node_property_create(const char *name, u8 *value)
+{
+	struct property *prop = kzalloc(sizeof(*prop), GFP_KERNEL);
+
+	if (!prop)
+		return NULL;
+
+	prop->name = kstrdup(name, GFP_KERNEL);
+	if (!prop->name) {
+		dt_node_property_destroy(prop);
+		return NULL;
+	}
+	if (!value)
+		return prop;
+	prop->value = kstrdup(value, GFP_KERNEL);
+	if (!prop->value) {
+		dt_node_property_destroy(prop);
+		return NULL;
+	}
+	prop->length = strnlen(prop->value, 32) + 1;
+
+	return prop;
+}
+
+/**
+ * Set device tree properties of dwc3 node to SMMU bypass mode.
+ *
+ * @return int 0 on success, a negative error value in case of
+ *         an error.
+ */
+static int dwc3_set_bypass_mode(struct device_node *node)
+{
+	struct property *prop = NULL;
+
+	prop = of_find_property(node, "dma-coherent", NULL);
+	if (prop) {
+		if (of_remove_property(node, prop)) {
+			pr_err("of_remove_property failed. name=%s\n", prop->name);
+			return -EINVAL;
+		}
+	}
+	prop = of_find_property(node, "qcom,iommu-dma", NULL);
+	if (prop) {
+		pr_info("dwc3-msm: %s found in device tree under %s\n", prop->name, node->name);
+		if (of_remove_property(node, prop)) {
+			pr_err("dwc3-msm: of_remove_property failed. name=%s\n", prop->name);
+			return -EINVAL;
+		}
+
+		prop = dt_node_property_create("qcom,iommu-dma", "bypass");
+		if (!prop) {
+			pr_err("dwc3-msm: qcom,iommu-dma dt_node_property_create failed\n");
+			return -EINVAL;
+		}
+		if (of_add_property(node, prop)) {
+			pr_err("dwc3-msm: of_add_property failed. name=%s\n", prop->name);
+			dt_node_property_destroy(prop);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static int dwc3_msm_set_smmu_cfg(struct device *dev)
+{
+	struct device_node *node = NULL;
+	int ret = 0;
+
+	if (!dwc3_msm_check_boot_config(dev))
+		return 0;
+
+	node = of_find_compatible_node(dev->of_node, NULL, "snps,dwc3");
+	if (node) {
+		ret = dwc3_set_bypass_mode(node);
+		of_node_put(node);
+		if (ret)
+			pr_err("dwc3_set_bypass_mode failed\n");
+	} else {
+		dev_err(dev, "snps,dwc3 node not found\n");
+		ret = -ENODEV;
+	}
+	return ret;
+}
+
 static int dwc3_msm_check_extcon_prop(struct platform_device *pdev)
 {
 	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
@@ -6159,6 +6367,12 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, mdwc);
 	mdwc->dev = &pdev->dev;
+
+	ret = dwc3_msm_set_smmu_cfg(dev);
+	if (ret) {
+		dev_err(dev, "dynamic smmu configuration failed\n");
+		return ret;
+	}
 
 	INIT_LIST_HEAD(&mdwc->req_complete_list);
 	INIT_WORK(&mdwc->resume_work, dwc3_resume_work);
