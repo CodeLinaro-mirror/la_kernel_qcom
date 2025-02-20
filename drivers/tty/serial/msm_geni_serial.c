@@ -33,6 +33,7 @@
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <uapi/linux/msm_geni_serial.h>
+#include <soc/qcom/boot_stats.h>
 
 static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENABLED);
 
@@ -5332,6 +5333,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	struct uart_driver *drv;
 	const struct of_device_id *id;
 	bool is_console = false;
+	char boot_kpi[40];
 
 	id = of_match_device(msm_geni_device_tbl, &pdev->dev);
 	if (!id) {
@@ -5376,10 +5378,13 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		line = pdev->id;
 	}
 
-	if (drv->cons)
-		pr_info("boot_kpi: M - DRIVER GENI_CONSOLE_%d Init\n", line);
-	else
-		pr_info("boot_kpi: M - DRIVER GENI_HS_UART_%d Init\n", line);
+	if (drv->cons) {
+		scnprintf(boot_kpi, sizeof(boot_kpi), "M - DRIVER GENI_CONSOLE_%d Init", line);
+		update_marker(boot_kpi);
+	} else {
+		scnprintf(boot_kpi, sizeof(boot_kpi), "M - DRIVER GENI_HS_UART_%d Init", line);
+		update_marker(boot_kpi);
+	}
 
 	is_console = (drv->cons ? true : false);
 	dev_port = get_port_from_line(line, is_console);
@@ -5448,10 +5453,13 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,suspend-ignore-children"))
 		pm_suspend_ignore_children(uport->dev, true);
 
-	if (is_console)
-		pr_info("boot_kpi: M - DRIVER GENI_CONSOLE_%d Ready\n", line);
-	else
-		pr_info("boot_kpi: M - DRIVER GENI_HS_UART_%d Ready\n", line);
+	if (is_console) {
+		scnprintf(boot_kpi, sizeof(boot_kpi), "M - DRIVER GENI_CONSOLE_%d Ready", line);
+		update_marker(boot_kpi);
+	} else {
+		scnprintf(boot_kpi, sizeof(boot_kpi), "M - DRIVER GENI_HS_UART_%d Ready", line);
+		update_marker(boot_kpi);
+	}
 
 exit_geni_serial_probe:
 	UART_LOG_DBG(dev_port->ipc_log_misc, &pdev->dev, "%s: ret:%d\n",

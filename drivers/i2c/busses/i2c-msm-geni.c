@@ -26,6 +26,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/sched/clock.h>
 #include <linux/slab.h>
+#include <soc/qcom/boot_stats.h>
 
 #define SE_GENI_TEST_BUS_CTRL	0x44
 #define SE_NUM_FOR_TEST_BUS	5
@@ -2714,6 +2715,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret;
 	struct device *dev = &pdev->dev;
+	char boot_kpi[32];
 
 	gi2c = devm_kzalloc(&pdev->dev, sizeof(*gi2c), GFP_KERNEL);
 	if (!gi2c)
@@ -2725,7 +2727,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 
 	gi2c->dev = dev;
 
-	pr_info("boot_kpi: M - DRIVER GENI_I2C Init\n");
+	update_marker("M - DRIVER GENI_I2C Init");
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
@@ -2856,7 +2858,9 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		test_bus_enable_per_qupv3(gi2c->wrapper_dev, gi2c->ipcl);
 	}
 
-	pr_info("boot_kpi: M - DRIVER GENI_I2C_%d Ready\n", gi2c->adap.nr);
+	scnprintf(boot_kpi, sizeof(boot_kpi), "M - DRIVER GENI_I2C_%d Ready", gi2c->adap.nr);
+	update_marker(boot_kpi);
+
 	dev_info(gi2c->dev, "I2C probed\n");
 	return 0;
 }
