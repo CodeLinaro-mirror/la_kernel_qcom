@@ -29,6 +29,7 @@ def define_autoghgvm():
         "drivers/pci/controller/pcie-qcom-ecam.ko",
         "drivers/pinctrl/qcom/pinctrl-lemans.ko",
         "drivers/pinctrl/qcom/pinctrl-monaco_auto.ko",
+        "drivers/pinctrl/qcom/pinctrl-sa8797p.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
         "drivers/remoteproc/qcom_sysmon.ko",
         "drivers/remoteproc/rproc_qcom_common.ko",
