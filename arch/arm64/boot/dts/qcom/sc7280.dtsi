@@ -5498,7 +5498,7 @@
 				gpr {
 					compatible = "qcom,gpr";
 					qcom,glink-channels = "adsp_apps";
-					//qcom,domain = <GPR_DOMAIN_ID_ADSP>;
+					qcom,domain = <GPR_DOMAIN_ID_ADSP>;
 					qcom,intents = <512 20>;
 					#address-cells = <1>;
 					#size-cells = <0>;
