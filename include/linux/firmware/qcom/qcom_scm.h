@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2010-2015, 2018-2019 The Linux Foundation. All rights reserved.
  * Copyright (C) 2015 Linaro Ltd.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QCOM_SCM_H
 #define __QCOM_SCM_H
@@ -122,6 +122,8 @@ bool qcom_scm_pas_supported(u32 peripheral);
 int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
 int qcom_scm_io_writel(phys_addr_t addr, unsigned int val);
 
+int qcom_scm_set_gpu_smmu_aperture(unsigned int context_bank);
+bool qcom_scm_set_gpu_smmu_aperture_is_available(void);
 bool qcom_scm_restore_sec_cfg_available(void);
 int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare);
 int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size);
