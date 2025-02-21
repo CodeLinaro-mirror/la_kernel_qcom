@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -142,10 +142,9 @@ static int mem_buf_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int mem_buf_remove(struct platform_device *pdev)
+static void mem_buf_remove(struct platform_device *pdev)
 {
 	mem_buf_dev = NULL;
-	return 0;
 }
 
 static const struct of_device_id mem_buf_match_tbl[] = {
