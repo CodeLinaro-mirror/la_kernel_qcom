@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
+#include <linux/pm_runtime.h>
 #include <linux/reset.h>
 
 #include "iris_core.h"
@@ -141,6 +142,7 @@ static int iris_register_video_device(struct iris_core *core)
 	strscpy(vdev->name, "qcom-iris-decoder", sizeof(vdev->name));
 	vdev->release = video_device_release;
 	vdev->fops = core->iris_v4l2_file_ops;
+	vdev->ioctl_ops = core->iris_v4l2_ioctl_ops;
 	vdev->vfl_dir = VFL_DIR_M2M;
 	vdev->v4l2_dev = &core->v4l2_dev;
 	vdev->device_caps = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
@@ -206,6 +208,7 @@ static int iris_probe(struct platform_device *pdev)
 	if (!core->response_packet)
 		return -ENOMEM;
 
+	INIT_LIST_HEAD(&core->instances);
 	INIT_DELAYED_WORK(&core->sys_error_handler, iris_sys_error_handler);
 
 	core->reg_base = devm_platform_ioremap_resource(pdev, 0);
@@ -252,6 +255,12 @@ static int iris_probe(struct platform_device *pdev)
 	dma_set_max_seg_size(&pdev->dev, DMA_BIT_MASK(32));
 	dma_set_seg_boundary(&pdev->dev, DMA_BIT_MASK(32));
 
+	pm_runtime_set_autosuspend_delay(core->dev, AUTOSUSPEND_DELAY_VALUE);
+	pm_runtime_use_autosuspend(core->dev);
+	ret = devm_pm_runtime_enable(core->dev);
+	if (ret)
+		goto err_vdev_unreg;
+
 	return 0;
 
 err_vdev_unreg:
@@ -261,6 +270,51 @@ err_v4l2_unreg:
 
 	return ret;
 }
+
+static int __maybe_unused iris_pm_suspend(struct device *dev)
+{
+	struct iris_core *core;
+	int ret = 0;
+
+	core = dev_get_drvdata(dev);
+
+	mutex_lock(&core->lock);
+	if (core->state != IRIS_CORE_INIT)
+		goto exit;
+
+	ret = iris_hfi_pm_suspend(core);
+
+exit:
+	mutex_unlock(&core->lock);
+
+	return ret;
+}
+
+static int __maybe_unused iris_pm_resume(struct device *dev)
+{
+	struct iris_core *core;
+	int ret = 0;
+
+	core = dev_get_drvdata(dev);
+
+	mutex_lock(&core->lock);
+	if (core->state != IRIS_CORE_INIT)
+		goto exit;
+
+	ret = iris_hfi_pm_resume(core);
+	pm_runtime_mark_last_busy(core->dev);
+
+exit:
+	mutex_unlock(&core->lock);
+
+	return ret;
+}
+
+static const struct dev_pm_ops iris_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				pm_runtime_force_resume)
+	SET_RUNTIME_PM_OPS(iris_pm_suspend, iris_pm_resume, NULL)
+};
 
 static const struct of_device_id iris_dt_match[] = {
 	{
@@ -277,6 +331,7 @@ static struct platform_driver qcom_iris_driver = {
 	.driver = {
 		.name = "qcom-iris",
 		.of_match_table = iris_dt_match,
+		.pm = &iris_pm_ops,
 	},
 };
 

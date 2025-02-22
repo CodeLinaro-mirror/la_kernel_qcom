@@ -10,6 +10,7 @@ struct iris_core;
 
 #define IRIS_PAS_ID				9
 #define HW_RESPONSE_TIMEOUT_VALUE               (1000) /* milliseconds */
+#define AUTOSUSPEND_DELAY_VALUE			(HW_RESPONSE_TIMEOUT_VALUE + 500) /* milliseconds */
 
 extern struct iris_platform_data sm8550_data;
 
@@ -41,10 +42,29 @@ struct ubwc_config_data {
 	u32	bank_spreading;
 };
 
+struct platform_inst_caps {
+	u32 min_frame_width;
+	u32 max_frame_width;
+	u32 min_frame_height;
+	u32 max_frame_height;
+	u32 max_mbpf;
+};
+struct iris_core_power {
+	u64 clk_freq;
+	u64 icc_bw;
+};
+
+enum platform_pm_domain_type {
+	IRIS_CTRL_POWER_DOMAIN,
+	IRIS_HW_POWER_DOMAIN,
+};
+
 struct iris_platform_data {
 	void (*init_hfi_command_ops)(struct iris_core *core);
 	void (*init_hfi_response_ops)(struct iris_core *core);
 	struct iris_inst *(*get_instance)(void);
+	const struct vpu_ops *vpu_ops;
+	void (*set_preset_registers)(struct iris_core *core);
 	const struct icc_info *icc_tbl;
 	unsigned int icc_tbl_size;
 	const char * const *pmdomain_tbl;
@@ -58,10 +78,13 @@ struct iris_platform_data {
 	u64 dma_mask;
 	const char *fwname;
 	u32 pas_id;
+	struct platform_inst_caps *inst_caps;
 	struct tz_cp_config *tz_cp_config_data;
 	u32 core_arch;
 	u32 hw_response_timeout;
 	struct ubwc_config_data *ubwc_config;
+	u32 num_vpp_pipe;
+	u32 max_session_count;
 };
 
 #endif
