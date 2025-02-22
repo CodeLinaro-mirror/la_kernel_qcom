@@ -41,7 +41,7 @@
  *	Andrew F. Davis <afd@ti.com>
  *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/dma-buf.h>
@@ -484,8 +484,8 @@ static struct page *alloc_largest_available(struct dynamic_page_pool **pools,
 
 static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 					       unsigned long len,
-					       unsigned long fd_flags,
-					       unsigned long heap_flags)
+					       u32 fd_flags,
+					       u64 heap_flags)
 {
 	struct qcom_secure_system_heap *sys_heap;
 	struct qcom_sg_buffer *buffer;
