@@ -1050,6 +1050,41 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 	return err;
 }
 
+static int ufs_qcom_fmr_hce_enable_notify(struct ufs_hba *hba,
+				      enum ufs_notify_change_status status)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	int err = 0;
+
+	switch (status) {
+	case PRE_CHANGE:
+		ufs_qcom_select_unipro_mode(host);
+		/*
+		 * ICE enable needs to be called before ufshcd_crypto_enable
+		 * during resume as it is needed before reprogramming all
+		 * keys. So moving it to PRE_CHANGE.
+		 */
+		ufs_qcom_ice_enable(host);
+		break;
+	case POST_CHANGE:
+		err = ufs_qcom_config_shared_ice(host);
+		if (err) {
+			dev_err(hba->dev, "%s: config shared ice failed, ret=%d\n",
+				__func__, err);
+			break;
+		}
+		/* check if UFS PHY moved from DISABLED to HIBERN8 */
+		err = ufs_qcom_check_hibern8(hba);
+		ufs_qcom_enable_hw_clk_gating(hba);
+		break;
+	default:
+		dev_err(hba->dev, "%s: invalid status %d\n", __func__, status);
+		err = -EINVAL;
+		break;
+	}
+	return err;
+}
+
 /*
  * Returns zero for success and non-zero in case of a failure
  */
@@ -1201,6 +1236,7 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 
 	return 0;
 }
+
 
 static int ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 			       u32 hs, u32 rate, bool update_link_startup_timer)
@@ -1821,6 +1857,25 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 	return err;
 }
 
+static int ufs_qcom_fmr_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
+	enum ufs_notify_change_status status)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	if (status == PRE_CHANGE)
+		return 0;
+
+	pm_runtime_put_sync(hba->dev);
+
+	if (ufs_qcom_is_link_off(hba) && host->device_reset)
+		ufs_qcom_device_reset_ctrl(hba, true);
+
+	ufs_qcom_ice_disable(host);
+
+	cancel_dwork_unvote_cpufreq(hba);
+	return 0;
+}
+
 static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
@@ -1859,6 +1914,17 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (host->dbg_en)
 		trace_ufs_qcom_resume(dev_name(hba->dev), pm_op, hba->rpm_lvl, hba->spm_lvl,
 				hba->uic_link_state, hba->curr_dev_pwr_mode, err);
+	return 0;
+}
+
+static int ufs_qcom_fmr_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
+{
+	int err;
+
+	err = pm_runtime_resume_and_get(hba->dev);
+	if (err < 0)
+		return err;
+
 	return 0;
 }
 
@@ -2383,8 +2449,10 @@ struct ufs_qcom_dev_params ufs_qcom_cap;
 			ret = -EINVAL;
 		}
 
-		val = ~(MAX_U32 << dev_req_params->lane_tx);
-		ufs_qcom_phy_set_tx_lane_enable(phy, val);
+		if (host->is_phy_pwr_on) {
+			val = ~(MAX_U32 << dev_req_params->lane_tx);
+			ufs_qcom_phy_set_tx_lane_enable(phy, val);
+		}
 
 		/* cache the power mode parameters to use internally */
 		memcpy(&host->dev_req_params,
@@ -2661,6 +2729,21 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 		 */
 		host->caps |= UFS_QCOM_CAP_SVS2;
 	}
+
+	if (host->hw_ver.major >= 0x5)
+		host->caps |= UFS_QCOM_CAP_SHARED_ICE;
+}
+
+static void ufs_qcom_fmr_set_caps(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	if (!host->disable_wb_support)
+		hba->caps |= UFSHCD_CAP_WB_EN;
+
+	if (host->hw_ver.major >= 0x2)
+		host->caps = UFS_QCOM_CAP_QUNIPRO |
+			     UFS_QCOM_CAP_RETAIN_SEC_CFG_AFTER_PWR_COLLAPSE;
 
 	if (host->hw_ver.major >= 0x5)
 		host->caps |= UFS_QCOM_CAP_SHARED_ICE;
@@ -3771,14 +3854,13 @@ static int ufs_qcom_get_host_id(struct ufs_hba *hba)
  * Returns -EPROBE_DEFER if binding fails, returns negative error
  * on phy power up failure and returns zero on success.
  */
-static int ufs_qcom_init(struct ufs_hba *hba)
+static int ufs_qcom_common_init(struct ufs_hba *hba)
 {
 	char type[5];
 	int err, host_id;
 	struct device *dev = hba->dev;
 	struct ufs_qcom_host *host;
 	struct ufs_qcom_thermal *ut;
-	struct ufs_clk_info *clki;
 
 	host = devm_kzalloc(dev, sizeof(*host), GFP_KERNEL);
 	if (!host) {
@@ -3804,23 +3886,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		goto out_variant_clear;
 	}
 
-	/* Fire up the reset controller. Failure here is non-fatal. */
-	host->rcdev.of_node = dev->of_node;
-	host->rcdev.ops = &ufs_qcom_reset_ops;
-	host->rcdev.owner = dev->driver->owner;
-	host->rcdev.nr_resets = 1;
-	err = devm_reset_controller_register(dev, &host->rcdev);
-	if (err)
-		dev_warn(dev, "Failed to register reset controller\n");
-
-	if (!has_acpi_companion(dev)) {
-		host->generic_phy = devm_phy_get(dev, "ufsphy");
-		if (IS_ERR(host->generic_phy)) {
-			err = dev_err_probe(dev, PTR_ERR(host->generic_phy), "Failed to get PHY\n");
-			goto out_variant_clear;
-		}
-	}
-
 	host->device_reset = devm_gpiod_get_optional(dev, "reset",
 						     GPIOD_OUT_HIGH);
 	if (IS_ERR(host->device_reset)) {
@@ -3830,86 +3895,18 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		goto out_variant_clear;
 	}
 
-	err = ufs_qcom_bus_register(host);
-	if (err)
-		goto out_variant_clear;
-
 	ufs_qcom_get_controller_revision(hba, &host->hw_ver.major,
 		&host->hw_ver.minor, &host->hw_ver.step);
 
-	ufs_qcom_populate_ref_clk_ctrl(hba);
 
 	ufs_qcom_setup_max_hs_gear(host);
-
-	/* Register vdd_hba vreg callback */
-	host->vdd_hba_reg_nb.notifier_call = ufs_qcom_vdd_hba_reg_notifier;
-	devm_regulator_register_notifier(hba->vreg_info.vdd_hba->reg,
-					 &host->vdd_hba_reg_nb);
-
-	/* update phy revision information before calling phy_init() */
-	ufs_qcom_phy_save_controller_version(host->generic_phy,
-		host->hw_ver.major, host->hw_ver.minor, host->hw_ver.step);
-	if (err == -EPROBE_DEFER) {
-		pr_err("%s: phy device probe is not completed yet\n",
-		__func__);
-		goto out_variant_clear;
-	}
-
-	err = ufs_qcom_parse_reg_info(host, "qcom,vddp-ref-clk",
-				      &host->vddp_ref_clk);
-
-	err = phy_init(host->generic_phy);
-	if (err) {
-		dev_err(hba->dev, "%s: phy init failed, err %d\n",
-				__func__, err);
-		goto out_variant_clear;
-	}
-	mutex_init(&host->phy_mutex);
-
-	if (host->vddp_ref_clk) {
-		err = ufs_qcom_enable_vreg(dev, host->vddp_ref_clk);
-		if (err) {
-			dev_err(dev, "%s: failed enabling ref clk supply: %d\n",
-				__func__, err);
-			goto out_phy_exit;
-		}
-	}
-
 	ufs_qcom_parse_limits(host);
-	ufs_qcom_setup_vreg_to_enable(hba);
-	if (host->parent_vreg) {
-		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
-		if (err) {
-			dev_err(dev, "%s: failed to enable %s err=%d\n",
-					__func__, host->parent_vreg->name, err);
-			goto out_disable_vddp;
-		}
-	}
 
-	list_for_each_entry(clki, &hba->clk_list_head, list) {
-		if (!strcmp(clki->name, "core_clk_unipro")) {
-			clki->keep_link_active = true;
-			host->core_unipro_clki = clki;
-		} else if (!strcmp(clki->name, "ref_clk"))
-			host->ref_clki = clki;
-	}
-
-	err = ufs_qcom_init_lane_clks(host);
-	if (err)
-		goto out_disable_parent_vreg;
-
-	ufs_qcom_parse_pm_level(hba);
-	ufs_qcom_parse_g4_workaround_flag(host);
-	ufs_qcom_parse_lpm(host);
-	if (host->disable_lpm)
-		pm_runtime_forbid(host->hba->dev);
-
-	ufs_qcom_parse_wb(host);
 	ufs_qcom_parse_pbl_rst_workaround_flag(host);
 	ufs_qcom_parse_broken_ahit_workaround_flag(host);
-	ufs_qcom_set_caps(hba);
+	ufs_qcom_parse_pm_level(hba);
 	ufs_qcom_advertise_quirks(hba);
-
+	ufs_qcom_parse_wb(host);
 	err = ufs_qcom_shared_ice_init(hba);
 	if (err)
 		dev_err(hba->dev, "Shared ICE Init failed, ret=%d\n", err);
@@ -3926,10 +3923,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	 */
 	ufshcd_qti_hba_init_crypto_capabilities(hba);
 
-	ufs_qcom_set_bus_vote(hba, true);
-	/* enable the device ref clock for HS mode*/
-	if (ufshcd_is_hs_mode(&hba->pwr_info))
-		ufs_qcom_dev_ref_clk_ctrl(host, true);
 
 	if (hba->dev->id < MAX_UFS_QCOM_HOSTS)
 		ufs_qcom_hosts[hba->dev->id] = host;
@@ -3992,6 +3985,119 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	return 0;
 
+out_variant_clear:
+	ufshcd_set_variant(hba, NULL);
+
+	return err;
+}
+
+static int ufs_qcom_init(struct ufs_hba *hba)
+{
+	struct device *dev = hba->dev;
+	struct ufs_qcom_host *host;
+	struct ufs_clk_info *clki;
+	int err;
+
+	err = ufs_qcom_common_init(hba);
+	if (err)
+		goto out_variant_clear;
+
+	host = ufshcd_get_variant(hba);
+
+	/* Fire up the reset controller. Failure here is non-fatal. */
+	host->rcdev.of_node = dev->of_node;
+	host->rcdev.ops = &ufs_qcom_reset_ops;
+	host->rcdev.owner = dev->driver->owner;
+	host->rcdev.nr_resets = 1;
+
+	err = devm_reset_controller_register(dev, &host->rcdev);
+	if (err)
+		dev_warn(dev, "Failed to register reset controller\n");
+
+	if (!has_acpi_companion(dev)) {
+		host->generic_phy = devm_phy_get(dev, "ufsphy");
+		if (IS_ERR(host->generic_phy)) {
+			err = dev_err_probe(dev, PTR_ERR(host->generic_phy), "Failed to get PHY\n");
+			goto out_variant_clear;
+		}
+	}
+
+	/* Register vdd_hba vreg callback */
+	host->vdd_hba_reg_nb.notifier_call = ufs_qcom_vdd_hba_reg_notifier;
+	devm_regulator_register_notifier(hba->vreg_info.vdd_hba->reg,
+					 &host->vdd_hba_reg_nb);
+
+	/* update phy revision information before calling phy_init() */
+	err = ufs_qcom_phy_save_controller_version(host->generic_phy,
+		host->hw_ver.major, host->hw_ver.minor, host->hw_ver.step);
+	if (err == -EPROBE_DEFER) {
+		pr_err("%s: phy device probe is not completed yet\n",
+		__func__);
+		goto out_variant_clear;
+	}
+
+	err = ufs_qcom_parse_reg_info(host, "qcom,vddp-ref-clk",
+				      &host->vddp_ref_clk);
+
+	err = phy_init(host->generic_phy);
+	if (err) {
+		dev_err(hba->dev, "%s: phy init failed, err %d\n",
+				__func__, err);
+		goto out_variant_clear;
+	}
+	mutex_init(&host->phy_mutex);
+
+	if (host->vddp_ref_clk) {
+		err = ufs_qcom_enable_vreg(dev, host->vddp_ref_clk);
+		if (err) {
+			dev_err(dev, "%s: failed enabling ref clk supply: %d\n",
+				__func__, err);
+			goto out_phy_exit;
+		}
+	}
+
+	ufs_qcom_setup_vreg_to_enable(hba);
+	if (host->parent_vreg) {
+		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
+		if (err) {
+			dev_err(dev, "%s: failed to enable %s err=%d\n",
+					__func__, host->parent_vreg->name, err);
+			goto out_disable_vddp;
+		}
+	}
+
+	ufs_qcom_populate_ref_clk_ctrl(hba);
+	list_for_each_entry(clki, &hba->clk_list_head, list) {
+		if (!strcmp(clki->name, "core_clk_unipro")) {
+			clki->keep_link_active = true;
+			host->core_unipro_clki = clki;
+		} else if (!strcmp(clki->name, "ref_clk"))
+			host->ref_clki = clki;
+	}
+
+	err = ufs_qcom_init_lane_clks(host);
+	if (err)
+		goto out_disable_parent_vreg;
+
+	err = ufs_qcom_bus_register(host);
+	if (err)
+		goto out_variant_clear;
+
+	ufs_qcom_set_bus_vote(hba, true);
+
+	ufs_qcom_parse_g4_workaround_flag(host);
+	ufs_qcom_parse_lpm(host);
+	if (host->disable_lpm)
+		pm_runtime_forbid(host->hba->dev);
+
+	ufs_qcom_set_caps(hba);
+
+	/* enable the device ref clock for HS mode*/
+	if (ufshcd_is_hs_mode(&hba->pwr_info))
+		ufs_qcom_dev_ref_clk_ctrl(host, true);
+
+	return 0;
+
 out_disable_parent_vreg:
 	if (host->parent_vreg)
 		ufs_qcom_disable_vreg(dev, host->parent_vreg);
@@ -4006,6 +4112,25 @@ out_variant_clear:
 	return err;
 }
 
+static int ufs_qcom_fmr_init(struct ufs_hba *hba)
+{
+	int err;
+
+	err = ufs_qcom_common_init(hba);
+	if (err)
+		goto out_variant_clear;
+
+	ufs_qcom_fmr_set_caps(hba);
+	hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
+
+	return 0;
+
+out_variant_clear:
+	ufshcd_set_variant(hba, NULL);
+
+	return err;
+}
+
 static void ufs_qcom_exit(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
@@ -4014,6 +4139,12 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 	ufs_qcom_phy_power_off(hba);
 	phy_exit(host->generic_phy);
 }
+
+static void ufs_qcom_fmr_exit(struct ufs_hba *hba)
+{
+	pm_runtime_put_sync(hba->dev);
+}
+
 
 static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
 						       u32 clk_1us_cycles,
@@ -5339,6 +5470,28 @@ static const struct ufs_hba_variant_ops ufs_hba_qcom_vops = {
 	.config_esi		= ufs_qcom_config_esi,
 };
 
+/* Firmware Managed Resources(fmr) VOPS */
+static const struct ufs_hba_variant_ops ufs_hba_qcom_fmr_vops = {
+	.name                   = "qcom-fmr",
+	.init                   = ufs_qcom_fmr_init,
+	.exit                   = ufs_qcom_fmr_exit,
+	.get_ufs_hci_version	= ufs_qcom_get_ufs_hci_version,
+	.hce_enable_notify      = ufs_qcom_fmr_hce_enable_notify,
+	.pwr_change_notify	= ufs_qcom_pwr_change_notify,
+	.apply_dev_quirks	= ufs_qcom_apply_dev_quirks,
+	.suspend		= ufs_qcom_fmr_suspend,
+	.resume			= ufs_qcom_fmr_resume,
+	.dbg_register_dump	= ufs_qcom_dump_dbg_regs,
+	.device_reset		= ufs_qcom_device_reset,
+	.config_scaling_param   = ufs_qcom_config_scaling_param,
+	.program_key		= ufs_qcom_ice_program_key,
+	.mcq_config_resource	= ufs_qcom_mcq_config_resource,
+	.get_hba_mac		= ufs_qcom_get_hba_mac,
+	.op_runtime_config	= ufs_qcom_op_runtime_config,
+	.get_outstanding_cqs	= ufs_qcom_get_outstanding_cqs,
+	.config_esi		= ufs_qcom_config_esi,
+};
+
 /**
  * QCOM specific sysfs group and nodes
  */
@@ -5977,6 +6130,11 @@ static int ufs_qcom_probe(struct platform_device *pdev)
 	int err = 0;
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
+	const struct ufs_hba_variant_ops *vops = &ufs_hba_qcom_vops;
+	const struct ufs_hba_variant_ops *drv_data = device_get_match_data(dev);
+
+	if (drv_data)
+		vops = drv_data;
 
 	if (!ufs_qcom_read_boot_config(pdev)) {
 		dev_err(dev, "UFS is not boot dev.\n");
@@ -6005,7 +6163,7 @@ static int ufs_qcom_probe(struct platform_device *pdev)
 	}
 
 	/* Perform generic probe */
-	err = ufshcd_pltfrm_init(pdev, &ufs_hba_qcom_vops);
+	err = ufshcd_pltfrm_init(pdev, vops);
 	if (err)
 		return dev_err_probe(dev, err, "ufshcd_pltfrm_init() failed\n");
 
@@ -6235,6 +6393,7 @@ static int ufs_qcom_system_thaw(struct device *dev)
 
 static const struct of_device_id ufs_qcom_of_match[] = {
 	{ .compatible = "qcom,ufshc"},
+	{ .compatible = "qcom,sa8255p-ufshc", .data = &ufs_hba_qcom_fmr_vops},
 	{},
 };
 MODULE_DEVICE_TABLE(of, ufs_qcom_of_match);
