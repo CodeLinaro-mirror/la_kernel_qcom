@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2016-2018, 2020-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Rob Clark <robdclark@gmail.com>
  */
 
@@ -1008,8 +1009,10 @@ bool msm_disp_drv_should_bind(struct device *dev, bool dpu_driver)
  * as components.
  */
 static const struct of_device_id msm_gpu_match[] = {
+	{ .compatible = "qcom,adreno" },
 	{ .compatible = "qcom,adreno-3xx" },
 	{ .compatible = "amd,imageon" },
+	{ .compatible = "qcom,kgsl-3d0" },
 	{ },
 };
 

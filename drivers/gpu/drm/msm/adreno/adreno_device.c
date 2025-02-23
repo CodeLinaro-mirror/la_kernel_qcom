@@ -4,6 +4,7 @@
  * Author: Rob Clark <robdclark@gmail.com>
  *
  * Copyright (c) 2014,2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "adreno_gpu.h"
@@ -281,9 +282,12 @@ static void adreno_shutdown(struct platform_device *pdev)
 }
 
 static const struct of_device_id dt_match[] = {
+	{ .compatible = "qcom,adreno" },
 	{ .compatible = "qcom,adreno-3xx" },
 	/* for compatibility with imx5 gpu: */
 	{ .compatible = "amd,imageon" },
+	/* for backwards compat w/ downstream kgsl DT files: */
+	{ .compatible = "qcom,kgsl-3d0" },
 	{}
 };
 
