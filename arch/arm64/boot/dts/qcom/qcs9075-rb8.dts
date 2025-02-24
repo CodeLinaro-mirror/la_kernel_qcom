@@ -817,7 +817,7 @@
 
 &pcieport0 {
 	wifi@0 {
-		compatible = "qcom,wcn6855-wifi";
+		compatible = "pci17cb,1103";
 		reg = <0x10000 0x0 0x0 0x0 0x0>;
 
 		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
