@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014-2017, 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -1125,6 +1125,7 @@ static size_t mem_dump_calc_dump_total_size(const struct device_node *node)
 	return total_size;
 }
 
+#ifdef CONFIG_QCOM_DYNAMIC_MEMORY_DUMP
 static int mem_dump_alloc(struct platform_device *pdev, struct device_node *node,
 		struct reserved_mem *rmem, size_t *rmem_offset)
 {
@@ -1170,8 +1171,6 @@ static void mem_dump_free_rmem(phys_addr_t base, uint32_t size)
 	pr_info("free unused reserved memory: %uK\n", size/1024);
 
 }
-
-#ifdef CONFIG_QCOM_DYNAMIC_MEMORY_DUMP
 
 static int dynamic_mem_dump_disable(struct memdump_info *dump_info)
 {
@@ -1294,14 +1293,6 @@ static int dynamic_mem_dump_alloc(struct platform_device *pdev, struct device_no
 	return ret;
 }
 
-#else
-static int dynamic_mem_dump_alloc(struct platform_device *pdev, struct device_node *node,
-			struct reserved_mem *rmem, size_t *rmem_offset)
-{
-	return 0;
-}
-#endif
-
 static int mem_dump_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -1387,6 +1378,123 @@ static int mem_dump_probe(struct platform_device *pdev)
 
 	return ret;
 }
+#else
+static int mem_dump_reserve_mem(struct device *dev)
+{
+	struct device_node *mem_node;
+	int ret;
+
+	mem_node = of_parse_phandle(dev->of_node, "memory-region", 0);
+	if (mem_node) {
+		ret = of_reserved_mem_device_init_by_idx(dev,
+				dev->of_node, 0);
+		of_node_put(dev->of_node);
+		if (ret) {
+			dev_err(dev,
+				"Failed to initialize reserved mem, ret %d\n",
+				ret);
+			return ret;
+		}
+	}
+	return 0;
+}
+
+static int mem_dump_alloc(struct platform_device *pdev)
+{
+	const struct device_node *node = pdev->dev.of_node;
+	struct md_region md_entry;
+	size_t total_size;
+	dma_addr_t dma_handle;
+	phys_addr_t phys_addr, mini_phys_addr;
+	struct sg_table mem_dump_sgt;
+	void *dump_vaddr, *mini_dump_vaddr;
+	uint32_t ns_vmids[] = {VMID_HLOS};
+	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
+	u64 shm_bridge_handle;
+	struct memdump_info *dump_info;
+	int ret;
+
+	dump_info = devm_kzalloc(&pdev->dev, sizeof(*dump_info), GFP_KERNEL);
+	if (!dump_info)
+		return  -ENOMEM;
+
+	if (mem_dump_reserve_mem(&pdev->dev) != 0)
+		return -ENOMEM;
+
+	total_size = ret = 0;
+	/* For dump table registration with IMEM */
+	total_size = sizeof(struct msm_dump_table) * 2;
+	total_size += mem_dump_calc_dump_total_size(node);
+	total_size = ALIGN(total_size, SZ_4K);
+
+	dump_vaddr = dmam_alloc_coherent(&pdev->dev, total_size,
+						&dma_handle, GFP_KERNEL);
+	if (!dump_vaddr)
+		return -ENOMEM;
+
+	dma_get_sgtable(&pdev->dev, &mem_dump_sgt, dump_vaddr,
+						dma_handle, total_size);
+	phys_addr = page_to_phys(sg_page(mem_dump_sgt.sgl));
+	sg_free_table(&mem_dump_sgt);
+
+	memset(dump_vaddr, 0x0, total_size);
+	ret = qtee_shmbridge_register(phys_addr, total_size, ns_vmids,
+			ns_vm_perms, 1, PERM_READ|PERM_WRITE, &shm_bridge_handle);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to create shm bridge.ret=%d\n", ret);
+		return ret;
+	}
+
+	ret = init_memory_dump(dump_vaddr, phys_addr);
+	if (ret) {
+		dev_err(&pdev->dev, "Memory Dump table set up is failed\n");
+		qtee_shmbridge_deregister(shm_bridge_handle);
+		return ret;
+	}
+
+	ret = qcom_scm_assign_dump_table_region(1, phys_addr, total_size);
+	if (ret) {
+		ret = init_memdump_imem_area(total_size);
+		if (ret) {
+			qtee_shmbridge_deregister(shm_bridge_handle);
+			return ret;
+		}
+	}
+
+	mini_dump_vaddr = dump_vaddr;
+	mini_phys_addr = phys_addr;
+	dump_vaddr += (sizeof(struct msm_dump_table) * 2);
+	phys_addr += (sizeof(struct msm_dump_table) * 2);
+
+	dump_info->vbase = dump_vaddr;
+	dump_info->base = phys_addr;
+	dump_info->dev_node = node;
+	dump_info->dev = &pdev->dev;
+	mem_dump_parse_register_entry(dump_info);
+
+	md_entry.phys_addr = mini_phys_addr;
+	md_entry.virt_addr = (u64)mini_dump_vaddr;
+	md_entry.size = total_size;
+	strscpy(md_entry.name, "MEMDUMP", sizeof(md_entry.name));
+	if (msm_minidump_add_region(&md_entry) < 0)
+		dev_err(&pdev->dev, "Mini dump entry failed name = %s\n", md_entry.name);
+
+	return ret;
+}
+
+static int mem_dump_probe(struct platform_device *pdev)
+{
+	int ret;
+
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (ret < 0)
+		return ret;
+
+	ret = mem_dump_alloc(pdev);
+	return ret;
+}
+
+#endif
 
 static const struct of_device_id mem_dump_match_table[] = {
 	{.compatible = "qcom,mem-dump",},
