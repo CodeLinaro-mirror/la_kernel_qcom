@@ -141,7 +141,7 @@
 			link-name = "MI2S-LPAIF_SDR-TX-PRIMARY";
 
 			cpu {
-				sound-dai = <&q6apmbedai PRIMARY_MI2S_TX>;
+				sound-dai = <&q6apmbedai PRIMARY_SDR_MI2S_TX>;
 			};
 
 			codec {
@@ -153,7 +153,7 @@
 			link-name = "MI2S-LPAIF_SDR-RX-PRIMARY";
 
 			cpu {
-				sound-dai = <&q6apmbedai PRIMARY_MI2S_RX>;
+				sound-dai = <&q6apmbedai PRIMARY_SDR_MI2S_RX>;
 			};
 
 			codec {
@@ -165,7 +165,7 @@
 			link-name = "TDM-LPAIF_SDR-TX-PRIMARY";
 
 			cpu {
-				sound-dai = <&q6apmbedai PRIMARY_TDM_TX_0>;
+				sound-dai = <&q6apmbedai PRIMARY_SDR_TDM_TX_0>;
 			};
 
 			codec {
@@ -177,7 +177,7 @@
 			link-name = "TDM-LPAIF_SDR-RX-PRIMARY";
 
 			cpu {
-				sound-dai = <&q6apmbedai PRIMARY_TDM_RX_0>;
+				sound-dai = <&q6apmbedai PRIMARY_SDR_TDM_RX_0>;
 			};
 
 			codec {
@@ -189,7 +189,7 @@
 			link-name = "MI2S-LPAIF_SDR-TX-QUATERNARY";
 
 			cpu {
-				sound-dai = <&q6apmbedai QUATERNARY_MI2S_TX>;
+				sound-dai = <&q6apmbedai QUATERNARY_SDR_MI2S_TX>;
 			};
 
 			codec {
@@ -201,7 +201,7 @@
 			link-name = "MI2S-LPAIF_SDR-RX-QUATERNARY";
 
 			cpu {
-				sound-dai = <&q6apmbedai QUATERNARY_MI2S_RX>;
+				sound-dai = <&q6apmbedai QUATERNARY_SDR_MI2S_RX>;
 			};
 
 			codec {
@@ -213,7 +213,7 @@
 			link-name = "TDM-LPAIF_SDR-TX-QUATERNARY";
 
 			cpu {
-				sound-dai = <&q6apmbedai QUATERNARY_TDM_TX_0>;
+				sound-dai = <&q6apmbedai QUATERNARY_SDR_TDM_TX_0>;
 			};
 
 			codec {
@@ -225,7 +225,7 @@
 			link-name = "TDM-LPAIF_SDR-RX-QUATERNARY";
 
 			cpu {
-				sound-dai = <&q6apmbedai QUATERNARY_TDM_RX_0>;
+				sound-dai = <&q6apmbedai QUATERNARY_SDR_TDM_RX_0>;
 			};
 
 			codec {
