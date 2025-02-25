@@ -38,6 +38,8 @@
 #define ATTR2_PROBE_TARGET_WAYS_SHIFT 0x4
 #define ATTR2_FIXED_SIZE_SHIFT        0x8
 #define ATTR2_PRIORITY_SHIFT          0xc
+#define ATTR2_PARENT_SLICE_ID_SHIFT	  0x10
+#define ATTR2_IN_A_GROUP_SHIFT		  0x18
 #define LLCC_STATUS_READ_DELAY        100
 
 #define CACHE_LINE_SIZE_SHIFT         6
@@ -126,6 +128,8 @@
  *			over capacity scid. This setting is ignored if ovcap_en is not set.
  * @vict_prio: When current SCID is under capacity, allocate over other lower than
  *		VICTIM_PL_THRESHOLD priority SCID.
+ * @in_a_group: Enable SCID grouping for a given client.
+ * @parent_slice_id: Parent SCID for a given client if SCID grouping enabled.
  */
 struct llcc_slice_config {
 	u32 usecase_id;
@@ -150,6 +154,8 @@ struct llcc_slice_config {
 	bool ovcap_en;
 	bool ovcap_prio;
 	bool vict_prio;
+	bool in_a_group;
+	u32 parent_slice_id;
 };
 
 static u32 llcc_offsets_v2[] = {
@@ -1291,7 +1297,12 @@ static int _qcom_llcc_cfg_program_v51(const struct llcc_slice_config *config,
 	u32 stale_en, stale_cap_en, mru_uncap_en, mru_rollover;
 	u32 alloc_oneway_en, ovcap_en, ovcap_prio, vict_prio;
 	u32 slice_offset, reg_offset;
-	struct llcc_slice_desc desc;
+	struct llcc_slice_desc *desc;
+	const struct llcc_slice_config *slice_cfg;
+	u32 sz, slice = 0;
+
+	slice_cfg = cfg->sct_data;
+	sz = cfg->size;
 
 	attr0_cfg = LLCC_V6_TRP_ATTR0_CFGn(config->slice_id);
 	attr1_cfg = LLCC_V6_TRP_ATTR1_CFGn(config->slice_id);
@@ -1304,6 +1315,27 @@ static int _qcom_llcc_cfg_program_v51(const struct llcc_slice_config *config,
 	attr2_val |= config->probe_target_ways << ATTR2_PROBE_TARGET_WAYS_SHIFT;
 	attr2_val |= config->fixed_size << ATTR2_FIXED_SIZE_SHIFT;
 	attr2_val |= config->priority << ATTR2_PRIORITY_SHIFT;
+	if (config->in_a_group) {
+		if (!(config->parent_slice_id) || !(config->fixed_size)) {
+			pr_err("SCID grouping failed for SCID:%d parent_SCID:%d FIXED_SIZE:%d\n",
+				config->slice_id, config->parent_slice_id, config->fixed_size);
+		} else {
+			for (slice = 0; slice_cfg && slice < sz; slice++, slice_cfg++) {
+				if (slice_cfg->slice_id == config->parent_slice_id)
+					break;
+			}
+			if (slice == sz || !slice_cfg) {
+				pr_err("SCID grouping failed for SCID:%d, invalid parent_SCID:%d\n",
+					config->slice_id, config->parent_slice_id);
+			} else if (config->max_cap > slice_cfg->max_cap) {
+				pr_err("SCID grouping failed for SCID:%d, invalid MAX_CAP:%x, PARENT_MAXCAP:%x\n",
+					config->slice_id, config->max_cap, slice_cfg->max_cap);
+			} else {
+				attr2_val |= config->parent_slice_id << ATTR2_PARENT_SLICE_ID_SHIFT;
+				attr2_val |= config->in_a_group << ATTR2_IN_A_GROUP_SHIFT;
+			}
+		}
+	}
 
 	attr3_val = MAX_CAP_TO_BYTES(config->max_cap);
 	attr3_val /= drv_data->num_banks;
