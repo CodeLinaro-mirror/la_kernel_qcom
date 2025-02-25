@@ -19,7 +19,6 @@
 #include <linux/of.h>
 #include <linux/dma-buf.h>
 #include <linux/firmware/qcom/qcom_scm.h>
-#include <linux/firmware/qcom/qcom_scm_addon.h>
 #include <linux/qtee_shmbridge.h>
 #include <linux/proc_fs.h>
 #include <linux/version.h>
@@ -1595,7 +1594,7 @@ static int  tzdbg_fs_init(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dent_dir);
 	return 0;
 err:
-	remove_proc_entry(TZDBG_DIR_NAME, NULL);
+	remove_proc_subtree(TZDBG_DIR_NAME, NULL);
 
 	return rc;
 }
@@ -1606,7 +1605,7 @@ static void tzdbg_fs_exit(struct platform_device *pdev)
 
 	dent_dir = platform_get_drvdata(pdev);
 	if (dent_dir)
-		remove_proc_entry(TZDBG_DIR_NAME, NULL);
+		remove_proc_subtree(TZDBG_DIR_NAME, NULL);
 }
 
 static int __update_hypdbg_base(struct platform_device *pdev,
@@ -1770,6 +1769,10 @@ static int tz_log_probe(struct platform_device *pdev)
 	phys_addr_t tzdiag_phy_iobase;
 	uint32_t *ptr = NULL;
 	int ret = 0, i;
+
+	/* Defer if qcom_scm is not available */
+	if (!qcom_scm_is_available())
+		return dev_err_probe(&pdev->dev, -EPROBE_DEFER, "qcom_scm is not up!\n");
 
 	/*
 	 * By default all nodes will be created.
