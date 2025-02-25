@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2022, Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -2764,6 +2764,9 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				clk_disable_unprepare(host->core_unipro_clki->clk);
 				host->core_unipro_clki->enabled = on;
 
+				if (host->broken_ahit_wa && host->active_cmds)
+					host->active_cmds = 0;
+
 				err = ufs_qcom_phy_power_off(hba);
 				if (err) {
 					dev_err(hba->dev, "%s: phy power off failed, ret=%d\n",
@@ -2779,7 +2782,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 		break;
 	case POST_CHANGE:
 		if (!on) {
-			if (ufs_qcom_is_link_hibern8(hba)) {
+			if ((ufs_qcom_is_link_hibern8(hba)) || (ufs_qcom_is_link_off(hba))) {
 				ufs_qcom_phy_set_src_clk_h8_enter(phy);
 				/*
 				 * As XO is set to the source of lane clocks, hence

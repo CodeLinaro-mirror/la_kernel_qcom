@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -420,7 +420,7 @@ static struct {
 } bus_vote_values[BUS_VOTE_MAX][3] = {
 	/* usb_ddr avg/peak, usb_ipa avg/peak, apps_usb avg/peak */
 	[BUS_VOTE_NONE]    = { {0, 0}, {0, 0}, {0, 0} },
-	[BUS_VOTE_NOMINAL] = { {1000000, 1250000}, {0, 2400}, {0, 40000}, },
+	[BUS_VOTE_NOMINAL] = { {1000000, 1350000}, {0, 2400}, {0, 40000}, },
 	[BUS_VOTE_SVS]     = { {240000, 700000}, {0, 2400}, {0, 40000}, },
 	[BUS_VOTE_MIN]     = { {1, 1}, {1, 1}, {1, 1}, },
 };
@@ -3826,7 +3826,7 @@ static void configure_usb_wakeup_interrupts(struct dwc3_msm *mdwc, bool enable)
 		else
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
-				IRQ_TYPE_EDGE_FALLING, enable);
+				IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_LEVEL_LOW, enable);
 
 	} else if (mdwc->hs_phy->flags & PHY_HSFS_MODE) {
 		/*
@@ -3842,7 +3842,7 @@ static void configure_usb_wakeup_interrupts(struct dwc3_msm *mdwc, bool enable)
 		else
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
-				IRQ_TYPE_EDGE_FALLING, enable);
+				IRQ_TYPE_EDGE_FALLING | IRQ_TYPE_LEVEL_LOW, enable);
 
 	} else {
 		/* When in host mode, with no device connected, set the HS
@@ -3854,19 +3854,20 @@ static void configure_usb_wakeup_interrupts(struct dwc3_msm *mdwc, bool enable)
 			&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
 			mdwc->in_host_mode && !(mdwc->use_pwr_event_for_wakeup
 			& PWR_EVENT_HS_WAKEUP) ?
-			(IRQF_TRIGGER_HIGH | IRQ_TYPE_LEVEL_HIGH) :
-			IRQ_TYPE_EDGE_RISING, true);
+			IRQ_TYPE_LEVEL_HIGH : IRQ_TYPE_EDGE_RISING |
+			IRQ_TYPE_LEVEL_HIGH, true);
+
 		configure_usb_wakeup_interrupt(mdwc,
 			&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
 			mdwc->in_host_mode && !(mdwc->use_pwr_event_for_wakeup
 			& PWR_EVENT_HS_WAKEUP) ?
-			(IRQF_TRIGGER_HIGH | IRQ_TYPE_LEVEL_HIGH) :
-			IRQ_TYPE_EDGE_RISING, true);
+			IRQ_TYPE_LEVEL_HIGH : IRQ_TYPE_EDGE_RISING |
+			IRQ_TYPE_LEVEL_HIGH, true);
 	}
 
 	configure_usb_wakeup_interrupt(mdwc,
 		&mdwc->wakeup_irq[SS_PHY_IRQ],
-		IRQF_TRIGGER_HIGH | IRQ_TYPE_LEVEL_HIGH, enable);
+		IRQ_TYPE_LEVEL_HIGH, enable);
 	return;
 
 disable_usb_irq:
@@ -6039,9 +6040,8 @@ static int dwc3_msm_parse_core_params(struct dwc3_msm *mdwc, struct device_node 
 
 static int dwc3_msm_interconnect_vote_populate(struct dwc3_msm *mdwc)
 {
-	int ret_nom = 0, i = 0, j = 0, count = 0;
-	int ret_svs = 0, ret = 0;
-	u32 *vv_nom, *vv_svs;
+	int i = 0, j = 0, count = 0, ret = 0;
+	u32 *vv_nom = NULL, *vv_svs = NULL;
 
 	count = of_property_count_strings(mdwc->dev->of_node,
 						"interconnect-names");
@@ -6052,29 +6052,31 @@ static int dwc3_msm_interconnect_vote_populate(struct dwc3_msm *mdwc)
 
 	/* 2 signifies the two types of values avg & peak */
 	vv_nom = kzalloc(count * 2 * sizeof(*vv_nom), GFP_KERNEL);
-	if (!vv_nom)
-		return -ENOMEM;
-
-	vv_svs = kzalloc(count * 2 * sizeof(*vv_svs), GFP_KERNEL);
-	if (!vv_svs)
-		return -ENOMEM;
-
-	/* of_property_read_u32_array returns 0 on success */
-	ret_nom = of_property_read_u32_array(mdwc->dev->of_node,
-				"qcom,interconnect-values-nom",
-					vv_nom, count * 2);
-	if (ret_nom) {
-		dev_err(mdwc->dev, "Nominal values not found.\n");
-		ret = ret_nom;
+	if (!vv_nom) {
+		ret = -ENOMEM;
 		goto icc_err;
 	}
 
-	ret_svs = of_property_read_u32_array(mdwc->dev->of_node,
+	vv_svs = kzalloc(count * 2 * sizeof(*vv_svs), GFP_KERNEL);
+	if (!vv_svs) {
+		ret = -ENOMEM;
+		goto icc_err;
+	}
+
+	/* of_property_read_u32_array returns 0 on success */
+	ret = of_property_read_u32_array(mdwc->dev->of_node,
+				"qcom,interconnect-values-nom",
+					vv_nom, count * 2);
+	if (ret) {
+		dev_err(mdwc->dev, "Nominal values not found.\n");
+		goto icc_err;
+	}
+
+	ret = of_property_read_u32_array(mdwc->dev->of_node,
 				"qcom,interconnect-values-svs",
 					vv_svs, count * 2);
-	if (ret_svs) {
+	if (ret) {
 		dev_err(mdwc->dev, "Svs values not found.\n");
-		ret = ret_svs;
 		goto icc_err;
 	}
 
@@ -7613,6 +7615,9 @@ static void dwc3_host_complete(struct device *dev)
 {
 	int ret = 0;
 
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return;
+
 	if (dev->power.direct_complete) {
 		ret = pm_runtime_resume(dev);
 		if (ret < 0) {
@@ -7624,6 +7629,9 @@ static void dwc3_host_complete(struct device *dev)
 
 static int dwc3_host_prepare(struct device *dev)
 {
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return 0;
+
 	/*
 	 * It is recommended to use the PM prepare callback to handle situations
 	 * where the device is already runtime suspended, in order to avoid
@@ -7643,6 +7651,9 @@ static int dwc3_core_prepare(struct device *dev)
 {
 	struct dwc3 *dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return 0;
 
 	dbg_event(0xFF, "Core PM prepare", pm_runtime_suspended(dev));
 	/*
@@ -7670,6 +7681,9 @@ static void dwc3_core_complete(struct device *dev)
 {
 	struct dwc3	*dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return;
 
 	/*
 	 * In the PM devices documentation, while leaving system suspend when
