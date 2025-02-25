@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/of.h>
@@ -434,8 +434,34 @@ int ethqos_phy_power_on(struct qcom_ethqos *ethqos)
 	return ret;
 }
 
+#ifdef CONFIG_OF
+static int ethqos_phy_gpio_down_direct(struct stmmac_priv *priv, const char *gpio_node)
+{
+	struct gpio_desc *reset_gpio;
+
+	if (!priv->device->of_node)
+		return 0;
+
+	reset_gpio = devm_gpiod_get_optional(priv->device, gpio_node, GPIOD_OUT_LOW);
+	if (IS_ERR_OR_NULL(reset_gpio))
+		return PTR_ERR(reset_gpio);
+
+	gpiod_set_raw_value(reset_gpio, 0);
+	gpiod_put(reset_gpio);
+
+	return 0;
+}
+#else
+static int ethqos_phy_gpio_down_direct(struct stmmac_priv *priv, const char *gpio_node)
+{
+	return 0;
+}
+#endif
+
 void  ethqos_phy_power_off(struct qcom_ethqos *ethqos)
 {
+	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
+
 	if (ethqos->reg_emac_phy) {
 		if (regulator_is_enabled(ethqos->reg_emac_phy)) {
 			regulator_disable(ethqos->reg_emac_phy);
@@ -444,6 +470,9 @@ void  ethqos_phy_power_off(struct qcom_ethqos *ethqos)
 	} else {
 		ETHQOSERR("reg_emac_phy is NULL\n");
 	}
+
+	if (ethqos_phy_gpio_down_direct(priv, "snps,phy1_reset"))
+		ETHQOSERR("unable to set snps,phy1_reset to low\n");
 }
 
 void ethqos_free_gpios(struct qcom_ethqos *ethqos)
