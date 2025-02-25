@@ -530,6 +530,24 @@ static const struct llcc_slice_config niobe_data[] = {
 	{LLCC_EVA_3DR,   8, 1310, 3, 1, 0xFFFFFFFF, 0x0, 0, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
+static const struct llcc_slice_config seraph_data[] = {
+	{LLCC_CPUSS,           1,  6144, 1, 0,  0x3FFF,     0x0,  0, 0x0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_VIDSC0,          2,   128, 2, 1,  0x3FFF,     0x0,  0, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_CMPT,           10,  1024, 1, 1,  0x3FFF,     0x0,  0, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_GPUHTW,         11,     0, 1, 1,  0x3FFF,     0x0,  0, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_MMUHWT,         18,  1024, 1, 1,  0x3FFF,     0x0,  0, 0x0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_WRTCH,          31,   256, 1, 1,  0x3FFF,     0x0,  0, 0x0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_LCPDARE,        30,   128, 5, 1,  0x3FFF,     0x0,  0, 0x0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0},
+	{LLCC_AENPU,           3,  3072, 2, 1,  0x3FFF,     0x0,  2, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_ISLAND1,        12,  6144, 7, 1,     0x0,     0x7,  0, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_DCP,             4,  4096, 2, 1,  0x3FFF,     0x0,  0, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_GPU_TEMP_DATA,   5,  4096, 1, 1,  0x3FFF,     0x0,  0, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_TCM_WIFI,       13,  4096, 7, 1,     0x0,    0x18,  1, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_TCM_OEM,        15, 10240, 7, 1,     0x0,    0x3E0, 1, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+	{LLCC_CAM_META_ADV,   24,  2048, 3, 1,     0x0,     0x0,  0, 0x0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0},
+};
+
+
 static const struct llcc_slice_config neo_xr_data[] =  {
 };
 /* LLCC register offset starting from v5.1.0 */
@@ -655,6 +673,12 @@ static const struct qcom_llcc_config cliffs7_cfg = {
 static const struct qcom_llcc_config niobe_cfg = {
 	.sct_data	= niobe_data,
 	.size		= ARRAY_SIZE(niobe_data),
+};
+
+static const struct qcom_llcc_config seraph_cfg = {
+	.sct_data       = seraph_data,
+	.size           = ARRAY_SIZE(seraph_data),
+	.reg_offset     = llcc_v51_reg_offset,
 };
 
 static const struct qcom_llcc_config qdu1000_cfg[] = {
@@ -1682,6 +1706,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,niobe-llcc", .data = &niobe_cfg },
 	{ .compatible = "qcom,anorak-llcc", .data = &anorak_cfg },
 	{ .compatible = "qcom,neo-llcc", .data = &neo_cfg },
+	{ .compatible = "qcom,seraph-llcc", .data = &seraph_cfg },
 	{ }
 };
 

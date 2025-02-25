@@ -63,6 +63,11 @@
 #define LLCC_EVCSLFT     67
 #define LLCC_EVCSRGHT    68
 #define LLCC_EVA_3DR     69
+#define LLCC_DCP         86
+#define LLCC_GPU_TEMP_DATA 257
+#define LLCC_TCM_WIFI      286
+#define LLCC_TCM_OEM       288
+#define LLCC_CAM_META_ADV  291
 
 /**
  * llcc_slice_desc - Cache slice descriptor
