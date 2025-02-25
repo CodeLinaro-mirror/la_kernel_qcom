@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -327,6 +327,10 @@ static const struct of_device_id iris_dt_match[] = {
 	{
 		.compatible = "qcom,sm8550-iris",
 		.data = &sm8550_data,
+	},
+	{
+		.compatible = "qcom,qcs8300-iris",
+		.data = &qcs8300_data,
 	},
 #if (!IS_ENABLED(CONFIG_VIDEO_QCOM_VENUS))
 		{
