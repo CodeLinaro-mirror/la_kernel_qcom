@@ -16,6 +16,20 @@ struct iris_hfi_rect_desc {
 	u32 height;
 };
 
+struct iris_hfi_frame_info {
+	u32 picture_type;
+	u32 no_output;
+	u32 data_corrupt;
+	u32 overflow;
+};
+
+struct iris_ts_metadata {
+	u64 ts_ns;
+	u64 ts_us;
+	u32 flags;
+	struct v4l2_timecode tc;
+};
+
 #define NUM_MBS_PER_FRAME(height, width) \
 	(DIV_ROUND_UP(height, 16) * DIV_ROUND_UP(width, 16))
 
@@ -27,8 +41,13 @@ static inline enum iris_buffer_type iris_v4l2_type_to_driver(u32 type)
 		return BUF_OUTPUT;
 }
 
+bool iris_res_is_less_than(u32 width, u32 height,
+			   u32 ref_width, u32 ref_height);
 int iris_get_mbpf(struct iris_inst *inst);
+bool iris_split_mode_enabled(struct iris_inst *inst);
 struct iris_inst *iris_get_instance(struct iris_core *core, u32 session_id);
-int iris_wait_for_session_response(struct iris_inst *inst);
+void iris_helper_buffers_done(struct iris_inst *inst, unsigned int type,
+			      enum vb2_buffer_state state);
+int iris_wait_for_session_response(struct iris_inst *inst, bool is_flush);
 
 #endif

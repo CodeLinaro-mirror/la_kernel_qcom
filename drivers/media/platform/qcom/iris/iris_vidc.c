@@ -7,6 +7,7 @@
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-mem2mem.h>
+#include <media/videobuf2-dma-contig.h>
 
 #include "iris_vidc.h"
 #include "iris_instance.h"
@@ -98,6 +99,7 @@ iris_m2m_queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *dst_
 	src_vq->io_modes = VB2_MMAP | VB2_DMABUF;
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	src_vq->ops = inst->core->iris_vb2_ops;
+	src_vq->mem_ops = &vb2_dma_contig_memops;
 	src_vq->drv_priv = inst;
 	src_vq->buf_struct_size = sizeof(struct iris_buffer);
 	src_vq->min_reqbufs_allocation = MIN_BUFFERS;
@@ -111,6 +113,7 @@ iris_m2m_queue_init(void *priv, struct vb2_queue *src_vq, struct vb2_queue *dst_
 	dst_vq->io_modes = VB2_MMAP | VB2_DMABUF;
 	dst_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	dst_vq->ops = inst->core->iris_vb2_ops;
+	dst_vq->mem_ops = &vb2_dma_contig_memops;
 	dst_vq->drv_priv = inst;
 	dst_vq->buf_struct_size = sizeof(struct iris_buffer);
 	dst_vq->min_reqbufs_allocation = MIN_BUFFERS;
@@ -145,10 +148,21 @@ int iris_open(struct file *filp)
 
 	inst->core = core;
 	inst->session_id = hash32_ptr(inst);
+	inst->state = IRIS_INST_DEINIT;
 
 	mutex_init(&inst->lock);
 	mutex_init(&inst->ctx_q_lock);
+
+	INIT_LIST_HEAD(&inst->buffers[BUF_BIN].list);
+	INIT_LIST_HEAD(&inst->buffers[BUF_ARP].list);
+	INIT_LIST_HEAD(&inst->buffers[BUF_COMV].list);
+	INIT_LIST_HEAD(&inst->buffers[BUF_NON_COMV].list);
+	INIT_LIST_HEAD(&inst->buffers[BUF_LINE].list);
+	INIT_LIST_HEAD(&inst->buffers[BUF_DPB].list);
+	INIT_LIST_HEAD(&inst->buffers[BUF_PERSIST].list);
+	INIT_LIST_HEAD(&inst->buffers[BUF_SCRATCH_1].list);
 	init_completion(&inst->completion);
+	init_completion(&inst->flush_completion);
 
 	iris_v4l2_fh_init(inst);
 
@@ -194,6 +208,9 @@ static void iris_session_close(struct iris_inst *inst)
 	bool wait_for_response = true;
 	int ret;
 
+	if (inst->state == IRIS_INST_DEINIT)
+		return;
+
 	reinit_completion(&inst->completion);
 
 	ret = hfi_ops->session_close(inst);
@@ -201,7 +218,7 @@ static void iris_session_close(struct iris_inst *inst)
 		wait_for_response = false;
 
 	if (wait_for_response)
-		iris_wait_for_session_response(inst);
+		iris_wait_for_session_response(inst, false);
 }
 
 int iris_close(struct file *filp)
@@ -214,7 +231,10 @@ int iris_close(struct file *filp)
 	mutex_lock(&inst->lock);
 	iris_vdec_inst_deinit(inst);
 	iris_session_close(inst);
+	iris_inst_change_state(inst, IRIS_INST_DEINIT);
 	iris_v4l2_fh_deinit(inst);
+	iris_destroy_internal_buffers(inst, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+	iris_destroy_internal_buffers(inst, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	iris_remove_session(inst);
 	mutex_unlock(&inst->lock);
 	mutex_destroy(&inst->ctx_q_lock);
@@ -303,6 +323,14 @@ static int iris_enum_framesizes(struct file *filp, void *fh,
 	return 0;
 }
 
+static int iris_querycap(struct file *filp, void *fh, struct v4l2_capability *cap)
+{
+	strscpy(cap->driver, IRIS_DRV_NAME, sizeof(cap->driver));
+	strscpy(cap->card, "Iris Decoder", sizeof(cap->card));
+
+	return 0;
+}
+
 static int iris_g_selection(struct file *filp, void *fh, struct v4l2_selection *s)
 {
 	struct iris_inst *inst = iris_get_inst(filp, NULL);
@@ -347,7 +375,13 @@ static struct v4l2_file_operations iris_v4l2_file_ops = {
 };
 
 static const struct vb2_ops iris_vb2_ops = {
+	.buf_init                       = iris_vb2_buf_init,
 	.queue_setup                    = iris_vb2_queue_setup,
+	.start_streaming                = iris_vb2_start_streaming,
+	.stop_streaming                 = iris_vb2_stop_streaming,
+	.buf_prepare                    = iris_vb2_buf_prepare,
+	.buf_out_validate               = iris_vb2_buf_out_validate,
+	.buf_queue                      = iris_vb2_buf_queue,
 };
 
 static const struct v4l2_ioctl_ops iris_v4l2_ioctl_ops = {
@@ -361,9 +395,19 @@ static const struct v4l2_ioctl_ops iris_v4l2_ioctl_ops = {
 	.vidioc_g_fmt_vid_out_mplane    = iris_g_fmt_vid_mplane,
 	.vidioc_enum_framesizes         = iris_enum_framesizes,
 	.vidioc_reqbufs                 = v4l2_m2m_ioctl_reqbufs,
+	.vidioc_querybuf                = v4l2_m2m_ioctl_querybuf,
+	.vidioc_create_bufs             = v4l2_m2m_ioctl_create_bufs,
+	.vidioc_prepare_buf             = v4l2_m2m_ioctl_prepare_buf,
+	.vidioc_expbuf                  = v4l2_m2m_ioctl_expbuf,
+	.vidioc_qbuf                    = v4l2_m2m_ioctl_qbuf,
+	.vidioc_dqbuf                   = v4l2_m2m_ioctl_dqbuf,
+	.vidioc_remove_bufs             = v4l2_m2m_ioctl_remove_bufs,
+	.vidioc_querycap                = iris_querycap,
 	.vidioc_g_selection             = iris_g_selection,
 	.vidioc_subscribe_event         = iris_subscribe_event,
 	.vidioc_unsubscribe_event       = v4l2_event_unsubscribe,
+	.vidioc_streamon                = v4l2_m2m_ioctl_streamon,
+	.vidioc_streamoff               = v4l2_m2m_ioctl_streamoff,
 };
 
 void iris_init_ops(struct iris_core *core)
