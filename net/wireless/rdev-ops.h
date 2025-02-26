@@ -611,6 +611,19 @@ static inline int rdev_set_tx_power(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
+static inline int rdev_set_tx_power_mlo(struct cfg80211_registered_device *rdev,
+					struct wireless_dev *wdev,
+					enum nl80211_tx_power_setting type, int mbm,
+					int link_id)
+{
+	int ret;
+
+	trace_rdev_set_tx_power_mlo(&rdev->wiphy, wdev, type, mbm, link_id);
+	ret = rdev->ops->set_tx_power_link(&rdev->wiphy, wdev, type, mbm, link_id);
+	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
+}
+
 static inline int rdev_get_tx_power(struct cfg80211_registered_device *rdev,
 				    struct wireless_dev *wdev, int *dbm)
 {

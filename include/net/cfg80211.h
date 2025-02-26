@@ -4675,6 +4675,9 @@ struct cfg80211_ops {
 	int	(*set_tx_power)(struct wiphy *wiphy, struct wireless_dev *wdev,
 				enum nl80211_tx_power_setting type, int mbm);
 
+	int	(*set_tx_power_link)(struct wiphy *wiphy, struct wireless_dev *wdev,
+				     enum nl80211_tx_power_setting type, int mbm, int link_id);
+
 	int	(*get_tx_power)(struct wiphy *wiphy, struct wireless_dev *wdev,
 				int *dbm);
 
