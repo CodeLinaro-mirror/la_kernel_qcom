@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #undef TRACE_SYSTEM
@@ -298,7 +298,7 @@ TRACE_EVENT(process_log_info,
 		__field(uint32_t,	tzhandle)
 	),
 	TP_fast_assign(
-		__assign_str(str, buf);
+		__assign_str(str);
 		__entry->context_type	= context_type;
 		__entry->tzhandle	= tzhandle;
 	),
@@ -352,8 +352,8 @@ TRACE_EVENT(status,
 		__string(str2,	status)
 	),
 	TP_fast_assign(
-		__assign_str(str,	func);
-		__assign_str(str2,	status);
+		__assign_str(str);
+		__assign_str(str2);
 	),
 	TP_printk("%s status=%s", __get_str(str), __get_str(str2))
 );

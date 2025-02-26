@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "smcinvoke: %s: " fmt, __func__
@@ -21,7 +21,7 @@
 #include <linux/kref.h>
 #include <linux/signal.h>
 #include <linux/mem-buf.h>
-#include <linux/of_platform.h>
+#include <linux/of.h>
 #include <linux/firmware.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/freezer.h>
@@ -199,6 +199,7 @@ static long smcinvoke_ioctl(struct file *, unsigned int, unsigned long);
 static int smcinvoke_open(struct inode *, struct file *);
 static int smcinvoke_release(struct inode *, struct file *);
 static int release_cb_server(uint16_t);
+static int smcinvoke_release_filp(struct file *filp);
 
 static const struct file_operations g_smcinvoke_fops = {
 	.owner		= THIS_MODULE,
@@ -3254,7 +3255,7 @@ exit_destroy_wkthread:
 	return rc;
 }
 
-static int smcinvoke_remove(struct platform_device *pdev)
+static void smcinvoke_remove(struct platform_device *pdev)
 {
 	int count = 1;
 
@@ -3263,7 +3264,6 @@ static int smcinvoke_remove(struct platform_device *pdev)
 	device_destroy(driver_class, smcinvoke_device_no);
 	class_destroy(driver_class);
 	unregister_chrdev_region(smcinvoke_device_no, count);
-	return 0;
 }
 
 static int __maybe_unused smcinvoke_suspend(struct platform_device *pdev,
@@ -3318,5 +3318,5 @@ module_exit(smcinvoke_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("SMC Invoke driver");
-MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
-MODULE_IMPORT_NS(DMA_BUF);
+MODULE_IMPORT_NS("VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver");
+MODULE_IMPORT_NS("DMA_BUF");
