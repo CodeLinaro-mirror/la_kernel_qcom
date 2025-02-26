@@ -2749,6 +2749,18 @@ static bool cfg80211_check_mode(enum nl80211_iftype iftype)
 void cfg80211_remove_links(struct wireless_dev *wdev)
 {
 	unsigned int link_id;
+	struct cfg80211_registered_device *rdev;
+
+	rdev = wiphy_to_rdev(wdev->wiphy);
+
+	/* if sta, abort any on going scan, so that, driver cancels it
+	 * as the scan results are no longer needed.
+	 */
+	if (wdev->iftype == NL80211_IFTYPE_STATION &&
+	    rdev->scan_req &&
+	    !rdev->scan_req->notified &&
+	    rdev->scan_req->wdev == wdev)
+		rdev_abort_scan(rdev, wdev);
 
 	if (cfg80211_check_mode(wdev->iftype))
 		return;
