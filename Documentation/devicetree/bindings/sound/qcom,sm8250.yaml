@@ -68,6 +68,9 @@ properties:
       being the connection's source. Valid names could be power supplies,
       MicBias of codec and the jacks on the board.
 
+  asoc-use-no-topology:
+    description: Support for no asoc topology solution.
+
   aux-devs:
     $ref: /schemas/types.yaml#/definitions/phandle-array
     description: |
