@@ -3480,7 +3480,7 @@ enum ep_pcie_link_status ep_pcie_core_get_linkstatus(void)
 	u32 bme;
 
 	if (dev->link_status == EP_PCIE_LINK_INVALID) {
-		dev_dbg(&ep_pcie_dev.pdev->dev, "PCIe V%d: Non PCIe Boot\n", ep_pcie_dev.rev);
+		pr_debug("PCIe V%d: Non PCIe Boot\n", ep_pcie_dev.rev);
 		return EP_PCIE_LINK_INVALID;
 	}
 
