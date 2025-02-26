@@ -4846,6 +4846,11 @@ struct cfg80211_ops {
 				 struct wireless_dev *wdev,
 				 struct cfg80211_txq_stats *txqstats);
 
+	int	(*get_txq_stats_link)(struct wiphy *wiphy,
+				      struct wireless_dev *wdev,
+				      unsigned int link_id,
+				      struct cfg80211_txq_stats *txqstats);
+
 	int	(*set_pmk)(struct wiphy *wiphy, struct net_device *dev,
 			   const struct cfg80211_pmk_conf *conf);
 	int	(*del_pmk)(struct wiphy *wiphy, struct net_device *dev,

@@ -670,6 +670,20 @@ rdev_get_txq_stats(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
+static inline int
+rdev_get_txq_stats_mlo(struct cfg80211_registered_device *rdev,
+		       struct wireless_dev *wdev,
+		       unsigned int link_id,
+		       struct cfg80211_txq_stats *txqstats)
+{
+	int ret;
+
+	trace_rdev_get_txq_stats(&rdev->wiphy, wdev);
+	ret = rdev->ops->get_txq_stats_link(&rdev->wiphy, wdev, link_id, txqstats);
+	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
+}
+
 static inline void rdev_rfkill_poll(struct cfg80211_registered_device *rdev)
 {
 	trace_rdev_rfkill_poll(&rdev->wiphy);
