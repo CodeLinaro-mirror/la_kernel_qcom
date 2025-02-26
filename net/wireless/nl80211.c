@@ -3981,7 +3981,7 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 	}
 
 	if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
-	    rdev->ops->get_tx_power) {
+	    rdev->ops->get_tx_power && !wdev->valid_links) {
 		int dbm, ret;
 
 		ret = rdev_get_tx_power(rdev, wdev, &dbm);
@@ -4051,12 +4051,14 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 				    wdev->links[link_id].addr))
 				goto nla_put_failure;
 
-			ret = rdev_get_channel(rdev, wdev, link_id, &chandef);
-			if (ret == 0 && nl80211_send_chandef(msg, &chandef))
-				goto nla_put_failure;
+			if (rdev->ops->get_channel) {
+				ret = rdev_get_channel(rdev, wdev, link_id, &chandef);
+				if (ret == 0 && nl80211_send_chandef(msg, &chandef))
+					goto nla_put_failure;
+			}
 
 			if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
-			    rdev->ops->get_tx_power) {
+			    rdev->ops->get_tx_power_link) {
 				int dbm, ret;
 
 				ret = rdev_get_tx_power_mlo(rdev, wdev, link_id, &dbm);
@@ -4079,7 +4081,7 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 				goto nla_put_failure;
 		}
 
-		if (rdev->ops->get_tx_power) {
+		if (rdev->ops->get_tx_power_link) {
 			int dbm, ret;
 
 			ret = rdev_get_tx_power_mlo(rdev, wdev, 0, &dbm);
@@ -4106,11 +4108,13 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 
 			if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id))
 				goto nla_put_failure;
-			ret = rdev_get_channel(rdev, wdev, link_id, &chandef);
-			if (ret == 0 && nl80211_send_chandef(msg, &chandef))
-				goto nla_put_failure;
+			if (rdev->ops->get_channel) {
+				ret = rdev_get_channel(rdev, wdev, link_id, &chandef);
+				if (ret == 0 && nl80211_send_chandef(msg, &chandef))
+					goto nla_put_failure;
+			}
 
-			if (rdev->ops->get_tx_power) {
+			if (rdev->ops->get_tx_power_link) {
 				int dbm, ret;
 
 				ret = rdev_get_tx_power_mlo(rdev, wdev, link_id, &dbm);
