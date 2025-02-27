@@ -19,6 +19,7 @@
 #include <dt-bindings/mailbox/qcom-ipcc.h>
 #include <dt-bindings/power/qcom,rpmhpd.h>
 #include <dt-bindings/power/qcom-rpmpd.h>
+#include <dt-bindings/sound/qcom,q6afe.h>
 #include <dt-bindings/soc/qcom,gpr.h>
 #include <dt-bindings/soc/qcom,rpmh-rsc.h>
 #include <dt-bindings/clock/qcom,sa8775p-videocc.h>
@@ -8485,24 +8486,27 @@
 					};
 				};
 
-				gpr {
+				gpr: gpr {
 					compatible = "qcom,gpr";
 					qcom,glink-channels = "adsp_apps";
 					qcom,domain = <GPR_DOMAIN_ID_ADSP>;
 					qcom,intents = <512 20>;
 					#address-cells = <1>;
 					#size-cells = <0>;
+					status = "disabled";
 
 					q6apm: service@1 {
 						compatible = "qcom,q6apm";
 						reg = <GPR_APM_MODULE_IID>;
 						#sound-dai-cells = <0>;
-						qcom,protection-domain = "avs/audio",
-									 "msm/adsp/audio_pd";
+
+						q6apmdai: dais {
+							compatible = "qcom,q6apm-dais";
+							iommus = <&apps_smmu 0x3001 0x0>;
+						};
 
 						q6apmbedai: bedais {
 							compatible = "qcom,q6apm-lpass-dais";
-							q6apm-dai-uses-dummy-ops;
 							#sound-dai-cells = <1>;
 						};
 					};
@@ -8510,8 +8514,6 @@
 					q6prm: service@2 {
 						compatible = "qcom,q6prm";
 						reg = <GPR_PRM_MODULE_IID>;
-						qcom,protection-domain = "avs/audio",
-									 "msm/adsp/audio_pd";
 
 						q6prmcc: clock-controller {
 							compatible = "qcom,q6prm-lpass-clocks";
@@ -8532,6 +8534,23 @@
 				};
 			};
 		};
+
+		lpass_tlmm: pinctrl@3440000 {
+			compatible = "qcom,qcs9100-lpass-lpi-pinctrl";
+			reg = <0x0 0x03440000 0x0 0x20000>,
+			      <0x0 0x034D0000 0x0 0x10000>;
+
+			clocks = <&q6prmcc LPASS_HW_MACRO_VOTE LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+				 <&q6prmcc LPASS_HW_DCODEC_VOTE LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+			clock-names = "core", "audio";
+
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&lpass_tlmm 0 0 23>;
+		};
+	};
+
+	sound: sound {
 	};
 
 	thermal_zones: thermal-zones {
