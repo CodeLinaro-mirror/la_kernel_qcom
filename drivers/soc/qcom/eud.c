@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -913,6 +913,7 @@ static int msm_eud_remove(struct platform_device *pdev)
 static const struct of_device_id msm_eud_dt_match[] = {
 	{.compatible = "qcom,msm-eud",		.data = &eud_intr_mask1 },
 	{.compatible = "qcom,msm-eud-sdxpinn",	.data = &eud_intr_mask4 },
+	{.compatible = "qcom,msm-eud-sa510m",	.data = &eud_intr_mask4 },
 	{},
 };
 MODULE_DEVICE_TABLE(of, msm_eud_dt_match);
