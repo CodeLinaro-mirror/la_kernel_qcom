@@ -484,6 +484,15 @@
 	};
 };
 
+&q6apmdai {
+	status = "disabled";
+};
+
+&q6apmbedai {
+	qcom,prmcc_clk = <&q6prmcc>;
+	q6apm-dai-uses-dummy-ops;
+};
+
 &qfprom {
 	tsens_chipinfo: tsens_chipinfo@180 {
 		reg = <0x180 0x4>;
@@ -1104,6 +1113,10 @@
 			};
 		};
 	};
+};
+
+&sound {
+	asoc-use-no-topology;
 };
 
 &thermal_zones {

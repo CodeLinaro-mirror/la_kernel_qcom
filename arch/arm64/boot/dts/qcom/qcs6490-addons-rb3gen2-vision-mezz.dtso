@@ -23,10 +23,6 @@
 	};
 };
 
-&q6apmbedai {
-	qcom,prmcc_clk = <&q6prmcc>;
-};
-
 &sound {
 	compatible = "qcom,qcm6490-sndcard";
 	model = "qcm6490-rb3-vision-snd-card";

@@ -234,10 +234,6 @@
 	};
 };
 
-&q6apmbedai {
-	qcom,prmcc_clk = <&q6prmcc>;
-};
-
 &sound {
 	mi2s-capture-dai-link {
 		link-name = "MI2S-LPAIF-TX-PRIMARY";

@@ -229,11 +229,20 @@
 	qcom,refclk-always-on;
 };
 
-&q6apmbedai {
-	qcom,prmcc_clk = <&q6prmcc>;
-};
-
 &sound {
+        compatible = "qcom,qcm6490-sndcard";
+        model = "qcm6490-rb3-vision-snd-card";
+
+        audio-routing =
+                "SpkrLeft IN", "WSA_SPK1 OUT",
+                "SpkrRight IN", "WSA_SPK2 OUT",
+                "VA DMIC0", "vdd-micb",
+                "VA DMIC1", "vdd-micb",
+                "VA DMIC2", "vdd-micb",
+                "VA DMIC3", "vdd-micb",
+                "VA DMIC4", "vdd-micb",
+                "VA DMIC5", "vdd-micb";
+
 	mi2s-capture-dai-link {
 		link-name = "MI2S-LPAIF-TX-PRIMARY";
 
