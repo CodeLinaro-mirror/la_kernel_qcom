@@ -20,6 +20,7 @@
 
 #include "camss-csid.h"
 #include "camss-csiphy.h"
+#include "camss-tpg.h"
 #include "camss-ispif.h"
 #include "camss-vfe.h"
 #include "camss-format.h"
@@ -51,6 +52,7 @@ struct camss_subdev_resources {
 	char *interrupt[CAMSS_RES_MAX];
 	union {
 		struct csiphy_subdev_resources csiphy;
+		struct tpg_subdev_resources tpg;
 		struct csid_subdev_resources csid;
 		struct vfe_subdev_resources vfe;
 	};
@@ -66,6 +68,10 @@ struct resources_icc {
 	struct icc_bw_tbl icc_bw_tbl;
 };
 
+struct resources_wrapper {
+	char *reg;
+};
+
 enum pm_domain {
 	PM_DOMAIN_VFE0 = 0,
 	PM_DOMAIN_VFE1 = 1,
@@ -73,12 +79,16 @@ enum pm_domain {
 };
 
 enum camss_version {
+	CAMSS_660,
+	CAMSS_7280,
 	CAMSS_8x16,
 	CAMSS_8x96,
-	CAMSS_660,
-	CAMSS_845,
 	CAMSS_8250,
 	CAMSS_8280XP,
+	CAMSS_8300,
+	CAMSS_845,
+	CAMSS_8550,
+	CAMSS_8775P,
 };
 
 enum icc_count {
@@ -90,12 +100,15 @@ struct camss_resources {
 	enum camss_version version;
 	const char *pd_name;
 	const struct camss_subdev_resources *csiphy_res;
+	const struct camss_subdev_resources *tpg_res;
 	const struct camss_subdev_resources *csid_res;
 	const struct camss_subdev_resources *ispif_res;
 	const struct camss_subdev_resources *vfe_res;
+	const struct resources_wrapper *csid_wrapper_res;
 	const struct resources_icc *icc_res;
 	const unsigned int icc_path_num;
 	const unsigned int csiphy_num;
+	const unsigned int tpg_num;
 	const unsigned int csid_num;
 	const unsigned int vfe_num;
 	int (*link_entities)(struct camss *camss);
@@ -107,9 +120,11 @@ struct camss {
 	struct media_device media_dev;
 	struct device *dev;
 	struct csiphy_device *csiphy;
+	struct tpg_device *tpg;
 	struct csid_device *csid;
 	struct ispif_device *ispif;
 	struct vfe_device *vfe;
+	void __iomem *csid_wrapper_base;
 	atomic_t ref_count;
 	int genpd_num;
 	struct device *genpd;
@@ -154,5 +169,8 @@ void camss_pm_domain_off(struct camss *camss, int id);
 int camss_vfe_get(struct camss *camss, int id);
 void camss_vfe_put(struct camss *camss, int id);
 void camss_delete(struct camss *camss);
+void camss_buf_done(struct camss *camss, int hw_id, int port_id);
+void camss_reg_update(struct camss *camss, int hw_id,
+		      int port_id, bool is_clear);
 
 #endif /* QC_MSM_CAMSS_H */
