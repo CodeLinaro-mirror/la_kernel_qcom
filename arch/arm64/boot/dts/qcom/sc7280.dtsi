@@ -3,6 +3,7 @@
  * sc7280 SoC device tree source
  *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <dt-bindings/clock/qcom,camcc-sc7280.h>
 #include <dt-bindings/clock/qcom,dispcc-sc7280.h>
@@ -5513,9 +5514,13 @@
 						reg = <GPR_APM_MODULE_IID>;
 						#sound-dai-cells = <0>;
 
+						q6apmdai: dais {
+							compatible = "qcom,q6apm-dais";
+							iommus = <&apps_smmu 0x1801 0x0>;
+						};
+
 						q6apmbedai: bedais {
 							compatible = "qcom,q6apm-lpass-dais";
-							q6apm-dai-uses-dummy-ops;
 							#sound-dai-cells = <1>;
 						};
 					};
