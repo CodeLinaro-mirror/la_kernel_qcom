@@ -1152,6 +1152,7 @@ struct dwc3_glue_data {
  * @suspended: set to track suspend event due to U3/L2.
  * @allow_role_switch_userspace_control: Expose sysfs entries to allow
  *					userspace to control role switch.
+ * @xhci_reset_on_resume: Set if reinit is required on APPS Resume.
  * @imod_interval: set the interrupt moderation interval in 250ns
  *			increments or 0 to disable.
  * @max_cfg_eps: current max number of IN eps used across all USB configs.
@@ -1379,6 +1380,7 @@ struct dwc3 {
 	unsigned		wakeup_configured:1;
 	unsigned		suspended:1;
 	unsigned		allow_role_switch_userspace_control:1;
+	unsigned		xhci_reset_on_resume:1;
 
 	u16			imod_interval;
 
