@@ -2862,6 +2862,10 @@ enum nl80211_commands {
  *      mapping is as defined in section 9.4.2.314 (TID-To-Link Mapping element)
  *      in Draft P802.11be_D4.0.
  *
+ * @NL80211_ATTR_ASSOC_SPP_AMSDU: flag attribute used with
+ *      %NL80211_CMD_ASSOCIATE indicating the SPP A-MSDUs
+ *      are used on this connection
+ *
  * @NL80211_ATTR_WIPHY_RADIOS: Nested attribute describing physical radios
  *	belonging to this wiphy. See &enum nl80211_wiphy_radio_attrs.
  *
@@ -3424,6 +3428,8 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_MLO_TTLM_DLINK,
 	NL80211_ATTR_MLO_TTLM_ULINK,
+
+	NL80211_ATTR_ASSOC_SPP_AMSDU,
 
 	NL80211_ATTR_WIPHY_RADIOS,
 	NL80211_ATTR_WIPHY_INTERFACE_COMBINATIONS,
