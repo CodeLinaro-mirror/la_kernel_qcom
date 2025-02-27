@@ -518,6 +518,10 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 	dwc3_qcom_setbits(qcom->qscratch_base, PWR_EVNT_IRQ_STAT_REG,
 			  PWR_EVNT_LPM_IN_L2_MASK | PWR_EVNT_LPM_OUT_L2_MASK);
 
+	/* Make sure vbus valid is set for PHYs after PM resume */
+	if (!(dwc3_qcom_is_host(qcom) && wakeup))
+		dwc3_qcom_vbus_override_enable(qcom, true);
+
 	qcom->is_suspended = false;
 
 	return 0;
