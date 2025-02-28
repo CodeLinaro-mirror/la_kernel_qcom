@@ -139,6 +139,7 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_rm_core.c",
             "drivers/virt/gunyah/gh_rm_drv_private.h",
             "drivers/virt/gunyah/gh_rm_iface.c",
+            "drivers/virt/gunyah/gh_devices.c",
         ],
         deps = [
             # do not sort
