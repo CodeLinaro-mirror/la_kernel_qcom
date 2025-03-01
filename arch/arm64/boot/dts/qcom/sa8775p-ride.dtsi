@@ -337,6 +337,10 @@
 	};
 };
 
+&camss {
+	status = "okay";
+};
+
 &ethernet0 {
 	phy-handle = <&sgmii_phy0>;
 

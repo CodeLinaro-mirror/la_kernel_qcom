@@ -398,6 +398,10 @@
 	};
 };
 
+&camss {
+	status = "okay";
+};
+
 &i2c0 {
 	qcom,load-firmware;
 	qcom,xfer-mode = <1>;

@@ -278,6 +278,10 @@
 	};
 };
 
+&camss {
+	status = "okay";
+};
+
 &ethernet0 {
 	phy-mode = "2500base-x";
 	phy-handle = <&sgmii_phy0>;
