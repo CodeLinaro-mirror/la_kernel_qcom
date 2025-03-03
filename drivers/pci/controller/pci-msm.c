@@ -6628,6 +6628,9 @@ static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 	if (!dev->sid_info)
 		return;
 
+	if (dev->rc_idx == 1)
+		return;
+
 	/* clear BDF_TO_SID_BYPASS bit to enable BDF to SID translation */
 	msm_pcie_write_mask(dev->parf + PCIE20_PARF_BDF_TO_SID_CFG, BIT(0), 0);
 
