@@ -52,12 +52,14 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&wlan_en_state>;
 
-		vddctrl1-supply = <&vreg_conn_pa>;
-		vddctrl2-supply = <&vreg_conn_1p8>;
-		vddaon-supply = <&vreg_conn_pa>;
-		vddvm-supply = <&vreg_conn_1p8>;
-		vddvl-supply = <&vreg_conn_pa>;
-		vddvh-supply = <&vreg_conn_1p8>;
+		vddio-supply = <&vreg_conn_pa>;
+		vddaon-supply = <&vreg_conn_1p8>;
+		vddpmu-supply = <&vreg_conn_pa>;
+		vddrfa0p95-supply = <&vreg_conn_1p8>;
+		vddrfa1p3-supply = <&vreg_conn_pa>;
+		vddrfa1p9-supply = <&vreg_conn_1p8>;
+		vddpcie1p3-supply = <&vreg_conn_pa>;
+		vddpcie1p9-supply = <&vreg_conn_1p8>;
 
 		wlan-enable-gpios = <&tlmm 54 GPIO_ACTIVE_HIGH>;
 
