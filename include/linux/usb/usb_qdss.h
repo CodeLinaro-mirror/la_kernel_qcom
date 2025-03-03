@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2013, 2017-2020 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __LINUX_USB_QDSS_H
@@ -55,7 +55,7 @@ static inline int usb_qdss_write(struct usb_qdss_ch *c, struct qdss_request *d)
 	return -ENODEV;
 }
 
-static inline int usb_qdss_alloc_req(struct usb_qdss_ch *c, int n_wr, int n_rd)
+static inline int usb_qdss_alloc_req(struct usb_qdss_ch *c, int n_wr)
 {
 	return -ENODEV;
 }
