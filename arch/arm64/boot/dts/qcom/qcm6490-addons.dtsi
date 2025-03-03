@@ -2,7 +2,7 @@
 /*
  * qcm6490-addons device tree source
  *
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -484,6 +484,15 @@
 	};
 };
 
+&q6apmdai {
+	status = "disabled";
+};
+
+&q6apmbedai {
+	qcom,prmcc_clk = <&q6prmcc>;
+	q6apm-dai-uses-dummy-ops;
+};
+
 &qfprom {
 	tsens_chipinfo: tsens_chipinfo@180 {
 		reg = <0x180 0x4>;
@@ -934,6 +943,31 @@
 
 	msm_stub_codec: msm-stub-codec {
 		compatible = "qcom,msm-stub-codec";
+
+		pinctrl-names = "default", "stub_aif0_active", "stub_aif0_sleep",
+				"stub_aif1_active", "stub_aif1_sleep",
+				"stub_aif2_active", "stub_aif2_sleep",
+				"stub_aif3_active", "stub_aif3_sleep";
+
+		pinctrl-0 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+					<&mi2s0_sclk_sleep>,<&mi2s0_ws_sleep>;
+		pinctrl-1 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>,
+					<&mi2s0_ws>;
+		pinctrl-2 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+					<&mi2s0_sclk_sleep>,<&mi2s0_ws_sleep>;
+		pinctrl-3 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>,
+					<&mi2s0_ws>;
+		pinctrl-4 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+					<&mi2s0_sclk_sleep>,<&mi2s0_ws_sleep>;
+		pinctrl-5 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>,
+					<&mi2s0_ws>;
+		pinctrl-6 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+					<&mi2s0_sclk_sleep>,<&mi2s0_ws_sleep>;
+		pinctrl-7 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>,
+					<&mi2s0_ws>;
+		pinctrl-8 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+					<&mi2s0_sclk_sleep>,<&mi2s0_ws_sleep>;
+
 		#sound-dai-cells = <1>;
 	};
 
@@ -1079,6 +1113,10 @@
 			};
 		};
 	};
+};
+
+&sound {
+	asoc-use-no-topology;
 };
 
 &thermal_zones {

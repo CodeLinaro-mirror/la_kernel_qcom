@@ -234,8 +234,8 @@
 	};
 
 	sound: sound {
-		compatible = "qcom,qcm6490-sndcard";
-		model = "qcm6490-rb3-snd-card";
+		compatible = "qcom,qcs6490-rb3gen2-sndcard";
+		model = "qcs6490-rb3gen2-snd-card";
 
 		audio-routing =
 			"SpkrLeft IN", "WSA_SPK1 OUT",
@@ -259,6 +259,10 @@
 				sound-dai = <&left_spkr>, <&right_spkr>, <&swr2 0>,
 					    <&lpass_wsa_macro 0>;
 			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
 		};
 
 		va-dai-link {
@@ -271,6 +275,10 @@
 			codec {
 				sound-dai = <&lpass_va_macro 0>;
 			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
 		};
 
 		vi-feedback-dai-link {
@@ -282,6 +290,10 @@
 
 			codec {
 				sound-dai = <&swr2 6>, <&lpass_wsa_macro 2>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
 			};
 		};
 	};

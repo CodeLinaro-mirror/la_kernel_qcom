@@ -34,6 +34,7 @@ int qcom_snd_parse_of(struct snd_soc_card *card)
 	struct of_phandle_args args;
 	struct snd_soc_dai_link_component *dlc;
 	int ret, num_links;
+	bool asoc_use_no_topology = false;
 
 	ret = snd_soc_of_parse_card_name(card, "model");
 	if (ret == 0 && !card->name)
@@ -62,6 +63,8 @@ int qcom_snd_parse_of(struct snd_soc_card *card)
 		if (ret)
 			return ret;
 	}
+	if (of_property_read_bool(dev->of_node, "asoc-use-no-topology"))
+		asoc_use_no_topology = true;
 
 	ret = snd_soc_of_parse_pin_switches(card, "pin-switches");
 	if (ret)
@@ -102,7 +105,10 @@ int qcom_snd_parse_of(struct snd_soc_card *card)
 		}
 
 		cpu = of_get_child_by_name(np, "cpu");
-		platform = of_get_child_by_name(np, "platform");
+
+		if (!asoc_use_no_topology)
+			platform = of_get_child_by_name(np, "platform");
+
 		codec = of_get_child_by_name(np, "codec");
 
 		if (!cpu) {

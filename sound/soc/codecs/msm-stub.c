@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -11,6 +11,10 @@
 #define DRV_NAME "msm-stub-codec"
 
 static const struct snd_soc_dapm_widget msm_stub_dapm_widgets[] = {
+	SND_SOC_DAPM_PINCTRL("STUB_AIF0_PINCTRL", "stub_aif0_active", "stub_aif0_sleep"),
+	SND_SOC_DAPM_PINCTRL("STUB_AIF1_PINCTRL", "stub_aif1_active", "stub_aif1_sleep"),
+	SND_SOC_DAPM_PINCTRL("STUB_AIF2_PINCTRL", "stub_aif2_active", "stub_aif2_sleep"),
+	SND_SOC_DAPM_PINCTRL("STUB_AIF3_PINCTRL", "stub_aif3_active", "stub_aif3_sleep"),
 	SND_SOC_DAPM_OUTPUT("STUB_AIF0_RX"),
 	SND_SOC_DAPM_INPUT("STUB_AIF0_TX"),
 	SND_SOC_DAPM_OUTPUT("STUB_AIF1_RX"),
@@ -30,6 +34,14 @@ static const struct snd_soc_dapm_route msm_stub_dapm_routes[] = {
 	{"STUB_AIF2_TX Capture", NULL, "STUB_AIF2_TX"},
 	{"STUB_AIF3_RX", NULL, "STUB_AIF3_RX Playback"},
 	{"STUB_AIF3_TX Capture", NULL, "STUB_AIF3_TX"},
+	{"STUB_AIF0_RX", NULL, "STUB_AIF0_PINCTRL"},
+	{"STUB_AIF0_TX", NULL, "STUB_AIF0_PINCTRL"},
+	{"STUB_AIF1_RX", NULL, "STUB_AIF1_PINCTRL"},
+	{"STUB_AIF1_TX", NULL, "STUB_AIF1_PINCTRL"},
+	{"STUB_AIF2_RX", NULL, "STUB_AIF2_PINCTRL"},
+	{"STUB_AIF2_TX", NULL, "STUB_AIF2_PINCTRL"},
+	{"STUB_AIF3_RX", NULL, "STUB_AIF3_PINCTRL"},
+	{"STUB_AIF3_TX", NULL, "STUB_AIF3_PINCTRL"},
 };
 
 static struct snd_soc_dai_driver msm_stub_dais[] = {
