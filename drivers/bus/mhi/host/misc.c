@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -246,7 +246,7 @@ void mhi_reg_write_work(struct work_struct *w)
 						struct mhi_private,
 						reg_write_work);
 	struct mhi_controller *mhi_cntrl = mhi_priv->mhi_cntrl;
-	struct pci_dev *parent = to_pci_dev(mhi_cntrl->cntrl_dev);
+	struct pci_dev __maybe_unused *parent = to_pci_dev(mhi_cntrl->cntrl_dev);
 	struct reg_write_info *info =
 				&mhi_priv->reg_write_q[mhi_priv->read_idx];
 
@@ -256,8 +256,10 @@ void mhi_reg_write_work(struct work_struct *w)
 	if (!mhi_is_active(mhi_cntrl))
 		return;
 
+#ifdef CONFIG_PCI_MSM
 	if (msm_pcie_prevent_l1(parent))
 		return;
+#endif
 
 	while (info->valid) {
 		if (!mhi_is_active(mhi_cntrl))
@@ -271,7 +273,9 @@ void mhi_reg_write_work(struct work_struct *w)
 		info = &mhi_priv->reg_write_q[mhi_priv->read_idx];
 	}
 
+#ifdef CONFIG_PCI_MSM
 	msm_pcie_allow_l1(parent);
+#endif
 }
 
 int mhi_misc_sysfs_create(struct mhi_controller *mhi_cntrl)
