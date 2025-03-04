@@ -2679,7 +2679,9 @@ static struct dst_entry *xfrm_bundle_create(struct xfrm_policy *policy,
 			if (xfrm[i]->props.smark.v || xfrm[i]->props.smark.m)
 				mark = xfrm_smark_get(fl->flowi_mark, xfrm[i]);
 
-			if (xfrm[i]->xso.type != XFRM_DEV_OFFLOAD_PACKET)
+			if (xfrm[i]->xso.type != XFRM_DEV_OFFLOAD_PACKET ||
+			    (xfrm[i]->xso.type == XFRM_DEV_OFFLOAD_PACKET &&
+			     xfrm[i]->props.family != AF_INET))
 				family = xfrm[i]->props.family;
 
 			oif = fl->flowi_oif ? : fl->flowi_l3mdev;
