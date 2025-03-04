@@ -166,6 +166,7 @@ config SND_SOC_MSM8996
 config SND_SOC_QCS9100
         tristate "SoC Machine driver for QCS9100 boards"
         depends on QCOM_APR
+        select PINCTRL_SA8775P_LPASS_LPI
         select SND_SOC_MAX98357A
         select SND_SOC_QCOM_COMMON
         select SND_SOC_QDSP6
