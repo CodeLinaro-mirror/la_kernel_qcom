@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1439,9 +1439,12 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 		if (!ret)
 			ret = prepare_qmi_response(subs, req_msg, &resp,
 					info_idx);
+		else
+			uaudio_dbg("enable_audio_stream failed %d\n", ret);
+
 		if (ret) {
 			mutex_lock(&chip->mutex);
-			uaudio_dbg("failed to prepare qmi response %d\n", ret);
+			uaudio_dbg("enable process failed %d\n", ret);
 			atomic_dec(&uadev[pcm_card_num].in_use);
 			mutex_unlock(&chip->mutex);
 		}

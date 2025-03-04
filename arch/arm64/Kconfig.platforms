@@ -312,7 +312,6 @@ config ARCH_X1E80100
 config ARCH_PARROT
 	bool "Enable Support for Qualcomm Technologies, Inc. PARROT"
 	depends on ARCH_QCOM
-	select GUNYAH_LEGACY
 	help
 	  This enables support for the Qualcomm Technologies, Inc.'s
 	  PARROT chipset. If you do not wish to build a kernel that

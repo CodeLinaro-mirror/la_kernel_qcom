@@ -21,6 +21,7 @@ load(
 )
 load(":allyes_images.bzl", "gen_allyes_files")
 load(":image_opts.bzl", "boot_image_opts")
+load(":modules.bzl", "get_gki_modules_list", "get_kunit_modules_list")
 load(":msm_abl.bzl", "define_abl_dist")
 load(":msm_common.bzl", "define_top_level_config", "gen_config_without_source_lines", "get_out_dir")
 load(":msm_dtc.bzl", "define_dtc_dist")
@@ -137,6 +138,11 @@ def _define_kernel_build(
         "certs/signing_key.pem",
         "certs/signing_key.x509",
     ])
+
+    if target.split("_")[0] == "sun-le":
+        out_list += ["utsrelease.h"]
+        in_tree_module_list = in_tree_module_list + get_gki_modules_list("arm64")
+        in_tree_module_list = in_tree_module_list + get_kunit_modules_list("arm64")
 
     kernel_build(
         name = target,

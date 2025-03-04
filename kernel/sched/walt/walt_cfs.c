@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/seq_file.h>
@@ -1497,8 +1497,10 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 	*repick = true;
 
 	/* Mark arrival of MVP task */
-	if (!wrq->mvp_arrival_time)
+	if (!wrq->mvp_arrival_time) {
+		update_rq_clock(rq);
 		wrq->mvp_arrival_time = rq->clock;
+	}
 
 	if (simple) {
 		for_each_sched_entity((*se)) {

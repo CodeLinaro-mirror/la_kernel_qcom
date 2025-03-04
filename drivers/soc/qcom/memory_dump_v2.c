@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014-2017, 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -1180,7 +1180,7 @@ static void mem_dump_free_rmem(phys_addr_t base, uint32_t size)
 static int dynamic_mem_dump_disable(struct memdump_info *dump_info)
 {
 	mutex_lock(&dump_info->mutex);
-	if (!dump_info->active) {
+	if (dump_info->enable || !dump_info->active) {
 		mutex_unlock(&dump_info->mutex);
 		return 0;
 	}

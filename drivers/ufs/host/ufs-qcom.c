@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2022, Linux Foundation. All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -437,7 +437,7 @@ static inline void cancel_dwork_unvote_cpufreq(struct ufs_hba *hba)
 
 	cancel_delayed_work_sync(&host->fwork);
 #if IS_ENABLED(CONFIG_SCHED_WALT)
-	if (host->esi_mask.bits[0])
+	if (host->esi_mask.bits[0] && host->enforce_high_irq_cpus)
 		walt_unset_enforce_high_irq_cpus(&host->esi_mask);
 	sched_set_boost(STORAGE_BOOST_DISABLE);
 #endif
@@ -1855,7 +1855,7 @@ static void ufs_qcom_set_esi_affinity_hint(struct ufs_hba *hba)
 		mask = get_cpu_mask(host->esi_affinity_mask[i]);
 		if (!cpumask_subset(mask, cpu_possible_mask)) {
 			dev_err(hba->dev, "Invalid esi-cpu affinity mask passed, using default\n");
-			mask = get_cpu_mask(UFS_QCOM_ESI_AFFINITY_MASK);
+			mask = cpu_possible_mask;
 		}
 
 		irq_modify_status(desc->irq, clear, set);
@@ -1887,15 +1887,16 @@ static void ufs_qcom_toggle_pri_affinity(struct ufs_hba *hba, bool on)
 #if IS_ENABLED(CONFIG_SCHED_WALT)
 	if (on) {
 		/*
-		 * Enforcing high irq cpus is needed for high IO load
-		 * condition, Single door bell which doesn't used
-		 * ESI doesn't need it.
+		 * Enforcing high IRQ CPUs is necessary for high I/O load
+		 * conditions. A single doorbell that doesn't use ESI doesn't
+		 * need this enforcement. Additionally, this enforcement is
+		 * only applied if storage boost is enabled.
 		 */
-		if (host->esi_mask.bits[0])
+		if (host->esi_mask.bits[0] && host->enforce_high_irq_cpus)
 			walt_set_enforce_high_irq_cpus(&host->esi_mask);
 		sched_set_boost(STORAGE_BOOST);
 	} else {
-		if (host->esi_mask.bits[0])
+		if (host->esi_mask.bits[0] && host->enforce_high_irq_cpus)
 			walt_unset_enforce_high_irq_cpus(&host->esi_mask);
 		sched_set_boost(STORAGE_BOOST_DISABLE);
 	}
@@ -3127,7 +3128,7 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 			qcg->mask.bits[0] = host->qos_perf_mask.bits[0];
 		} else {
 			qcg->mask.bits[0] = host->qos_non_perf_mask.bits[0];
-			if (host->storage_boost_en)
+			if (host->enforce_high_irq_cpus)
 				qcg->perf_core = true;
 		}
 
@@ -3229,12 +3230,12 @@ static int ufs_qcom_first_partial_cpu(struct ufs_qcom_host *host)
  */
 static void ufs_qcom_update_esi_affinity_mask(struct ufs_qcom_host *host, int num_cqs)
 {
+	cpumask_t localclustermask[MAX_NUM_CLUSTERS];
 	int cid = -1;
 	int  first_hole_index = -1;
 	int i, j, pos = 0;
 	int last_cpu = -1;
 	int qultivate_cid = -1;
-	cpumask_t localclustermask[3];
 	u32 cpu;
 
 	first_hole_index = ufs_qcom_first_partial_cpu(host);
@@ -3397,6 +3398,8 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 		if (ufs_qcom_partial_cpu_found(host))
 			ufs_qcom_update_esi_affinity_mask(host, num_cqs);
 
+		/* Ensure the esi-mask only includes possible CPUs. */
+		cpumask_and(&host->esi_mask, &host->esi_mask, cpu_possible_mask);
 	}
 }
 
@@ -3847,7 +3850,7 @@ static void ufs_qcom_parse_storage_boost_flag(struct ufs_qcom_host *host)
 	if (!np)
 		return;
 
-	host->storage_boost_en = of_property_read_bool(np, "qcom,storage-boost");
+	host->enforce_high_irq_cpus = of_property_read_bool(np, "qcom,enforce-high-irq-cpus");
 }
 
 /*

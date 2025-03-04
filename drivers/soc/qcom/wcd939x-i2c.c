@@ -37,6 +37,14 @@ enum {
 };
 
 enum {
+	INVALID_MODE,
+	MBHC_MODE1 = 1,
+	ULP_MODE2 = 2,
+	STD_MODE3 = 3,
+	HIFI_MODE4 = 4,
+};
+
+enum {
 	WCD_USBSS_LPD_USB_MODE_CLEAR = 0,
 	WCD_USBSS_LPD_MODE_SET,
 	WCD_USBSS_USB_MODE_SET,
@@ -69,9 +77,7 @@ static const struct wcd_usbss_reg_mask_val coeff_init[] = {
 	{WCD_USBSS_GND_COEF_R_K2_0,       0xFF, 0xE8},
 	{WCD_USBSS_GND_COEF_R_K4_0,       0xFF, 0x73},
 	{WCD_USBSS_RATIO_SPKR_REXT_L_LSB, 0xFF, 0x00},
-	{WCD_USBSS_RATIO_SPKR_REXT_L_MSB, 0x7F, 0x04},
 	{WCD_USBSS_RATIO_SPKR_REXT_R_LSB, 0xFF, 0x00},
-	{WCD_USBSS_RATIO_SPKR_REXT_R_MSB, 0x7F, 0x04},
 };
 
 static struct wcd_usbss_ctxt *wcd_usbss_ctxt_;
@@ -1065,6 +1071,7 @@ int wcd_usbss_audio_config(bool enable, enum wcd_usbss_config_type config_type,
 
 	int rc = 0;
 	unsigned int current_power_mode;
+	unsigned int force_power_mode = HIFI_MODE4;
 
 	/* check if driver is probed and private context is init'ed */
 	if (wcd_usbss_ctxt_ == NULL)
@@ -1103,6 +1110,7 @@ int wcd_usbss_audio_config(bool enable, enum wcd_usbss_config_type config_type,
 					WCD_USBSS_USB_SS_CNTL, 0x07, power_mode);
 			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_CLK, 0x10);
 		} else { /* switching to ULP/HiFi/Std */
+			power_mode = force_power_mode;
 			if (power_mode == 0x2) /* ULP */
 				regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_CLK, 0x1C);
 			else

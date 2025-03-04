@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Description: CoreSight System Trace Macrocell driver
  *
@@ -213,14 +213,7 @@ static int stm_enable(struct coresight_device *csdev, struct perf_event *event,
 	/* Someone is already using the tracer */
 	if (val)
 		return -EBUSY;
-	if (drvdata->static_atid) {
-		ret = coresight_trace_id_reserve_id(drvdata->traceid);
-		if (ret) {
-			local_set(&drvdata->mode, CS_MODE_DISABLED);
-			dev_err(&csdev->dev, "reserve ATID: %d fail\n", drvdata->traceid);
-			return ret;
-		}
-	}
+
 	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true, NULL);
 
 	ret = pm_runtime_resume_and_get(csdev->dev.parent);
@@ -914,8 +907,15 @@ static int stm_probe(struct amba_device *adev, const struct amba_id *id)
 		goto stm_unregister;
 	}
 
-	if (!of_property_read_u32(adev->dev.of_node, "atid", &trace_id))
+	if (!of_property_read_u32(adev->dev.of_node, "atid", &trace_id)) {
 		drvdata->static_atid = true;
+		ret = coresight_trace_id_reserve_id(trace_id);
+		if (ret) {
+			local_set(&drvdata->mode, CS_MODE_DISABLED);
+			dev_err(&drvdata->csdev->dev, "reserve ATID: %d fail\n", drvdata->traceid);
+			return ret;
+		}
+	}
 	else {
 		trace_id = coresight_trace_id_get_system_id();
 		if (trace_id < 0) {

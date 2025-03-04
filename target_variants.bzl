@@ -17,6 +17,7 @@ le_targets = [
     "sdxkova",
     "sdxkova.cpe.wkk",
     "sun-allyes",
+    "sun-le",
 ]
 
 le_variants = [

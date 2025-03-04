@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_GCC_TUNA_H
@@ -157,6 +157,8 @@
 #define GCC_UFS_PHY_ICE_CORE_HW_CTL_CLK				147
 #define GCC_UFS_PHY_PHY_AUX_HW_CTL_CLK				148
 #define GCC_UFS_PHY_UNIPRO_CORE_HW_CTL_CLK			149
+#define GCC_GPU_SMMU_VOTE_CLK					150
+#define GCC_MMU_TCU_VOTE_CLK					151
 
 /* GCC power domains */
 #define GCC_PCIE_0_GDSC						0
