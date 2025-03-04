@@ -5,6 +5,7 @@
 
 /dts-v1/;
 
+#include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
 #include "sa8775p-ride.dtsi"
 
 / {
@@ -12,6 +13,34 @@
 	compatible = "qcom,sa8775p-ride", "qcom,sa8775p";
 	qcom,msm-id = <533 0x10000>, <534 0x10000>, <534 0x20000>;
 	qcom,board-id = <0x10019 0>, <0x10025 1>;
+
+	sound {
+		compatible = "qcom,qcs9100-sndcard";
+		model = "qcs9100-ridesx-snd-card";
+
+		mi2s1-capture-dai-link {
+			link-name = "MI2S-LPAIF-TX-SECONDARY";
+
+			cpu {
+				sound-dai = <&q6apmbedai SECONDARY_MI2S_TX>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
+
+		mi2s1-playback-dai-link {
+			link-name = "MI2S-LPAIF-RX-SECONDARY";
+			cpu {
+				sound-dai = <&q6apmbedai SECONDARY_MI2S_RX>;
+			};
+
+			platform {
+				sound-dai =<&q6apm>;
+			};
+		};
+	};
 };
 
 &ethernet0 {
