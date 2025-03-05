@@ -22,6 +22,7 @@
 #ifdef CONFIG_HYFI_BRIDGE_HOOKS
 #include <linux/export.h>
 #endif
+#include <linux/netfilter.h>
 
 #define BR_HASH_BITS 8
 #define BR_HASH_SIZE (1 << BR_HASH_BITS)
@@ -914,6 +915,7 @@ void br_manage_promisc(struct net_bridge *br);
 int nbp_backup_change(struct net_bridge_port *p, struct net_device *backup_dev);
 
 /* br_input.c */
+int br_pass_frame_up(struct sk_buff *skb, bool promisc);
 int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb);
 rx_handler_func_t *br_get_rx_handler(const struct net_device *dev);
 
@@ -1569,6 +1571,7 @@ void br_vlan_fill_forward_path_pvid(struct net_bridge *br,
 int br_vlan_fill_forward_path_mode(struct net_bridge *br,
 				   struct net_bridge_port *dst,
 				   struct net_device_path *path);
+void br_vlan_disable_default_pvid(struct net_bridge *br);
 
 static inline struct net_bridge_vlan_group *br_vlan_group(
 					const struct net_bridge *br)
@@ -1938,11 +1941,24 @@ extern const struct nf_br_ops __rcu *nf_br_ops;
 int br_nf_core_init(void);
 void br_nf_core_fini(void);
 void br_netfilter_rtable_init(struct net_bridge *);
+bool br_netfilter_run_hooks(struct net *net);
 #else
 static inline int br_nf_core_init(void) { return 0; }
 static inline void br_nf_core_fini(void) {}
 #define br_netfilter_rtable_init(x)
+static inline bool br_netfilter_run_hooks(struct net *net) { return false; }
 #endif
+
+static inline int
+BR_HOOK(u8 pf, unsigned int hook, struct net *net, struct sock *sk,
+	struct sk_buff *skb, struct net_device *in, struct net_device *out,
+	int (*okfn)(struct net *, struct sock *, struct sk_buff *))
+{
+	if (!br_netfilter_run_hooks(net))
+		return okfn(net, sk, skb);
+
+	return NF_HOOK(pf, hook, net, sk, skb, in, out, okfn);
+}
 
 /* br_stp.c */
 void br_set_state(struct net_bridge_port *p, unsigned int state);
@@ -2286,5 +2302,8 @@ static inline void __br_notify(int group, int type, const void *data)
 	if (notify_hook)
 		notify_hook(group, type, data);
 }
+#else
+#define __br_get(__hook, __default, __args ...) \
+		(__hook ? (__hook(__args)) : (__default))
 #endif
 #endif

@@ -7542,11 +7542,12 @@ EXPORT_SYMBOL(netdev_lower_get_first_private_rcu);
  * Find a master upper device and return pointer to it or NULL in case
  * it's not there. The caller must hold the RCU read lock.
  */
-struct net_device *netdev_master_upper_dev_get_rcu(struct net_device *dev)
+struct net_device *netdev_master_upper_dev_get_rcu(const struct net_device *dev)
 {
 	struct netdev_adjacent *upper;
+	struct net_device *ndev = (struct net_device *)dev;
 
-	upper = list_first_or_null_rcu(&dev->adj_list.upper,
+	upper = list_first_or_null_rcu(&ndev->adj_list.upper,
 				       struct netdev_adjacent, list);
 	if (upper && likely(upper->master))
 		return upper->dev;

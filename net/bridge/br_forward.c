@@ -24,7 +24,8 @@ static inline int should_deliver(const struct net_bridge_port *p,
 	struct net_bridge_vlan_group *vg;
 
 	vg = nbp_vlan_group_rcu(p);
-	return ((p->flags & BR_HAIRPIN_MODE) || skb->dev != p->dev) &&
+	return (((p->flags & BR_HAIRPIN_MODE) && !is_multicast_ether_addr(eth_hdr(skb)->h_dest)) ||
+		skb->dev != p->dev) &&
 		p->state == BR_STATE_FORWARDING && br_allowed_egress(vg, skb) &&
 		nbp_switchdev_allowed_egress(p, skb) &&
 		!br_skb_isolated(p, skb);
@@ -63,7 +64,7 @@ EXPORT_SYMBOL_GPL(br_dev_queue_push_xmit);
 int br_forward_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	skb_clear_tstamp(skb);
-	return NF_HOOK(NFPROTO_BRIDGE, NF_BR_POST_ROUTING,
+	return BR_HOOK(NFPROTO_BRIDGE, NF_BR_POST_ROUTING,
 		       net, sk, skb, NULL, skb->dev,
 		       br_dev_queue_push_xmit);
 
@@ -112,7 +113,7 @@ static void __br_forward(const struct net_bridge_port *to,
 		indev = NULL;
 	}
 
-	NF_HOOK(NFPROTO_BRIDGE, br_hook,
+	BR_HOOK(NFPROTO_BRIDGE, br_hook,
 		net, NULL, skb, indev, skb->dev,
 		br_forward_finish);
 }

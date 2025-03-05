@@ -60,6 +60,8 @@ struct brnf_net {
 	int call_iptables;
 	int call_ip6tables;
 	int call_arptables;
+	int call_ebtables;
+	int call_custom;
 
 	/* default value is 0 */
 	int filter_vlan_tagged;
@@ -75,6 +77,14 @@ struct brnf_net {
 
 #define IS_ARP(skb) \
 	(!skb_vlan_tag_present(skb) && skb->protocol == htons(ETH_P_ARP))
+
+bool br_netfilter_run_hooks(struct net *net)
+{
+	struct brnf_net *brnf = net_generic(net, brnf_net_id);
+
+	return brnf->call_iptables | brnf->call_ip6tables | brnf->call_arptables |
+		brnf->call_ebtables | brnf->call_custom;
+}
 
 static inline __be16 vlan_proto(const struct sk_buff *skb)
 {
@@ -1229,6 +1239,18 @@ static struct ctl_table brnf_table[] = {
 		.mode		= 0644,
 		.proc_handler	= brnf_sysctl_call_tables,
 	},
+	{
+		.procname       = "bridge-nf-call-ebtables",
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = brnf_sysctl_call_tables,
+	},
+	{
+		.procname	= "bridge-nf-call-custom",
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= brnf_sysctl_call_tables,
+	},
 	{ }
 };
 
@@ -1237,6 +1259,8 @@ static inline void br_netfilter_sysctl_default(struct brnf_net *brnf)
 	brnf->call_iptables = 1;
 	brnf->call_ip6tables = 1;
 	brnf->call_arptables = 1;
+	brnf->call_ebtables = 0;
+	brnf->call_custom = 0;
 	brnf->filter_vlan_tagged = 0;
 	brnf->filter_pppoe_tagged = 0;
 	brnf->pass_vlan_indev = 0;
@@ -1260,6 +1284,8 @@ static int br_netfilter_sysctl_init_net(struct net *net)
 	table[3].data = &brnet->filter_vlan_tagged;
 	table[4].data = &brnet->filter_pppoe_tagged;
 	table[5].data = &brnet->pass_vlan_indev;
+	table[6].data = &brnet->call_ebtables;
+	table[7].data = &brnet->call_custom;
 
 	br_netfilter_sysctl_default(brnet);
 
