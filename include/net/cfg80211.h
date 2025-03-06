@@ -4571,14 +4571,14 @@ struct cfg80211_ops {
 			    struct cfg80211_ap_settings *settings);
 	int	(*change_beacon)(struct wiphy *wiphy, struct net_device *dev,
 				 struct cfg80211_beacon_data *info);
-#ifdef CONFIG_ML_RECONFIG_SINGLE_WIPHY
+#ifdef CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 	int	(*stop_ap)(struct wiphy *wiphy, struct net_device *dev,
 			   unsigned int link_id,
 			   struct cfg80211_ap_settings *settings);
 #else
 	int	(*stop_ap)(struct wiphy *wiphy, struct net_device *dev,
 			   unsigned int link_id);
-#endif /* CONFIG_ML_RECONFIG_SINGLE_WIPHY */
+#endif /* CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT */
 
 
 	int	(*add_station)(struct wiphy *wiphy, struct net_device *dev,
