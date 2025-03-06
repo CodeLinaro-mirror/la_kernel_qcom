@@ -1058,6 +1058,7 @@ struct sk_buff {
 		__u32 magic	:24;
 		__u32 sa_dir	:2;
 		__u32 sa_idx	:6;
+		__u32 reserved;
 	} ipa_skb_cb;
 
 	ANDROID_KABI_RESERVE(1);
