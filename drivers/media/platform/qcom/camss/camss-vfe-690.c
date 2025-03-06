@@ -1,8 +1,9 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Qualcomm MSM Camera Subsystem - VFE (Video Front End) Module v690 (SA8755P)
  *
- * Copyright (c) 2025 Qualcomm Technologies, Inc.
+ * Copyright (C) 2021 Linaro Ltd.
+ * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/interrupt.h>
