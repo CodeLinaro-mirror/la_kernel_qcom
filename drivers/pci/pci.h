@@ -216,6 +216,7 @@ extern const struct attribute_group *pci_dev_groups[];
 extern const struct attribute_group *pcibus_groups[];
 extern const struct device_type pci_dev_type;
 extern const struct attribute_group *pci_bus_groups[];
+extern const struct attribute_group pci_doe_sysfs_group;
 
 extern unsigned long pci_hotplug_io_size;
 extern unsigned long pci_hotplug_mmio_size;
@@ -350,6 +351,14 @@ void pci_doe_disconnected(struct pci_dev *pdev);
 static inline void pci_doe_init(struct pci_dev *pdev) { }
 static inline void pci_doe_destroy(struct pci_dev *pdev) { }
 static inline void pci_doe_disconnected(struct pci_dev *pdev) { }
+#endif
+
+#if defined(CONFIG_PCI_DOE) && defined(CONFIG_SYSFS)
+void pci_doe_sysfs_init(struct pci_dev *pci_dev);
+void pci_doe_sysfs_teardown(struct pci_dev *pdev);
+#else
+static inline void pci_doe_sysfs_init(struct pci_dev *pdev) { return; }
+static inline void pci_doe_sysfs_teardown(struct pci_dev *pdev) { }
 #endif
 
 /**
