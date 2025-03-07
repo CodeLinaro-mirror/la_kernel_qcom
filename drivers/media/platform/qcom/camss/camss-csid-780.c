@@ -1,8 +1,9 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Qualcomm MSM Camera Subsystem - CSID (CSI Decoder) Module
  *
- * Copyright (c) 2024 Qualcomm Technologies, Inc.
+ * Copyright (C) 2021 Linaro Ltd.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/completion.h>
 #include <linux/delay.h>

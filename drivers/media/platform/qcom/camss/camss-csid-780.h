@@ -1,10 +1,11 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * camss-csid-780.h
  *
  * Qualcomm MSM Camera Subsystem - CSID (CSI Decoder) Module Generation 3
  *
- * Copyright (c) 2024 Qualcomm Technologies, Inc.
+ * Copyright (C) 2021 Linaro Ltd.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QC_MSM_CAMSS_CSID_780_H__
 #define __QC_MSM_CAMSS_CSID_780_H__
