@@ -19,7 +19,7 @@
 #include "common.h"
 #include "sdw.h"
 
-#define DRIVER_NAME		"qcs9100"
+#define DRIVER_NAME		"sa8775p"
 #define WCN_CDC_SLIM_RX_CH_MAX	2
 #define WCN_CDC_SLIM_TX_CH_MAX	2
 #define NAME_SIZE	32
@@ -96,6 +96,24 @@ static int qcs9100_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 	rate->max = 48000;
 	channels->min = 2;
 	channels->max = 2;
+
+	return 0;
+}
+
+static int qcs9100_snd_startup(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	unsigned int fmt = SND_SOC_DAIFMT_BP_FP;
+
+	switch (cpu_dai->id) {
+	case PRIMARY_MI2S_RX ... QUATERNARY_MI2S_TX:
+	case PRIMARY_SDR_MI2S_RX ... QUINARY_SDR_MI2S_TX:
+		snd_soc_dai_set_fmt(cpu_dai, fmt);
+		break;
+	default:
+		break;
+	}
 
 	return 0;
 }
@@ -191,6 +209,7 @@ static const struct snd_soc_dapm_route qcs9075_dapm_routes[] = {
 };
 
 static const struct snd_soc_ops qcs9100_be_ops = {
+	.startup = qcs9100_snd_startup,
 	.hw_params = qcs9100_snd_hw_params,
 	.hw_free = qcs9100_snd_hw_free,
 	.prepare = qcs9100_snd_prepare,
