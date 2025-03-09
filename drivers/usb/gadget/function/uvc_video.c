@@ -301,13 +301,11 @@ uvc_video_free_requests(struct uvc_video *video)
 
 			if (video->ureq[i].req) {
 				usb_ep_free_request(video->ep, video->ureq[i].req);
-				video->ureq[i].req = NULL;
-			}
-
-			if (video->ureq[i].req_buffer) {
 				kfree(video->ureq[i].req_buffer);
+				video->ureq[i].req = NULL;
 				video->ureq[i].req_buffer = NULL;
 			}
+
 		}
 
 		kfree(video->ureq);
