@@ -92,6 +92,7 @@ struct dwc3_qcom {
 	struct icc_path		*icc_path_apps;
 
 	bool			enable_rt;
+	bool			ignore_pipe_clk;
 	enum usb_role		current_role;
 	struct notifier_block	xhci_nb;
 };
@@ -447,6 +448,23 @@ static void dwc3_qcom_enable_interrupts(struct dwc3_qcom *qcom)
 	dwc3_qcom_enable_wakeup_irq(qcom->ss_phy_irq, 0);
 }
 
+static void dwc3_qcom_select_utmi_clk(struct dwc3_qcom *qcom)
+{
+	/* Configure dwc3 to use UTMI clock as PIPE clock not present */
+	dwc3_qcom_setbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
+			  PIPE_UTMI_CLK_DIS);
+
+	usleep_range(100, 1000);
+
+	dwc3_qcom_setbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
+			  PIPE_UTMI_CLK_SEL | PIPE3_PHYSTATUS_SW);
+
+	usleep_range(100, 1000);
+
+	dwc3_qcom_clrbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
+			  PIPE_UTMI_CLK_DIS);
+}
+
 static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 {
 	u32 val;
@@ -518,6 +536,13 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 	dwc3_qcom_setbits(qcom->qscratch_base, PWR_EVNT_IRQ_STAT_REG,
 			  PWR_EVNT_LPM_IN_L2_MASK | PWR_EVNT_LPM_OUT_L2_MASK);
 
+	/* Make sure vbus valid is set for PHYs after PM resume */
+	if (!(dwc3_qcom_is_host(qcom) && wakeup))
+		dwc3_qcom_vbus_override_enable(qcom, true);
+
+	if (!wakeup && qcom->ignore_pipe_clk)
+		dwc3_qcom_select_utmi_clk(qcom);
+
 	qcom->is_suspended = false;
 
 	return 0;
@@ -548,23 +573,6 @@ static irqreturn_t qcom_dwc3_resume_irq(int irq, void *data)
 		pm_runtime_resume(&dwc->xhci->dev);
 
 	return IRQ_HANDLED;
-}
-
-static void dwc3_qcom_select_utmi_clk(struct dwc3_qcom *qcom)
-{
-	/* Configure dwc3 to use UTMI clock as PIPE clock not present */
-	dwc3_qcom_setbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
-			  PIPE_UTMI_CLK_DIS);
-
-	usleep_range(100, 1000);
-
-	dwc3_qcom_setbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
-			  PIPE_UTMI_CLK_SEL | PIPE3_PHYSTATUS_SW);
-
-	usleep_range(100, 1000);
-
-	dwc3_qcom_clrbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
-			  PIPE_UTMI_CLK_DIS);
 }
 
 static int dwc3_qcom_get_irq(struct platform_device *pdev,
@@ -717,6 +725,15 @@ static int dwc3_qcom_clk_init(struct dwc3_qcom *qcom, int count)
 
 	return 0;
 }
+
+static const struct property_entry dwc3_qcom_props[] = {
+	PROPERTY_ENTRY_BOOL("snps,allow-role-switch-userspace-control"),
+	{ },
+};
+
+static const struct software_node dwc3_qcom_swnode_prop = {
+	.properties = dwc3_qcom_props,
+};
 
 static const struct property_entry dwc3_qcom_acpi_properties[] = {
 	PROPERTY_ENTRY_STRING("dr_mode", "host"),
@@ -981,6 +998,10 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	qcom->dev = &pdev->dev;
 	qcom->dwc.dev = qcom->dev;
 
+	ret = device_add_software_node(&pdev->dev, &dwc3_qcom_swnode_prop);
+	if (ret)
+		return ret;
+
 	if (has_acpi_companion(dev)) {
 		qcom->acpi_pdata = acpi_device_get_match_data(dev);
 		if (!qcom->acpi_pdata) {
@@ -1057,9 +1078,9 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	 * Disable pipe_clk requirement if specified. Used when dwc3
 	 * operates without SSPHY and only HS/FS/LS modes are supported.
 	 */
-	ignore_pipe_clk = device_property_read_bool(dev,
+	qcom->ignore_pipe_clk = device_property_read_bool(dev,
 				"qcom,select-utmi-as-pipe-clk");
-	if (ignore_pipe_clk)
+	if (qcom->ignore_pipe_clk)
 		dwc3_qcom_select_utmi_clk(qcom);
 
 	qcom->enable_rt = device_property_read_bool(dev,

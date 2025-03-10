@@ -1647,6 +1647,26 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	dwc->tx_fifo_resize_max_num = tx_fifo_resize_max_num;
 }
 
+static void dwc3_get_software_properties(struct dwc3 *dwc)
+{
+	struct device *tmpdev;
+
+	/*
+	 * Iterate over all parent nodes for finding swnode properties
+	 * and non-DT (non-ABI) properties.
+	 */
+	if (IS_ENABLED(CONFIG_USB_ROLE_SWITCH) &&
+		device_property_read_bool(dwc->dev, "usb-role-switch")) {
+		for (tmpdev = dwc->dev; tmpdev; tmpdev = tmpdev->parent) {
+			dwc->allow_role_switch_userspace_control =
+					device_property_read_bool(tmpdev,
+					"snps,allow-role-switch-userspace-control");
+			if (dwc->allow_role_switch_userspace_control)
+				break;
+		}
+	}
+}
+
 /* check whether the core supports IMOD */
 bool dwc3_has_imod(struct dwc3 *dwc)
 {
@@ -1918,6 +1938,8 @@ int dwc3_probe(struct dwc3 *dwc,
 	dwc->regs_size	= resource_size(&dwc_res);
 
 	dwc3_get_properties(dwc);
+
+	dwc3_get_software_properties(dwc);
 
 	dwc->reset = devm_reset_control_array_get_optional_shared(dev);
 	if (IS_ERR(dwc->reset)) {
