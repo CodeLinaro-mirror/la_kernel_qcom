@@ -59,6 +59,7 @@ properties:
   compatible:
     enum:
       - qcom,qcs404-ethqos
+      - qcom,qcs615-ethqos
       - qcom,qcs8300-ethqos
       - qcom,sa8620p-ethqos
       - qcom,sa7255p-ethqos
