@@ -3656,7 +3656,7 @@ static int stmmac_hw_setup(struct net_device *dev, bool ptp_register)
 	}
 
 	if (priv->hw->pcs) {
-		if (priv->plat->disable_pcs_ane)
+		if (priv->plat->disable_pcs_ane == 1)
 			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 0, priv->hw->ps, 0);
 		else
 			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, priv->hw->ps, 0);
