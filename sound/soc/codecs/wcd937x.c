@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/component.h>
 #include <linux/delay.h>
@@ -2906,24 +2906,19 @@ static int wcd937x_probe(struct platform_device *pdev)
 		wcd937x->supplies[0].supply = "vdd-rxtx";
 		wcd937x->supplies[1].supply = "vdd-px";
 		wcd937x->supplies[2].supply = "vdd-mic-bias";
+		wcd937x->supplies[3].supply = "vdd-buck";
+
 		ret = devm_regulator_bulk_get(dev, WCD937X_MAX_BULK_SUPPLY, wcd937x->supplies);
 		if (ret)
 			return dev_err_probe(dev, ret, "Failed to get supplies\n");
 
 		ret = regulator_bulk_enable(WCD937X_MAX_BULK_SUPPLY, wcd937x->supplies);
-		if (ret)
+		if (ret) {
+			regulator_bulk_free(WCD937X_MAX_BULK_SUPPLY, wcd937x->supplies);
 			return dev_err_probe(dev, ret, "Failed to enable supplies\n");
+		}
 
-		/* Get the buck separately, as it needs special handling */
-		wcd937x->buck_supply = devm_regulator_get(dev, "vdd-buck");
-		if (IS_ERR(wcd937x->buck_supply))
-			return dev_err_probe(dev, PTR_ERR(wcd937x->buck_supply),
-					"Failed to get buck supply\n");
-		ret = regulator_enable(wcd937x->buck_supply);
-		if (ret)
-			return dev_err_probe(dev, ret, "Failed to enable buck supply\n");
 	}
-
 	wcd937x_dt_parse_micbias_info(dev, wcd937x);
 
 	cfg->mbhc_micbias = MIC_BIAS_2;
