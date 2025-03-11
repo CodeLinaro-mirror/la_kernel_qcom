@@ -1016,6 +1016,9 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 
 			ops = macsec_get_ops(macsec, NULL);
 
+			if (hdr->h_proto == htons(ETH_P_PAE))
+				continue;
+
 			if (ops->rx_uses_md_dst && !is_macsec_md_dst)
 				continue;
 
