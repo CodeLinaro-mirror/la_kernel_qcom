@@ -100,6 +100,22 @@ static inline int ip6_tnl_mpls_supported(void)
 #define for_each_ip6_tunnel_rcu(start) \
 	for (t = rcu_dereference(start); t; t = rcu_dereference(t->next))
 
+/* Update offload stats
+ */
+void ip6_update_offload_stats(struct net_device *dev, void *ptr)
+{
+	struct pcpu_sw_netstats *tstats = per_cpu_ptr(dev->tstats, 0);
+	const struct pcpu_sw_netstats *offload_stats =
+					(struct pcpu_sw_netstats *)ptr;
+
+	u64_stats_update_begin(&tstats->syncp);
+	u64_stats_add(&tstats->tx_packets, u64_stats_read(&offload_stats->tx_packets));
+	u64_stats_add(&tstats->tx_bytes, u64_stats_read(&offload_stats->tx_bytes));
+	u64_stats_add(&tstats->rx_packets, u64_stats_read(&offload_stats->rx_packets));
+	u64_stats_add(&tstats->rx_bytes, u64_stats_read(&offload_stats->rx_bytes));
+	u64_stats_update_end(&tstats->syncp);
+}
+
 /**
  * ip6_tnl_lookup - fetch tunnel matching the end-point addresses
  *   @net: network namespace
@@ -868,7 +884,7 @@ static void ip4ip6_fmr_calc(struct in6_addr *dest,
 		struct icmphdr *ih = (struct icmphdr *)(((u8 *)dsth) + dsth->ihl * 4);
 
 		/* use icmp identifier as port */
-		if (((u8 *)&ih) <= end &&
+		if (((u8 *)ih) <= end &&
 		    ((use_dest_addr &&
 		      (ih->type == ICMP_ECHOREPLY ||
 		       ih->type == ICMP_TIMESTAMPREPLY ||
@@ -878,7 +894,8 @@ static void ip4ip6_fmr_calc(struct in6_addr *dest,
 		      (ih->type == ICMP_ECHO ||
 		       ih->type == ICMP_TIMESTAMP ||
 		       ih->type == ICMP_INFO_REQUEST ||
-		       ih->type == ICMP_ADDRESS))))
+		       ih->type == ICMP_ADDRESS)
+		     )))
 			portp = (u8 *)&ih->un.echo.id;
 	}
 
@@ -886,7 +903,7 @@ static void ip4ip6_fmr_calc(struct in6_addr *dest,
 		int frombyte = fmr->ip6_prefix_len / 8;
 		int fromrem = fmr->ip6_prefix_len % 8;
 		int bytes = sizeof(struct in6_addr) - frombyte;
-		const u32 *addr = (use_dest_addr) ? &iph->daddr : &iph->saddr;
+		const u32 *addr = (use_dest_addr) ? &dsth->daddr : &dsth->saddr;
 		u64 eabits = ((u64)ntohl(*addr)) << (32 + fmr->ip4_prefix_len);
 		u64 t = 0;
 
@@ -1048,6 +1065,9 @@ static int __ip6_tnl_rcv(struct ip6_tnl *tunnel, struct sk_buff *skb,
 	if (tun_dst)
 		skb_dst_set(skb, (struct dst_entry *)tun_dst);
 
+	/* Reset the skb_iif to Tunnels interface index */
+	skb->skb_iif = tunnel->dev->ifindex;
+
 	gro_cells_receive(&tunnel->gro_cells, skb);
 	return 0;
 
@@ -1129,7 +1149,6 @@ static int ipxip6_rcv(struct sk_buff *skb, u8 ipproto,
 	rcu_read_unlock();
 
 	return ret;
-
 drop:
 	rcu_read_unlock();
 	kfree_skb(skb);
@@ -1447,6 +1466,9 @@ route_lookup:
 	ipv6h->nexthdr = proto;
 	ipv6h->saddr = fl6->saddr;
 	ipv6h->daddr = fl6->daddr;
+
+	/* Reset the skb_iif to Tunnels interface index */
+	skb->skb_iif = dev->ifindex;
 	ip6tunnel_xmit(NULL, skb, dev);
 	return 0;
 tx_err_link_failure:
@@ -2220,8 +2242,8 @@ static void ip6_tnl_netlink_parms(struct nlattr *data[],
 			struct nlattr *fmrd[IFLA_IPTUN_FMR_MAX + 1], *c;
 			struct __ip6_tnl_fmr *nfmr;
 
-			nla_parse_nested(fmrd, IFLA_IPTUN_FMR_MAX,
-					 fmr, ip6_tnl_fmr_policy, NULL);
+			nla_parse_nested_deprecated(fmrd, IFLA_IPTUN_FMR_MAX,
+						    fmr, ip6_tnl_fmr_policy, NULL);
 
 			nfmr = kzalloc(sizeof(*nfmr), GFP_KERNEL);
 			if (!(nfmr))
