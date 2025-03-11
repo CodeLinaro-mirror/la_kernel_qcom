@@ -3420,7 +3420,9 @@ static netdev_tx_t macsec_start_xmit(struct sk_buff *skb,
 		dst_hold(&md_dst->dst);
 		skb_dst_set(skb, &md_dst->dst);
 		skb->dev = macsec->real_dev;
-		return dev_queue_xmit(skb);
+		ret = dev_queue_xmit(skb);
+		count_tx(dev, ret, skb->len);
+		return ret;
 	}
 
 	/* 10.5 */
