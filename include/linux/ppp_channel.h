@@ -19,6 +19,7 @@
 #include <linux/skbuff.h>
 #include <linux/poll.h>
 #include <net/net_namespace.h>
+#include <linux/ppp_defs.h>
 #include <linux/notifier.h>
 
 /* PPP channel connection event types */
@@ -43,6 +44,8 @@ struct ppp_channel_ops {
 	 * the channel subtype
 	 */
 	int (*get_channel_protocol)(struct ppp_channel *chan);
+	/* Get channel protocol version */
+	int (*get_channel_protocol_ver)(struct ppp_channel *chan);
 	/* Hold the channel from being destroyed */
 	void (*hold)(struct ppp_channel *chan);
 	/* Release hold on the channel */
@@ -66,6 +69,9 @@ struct ppp_channel {
  */
 extern int ppp_channel_get_protocol(struct ppp_channel *);
 
+/* Call this get protocol version */
+extern int ppp_channel_get_proto_version(struct ppp_channel *chan);
+
 /* Call this to hold a channel */
 extern bool ppp_channel_hold(struct ppp_channel *chan);
 
@@ -83,8 +89,19 @@ extern int ppp_hold_channels(struct net_device *dev,
 
 bool ppp_is_cp_enabled(struct net_device *dev);
 
+/* Test if ppp xmit lock is locked */
+extern bool ppp_is_xmit_locked(struct net_device *dev);
+
+/* Hold PPP channels for the PPP device */
+extern int __ppp_hold_channels(struct net_device *dev,
+			       struct ppp_channel *channels[],
+			       unsigned int chan_sz);
+
 /* Test if the ppp device is a multi-link ppp device */
 extern int ppp_is_multilink(struct net_device *dev);
+
+/* Test if the ppp device is a multi-link ppp device */
+extern int __ppp_is_multilink(struct net_device *dev);
 
 /* Update statistics of the PPP net_device by incrementing related
  * statistics field value with corresponding parameter
@@ -117,6 +134,9 @@ extern void ppp_unregister_channel(struct ppp_channel *);
 
 /* Get the channel number for a channel */
 extern int ppp_channel_index(struct ppp_channel *);
+
+/* Get the device index  associated with a channel, or 0, if none */
+extern int ppp_dev_index(struct ppp_channel *chan);
 
 /* Get the unit number associated with a channel, or -1 if none */
 extern int ppp_unit_number(struct ppp_channel *);

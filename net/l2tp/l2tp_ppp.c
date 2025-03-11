@@ -92,6 +92,7 @@
 #include <net/ip.h>
 #include <net/udp.h>
 #include <net/inet_common.h>
+#include <linux/if_pppox.h>
 
 #include <asm/byteorder.h>
 #include <linux/atomic.h>
@@ -123,9 +124,16 @@ struct pppol2tp_session {
 };
 
 static int pppol2tp_xmit(struct ppp_channel *chan, struct sk_buff *skb);
-
-static const struct ppp_channel_ops pppol2tp_chan_ops = {
-	.start_xmit =  pppol2tp_xmit,
+static int pppol2tp_get_channel_protocol(struct ppp_channel *);
+static int pppol2tp_get_channel_protocol_ver(struct ppp_channel *);
+static void pppol2tp_hold_chan(struct ppp_channel *);
+static void pppol2tp_release_chan(struct ppp_channel *);
+static const struct pppol2tp_channel_ops pppol2tp_chan_ops = {
+	.ops.start_xmit =  pppol2tp_xmit,
+	.ops.get_channel_protocol = pppol2tp_get_channel_protocol,
+	.ops.get_channel_protocol_ver = pppol2tp_get_channel_protocol_ver,
+	.ops.hold = pppol2tp_hold_chan,
+	.ops.release = pppol2tp_release_chan,
 };
 
 static const struct proto_ops pppol2tp_ops;
@@ -237,6 +245,7 @@ static void pppol2tp_recv(struct l2tp_session *session, struct sk_buff *skb, int
 		struct pppox_sock *po;
 
 		po = pppox_sk(sk);
+		skb->skb_iif = ppp_dev_index(&po->chan);
 		ppp_input(&po->chan, skb);
 	} else {
 		if (sock_queue_rcv_skb(sk, skb) < 0) {
@@ -328,6 +337,102 @@ error:
 	return error;
 }
 
+/* pppol2tp_hold_chan() */
+static void pppol2tp_hold_chan(struct ppp_channel *chan)
+{
+	struct sock *sk = (struct sock *)chan->private;
+
+	sock_hold(sk);
+}
+
+/* pppol2tp_release_chan() */
+static void pppol2tp_release_chan(struct ppp_channel *chan)
+{
+	struct sock *sk = (struct sock *)chan->private;
+
+	sock_put(sk);
+}
+
+/* pppol2tp_get_channel_protocol()
+ * Return the protocol type of the L2TP over PPP protocol
+ */
+static int pppol2tp_get_channel_protocol(struct ppp_channel *chan)
+{
+	return PX_PROTO_OL2TP;
+}
+
+/* pppol2tp_get_channel_protocol_ver()
+ * Return the protocol version of the L2TP over PPP protocol
+ */
+static int pppol2tp_get_channel_protocol_ver(struct ppp_channel *chan)
+{
+	struct sock *sk;
+	struct l2tp_session *session;
+	struct l2tp_tunnel *tunnel;
+	int version = 0;
+
+	if (!(chan && chan->private))
+		return -1;
+
+	sk = (struct sock *)chan->private;
+
+	/* Get session and tunnel contexts from the socket */
+	session = pppol2tp_sock_to_session(sk);
+	if (!session)
+		return -1;
+
+	tunnel = session->tunnel;
+	if (!tunnel) {
+		sock_put(sk);
+		return -1;
+	}
+
+	version = tunnel->version;
+
+	sock_put(sk);
+	return version;
+}
+
+/* pppol2tp_get_addressing() */
+static int pppol2tp_get_addressing(struct ppp_channel *chan,
+				   struct pppol2tp_common_addr *addr)
+{
+	struct sock *sk = (struct sock *)chan->private;
+	struct l2tp_session *session;
+	struct l2tp_tunnel *tunnel;
+	struct inet_sock *isk = NULL;
+	int err = -ENXIO;
+
+	/* Get session and tunnel contexts from the socket */
+	session = pppol2tp_sock_to_session(sk);
+	if (!session)
+		return err;
+
+	tunnel = session->tunnel;
+	isk = inet_sk(tunnel->sock);
+
+	addr->local_tunnel_id = tunnel->tunnel_id;
+	addr->remote_tunnel_id = tunnel->peer_tunnel_id;
+	addr->local_session_id = session->session_id;
+	addr->remote_session_id = session->peer_session_id;
+
+	addr->local_addr.sin_port = isk->inet_sport;
+	addr->remote_addr.sin_port = isk->inet_dport;
+	addr->local_addr.sin_addr.s_addr = isk->inet_saddr;
+	addr->remote_addr.sin_addr.s_addr = isk->inet_daddr;
+
+	sock_put(sk);
+	return 0;
+}
+
+/* pppol2tp_channel_addressing_get() */
+int pppol2tp_channel_addressing_get(struct ppp_channel *chan,
+				    struct pppol2tp_common_addr *addr)
+{
+	return pppol2tp_get_addressing(chan, addr);
+}
+EXPORT_SYMBOL_GPL(pppol2tp_channel_addressing_get);
+
 /* Transmit function called by generic PPP driver.  Sends PPP frame
  * over PPPoL2TP socket.
  *
@@ -372,6 +477,10 @@ static int pppol2tp_xmit(struct ppp_channel *chan, struct sk_buff *skb)
 	__skb_push(skb, 2);
 	skb->data[0] = PPP_ALLSTATIONS;
 	skb->data[1] = PPP_UI;
+	/* set incoming interface as the ppp interface */
+	if (skb->protocol == htons(ETH_P_IP) ||
+	    skb->protocol == htons(ETH_P_IPV6))
+		skb->skb_iif = ppp_dev_index(chan);
 
 	local_bh_disable();
 	l2tp_xmit_skb(session, skb);
@@ -818,7 +927,7 @@ static int pppol2tp_connect(struct socket *sock, struct sockaddr *uservaddr,
 	po->chan.hdrlen = PPPOL2TP_L2TP_HDR_SIZE_NOSEQ;
 
 	po->chan.private = sk;
-	po->chan.ops	 = &pppol2tp_chan_ops;
+	po->chan.ops	 = &pppol2tp_chan_ops.ops;
 	po->chan.mtu	 = pppol2tp_tunnel_mtu(tunnel);
 
 	error = ppp_register_net_channel(sock_net(sk), &po->chan);
