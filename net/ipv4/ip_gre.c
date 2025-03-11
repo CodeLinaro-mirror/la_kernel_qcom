@@ -459,6 +459,32 @@ drop:
 	return 0;
 }
 
+bool gre_tunnel_is_fallback_dev(struct net_device *dev)
+{
+	struct net *net;
+	struct ip_tunnel_net *itn = NULL;
+	struct net_device *fb_tunnel_dev = NULL;
+
+	net = dev_net(dev);
+	if (!net)
+		return false;
+
+	if (dev->rtnl_link_ops) {
+		if (!strcmp(dev->rtnl_link_ops->kind, "gretap"))
+			itn = net_generic(net, gre_tap_net_id);
+		else if (!strcmp(dev->rtnl_link_ops->kind, "gre"))
+			itn = net_generic(net, ipgre_net_id);
+	}
+
+	if (!itn)
+		return false;
+
+	fb_tunnel_dev = itn->fb_tunnel_dev;
+
+	return (fb_tunnel_dev == dev);
+}
+EXPORT_SYMBOL_GPL(gre_tunnel_is_fallback_dev);
+
 static void __gre_xmit(struct sk_buff *skb, struct net_device *dev,
 		       const struct iphdr *tnl_params,
 		       __be16 proto)
@@ -667,6 +693,8 @@ static netdev_tx_t ipgre_xmit(struct sk_buff *skb,
 	if (gre_handle_offloads(skb, !!(tunnel->parms.o_flags & TUNNEL_CSUM)))
 		goto free_skb;
 
+	skb->skb_iif = dev->ifindex;
+
 	__gre_xmit(skb, dev, tnl_params, skb->protocol);
 	return NETDEV_TX_OK;
 
@@ -749,6 +777,8 @@ static netdev_tx_t gre_tap_xmit(struct sk_buff *skb,
 
 	if (skb_cow_head(skb, dev->needed_headroom))
 		goto free_skb;
+
+	skb->skb_iif = dev->ifindex;
 
 	__gre_xmit(skb, dev, &tunnel->parms.iph, htons(ETH_P_TEB));
 	return NETDEV_TX_OK;
