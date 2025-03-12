@@ -7644,7 +7644,8 @@ static int dwc3_msm_pm_resume(struct device *dev)
 static void dwc3_host_complete(struct device *dev)
 {
 	int ret = 0;
-	if (strcmp(dev_driver_string(dev), "msm-dwc3") != 0)
+
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
 		return;
 
 	if (dev->power.direct_complete) {
@@ -7658,6 +7659,9 @@ static void dwc3_host_complete(struct device *dev)
 
 static int dwc3_host_prepare(struct device *dev)
 {
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return 0;
+
 	/*
 	 * It is recommended to use the PM prepare callback to handle situations
 	 * where the device is already runtime suspended, in order to avoid
@@ -7681,8 +7685,8 @@ static int dwc3_core_prepare(struct device *dev)
 	struct dwc3 *dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
-	if (strcmp(dev_driver_string(dev), "msm-dwc3") != 0)
-		return 1;
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return 0;
 
 	dbg_event(0xFF, "Core PM prepare", pm_runtime_suspended(dev));
 	/*
@@ -7710,6 +7714,9 @@ static void dwc3_core_complete(struct device *dev)
 {
 	struct dwc3	*dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return;
 
 	/*
 	 * In the PM devices documentation, while leaving system suspend when

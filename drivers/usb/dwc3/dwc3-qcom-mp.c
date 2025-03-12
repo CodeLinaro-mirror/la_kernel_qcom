@@ -2,7 +2,7 @@
 /* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
- * Inspired by dwc3-of-simple.c
+ * Inspired by dwc3-qcom.c
  *
  */
 
@@ -420,19 +420,7 @@ static int dwc3_qcom_config_gdsc(struct dwc3_qcom *qcom, bool on)
 			dev_err(qcom->dev, "unable to enable usb3 gdsc\n");
 			return ret;
 		}
-	/**
-	 * TODO: Take care of GDSC retaintion here.
-	 *
-	 * qcom_clk_set_flags(mdwc->core_clk, CLKFLAG_RETAIN_MEM);
-	 *
-	 */
 	} else {
-	/**
-	 * TODO: Take care of GDSC retaintion here.
-	 *
-	 * qcom_clk_set_flags(mdwc->core_clk, CLKFLAG_NORETAIN_MEM);
-	 *
-	 */
 		ret = regulator_disable(qcom->dwc3_gdsc);
 		if (ret) {
 			dev_err(qcom->dev, "unable to disable usb3 gdsc\n");
@@ -470,9 +458,11 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 		dwc3_qcom_enable_interrupts(qcom);
 	}
 
-	ret = dwc3_qcom_config_gdsc(qcom, false);
-	if (ret < 0)
-		return ret;
+	if (!wakeup) {
+		ret = dwc3_qcom_config_gdsc(qcom, false);
+		if (ret < 0)
+			return ret;
+	}
 
 	qcom->is_suspended = true;
 
@@ -487,9 +477,11 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 	if (!qcom->is_suspended)
 		return 0;
 
-	ret = dwc3_qcom_config_gdsc(qcom, true);
-	if (ret < 0)
-		return ret;
+	if (!wakeup) {
+		ret = dwc3_qcom_config_gdsc(qcom, true);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (dwc3_qcom_is_host(qcom) && wakeup)
 		dwc3_qcom_disable_interrupts(qcom);
@@ -925,5 +917,5 @@ static struct platform_driver dwc3_qcom_driver = {
 module_platform_driver(dwc3_qcom_driver);
 
 MODULE_AUTHOR("Rajashekar kuruva <quic_kuruva@quicinc.com>");
-MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION("DesignWare DWC3 QCOM  MP Glue Driver");
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("DesignWare DWC3 QCOM MP Glue Driver");
