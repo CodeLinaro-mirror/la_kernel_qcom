@@ -356,6 +356,8 @@ struct plat_stmmacenet_data {
 	bool pcs_v3;
 	bool pm_lite;
 	bool fixed_phy_mode;
+	int fixed_phy_speed;
+	int max_supported_speed;
 	bool fixed_phy_mode_needs_mdio;
 	bool crc_strip_en;
 	bool plat_wait_for_emac_rx_clk_en;
@@ -377,5 +379,6 @@ struct plat_stmmacenet_data {
 	bool enable_pfc;
 	bool qos_use_skprio;
 	bool qos_supported;
+	bool enable_aux_ts;
 };
 #endif

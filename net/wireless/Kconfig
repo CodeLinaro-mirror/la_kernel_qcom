@@ -42,6 +42,12 @@ config CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 	  Enable this option if wireless driver needs to operate in
 	  single wiphy feature with new 802.11be version.
 
+config ML_RECONFIG_SINGLE_WIPHY
+	tristate "cfg80211 - wireless configuration for ML Reconfig"
+	help
+	  Enable this option if wireless driver needs to handle
+	  ML reconfig feature for 802.11BE protocol.
+
 if CFG80211
 
 config NL80211_TESTMODE
