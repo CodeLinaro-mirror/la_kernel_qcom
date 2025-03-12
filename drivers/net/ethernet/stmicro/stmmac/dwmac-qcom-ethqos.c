@@ -2307,6 +2307,47 @@ static void qcom_ethqos_request_phy_wol(void *plat_n)
 	}
 }
 
+static int ethqos_set_fixed_link(struct platform_device *pdev)
+{
+	struct device_node *fixed_phy_node;
+	struct property *status_prop;
+
+	ETHQOSINFO("Enter");
+	fixed_phy_node = of_get_child_by_name(pdev->dev.of_node, "fixed-link");
+
+		if (fixed_phy_node) {
+			status_prop = kzalloc(sizeof(*status_prop), GFP_KERNEL);
+			if (!status_prop) {
+				ETHQOSERR("kzalloc failed\n");
+				return -ENOMEM;
+			}
+
+			status_prop->name = kstrdup("status", GFP_KERNEL);
+			if (!(status_prop->name)) {
+				ETHQOSERR("kstrdup failed to alloc space for name\n");
+				kfree(status_prop);
+				return -ENOMEM;
+			}
+			status_prop->value = kstrdup("okay", GFP_KERNEL);
+			if (!(status_prop->value)) {
+				ETHQOSERR("kstrdup failed to alloc space for value\n");
+				kfree(status_prop);
+				return -ENOMEM;
+			}
+			status_prop->length = strlen(status_prop->value) + 1;
+
+			if (!(of_update_property(fixed_phy_node, status_prop) == 0)) {
+				kfree(status_prop);
+				ETHQOSERR("Fixed-link status update failed\n");
+				return -ENOENT;
+			}
+			ETHQOSINFO("Switch case: Fixed-link enabled from code\n");
+		}
+
+	of_node_put(fixed_phy_node);
+	return 0;
+}
+
 void qcom_stop_dma(void __iomem *ioaddr)
 {
 	u32 value = readl(ioaddr + DMA_CHAN_TX_CONTROL(0));
@@ -2419,6 +2460,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 			ret = set_pcs_ane(pcs_ane);
 #endif
 
+	if (phytype == SWITCH)
+		ethqos_set_fixed_link(pdev);
 	stmmac_set_phytype(phytype);
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
