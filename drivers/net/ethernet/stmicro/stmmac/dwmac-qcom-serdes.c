@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-/* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #include <linux/delay.h>
 #include <linux/module.h>
@@ -458,7 +458,7 @@ err_ret:
 static int qcom_ethqos_serdes_sgmii_1Gb(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
-	int retry = 5000;
+	int retry = 500;
 	unsigned int val;
 
 	if (ethqos->emac_ver == EMAC_HW_v3_1_0)
@@ -646,7 +646,7 @@ err_ret:
 static int qcom_ethqos_serdes_sgmii_2p5Gb(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
-	int retry = 5000;
+	int retry = 500;
 	unsigned int val;
 
 	if (ethqos->emac_ver == EMAC_HW_v3_1_0)
@@ -834,7 +834,7 @@ err_ret:
 static int qcom_ethqos_serdes_usxgmii_2p5Gb(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
-	int retry = 5000;
+	int retry = 500;
 	unsigned int val;
 
 	/****************MODULE: SGMII_PHY_SGMII_PCS**********************************/
@@ -1011,7 +1011,7 @@ err_ret:
 static int qcom_ethqos_serdes_usxgmii_5Gb(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
-	int retry = 5000;
+	int retry = 500;
 	unsigned int val;
 
 	/****************MODULE: SGMII_PHY_SGMII_PCS**********************************/
@@ -1193,7 +1193,7 @@ err_ret:
 static int qcom_ethqos_serdes_usxgmii_10Gb_1Gb(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
-	int retry = 5000;
+	int retry = 500;
 	unsigned int val;
 
 	/****************MODULE: SGMII_PHY_SGMII_PCS**********************************/

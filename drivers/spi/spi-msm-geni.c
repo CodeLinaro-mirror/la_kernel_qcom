@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -21,6 +21,7 @@
 #include <linux/msm_gpi.h>
 #include <linux/spi/spi.h>
 #include <linux/pinctrl/consumer.h>
+#include <soc/qcom/boot_stats.h>
 
 #define SPI_NUM_CHIPSELECT	(4)
 #define SPI_XFER_TIMEOUT_MS	(250)
@@ -2504,6 +2505,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	bool slave_en;
 	struct device *dev = &pdev->dev;
 	struct geni_se *spi_rsc;
+	char boot_kpi[32];
 
 	slave_en  = of_property_read_bool(pdev->dev.of_node,
 			 "qcom,slv-ctrl");
@@ -2518,7 +2520,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (slave_en)
 		spi->slave_abort = spi_slv_abort;
 
-	pr_info("boot_kpi: M - DRIVER GENI_SPI Init\n");
+	update_marker("M - DRIVER GENI_SPI Init");
 
 	platform_set_drvdata(pdev, spi);
 	geni_mas = spi_master_get_devdata(spi);
@@ -2730,7 +2732,8 @@ static int spi_geni_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "%s: completed %d\n", __func__, ret);
 
-	pr_info("boot_kpi: M - DRIVER GENI_SPI_%d Ready\n", spi->bus_num);
+	scnprintf(boot_kpi, sizeof(boot_kpi), "M - DRIVER GENI_SPI_%d Ready", spi->bus_num);
+	update_marker(boot_kpi);
 
 	return ret;
 spi_geni_probe_err:

@@ -2,7 +2,7 @@
 
 // Copyright (c) 2018-19, Linaro Limited
 // Copyright (c) 2021, The Linux Foundation. All rights reserved.
-// Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -64,6 +64,7 @@
 #define PHY_USXGMII_LOOPBACK_10	0x0800
 #define TN_SYSFS_DEV_ATTR_PERMS 0644
 #define ETH_RTK_PHY_ID_RTL8261N 0x001CCAF3
+#define EFUSE_MAC_ADDR_MASK 16
 
 static void ethqos_rgmii_io_macro_loopback(struct qcom_ethqos *ethqos,
 					   int mode);
@@ -706,6 +707,9 @@ static int set_ethernet_interface(char *eth_intf)
 		mparams.is_valid_eth_intf = true;
 	} else if (!strcmp("2500base", eth_intf)) {
 		mparams.eth_intf =  PHY_INTERFACE_MODE_2500BASEX;
+		mparams.is_valid_eth_intf = true;
+	} else if (!strcmp("5gbase-r", eth_intf)) {
+		mparams.eth_intf =  PHY_INTERFACE_MODE_5GBASER;
 		mparams.is_valid_eth_intf = true;
 	} else {
 		ETHQOSERR("Invalid Eth interface programmed: %s\n", eth_intf);
@@ -4625,7 +4629,7 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 		break;
 	}
 
-	/*Backup speed & duplex before Enabling Loopback */
+	/*Backup speed & duplex and disable power saving before Enabling Loopback */
 	if (priv->current_loopback == DISABLE_LOOPBACK &&
 	    config > DISABLE_LOOPBACK) {
 		/*Backup old speed & duplex*/
@@ -4636,6 +4640,10 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 			ethqos->backup_speed = SPEED_UNKNOWN;
 			ethqos->backup_duplex = DUPLEX_UNKNOWN;
 		}
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
+		if (priv->plat->enable_power_saving)
+			priv->plat->enable_power_saving(netdev, false);
+#endif
 	}
 
 	if (config == DISABLE_LOOPBACK)
@@ -4678,6 +4686,11 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 		ETHQOSINFO("Invalid Loopback=%d\n", config);
 		break;
 	}
+
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
+	if (priv->plat->enable_power_saving && config == DISABLE_LOOPBACK)
+		priv->plat->enable_power_saving(netdev, true);
+#endif
 
 	priv->current_loopback = config;
 
@@ -5551,6 +5564,7 @@ static void read_mac_addr_from_fuse_reg(struct device_node *np)
 	int ret, i, count, x;
 	u32 mac_efuse_prop, efuse_size = 8;
 	unsigned long mac_addr;
+	unsigned char temp_mac_addr[ETH_ALEN];
 
 	/* If the property doesn't exist or empty return */
 	count = of_property_count_u32_elems(np, "mac-efuse-addr");
@@ -5568,21 +5582,25 @@ static void read_mac_addr_from_fuse_reg(struct device_node *np)
 			if (!mac_efuse_addr)
 				continue;
 
-			mac_addr = readq(mac_efuse_addr);
+			mac_addr = readq(mac_efuse_addr) >> EFUSE_MAC_ADDR_MASK;
 			ETHQOSINFO("Mac address read: %lx\n", mac_addr);
 
 			/* create byte array out of value read from efuse */
 			for (i = 0; i < ETH_ALEN ; i++) {
-				pparams.mac_addr[ETH_ALEN - 1 - i] =
+				temp_mac_addr[ETH_ALEN - 1 - i] =
 					mac_addr & 0xff;
 				mac_addr = mac_addr >> 8;
+			}
+			if (is_valid_ether_addr(temp_mac_addr)) {
+				strscpy(pparams.mac_addr, temp_mac_addr, sizeof(pparams.mac_addr));
+				pparams.is_valid_mac_addr = true;
+			} else {
+				ETHQOSERR("Fuse Mac address is invalid\n");
 			}
 
 			iounmap(mac_efuse_addr);
 
-			/* if valid address is found set cookie & return */
-			pparams.is_valid_mac_addr =
-				is_valid_ether_addr(pparams.mac_addr);
+			/* if valid address is found return */
 			if (pparams.is_valid_mac_addr)
 				return;
 		}
@@ -6367,6 +6385,7 @@ static int ethqos_fixed_link_check(struct platform_device *pdev)
 		of_property_read_u32(fixed_phy_node, "speed", &mac2mac_speed);
 		plat_dat->fixed_phy_mode = true;
 		plat_dat->phy_addr = -1;
+		plat_dat->fixed_phy_speed = mac2mac_speed;
 		ETHQOSINFO("mac2mac mode: Fixed-link enabled from dt, Speed = %d\n",
 			   mac2mac_speed);
 		goto out;
@@ -6421,6 +6440,8 @@ static int ethqos_fixed_link_check(struct platform_device *pdev)
 				ETHQOSERR("Fixed-link speed update failed\n");
 				return -ENOENT;
 			}
+
+			plat_dat->fixed_phy_speed = mparams.link_speed;
 
 			ETHQOSINFO("mac2mac mode: Fixed-link speed updated from partition: %u\n",
 				   mparams.link_speed);
@@ -7544,6 +7565,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->has_c45_mdio_probe_capability = 1;
 		plat_dat->has_c22_mdio_probe_capability = 0;
 	}
+
+	if (!!of_find_property(np, "eth_aux_ts_enabled", NULL))
+		plat_dat->enable_aux_ts = true;
+
+	ETHQOSDBG("Aux Timestamp Feature  = %d\n", plat_dat->enable_aux_ts);
 
 	plat_dat->tso_en = of_property_read_bool(np, "snps,tso");
 	plat_dat->handle_prv_ioctl = ethqos_handle_prv_ioctl;
