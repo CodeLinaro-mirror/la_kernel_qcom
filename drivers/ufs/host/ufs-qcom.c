@@ -6252,11 +6252,15 @@ static int ufs_qcom_system_freeze(struct device *dev)
 
 static int ufs_qcom_system_restore(struct device *dev)
 {
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+
 	if (!is_bootdevice_ufs) {
 		dev_info(dev, "UFS is not boot dev.\n");
 		return 0;
 	}
+
 	ufs_qcom_set_s2r_cap(dev);
+	ufshcd_set_link_off(hba);
 	return ufshcd_system_restore(dev);
 }
 
