@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "si-mo: %s: " fmt, __func__
@@ -13,6 +13,12 @@
 #include <linux/of_platform.h>
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/si_core_xts.h>
+
+#ifdef CONFIG_PHYS_ADDR_T_64BIT
+#define __PHYS_ADDR_FMT "llx"
+#else
+#define __PHYS_ADDR_FMT "x"
+#endif
 
 /* Memory object operations. */
 /* ... */
@@ -467,7 +473,8 @@ static ssize_t mem_objects_show(struct device *dev, struct device_attribute *att
 
 	mutex_lock(&mo_list_mutex);
 	list_for_each_entry(mo, &mo_list, node) {
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s %u (%llx %zx) %d\n",
+		len += scnprintf(buf + len, PAGE_SIZE - len,
+			"%s %u (%" __PHYS_ADDR_FMT " %zx) %d\n",
 			si_object_name(&mo->object), kref_read(&mo->object.refcount),
 			mo->mapping_info.p_addr, mo->mapping_info.p_addr_len, mo->map.early_mapped);
 	}
