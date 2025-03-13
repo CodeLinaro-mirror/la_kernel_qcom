@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020 Synopsys, Inc. and/or its affiliates.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Synopsys DesignWare XPCS helpers
  *
  * Author: Jose Abreu <Jose.Abreu@synopsys.com>
@@ -239,7 +239,6 @@ void qcom_xpcs_validate(struct dw_xpcs_qcom *xpcs, unsigned long *supported,
 			set_bit(compat->supported[i], xpcs_supported);
 
 	linkmode_and(supported, supported, xpcs_supported);
-	linkmode_and(state->advertising, state->advertising, xpcs_supported);
 }
 EXPORT_SYMBOL_GPL(qcom_xpcs_validate);
 
