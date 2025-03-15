@@ -2870,7 +2870,6 @@ enum nl80211_commands {
  *	nested item, it contains attributes defined in
  *	&enum nl80211_if_combination_attrs.
  *
- * @NL80211_ATTR_MLD_IFACE_NAME: mld interface name
  *
  * @NL80211_ATTR_AP_REMOVAL_COUNT: (u16) TBTT count up-to which reconfiguration
  *	MLE is sent. Also, userspace will be notified with this count once the
@@ -3425,7 +3424,7 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_MLO_TTLM_DLINK,
 	NL80211_ATTR_MLO_TTLM_ULINK,
-	NL80211_ATTR_MLD_IFACE_NAME,
+
 	NL80211_ATTR_WIPHY_RADIOS,
 	NL80211_ATTR_WIPHY_INTERFACE_COMBINATIONS,
 	NL80211_ATTR_AP_REMOVAL_COUNT,

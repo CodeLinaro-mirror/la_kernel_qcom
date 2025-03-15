@@ -821,7 +821,6 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_BSS_DUMP_INCLUDE_USE_DATA] = { .type = NLA_FLAG },
 	[NL80211_ATTR_MLO_TTLM_DLINK] = NLA_POLICY_EXACT_LEN(sizeof(u16) * 8),
 	[NL80211_ATTR_MLO_TTLM_ULINK] = NLA_POLICY_EXACT_LEN(sizeof(u16) * 8),
-	[NL80211_ATTR_MLD_IFACE_NAME] = { .type = NLA_BINARY, .len = IFNAMSIZ - 1 },
 	[NL80211_ATTR_AP_REMOVAL_COUNT] = { .type = NLA_U16 },
 	[NL80211_ATTR_TSF] = { .type = NLA_U64 },
 	[NL80211_ATTR_RADIO_IFACE] = { .type = NLA_BINARY, .len = IFNAMSIZ - 1 },
@@ -4484,14 +4483,6 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info)
 			} else {
 				return -EOPNOTSUPP;
 			}
-		}
-
-		if (info->attrs[NL80211_ATTR_MLD_IFACE_NAME]) {
-			if (rdev->wiphy.flags & WIPHY_FLAG_SUPPORTS_MLO)
-				params.mld_iface_name =
-					nla_data(info->attrs[NL80211_ATTR_MLD_IFACE_NAME]);
-			else
-				return -EOPNOTSUPP;
 		}
 	}
 
