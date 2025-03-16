@@ -4571,14 +4571,14 @@ struct cfg80211_ops {
 			    struct cfg80211_ap_settings *settings);
 	int	(*change_beacon)(struct wiphy *wiphy, struct net_device *dev,
 				 struct cfg80211_beacon_data *info);
-#ifdef CONFIG_ML_RECONFIG_SINGLE_WIPHY
+#ifdef CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 	int	(*stop_ap)(struct wiphy *wiphy, struct net_device *dev,
 			   unsigned int link_id,
 			   struct cfg80211_ap_settings *settings);
 #else
 	int	(*stop_ap)(struct wiphy *wiphy, struct net_device *dev,
 			   unsigned int link_id);
-#endif /* CONFIG_ML_RECONFIG_SINGLE_WIPHY */
+#endif /* CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT */
 
 
 	int	(*add_station)(struct wiphy *wiphy, struct net_device *dev,
@@ -4674,6 +4674,9 @@ struct cfg80211_ops {
 
 	int	(*set_tx_power)(struct wiphy *wiphy, struct wireless_dev *wdev,
 				enum nl80211_tx_power_setting type, int mbm);
+
+	int	(*set_tx_power_link)(struct wiphy *wiphy, struct wireless_dev *wdev,
+				     enum nl80211_tx_power_setting type, int mbm, int link_id);
 
 	int	(*get_tx_power)(struct wiphy *wiphy, struct wireless_dev *wdev,
 				int *dbm);
@@ -4842,6 +4845,11 @@ struct cfg80211_ops {
 	int	(*get_txq_stats)(struct wiphy *wiphy,
 				 struct wireless_dev *wdev,
 				 struct cfg80211_txq_stats *txqstats);
+
+	int	(*get_txq_stats_link)(struct wiphy *wiphy,
+				      struct wireless_dev *wdev,
+				      unsigned int link_id,
+				      struct cfg80211_txq_stats *txqstats);
 
 	int	(*set_pmk)(struct wiphy *wiphy, struct net_device *dev,
 			   const struct cfg80211_pmk_conf *conf);

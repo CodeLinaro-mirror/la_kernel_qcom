@@ -3046,7 +3046,10 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 			struct cfg80211_txq_stats txqstats = {};
 			int res;
 
-			res = rdev_get_txq_stats(rdev, NULL, &txqstats);
+			if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+				res = rdev_get_txq_stats_mlo(rdev, NULL, 0, &txqstats);
+			else
+				res = rdev_get_txq_stats(rdev, NULL, &txqstats);
 			if (!res &&
 			    !nl80211_put_txq_stats(msg, &txqstats,
 						   NL80211_ATTR_TXQ_STATS))
@@ -3694,6 +3697,7 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 		struct wireless_dev *txp_wdev = wdev;
 		enum nl80211_tx_power_setting type;
 		int idx, mbm = 0;
+		int link_id = nl80211_link_id_or_invalid(info->attrs);
 
 		if (!(rdev->wiphy.features & NL80211_FEATURE_VIF_TXPOWER))
 			txp_wdev = NULL;
@@ -3717,7 +3721,10 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 			mbm = nla_get_u32(info->attrs[idx]);
 		}
 
-		result = rdev_set_tx_power(rdev, txp_wdev, type, mbm);
+		if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+			result = rdev_set_tx_power_mlo(rdev, txp_wdev, type, mbm, link_id);
+		else
+			result = rdev_set_tx_power(rdev, txp_wdev, type, mbm);
 		if (result)
 			goto out;
 	}
@@ -3991,6 +3998,17 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 			goto nla_put_failure;
 	}
 
+	if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+	    rdev->ops->get_txq_stats && !wdev->valid_links) {
+		struct cfg80211_txq_stats txqstats = {};
+		int ret = rdev_get_txq_stats(rdev, wdev, &txqstats);
+
+		if (ret == 0 &&
+		    !nl80211_put_txq_stats(msg, &txqstats,
+					   NL80211_ATTR_TXQ_STATS))
+			goto nla_put_failure;
+	}
+
 	wdev_lock(wdev);
 	switch (wdev->iftype) {
 	case NL80211_IFTYPE_AP:
@@ -4018,16 +4036,6 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 		break;
 	}
 	wdev_unlock(wdev);
-
-	if (rdev->ops->get_txq_stats) {
-		struct cfg80211_txq_stats txqstats = {};
-		int ret = rdev_get_txq_stats(rdev, wdev, &txqstats);
-
-		if (ret == 0 &&
-		    !nl80211_put_txq_stats(msg, &txqstats,
-					   NL80211_ATTR_TXQ_STATS))
-			goto nla_put_failure;
-	}
 
 	if (wdev->valid_links) {
 		unsigned int link_id;
@@ -4065,6 +4073,17 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 				if (ret == 0 &&
 				    nla_put_u32(msg, NL80211_ATTR_WIPHY_TX_POWER_LEVEL,
 						DBM_TO_MBM(dbm)))
+					goto nla_put_failure;
+			}
+
+			if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+			    rdev->ops->get_txq_stats_link) {
+				struct cfg80211_txq_stats txqstats = {};
+				int ret = rdev_get_txq_stats_mlo(rdev, wdev, link_id, &txqstats);
+
+				if (ret == 0 &&
+				    !nl80211_put_txq_stats(msg, &txqstats,
+							   NL80211_ATTR_TXQ_STATS))
 					goto nla_put_failure;
 			}
 			nla_nest_end(msg, link);
@@ -16533,6 +16552,7 @@ static int nl80211_add_link(struct sk_buff *skb, struct genl_info *info)
 	switch (wdev->iftype) {
 	case NL80211_IFTYPE_AP:
 	case NL80211_IFTYPE_STATION:
+	case NL80211_IFTYPE_MONITOR:
 		break;
 	default:
 		return -EINVAL;
@@ -16573,6 +16593,7 @@ static int nl80211_remove_link(struct sk_buff *skb, struct genl_info *info)
 	switch (wdev->iftype) {
 	case NL80211_IFTYPE_AP:
 	case NL80211_IFTYPE_STATION:
+	case NL80211_IFTYPE_MONITOR:
 		break;
 	default:
 		return -EINVAL;

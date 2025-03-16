@@ -2454,8 +2454,20 @@ bool cfg80211_does_bw_fit_range(const struct ieee80211_freq_range *freq_range,
 {
 	u32 start_freq_khz, end_freq_khz;
 
-	start_freq_khz = center_freq_khz - (bw_khz / 2);
-	end_freq_khz = center_freq_khz + (bw_khz / 2);
+	/* As 4.9GHz supports 5Mhz and 10 MHz center frequencies,
+	 * the offset calculation using the bw_khz may not work.
+	 * Therefore, apply center_freq_khz to start_freq_khz and
+	 * end_freq_khz directly for bw check.
+	 */
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+	    (center_freq_khz >= MHZ_TO_KHZ(4940) &&
+	     center_freq_khz <= MHZ_TO_KHZ(5090))) {
+		start_freq_khz = center_freq_khz;
+		end_freq_khz = center_freq_khz;
+	} else {
+		start_freq_khz = center_freq_khz - (bw_khz / 2);
+		end_freq_khz = center_freq_khz + (bw_khz / 2);
+	}
 
 	if (start_freq_khz >= freq_range->start_freq_khz &&
 	    end_freq_khz <= freq_range->end_freq_khz)
@@ -2737,6 +2749,18 @@ static bool cfg80211_check_mode(enum nl80211_iftype iftype)
 void cfg80211_remove_links(struct wireless_dev *wdev)
 {
 	unsigned int link_id;
+	struct cfg80211_registered_device *rdev;
+
+	rdev = wiphy_to_rdev(wdev->wiphy);
+
+	/* if sta, abort any on going scan, so that, driver cancels it
+	 * as the scan results are no longer needed.
+	 */
+	if (wdev->iftype == NL80211_IFTYPE_STATION &&
+	    rdev->scan_req &&
+	    !rdev->scan_req->notified &&
+	    rdev->scan_req->wdev == wdev)
+		rdev_abort_scan(rdev, wdev);
 
 	if (cfg80211_check_mode(wdev->iftype))
 		return;

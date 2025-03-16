@@ -182,7 +182,7 @@ static inline int rdev_change_beacon(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
-#ifdef CONFIG_ML_RECONFIG_SINGLE_WIPHY
+#ifdef CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 static inline int rdev_stop_ap(struct cfg80211_registered_device *rdev,
 			       struct net_device *dev, unsigned int link_id,
 			       struct cfg80211_ap_settings *settings)
@@ -205,7 +205,7 @@ static inline int rdev_stop_ap(struct cfg80211_registered_device *rdev,
 	trace_rdev_return_int(&rdev->wiphy, ret);
 	return ret;
 }
-#endif /* CONFIG_ML_RECONFIG_SINGLE_WIPHY */
+#endif /* CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT */
 
 static inline int rdev_add_station(struct cfg80211_registered_device *rdev,
 				   struct net_device *dev, u8 *mac,
@@ -611,6 +611,19 @@ static inline int rdev_set_tx_power(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
+static inline int rdev_set_tx_power_mlo(struct cfg80211_registered_device *rdev,
+					struct wireless_dev *wdev,
+					enum nl80211_tx_power_setting type, int mbm,
+					int link_id)
+{
+	int ret;
+
+	trace_rdev_set_tx_power_mlo(&rdev->wiphy, wdev, type, mbm, link_id);
+	ret = rdev->ops->set_tx_power_link(&rdev->wiphy, wdev, type, mbm, link_id);
+	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
+}
+
 static inline int rdev_get_tx_power(struct cfg80211_registered_device *rdev,
 				    struct wireless_dev *wdev, int *dbm)
 {
@@ -653,6 +666,20 @@ rdev_get_txq_stats(struct cfg80211_registered_device *rdev,
 	int ret;
 	trace_rdev_get_txq_stats(&rdev->wiphy, wdev);
 	ret = rdev->ops->get_txq_stats(&rdev->wiphy, wdev, txqstats);
+	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
+}
+
+static inline int
+rdev_get_txq_stats_mlo(struct cfg80211_registered_device *rdev,
+		       struct wireless_dev *wdev,
+		       unsigned int link_id,
+		       struct cfg80211_txq_stats *txqstats)
+{
+	int ret;
+
+	trace_rdev_get_txq_stats(&rdev->wiphy, wdev);
+	ret = rdev->ops->get_txq_stats_link(&rdev->wiphy, wdev, link_id, txqstats);
 	trace_rdev_return_int(&rdev->wiphy, ret);
 	return ret;
 }
