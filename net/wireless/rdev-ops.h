@@ -627,7 +627,7 @@ static inline int rdev_get_tx_power_mlo(struct cfg80211_registered_device *rdev,
 {
 	int ret;
 
-	trace_rdev_get_tx_power(&rdev->wiphy, wdev);
+	trace_rdev_get_tx_power_mlo(&rdev->wiphy, wdev, link_id);
 	ret = rdev->ops->get_tx_power_link(&rdev->wiphy, wdev, link_id, dbm);
 	trace_rdev_return_int_int(&rdev->wiphy, ret, *dbm);
 	return ret;
