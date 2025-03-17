@@ -30,11 +30,9 @@ br_netif_receive_skb(struct net *net, struct sock *sk, struct sk_buff *skb)
 	return netif_receive_skb(skb);
 }
 
-#ifdef CONFIG_HYFI_BRIDGE_HOOKS
 /* Hook for external Multicast handler */
 br_multicast_handle_hook_t __rcu *br_multicast_handle_hook __read_mostly;
 EXPORT_SYMBOL_GPL(br_multicast_handle_hook);
-#endif
 
 /* Hook for external forwarding logic */
 br_get_dst_hook_t __rcu *br_get_dst_hook __read_mostly;
@@ -96,9 +94,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	struct net_bridge_vlan *vlan;
 	struct net_bridge *br;
 	bool promisc;
-#ifdef CONFIG_HYFI_BRIDGE_HOOKS
 	br_multicast_handle_hook_t *multicast_handle_hook;
-#endif
 	struct net_bridge_port *pdst = NULL;
 	br_get_dst_hook_t *get_dst_hook = rcu_dereference(br_get_dst_hook);
 	u16 vid = 0;
@@ -196,11 +192,9 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 	switch (pkt_type) {
 	case BR_PKT_MULTICAST:
-#ifdef CONFIG_HYFI_BRIDGE_HOOKS
 		multicast_handle_hook = rcu_dereference(br_multicast_handle_hook);
 		if (!__br_get(multicast_handle_hook, true, p, skb))
 			goto out;
-#endif
 
 		mdst = br_mdb_get(brmctx, skb, vid);
 		if ((mdst || BR_INPUT_SKB_CB_MROUTERS_ONLY(skb)) &&
