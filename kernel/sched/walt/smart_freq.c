@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/tick.h>
@@ -661,7 +661,7 @@ void smart_freq_init(const char *name)
 				cluster->smart_freq_info->min_cycles = 7004160;
 			}
 		}
-	} else if (!strcmp(name, "TUNA")) {
+	} else if (!strcmp(name, "TUNA") || !strcmp(name, "TUNA7")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */

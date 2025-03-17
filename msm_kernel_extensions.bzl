@@ -36,5 +36,8 @@ def get_dtstree(target):
 def get_vendor_ramdisk_binaries(target, flavor = None):
     return None
 
+def get_16K_vendor_ramdisk_binaries(target, flavor = None):
+    return None
+
 def get_gki_ramdisk_prebuilt_binary():
     return None

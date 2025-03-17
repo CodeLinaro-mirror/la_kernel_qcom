@@ -198,7 +198,7 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
 
-	} else if (!strcmp(name, "TUNA")) {
+	} else if (!strcmp(name, "TUNA") || !strcmp(name, "TUNA7")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
 		soc_feat_set(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING);
@@ -228,6 +228,8 @@ void walt_config(void)
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+
+		sysctl_sched_suppress_region2 = 1;
 
 	} else if (!strcmp(name, "KERA")) {
 		soc_sched_lib_name_capacity = 3;

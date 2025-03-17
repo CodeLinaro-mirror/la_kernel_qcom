@@ -1039,9 +1039,9 @@ done:
 	if (dev->sb)
 		xhci_sideband_unregister(dev->sb);
 
-	mutex_unlock(&chip->mutex);
 	uadev[card_num].chip = NULL;
 	uadev[card_num].sb = NULL;
+	mutex_unlock(&chip->mutex);
 }
 
 static void uaudio_dev_release(struct uaudio_dev *dev)

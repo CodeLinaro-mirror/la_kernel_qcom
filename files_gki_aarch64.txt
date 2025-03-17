@@ -4501,6 +4501,7 @@ include/trace/hooks/lz4_decompress.h
 include/trace/hooks/madvise.h
 include/trace/hooks/mm.h
 include/trace/hooks/mmc.h
+include/trace/hooks/module.h
 include/trace/hooks/mpam.h
 include/trace/hooks/net.h
 include/trace/hooks/ogki_honor.h
@@ -4533,6 +4534,7 @@ include/trace/hooks/user.h
 include/trace/hooks/vendor_hooks.h
 include/trace/hooks/vmscan.h
 include/trace/hooks/wqlockup.h
+include/trace/hooks/xhci.h
 include/trace/perf.h
 include/trace/stages/init.h
 include/trace/stages/stage1_struct_define.h

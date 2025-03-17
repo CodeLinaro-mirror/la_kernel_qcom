@@ -57,6 +57,7 @@
   bitmap_find_next_zero_area_off
   bitmap_free
   __bitmap_or
+  bitmap_parselist
   bitmap_print_to_pagebuf
   bitmap_release_region
   __bitmap_set
@@ -1182,10 +1183,13 @@
   mmc_hs200_tuning
   mmc_issue_type
   mmc_of_parse
+  __mmc_poll_for_busy
+  mmc_prepare_busy_cmd
   mmc_regulator_get_supply
   mmc_regulator_set_ocr
   mmc_regulator_set_vqmmc
   mmc_retune_hold
+  mmc_retune_release
   mmc_select_bus_width
   mmc_select_card
   mmc_select_hs
@@ -1733,6 +1737,7 @@
   sched_feat_keys
   sched_feat_names
   sched_setattr
+  sched_set_fifo_low
   sched_set_normal
   sched_setscheduler
   sched_setscheduler_nocheck
@@ -2058,6 +2063,8 @@
   __traceiter_android_rvh_irqs_disable
   __traceiter_android_rvh_irqs_enable
   __traceiter_android_rvh_is_cpu_allowed
+  __traceiter_android_rvh_mmc_resume
+  __traceiter_android_rvh_mmc_suspend
   __traceiter_android_rvh_new_task_stats
   __traceiter_android_rvh_preempt_disable
   __traceiter_android_rvh_preempt_enable
@@ -2162,6 +2169,8 @@
   __tracepoint_android_rvh_irqs_disable
   __tracepoint_android_rvh_irqs_enable
   __tracepoint_android_rvh_is_cpu_allowed
+  __tracepoint_android_rvh_mmc_resume
+  __tracepoint_android_rvh_mmc_suspend
   __tracepoint_android_rvh_new_task_stats
   __tracepoint_android_rvh_preempt_disable
   __tracepoint_android_rvh_preempt_enable
@@ -2438,6 +2447,7 @@
   __xa_alloc
   __xa_alloc_cyclic
   xa_destroy
+  __xa_erase
   xa_erase
   xa_find
   xa_find_after
