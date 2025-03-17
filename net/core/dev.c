@@ -157,6 +157,7 @@
 
 #include "dev.h"
 #include "net-sysfs.h"
+#include "skbuff_debug.h"
 
 static DEFINE_SPINLOCK(ptype_lock);
 struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
@@ -533,7 +534,6 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
  *
  *******************************************************************************/
 
-
 /*
  *	Add a protocol ID to the list. Now that the input handler is
  *	smarter we can dispense with all the messy stuff that used to be
@@ -640,7 +640,6 @@ void dev_remove_pack(struct packet_type *pt)
 	synchronize_net();
 }
 EXPORT_SYMBOL(dev_remove_pack);
-
 
 /*******************************************************************************
  *
@@ -1620,7 +1619,6 @@ void dev_close(struct net_device *dev)
 }
 EXPORT_SYMBOL(dev_close);
 
-
 /**
  *	dev_disable_lro - disable Large Receive Offload on a device
  *	@dev: device
@@ -2076,6 +2074,9 @@ static int call_netdevice_notifiers_mtu(unsigned long val,
 
 	return call_netdevice_notifiers_info(val, &info.info);
 }
+
+bool fast_tc_filter;
+EXPORT_SYMBOL_GPL(fast_tc_filter);
 
 #ifdef CONFIG_NET_INGRESS
 static DEFINE_STATIC_KEY_FALSE(ingress_needed_key);
@@ -3205,7 +3206,6 @@ void dev_kfree_skb_any_reason(struct sk_buff *skb, enum skb_drop_reason reason)
 }
 EXPORT_SYMBOL(dev_kfree_skb_any_reason);
 
-
 /**
  * netif_device_detach - mark device as removed
  * @dev: network device
@@ -3816,8 +3816,13 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 	unsigned int len;
 	int rc;
 
-	if (dev_nit_active(dev))
-		dev_queue_xmit_nit(skb, dev);
+	/* If this skb has been fast forwarded then we don't want it to
+	 * go to any taps (by definition we're trying to bypass them).
+	 */
+	if (unlikely(!skb->fast_forwarded)) {
+		if (dev_nit_active(dev))
+			dev_queue_xmit_nit(skb, dev);
+	}
 
 	len = skb->len;
 	trace_net_dev_start_xmit(skb, dev);
@@ -5092,8 +5097,20 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 
 	flow_table = rcu_dereference(rxqueue->rps_flow_table);
 	map = rcu_dereference(rxqueue->rps_map);
-	if (!flow_table && !map)
-		goto done;
+	if (!flow_table) {
+		if (!map)
+			goto done;
+		/* Skip hash calculation & lookup
+		 * if we have only one CPU to transmit and RFS is disabled
+		 */
+		if (map->len == 1) {
+			tcpu = map->cpus[0];
+			if (cpu_online(tcpu)) {
+				cpu = tcpu;
+				goto done;
+			}
+		}
+	}
 
 	skb_reset_network_header(skb);
 	hash = skb_get_hash(skb);
@@ -5821,6 +5838,9 @@ void netdev_rx_handler_unregister(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(netdev_rx_handler_unregister);
 
+int (*athrs_fast_nat_recv)(struct sk_buff *skb) __rcu __read_mostly;
+EXPORT_SYMBOL_GPL(athrs_fast_nat_recv);
+
 /*
  * Limit the use of PFMEMALLOC reserves to those protocols that implement
  * the special handling of PFMEMALLOC skbs.
@@ -5887,6 +5907,7 @@ static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 	int ret = NET_RX_DROP;
 	__be16 type;
 	int flag = 0;
+	int (*fast_recv)(struct sk_buff *skb);
 #ifdef CONFIG_ENABLE_SFE
 	int (*fast_recv)(struct sk_buff *skb, struct packet_type *pt_temp);
 #endif
@@ -5926,10 +5947,30 @@ another_round:
 		}
 	}
 
+	if (likely(!fast_tc_filter)) {
+		fast_recv = rcu_dereference(athrs_fast_nat_recv);
+		if (fast_recv) {
+			if (fast_recv(skb)) {
+				ret = NET_RX_SUCCESS;
+				goto out;
+			}
+		}
+	}
+
 	if (eth_type_vlan(skb->protocol)) {
 		skb = skb_vlan_untag(skb);
 		if (unlikely(!skb))
 			goto out;
+	}
+
+	if (likely(!fast_tc_filter)) {
+		fast_recv = rcu_dereference(athrs_fast_nat_recv);
+		if (fast_recv) {
+			if (fast_recv(skb)) {
+				ret = NET_RX_SUCCESS;
+				goto out;
+			}
+		}
 	}
 
 	if (skb_skip_tc_classify(skb))
@@ -5995,6 +6036,23 @@ skip_classify:
 		else if (unlikely(!skb))
 			goto out;
 	}
+
+	if (unlikely(!fast_tc_filter))
+		goto skip_fast_recv;
+
+	fast_recv = rcu_dereference(athrs_fast_nat_recv);
+	if (fast_recv) {
+		if (pt_prev) {
+			ret = deliver_skb(skb, pt_prev, orig_dev);
+			pt_prev = NULL;
+		}
+
+		if (fast_recv(skb)) {
+			ret = NET_RX_SUCCESS;
+			goto out;
+		}
+	}
+skip_fast_recv:
 
 	rx_handler = rcu_dereference(skb->dev->rx_handler);
 	if (rx_handler) {
@@ -6557,10 +6615,15 @@ static int process_backlog(struct napi_struct *napi, int quota)
 
 	napi->weight = READ_ONCE(dev_rx_weight);
 	while (again) {
-		struct sk_buff *skb;
+		struct sk_buff *skb, *next_skb;
 
 		while ((skb = __skb_dequeue(&sd->process_queue))) {
 			rcu_read_lock();
+
+			next_skb = skb_peek(&sd->process_queue);
+			if (likely(next_skb))
+				prefetch(next_skb->data);
+
 			__netif_receive_skb(skb);
 			rcu_read_unlock();
 			input_queue_head_incr(sd);
@@ -8933,7 +8996,6 @@ void *netdev_lower_dev_get_private(struct net_device *dev,
 }
 EXPORT_SYMBOL(netdev_lower_dev_get_private);
 
-
 /**
  * netdev_lower_state_changed - Dispatch event about lower device state change
  * @lower_dev: device
@@ -10783,6 +10845,12 @@ int register_netdevice(struct net_device *dev)
 	 */
 	dev->mpls_features |= NETIF_F_SG;
 
+	/* Disable default qdisc on the netdevice if required.
+	 */
+#ifdef CONFIG_DEFAULT_QDISC_DISABLE
+	dev->priv_flags |= IFF_NO_QUEUE;
+#endif
+
 	ret = call_netdevice_notifiers(NETDEV_POST_INIT, dev);
 	ret = notifier_to_errno(ret);
 	if (ret)
@@ -10899,7 +10967,6 @@ int init_dummy_netdev(struct net_device *dev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(init_dummy_netdev);
-
 
 /**
  *	register_netdev	- register a network device

@@ -1021,6 +1021,8 @@ struct sk_buff {
 	__u8			int_pri:4;
 	/* Priority info for hardware qdiscs */
 
+	__u8			fast_forwarded:1;
+	/* 1 or 3 bit hole */
 #if defined(CONFIG_NET_SCHED) || defined(CONFIG_NET_XGRESS)
 	__u16			tc_index;	/* traffic control index */
 #endif
@@ -1098,6 +1100,13 @@ struct sk_buff {
 #ifdef CONFIG_SKB_EXTENSIONS
 	/* only useable after checking ->active_extensions != 0 */
 	struct skb_ext		*extensions;
+#endif
+
+#ifdef CONFIG_DEBUG_OBJECTS_SKBUFF
+#define DEBUG_OBJECTS_SKBUFF_STACKSIZE	20
+	void			*free_addr[DEBUG_OBJECTS_SKBUFF_STACKSIZE];
+	void			*alloc_addr[DEBUG_OBJECTS_SKBUFF_STACKSIZE];
+	u32			sum;
 #endif
 };
 
@@ -1424,7 +1433,7 @@ static inline int skb_pad(struct sk_buff *skb, int pad)
 }
 #define dev_kfree_skb(a)	consume_skb(a)
 #define dev_kfree_skb_list_fast(a)	consume_skb_list_fast(a)
-#if defined(SKB_FAST_RECYCLABLE_DEBUG_ENABLE) && defined(CONFIG_SKB_RECYCLER)
+#if defined(CONFIG_SKB_FAST_RECYCLABLE_DEBUG_ENABLE)
 #define dev_check_skb_fast_recyclable(a)       check_skb_fast_recyclable(a)
 #else
 #define dev_check_skb_fast_recyclable(a)

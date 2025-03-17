@@ -121,6 +121,7 @@ struct kmem_cache *skb_data_cache;
 #endif
 
 #include "skbuff_recycle.h"
+#include "skbuff_debug.h"
 
 static struct kmem_cache *skbuff_fclone_cache __ro_after_init;
 #ifdef CONFIG_SKB_EXTENSIONS
@@ -486,6 +487,7 @@ struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 	skb = kmem_cache_alloc(skbuff_cache, GFP_ATOMIC);
 	if (unlikely(!skb))
 		return NULL;
+	skbuff_debugobj_init_and_activate(skb);
 
 	memset(skb, 0, offsetof(struct sk_buff, tail));
 	__build_skb_around(skb, data, frag_size);
@@ -547,6 +549,8 @@ static struct sk_buff *__napi_build_skb(void *data, unsigned int frag_size)
 	skb = napi_skb_cache_get();
 	if (unlikely(!skb))
 		return NULL;
+
+	skbuff_debugobj_init_and_activate(skb);
 
 	memset(skb, 0, offsetof(struct sk_buff, tail));
 	__build_skb_around(skb, data, frag_size);
@@ -686,6 +690,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 		skb = kmem_cache_alloc_node(cache, gfp_mask & ~GFP_DMA, node);
 	if (unlikely(!skb))
 		return NULL;
+	skbuff_debugobj_init_and_activate(skb);
 	prefetchw(skb);
 
 	/* We do our best to align skb_shared_info on a separate cache
@@ -723,6 +728,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	return skb;
 
 nodata:
+	skbuff_debugobj_deactivate(skb);
 	kmem_cache_free(cache, skb);
 	return NULL;
 }
@@ -779,16 +785,21 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev,
 #else
 	struct page_frag_cache *nc;
 	bool pfmemalloc;
+	bool page_frag_alloc_enable = true;
 	void *data;
 
 	len += NET_SKB_PAD;
 
+#ifdef CONFIG_ALLOC_SKB_PAGE_FRAG_DISABLE
+	page_frag_alloc_enable = false;
+#endif
 	/* If requested length is either too small or too big,
 	 * we use kmalloc() for skb->head allocation.
 	 */
 	if (len <= SKB_WITH_OVERHEAD(1024) ||
 	    len > SKB_WITH_OVERHEAD(PAGE_SIZE) ||
-	    (gfp_mask & (__GFP_DIRECT_RECLAIM | GFP_DMA))) {
+	    (gfp_mask & (__GFP_DIRECT_RECLAIM | GFP_DMA)) ||
+	    !page_frag_alloc_enable) {
 		skb = __alloc_skb(len, gfp_mask, SKB_ALLOC_RX, NUMA_NO_NODE);
 		if (!skb)
 			goto skb_fail;
@@ -1159,6 +1170,7 @@ void kfree_skbmem(struct sk_buff *skb)
 
 	switch (skb->fclone) {
 	case SKB_FCLONE_UNAVAILABLE:
+		skbuff_debugobj_deactivate(skb);
 		kmem_cache_free(skbuff_cache, skb);
 		return;
 
@@ -1180,6 +1192,7 @@ void kfree_skbmem(struct sk_buff *skb)
 	if (!refcount_dec_and_test(&fclones->fclone_ref))
 		return;
 fastpath:
+	skbuff_debugobj_deactivate(&fclones->skb1);
 	kmem_cache_free(skbuff_fclone_cache, fclones);
 }
 
@@ -1251,8 +1264,13 @@ bool __kfree_skb_reason(struct sk_buff *skb, enum skb_drop_reason reason)
 void __fix_address
 kfree_skb_reason(struct sk_buff *skb, enum skb_drop_reason reason)
 {
-	if (__kfree_skb_reason(skb, reason))
+	if (__kfree_skb_reason(skb, reason)) {
+#if defined(CONFIG_SKB_RECYCLER)
+		dev_kfree_skb(skb);
+#else
 		__kfree_skb(skb);
+#endif
+	}
 }
 EXPORT_SYMBOL(kfree_skb_reason);
 
@@ -1295,6 +1313,7 @@ kfree_skb_list_reason(struct sk_buff *segs, enum skb_drop_reason reason)
 
 		if (__kfree_skb_reason(segs, reason)) {
 			skb_poison_list(segs);
+			skbuff_debugobj_deactivate(segs);
 			kfree_skb_add_bulk(segs, &sa, reason);
 		}
 
@@ -1454,7 +1473,7 @@ void consume_skb(struct sk_buff *skb)
 	 * for us to recycle this one later than to allocate a new one
 	 * from scratch.
 	 */
-	if (likely(skb_recycler_consume(skb)))
+	if (likely(skb->head) && likely(skb_recycler_consume(skb)))
 		return;
 
 #ifdef CONFIG_TRACEPOINTS
@@ -1464,7 +1483,9 @@ void consume_skb(struct sk_buff *skb)
 	 * have done in __kfree_skb (above and beyond the skb_release_head_state
 	 * that we already did).
 	 */
-	skb_release_data(skb, SKB_CONSUMED, false);
+	if (likely(skb->head))
+		skb_release_data(skb, SKB_CONSUMED, false);
+
 	kfree_skbmem(skb);
 }
 EXPORT_SYMBOL(consume_skb);
@@ -1525,6 +1546,7 @@ static void napi_skb_cache_put(struct sk_buff *skb)
 	u32 i;
 
 	kasan_poison_object_data(skbuff_cache, skb);
+	skbuff_debugobj_deactivate(skb);
 	nc->skb_cache[nc->skb_count++] = skb;
 
 	if (unlikely(nc->skb_count == NAPI_SKB_CACHE_SIZE)) {
@@ -2131,6 +2153,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, gfp_t gfp_mask)
 		n = kmem_cache_alloc(skbuff_cache, gfp_mask);
 		if (!n)
 			return NULL;
+		skbuff_debugobj_init_and_activate(n);
 
 		n->fclone = SKB_FCLONE_UNAVAILABLE;
 	}
@@ -5950,6 +5973,8 @@ void kfree_skb_partial(struct sk_buff *skb, bool head_stolen)
 {
 	if (head_stolen) {
 		skb_release_head_state(skb);
+
+		skbuff_debugobj_deactivate(skb);
 		kmem_cache_free(skbuff_cache, skb);
 	} else {
 		__kfree_skb(skb);
