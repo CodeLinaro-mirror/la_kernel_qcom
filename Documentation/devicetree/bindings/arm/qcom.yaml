@@ -979,7 +979,7 @@ properties:
 
       - items:
           - enum:
-              - qcom,qcs9075-rb8
+              - qcom,qcs9075-iq-9075-evk
               - qcom,qcs9075-ride
               - qcom,qcs9075-ride-r3
           - const: qcom,qcs9075
