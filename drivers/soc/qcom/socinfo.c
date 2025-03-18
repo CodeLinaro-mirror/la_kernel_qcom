@@ -596,8 +596,12 @@ static const struct soc_id soc_id[] = {
 	{ 642, "CLIFFSP" },
 	{ 643, "CLIFFS7P" },
 	{ 682, "SG_PINEAPPLE" },
+	{ 696, "PINEAPPLEQ" },
 	{ 549, "ANORAK" },
 	{ 554, "NEO-LA" },
+	{ 645, "QCM_PINEAPPLE" },
+	{ 646, "QCS_PINEAPPLE" },
+	{ 702, "QCS8625_PINEAPPLE" },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];
