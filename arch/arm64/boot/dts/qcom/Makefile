@@ -190,7 +190,7 @@ qcs9075-addons-ride-r3-dtbs:= qcs9075-ride-r3.dtb \
 				sa8775p-addons-ride.dtbo \
 				sa8775p-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-addons-ride-r3.dtb
-dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-rb8.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-iq-9075-evk.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-ride-r3.dtb
 qcs9100-addons-ride-dtbs:= qcs9100-ride.dtb \
