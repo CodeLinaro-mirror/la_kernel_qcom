@@ -131,6 +131,11 @@ int qcom_scm_iommu_secure_ptbl_init(u64 addr, u32 size, u32 spare);
 int qcom_scm_iommu_set_cp_pool_size(u32 spare, u32 size);
 int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
 				   u32 cp_nonpixel_start, u32 cp_nonpixel_size);
+extern int
+qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
+		size_t mem_regions_sz, u32 *srcvms, size_t src_sz,
+		struct qcom_scm_current_perm_info *newvms,
+		size_t newvms_sz);
 int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz, u64 *src,
 			const struct qcom_scm_vmperm *newvm,
 			unsigned int dest_cnt);
