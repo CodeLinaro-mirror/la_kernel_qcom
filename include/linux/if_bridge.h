@@ -271,10 +271,10 @@ extern br_port_dev_get_hook_t __rcu *br_port_dev_get_hook;
 #ifdef CONFIG_HYFI_BRIDGE_HOOKS
 typedef void (br_notify_hook_t)(int group, int event, const void *ptr);
 extern br_notify_hook_t __rcu *br_notify_hook;
+#endif
 typedef int (br_multicast_handle_hook_t)(const struct net_bridge_port *src,
 		struct sk_buff *skb);
 extern br_multicast_handle_hook_t __rcu *br_multicast_handle_hook;
-#endif
 
 #define BR_FDB_EVENT_ADD     0x01
 #define BR_FDB_EVENT_DEL     0x02

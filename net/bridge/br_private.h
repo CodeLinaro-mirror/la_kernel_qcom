@@ -2290,7 +2290,6 @@ void br_do_suppress_nd(struct sk_buff *skb, struct net_bridge *br,
 		       u16 vid, struct net_bridge_port *p, struct nd_msg *msg);
 struct nd_msg *br_is_nd_neigh_msg(struct sk_buff *skb, struct nd_msg *m);
 bool br_is_neigh_suppress_enabled(const struct net_bridge_port *p, u16 vid);
-#ifdef CONFIG_HYFI_BRIDGE_HOOKS
 #define __br_get(__hook, __default, __args ...) \
 		({ typeof(__hook) HOOK_ = (__hook);     \
 		(HOOK_ ? (HOOK_(__args)) : (__default)); })
@@ -2302,8 +2301,4 @@ static inline void __br_notify(int group, int type, const void *data)
 	if (notify_hook)
 		notify_hook(group, type, data);
 }
-#else
-#define __br_get(__hook, __default, __args ...) \
-		(__hook ? (__hook(__args)) : (__default))
-#endif
 #endif
