@@ -20,6 +20,7 @@ properties:
           - enum:
               - qcom,ipq5018-apcs-apps-global
               - qcom,ipq5332-apcs-apps-global
+              - qcom,ipq5424-apcs-apps-global
               - qcom,ipq8074-apcs-apps-global
               - qcom,ipq9574-apcs-apps-global
           - const: qcom,ipq6018-apcs-apps-global
@@ -166,12 +167,13 @@ allOf:
   - if:
       properties:
         compatible:
-          enum:
-            - qcom,msm8953-apcs-kpss-global
-            - qcom,msm8994-apcs-kpss-global
-            - qcom,msm8996-apcs-hmss-global
-            - qcom,qcm2290-apcs-hmss-global
-            - qcom,sdm845-apss-shared
+          contains:
+            enum:
+              - qcom,msm8953-apcs-kpss-global
+              - qcom,msm8994-apcs-kpss-global
+              - qcom,msm8996-apcs-hmss-global
+              - qcom,qcm2290-apcs-hmss-global
+              - qcom,sdm845-apss-shared
     then:
       properties:
         clocks: false

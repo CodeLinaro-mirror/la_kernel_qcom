@@ -278,10 +278,10 @@ static bool qca_filename_has_extension(const char *filename)
 
 	/* File extensions require a dot, but not as the first or last character */
 	if (!suffix || suffix == filename || *(suffix + 1) == '\0')
-		return false;
+		return 0;
 
 	/* Avoid matching directories with names that look like files with extensions */
-	return strchr(suffix, '/') == NULL;
+	return !strchr(suffix, '/');
 }
 
 static bool qca_get_alt_nvm_file(char *filename, size_t max_size)
@@ -876,7 +876,7 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		} else {
 			qca_read_fw_board_id(hdev, &boardid);
 			qca_get_nvm_name_by_board(config.fwname, sizeof(config.fwname),
-					firmware_name, soc_type, ver, 0, boardid);
+				 firmware_name, soc_type, ver, 0, boardid);
 		}
 	} else {
 		switch (soc_type) {
@@ -915,9 +915,8 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 			break;
 		case QCA_WCN7850:
 			qca_get_nvm_name_by_board(config.fwname, sizeof(config.fwname),
-						  "hmtnv", soc_type, ver, rom_ver, boardid);
+				 "hmtnv", soc_type, ver, rom_ver, boardid);
 			break;
-
 		default:
 			snprintf(config.fwname, sizeof(config.fwname),
 				 "qca/nvm_%08x.bin", soc_ver);

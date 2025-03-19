@@ -21,6 +21,9 @@
 #include "xfs_ag.h"
 #include "xfs_ag_resv.h"
 #include "xfs_trace.h"
+#include "xfs_rtalloc.h"
+#include "xfs_rtrmap_btree.h"
+#include "xfs_rtrefcount_btree.h"
 
 /*
  * Write new AG headers to disk. Non-transactional, but need to be
@@ -113,6 +116,12 @@ xfs_growfs_data_private(
 		xfs_buf_relse(bp);
 	}
 
+	/* Make sure the new fs size won't cause problems with the log. */
+	error = xfs_growfs_check_rtgeom(mp, nb, mp->m_sb.sb_rblocks,
+			mp->m_sb.sb_rextsize);
+	if (error)
+		return error;
+
 	nb_div = nb;
 	nb_mod = do_div(nb_div, mp->m_sb.sb_agblocks);
 	if (nb_mod && nb_mod >= XFS_MIN_AG_BLOCKS)
@@ -162,9 +171,7 @@ xfs_growfs_data_private(
 		error = xfs_resizefs_init_new_ags(tp, &id, oagcount, nagcount,
 				delta, last_pag, &lastag_extended);
 	} else {
-		xfs_warn_mount(mp, XFS_OPSTATE_WARNED_SHRINK,
-	"EXPERIMENTAL online shrink feature in use. Use at your own risk!");
-
+		xfs_warn_experimental(mp, XFS_EXPERIMENTAL_SHRINK);
 		error = xfs_ag_shrink_space(last_pag, &tp, -delta);
 	}
 	xfs_perag_put(last_pag);
@@ -222,7 +229,12 @@ xfs_growfs_data_private(
 		error = xfs_fs_reserve_ag_blocks(mp);
 		if (error == -ENOSPC)
 			error = 0;
+
+		/* Compute new maxlevels for rt btrees. */
+		xfs_rtrmapbt_compute_maxlevels(mp);
+		xfs_rtrefcountbt_compute_maxlevels(mp);
 	}
+
 	return error;
 
 out_trans_cancel:
@@ -528,13 +540,12 @@ int
 xfs_fs_reserve_ag_blocks(
 	struct xfs_mount	*mp)
 {
-	xfs_agnumber_t		agno;
-	struct xfs_perag	*pag;
+	struct xfs_perag	*pag = NULL;
 	int			error = 0;
 	int			err2;
 
 	mp->m_finobt_nores = false;
-	for_each_perag(mp, agno, pag) {
+	while ((pag = xfs_perag_next(mp, pag))) {
 		err2 = xfs_ag_resv_init(pag, NULL);
 		if (err2 && !error)
 			error = err2;
@@ -544,6 +555,19 @@ xfs_fs_reserve_ag_blocks(
 		xfs_warn(mp,
 	"Error %d reserving per-AG metadata reserve pool.", error);
 		xfs_force_shutdown(mp, SHUTDOWN_CORRUPT_INCORE);
+		return error;
+	}
+
+	if (xfs_has_realtime(mp)) {
+		err2 = xfs_rt_resv_init(mp);
+		if (err2 && err2 != -ENOSPC) {
+			xfs_warn(mp,
+		"Error %d reserving realtime metadata reserve pool.", err2);
+			xfs_force_shutdown(mp, SHUTDOWN_CORRUPT_INCORE);
+		}
+
+		if (err2 && !error)
+			error = err2;
 	}
 
 	return error;
@@ -556,9 +580,11 @@ void
 xfs_fs_unreserve_ag_blocks(
 	struct xfs_mount	*mp)
 {
-	xfs_agnumber_t		agno;
-	struct xfs_perag	*pag;
+	struct xfs_perag	*pag = NULL;
 
-	for_each_perag(mp, agno, pag)
+	if (xfs_has_realtime(mp))
+		xfs_rt_resv_free(mp);
+
+	while ((pag = xfs_perag_next(mp, pag)))
 		xfs_ag_resv_free(pag);
 }

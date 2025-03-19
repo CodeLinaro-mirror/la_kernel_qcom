@@ -17,22 +17,22 @@
 		cpu-map {
 			cluster0 {
 				core6 {
-					cpu = <&CPU6>;
+					cpu = <&cpu6>;
 				};
 
 				core7 {
-					cpu = <&CPU7>;
+					cpu = <&cpu7>;
 				};
 			};
 		};
 	};
 };
 
-&CPU6 {
+&cpu6 {
 	enable-method = "psci";
 };
 
-&CPU7 {
+&cpu7 {
 	enable-method = "psci";
 };
 

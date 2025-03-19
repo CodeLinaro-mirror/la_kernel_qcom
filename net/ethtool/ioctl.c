@@ -992,7 +992,13 @@ static noinline_for_stack int ethtool_set_rxnfc(struct net_device *dev,
 	if (rc)
 		return rc;
 
-	if (ops->get_rxfh) {
+	/* Nonzero ring with RSS only makes sense if NIC adds them together */
+	if (cmd == ETHTOOL_SRXCLSRLINS && info.fs.flow_type & FLOW_RSS &&
+	    !ops->cap_rss_rxnfc_adds &&
+	    ethtool_get_flow_spec_ring(info.fs.ring_cookie))
+		return -EINVAL;
+
+	if (cmd == ETHTOOL_SRXFH && ops->get_rxfh) {
 		struct ethtool_rxfh_param rxfh = {};
 
 		rc = ops->get_rxfh(dev, &rxfh);
@@ -1462,6 +1468,13 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 		mutex_lock(&dev->ethtool->rss_lock);
 		locked = true;
 	}
+
+	if (rxfh.rss_context && rxfh_dev.rss_delete) {
+		ret = ethtool_check_rss_ctx_busy(dev, rxfh.rss_context);
+		if (ret)
+			goto out;
+	}
+
 	if (create) {
 		if (rxfh_dev.rss_delete) {
 			ret = -EINVAL;
@@ -1505,6 +1518,7 @@ static noinline_for_stack int ethtool_set_rxfh(struct net_device *dev,
 						       extack);
 			/* Make sure driver populates defaults */
 			WARN_ON_ONCE(!ret && !rxfh_dev.key &&
+				     ops->rxfh_per_ctx_key &&
 				     !memchr_inv(ethtool_rxfh_context_key(ctx),
 						 0, ctx->key_size));
 		} else if (rxfh_dev.rss_delete) {
@@ -2045,8 +2059,8 @@ static int ethtool_get_ringparam(struct net_device *dev, void __user *useraddr)
 
 static int ethtool_set_ringparam(struct net_device *dev, void __user *useraddr)
 {
-	struct ethtool_ringparam ringparam, max = { .cmd = ETHTOOL_GRINGPARAM };
 	struct kernel_ethtool_ringparam kernel_ringparam;
+	struct ethtool_ringparam ringparam, max;
 	int ret;
 
 	if (!dev->ethtool_ops->set_ringparam || !dev->ethtool_ops->get_ringparam)
@@ -2055,7 +2069,7 @@ static int ethtool_set_ringparam(struct net_device *dev, void __user *useraddr)
 	if (copy_from_user(&ringparam, useraddr, sizeof(ringparam)))
 		return -EFAULT;
 
-	dev->ethtool_ops->get_ringparam(dev, &max, &kernel_ringparam, NULL);
+	ethtool_ringparam_get_cfg(dev, &max, &kernel_ringparam, NULL);
 
 	/* ensure new ring parameters are within the maximums */
 	if (ringparam.rx_pending > max.rx_max_pending ||

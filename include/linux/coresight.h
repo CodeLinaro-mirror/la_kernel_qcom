@@ -206,8 +206,8 @@ struct coresight_connection {
 	struct coresight_device *src_dev;
 	struct fwnode_handle *filter_src_fwnode;
 	struct coresight_device *filter_src_dev;
-	atomic_t src_refcnt;
-	atomic_t dest_refcnt;
+	int src_refcnt;
+	int dest_refcnt;
 };
 
 /**
@@ -673,7 +673,7 @@ void coresight_relaxed_write64(struct coresight_device *csdev,
 void coresight_write64(struct coresight_device *csdev, u64 val, u32 offset);
 
 extern int coresight_get_cpu(struct device *dev);
-extern int coresight_get_source_traceid(struct device *dev, u32 *id);
+extern int coresight_get_static_trace_id(struct device *dev, u32 *id);
 extern const char *coresight_get_device_name(struct device *dev);
 
 struct coresight_platform_data *coresight_get_platform_data(struct device *dev);

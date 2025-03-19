@@ -37,12 +37,16 @@ properties:
 patternProperties:
   "^display-controller@[0-9a-f]+$":
     type: object
+    additionalProperties: true
+
     properties:
       compatible:
         const: qcom,sa8775p-dpu
 
   "^displayport-controller@[0-9a-f]+$":
     type: object
+    additionalProperties: true
+
     properties:
       compatible:
         items:
@@ -55,32 +59,31 @@ unevaluatedProperties: false
 
 examples:
   - |
-    #include <dt-bindings/clock/qcom,sa8775p-dispcc.h>
-    #include <dt-bindings/clock/qcom,gcc-sa8775p.h>
-    #include <dt-bindings/clock/qcom,rpmh.h>
+    #include <dt-bindings/interconnect/qcom,icc.h>
     #include <dt-bindings/interrupt-controller/arm-gic.h>
-    #include <dt-bindings/interconnect/qcom,sa8775p.h>
+    #include <dt-bindings/clock/qcom,sa8775p-gcc.h>
+    #include <dt-bindings/interconnect/qcom,sa8775p-rpmh.h>
     #include <dt-bindings/power/qcom,rpmhpd.h>
+    #include <dt-bindings/power/qcom-rpmpd.h>
 
-    mdss: display-subsystem@ae00000 {
+    display-subsystem@ae00000 {
         compatible = "qcom,sa8775p-mdss";
-        reg = <0 0x0ae00000 0 0x1000>;
+        reg = <0x0ae00000 0x1000>;
         reg-names = "mdss";
 
-        /* same path used twice */
-        interconnects = <&mmss_noc MASTER_MDP0 0 &mc_virt SLAVE_EBI1 0>,
-                        <&mmss_noc MASTER_MDP1 0 &mc_virt SLAVE_EBI1 0>,
-                        <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
-                        &config_noc SLAVE_DISPLAY_CFG QCOM_ICC_TAG_ACTIVE_ONLY>;
+        interconnects = <&mmss_noc MASTER_MDP0 &mc_virt SLAVE_EBI1>,
+                        <&mmss_noc MASTER_MDP1 &mc_virt SLAVE_EBI1>,
+                        <&gem_noc MASTER_APPSS_PROC &config_noc SLAVE_DISPLAY_CFG>;
         interconnect-names = "mdp0-mem",
                              "mdp1-mem",
                              "cpu-cfg";
 
-        power-domains = <&dispcc0 MDSS_DISP_CC_MDSS_CORE_GDSC>;
+        resets = <&dispcc_core_bcr>;
+        power-domains = <&dispcc_gdsc>;
 
-        clocks = <&dispcc0 MDSS_DISP_CC_MDSS_AHB_CLK>,
+        clocks = <&dispcc_ahb_clk>,
                  <&gcc GCC_DISP_HF_AXI_CLK>,
-                 <&dispcc0 MDSS_DISP_CC_MDSS_MDP_CLK>;
+                 <&dispcc_mdp_clk>;
 
         interrupts = <GIC_SPI 92 IRQ_TYPE_LEVEL_HIGH>;
         interrupt-controller;
@@ -88,48 +91,49 @@ examples:
 
         iommus = <&apps_smmu 0x1000 0x402>;
 
-        #address-cells = <2>;
-        #size-cells = <2>;
+        #address-cells = <1>;
+        #size-cells = <1>;
         ranges;
 
-        status = "disabled";
-
-        mdss_mdp: display-controller@ae01000 {
+        display-controller@ae01000 {
             compatible = "qcom,sa8775p-dpu";
-            reg = <0 0x0ae01000 0 0x8f000>,
-                  <0 0x0aeb0000 0 0x2008>;
+            reg = <0x0ae01000 0x8f000>,
+                  <0x0aeb0000 0x2008>;
             reg-names = "mdp", "vbif";
 
             clocks = <&gcc GCC_DISP_HF_AXI_CLK>,
-                     <&dispcc0 MDSS_DISP_CC_MDSS_AHB_CLK>,
-                     <&dispcc0 MDSS_DISP_CC_MDSS_MDP_LUT_CLK>,
-                     <&dispcc0 MDSS_DISP_CC_MDSS_MDP_CLK>,
-                     <&dispcc0 MDSS_DISP_CC_MDSS_VSYNC_CLK>;
-            clock-names = "bus",
+                     <&dispcc_ahb_clk>,
+                     <&dispcc_mdp_lut_clk>,
+                     <&dispcc_mdp_clk>,
+                     <&dispcc_mdp_vsync_clk>;
+            clock-names = "nrt_bus",
                           "iface",
                           "lut",
                           "core",
                           "vsync";
 
-            assigned-clocks = <&dispcc0 MDSS_DISP_CC_MDSS_VSYNC_CLK>;
+            assigned-clocks = <&dispcc_mdp_vsync_clk>;
             assigned-clock-rates = <19200000>;
-            operating-points-v2 = <&mdp_opp_table>;
+
+            operating-points-v2 = <&mdss0_mdp_opp_table>;
             power-domains = <&rpmhpd RPMHPD_MMCX>;
 
-            interrupt-parent = <&mdss>;
+            interrupt-parent = <&mdss0>;
             interrupts = <0>;
+
             ports {
                 #address-cells = <1>;
                 #size-cells = <0>;
+
                 port@0 {
                     reg = <0>;
                     dpu_intf0_out: endpoint {
-                         remote-endpoint = <&mdss_dp0_in>;
+                        remote-endpoint = <&mdss0_dp0_in>;
                     };
                 };
             };
 
-            mdp_opp_table: opp-table {
+            mdss0_mdp_opp_table: opp-table {
                 compatible = "operating-points-v2";
 
                 opp-375000000 {
@@ -154,72 +158,84 @@ examples:
             };
         };
 
-        mdss_dp0: displayport-controller@af54000 {
+        displayport-controller@af54000 {
             compatible = "qcom,sa8775p-dp";
 
             pinctrl-0 = <&dp_hot_plug_det>;
             pinctrl-names = "default";
 
-            reg = <0 0xaf54000 0 0x104>,
-                <0 0xaf54200 0 0x0c0>,
-                <0 0xaf55000 0 0x770>,
-                <0 0xaf56000 0 0x09c>;
+            reg = <0xaf54000 0x104>,
+                  <0xaf54200 0x0c0>,
+                  <0xaf55000 0x770>,
+                  <0xaf56000 0x09c>,
+                  <0xaf57000 0x09c>;
 
-            interrupt-parent = <&mdss>;
+            interrupt-parent = <&mdss0>;
             interrupts = <12>;
-            clocks = <&dispcc0 MDSS_DISP_CC_MDSS_AHB_CLK>,
-                <&dispcc0 MDSS_DISP_CC_MDSS_DPTX0_AUX_CLK>,
-                <&dispcc0 MDSS_DISP_CC_MDSS_DPTX0_LINK_CLK>,
-                <&dispcc0 MDSS_DISP_CC_MDSS_DPTX0_LINK_INTF_CLK>,
-                <&dispcc0 MDSS_DISP_CC_MDSS_DPTX0_PIXEL0_CLK>;
+
+            clocks = <&dispcc_mdss_ahb_clk>,
+                     <&dispcc_dptx0_aux_clk>,
+                     <&dispcc_dptx0_link_clk>,
+                     <&dispcc_dptx0_link_intf_clk>,
+                     <&dispcc_dptx0_pixel0_clk>;
             clock-names = "core_iface",
-                "core_aux",
-                "ctrl_link",
-                "ctrl_link_iface",
-                "stream_pixel";
-            assigned-clocks = <&dispcc0 MDSS_DISP_CC_MDSS_DPTX0_LINK_CLK_SRC>,
-                 <&dispcc0 MDSS_DISP_CC_MDSS_DPTX0_PIXEL0_CLK_SRC>;
-            assigned-clock-parents = <&mdss_edp_phy 0>, <&mdss_edp_phy 1>;
-            phys = <&mdss_edp_phy>;
+                          "core_aux",
+                          "ctrl_link",
+                          "ctrl_link_iface",
+                          "stream_pixel";
+
+            assigned-clocks = <&dispcc_mdss_dptx0_link_clk_src>,
+                              <&dispcc_mdss_dptx0_pixel0_clk_src>;
+            assigned-clock-parents = <&mdss0_edp_phy 0>, <&mdss0_edp_phy 1>;
+
+            phys = <&mdss0_edp_phy>;
             phy-names = "dp";
+
             operating-points-v2 = <&dp_opp_table>;
             power-domains = <&rpmhpd SA8775P_MMCX>;
+
             #sound-dai-cells = <0>;
-            status = "disabled";
+
             ports {
                 #address-cells = <1>;
                 #size-cells = <0>;
+
                 port@0 {
                     reg = <0>;
-                    mdss_dp0_in: endpoint {
+                    mdss0_dp0_in: endpoint {
                         remote-endpoint = <&dpu_intf0_out>;
                     };
                 };
+
                 port@1 {
-                   reg = <1>;
-                   mdss_dp_out: endpoint { };
+                    reg = <1>;
+                    mdss0_dp_out: endpoint { };
                 };
             };
+
             dp_opp_table: opp-table {
                 compatible = "operating-points-v2";
+
                 opp-160000000 {
                     opp-hz = /bits/ 64 <160000000>;
                     required-opps = <&rpmhpd_opp_low_svs>;
                 };
+
                 opp-270000000 {
-                     opp-hz = /bits/ 64 <270000000>;
-                     required-opps = <&rpmhpd_opp_svs>;
+                    opp-hz = /bits/ 64 <270000000>;
+                    required-opps = <&rpmhpd_opp_svs>;
                 };
 
                 opp-540000000 {
                     opp-hz = /bits/ 64 <540000000>;
                     required-opps = <&rpmhpd_opp_svs_l1>;
                 };
+
                 opp-810000000 {
                     opp-hz = /bits/ 64 <810000000>;
                     required-opps = <&rpmhpd_opp_nom>;
                 };
             };
-
+        };
     };
 ...

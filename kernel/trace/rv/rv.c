@@ -41,7 +41,7 @@
  * per-task monitor, and so on), and the helper functions that glue the
  * monitor to the system via trace. Generally, a monitor includes some form
  * of trace output as a reaction for event parsing and exceptions,
- * as depicted bellow:
+ * as depicted below:
  *
  * Linux  +----- RV Monitor ----------------------------------+ Formal
  *  Realm |                                                   |  Realm
@@ -145,7 +145,7 @@
 
 #ifdef CONFIG_DA_MON_EVENTS
 #define CREATE_TRACE_POINTS
-#include <trace/events/rv.h>
+#include <rv_trace.h>
 #endif
 
 #include "rv.h"

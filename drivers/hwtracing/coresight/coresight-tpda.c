@@ -72,7 +72,6 @@ static int tpdm_read_element_size(struct tpda_drvdata *drvdata,
 		rc = fwnode_property_read_u32(dev_fwnode(csdev->dev.parent),
 				"qcom,dsb-element-bits", &drvdata->dsb_esize);
 	}
-
 	if (tpdm_data->cmb) {
 		rc = fwnode_property_read_u32(dev_fwnode(csdev->dev.parent),
 				"qcom,cmb-element-bits", &drvdata->cmb_esize);
@@ -200,10 +199,10 @@ static int tpda_enable(struct coresight_device *csdev,
 	int ret = 0;
 
 	spin_lock(&drvdata->spinlock);
-	if (atomic_read(&in->dest_refcnt) == 0) {
+	if (in->dest_refcnt == 0) {
 		ret = __tpda_enable(drvdata, in->dest_port);
 		if (!ret) {
-			atomic_inc(&in->dest_refcnt);
+			in->dest_refcnt++;
 			csdev->refcnt++;
 			dev_dbg(drvdata->dev, "TPDA inport %d enabled.\n", in->dest_port);
 		}
@@ -233,7 +232,7 @@ static void tpda_disable(struct coresight_device *csdev,
 	struct tpda_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
 	spin_lock(&drvdata->spinlock);
-	if (atomic_dec_return(&in->dest_refcnt) == 0) {
+	if (--in->dest_refcnt == 0) {
 		__tpda_disable(drvdata, in->dest_port);
 		csdev->refcnt--;
 	}
@@ -261,7 +260,7 @@ static int tpda_init_default_data(struct tpda_drvdata *drvdata)
 	 * same trace-id. When TPDA does packetization, different
 	 * port will have unique channel number for decoding.
 	 */
-	atid = coresight_trace_id_get_system_id(TRACE_ID_ANY);
+	atid = coresight_trace_id_get_system_id();
 	if (atid < 0)
 		return atid;
 

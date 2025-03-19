@@ -248,8 +248,7 @@ static int btrfs_get_blocks_direct_write(struct extent_map **map,
 		len = min(len, em->len - (start - em->start));
 		block_start = extent_map_block_start(em) + (start - em->start);
 
-		if (can_nocow_extent(inode, start, &len,
-				     &file_extent, false, false) == 1) {
+		if (can_nocow_extent(inode, start, &len, &file_extent, false) == 1) {
 			bg = btrfs_inc_nocow_writers(fs_info, block_start);
 			if (bg)
 				can_nocow = true;
@@ -834,7 +833,7 @@ relock:
 		return ret;
 	}
 
-	ret = btrfs_write_check(iocb, from, ret);
+	ret = btrfs_write_check(iocb, ret);
 	if (ret < 0) {
 		btrfs_inode_unlock(BTRFS_I(inode), ilock_flags);
 		goto out;

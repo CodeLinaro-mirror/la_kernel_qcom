@@ -153,7 +153,6 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 		   enum qcom_scm_convention qcom_convention,
 		   struct qcom_scm_res *res, bool atomic)
 {
-	struct qcom_tzmem_pool *mempool = qcom_scm_get_tzmem_pool();
 	int arglen = desc->arginfo & 0xf;
 	int i, ret;
 	void *args_virt __free(qcom_tzmem) = NULL;
@@ -177,6 +176,11 @@ int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
 		smc.args[i + SCM_SMC_FIRST_REG_IDX] = desc->args[i];
 
 	if (unlikely(arglen > SCM_SMC_N_REG_ARGS)) {
+		struct qcom_tzmem_pool *mempool = qcom_scm_get_tzmem_pool();
+
+		if (!mempool)
+			return -EINVAL;
+
 		alloc_len = SCM_SMC_N_EXT_ARGS * sizeof(u64);
 
 		use_qtee_shmbridge = qtee_shmbridge_is_enabled();

@@ -775,7 +775,8 @@ void inet_csk_clear_xmit_timers(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
-	icsk->icsk_pending = icsk->icsk_ack.pending = 0;
+	smp_store_release(&icsk->icsk_pending, 0);
+	smp_store_release(&icsk->icsk_ack.pending, 0);
 
 	sk_stop_timer(sk, &icsk->icsk_retransmit_timer);
 	sk_stop_timer(sk, &icsk->icsk_delack_timer);
@@ -790,7 +791,8 @@ void inet_csk_clear_xmit_timers_sync(struct sock *sk)
 	/* ongoing timer handlers need to acquire socket lock. */
 	sock_not_owned_by_me(sk);
 
-	icsk->icsk_pending = icsk->icsk_ack.pending = 0;
+	smp_store_release(&icsk->icsk_pending, 0);
+	smp_store_release(&icsk->icsk_ack.pending, 0);
 
 	sk_stop_timer_sync(sk, &icsk->icsk_retransmit_timer);
 	sk_stop_timer_sync(sk, &icsk->icsk_delack_timer);
@@ -1189,7 +1191,7 @@ no_ownership:
 
 drop:
 	__inet_csk_reqsk_queue_drop(sk_listener, oreq, true);
-	reqsk_put(req);
+	reqsk_put(oreq);
 }
 
 static bool reqsk_queue_hash_req(struct request_sock *req,
@@ -1559,20 +1561,13 @@ EXPORT_SYMBOL_GPL(inet_csk_addr2sockaddr);
 static struct dst_entry *inet_csk_rebuild_route(struct sock *sk, struct flowi *fl)
 {
 	const struct inet_sock *inet = inet_sk(sk);
-	const struct ip_options_rcu *inet_opt;
-	__be32 daddr = inet->inet_daddr;
 	struct flowi4 *fl4;
 	struct rtable *rt;
 
 	rcu_read_lock();
-	inet_opt = rcu_dereference(inet->inet_opt);
-	if (inet_opt && inet_opt->opt.srr)
-		daddr = inet_opt->opt.faddr;
 	fl4 = &fl->u.ip4;
-	rt = ip_route_output_ports(sock_net(sk), fl4, sk, daddr,
-				   inet->inet_saddr, inet->inet_dport,
-				   inet->inet_sport, sk->sk_protocol,
-				   ip_sock_rt_tos(sk), sk->sk_bound_dev_if);
+	inet_sk_init_flowi4(inet, fl4);
+	rt = ip_route_output_flow(sock_net(sk), fl4, sk);
 	if (IS_ERR(rt))
 		rt = NULL;
 	if (rt)

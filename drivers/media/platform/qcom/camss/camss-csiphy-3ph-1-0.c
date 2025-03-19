@@ -667,6 +667,28 @@ static void csiphy_gen2_config_lanes(struct csiphy_device *csiphy,
 	int i, array_size = csiphy->regs->lane_array_size;
 	u32 val;
 
+	switch (csiphy->camss->res->version) {
+	case CAMSS_7280:
+		r = &lane_regs_sm8250[0];
+		array_size = ARRAY_SIZE(lane_regs_sm8250);
+		break;
+	case CAMSS_8250:
+		r = &lane_regs_sm8250[0];
+		array_size = ARRAY_SIZE(lane_regs_sm8250);
+		break;
+	case CAMSS_8280XP:
+		r = &lane_regs_sc8280xp[0];
+		array_size = ARRAY_SIZE(lane_regs_sc8280xp);
+		break;
+	case CAMSS_845:
+		r = &lane_regs_sdm845[0];
+		array_size = ARRAY_SIZE(lane_regs_sdm845);
+		break;
+	default:
+		WARN(1, "unknown cspi version\n");
+		return;
+	}
+
 	for (i = 0; i < array_size; i++, r++) {
 		switch (r->csiphy_param_type) {
 		case CSIPHY_SETTLE_CNT_LOWER_BYTE:

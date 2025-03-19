@@ -70,7 +70,7 @@
 #include <linux/mman.h>
 
 #ifdef HAVE_LIBTRACEEVENT
-#include <traceevent/event-parse.h>
+#include <event-parse.h>
 #endif
 
 struct report {
@@ -348,11 +348,9 @@ static int process_read_event(const struct perf_tool *tool,
 	struct report *rep = container_of(tool, struct report, tool);
 
 	if (rep->show_threads) {
-		const char *name = evsel__name(evsel);
 		int err = perf_read_values_add_value(&rep->show_threads_values,
 					   event->read.pid, event->read.tid,
-					   evsel->core.idx,
-					   name,
+					   evsel,
 					   event->read.value);
 
 		if (err)
@@ -455,7 +453,7 @@ static int report__setup_sample_type(struct report *rep)
 	if (!(evlist__combined_branch_type(session->evlist) & PERF_SAMPLE_BRANCH_ANY))
 		rep->nonany_branch_mode = true;
 
-#if !defined(HAVE_LIBUNWIND_SUPPORT) && !defined(HAVE_DWARF_SUPPORT)
+#if !defined(HAVE_LIBUNWIND_SUPPORT) && !defined(HAVE_LIBDW_SUPPORT)
 	if (dwarf_callchain_users) {
 		ui__warning("Please install libunwind or libdw "
 			    "development packages during the perf build.\n");
@@ -1271,6 +1269,10 @@ static int process_attr(const struct perf_tool *tool __maybe_unused,
 	return 0;
 }
 
+#define CALLCHAIN_BRANCH_SORT_ORDER	\
+	"srcline,symbol,dso,callchain_branch_predicted," \
+	"callchain_branch_abort,callchain_branch_cycles"
+
 int cmd_report(int argc, const char **argv)
 {
 	struct perf_session *session;
@@ -1418,7 +1420,7 @@ int cmd_report(int argc, const char **argv)
 	OPT_STRING(0, "addr2line", &addr2line_path, "path",
 		   "addr2line binary to use for line numbers"),
 	OPT_BOOLEAN(0, "demangle", &symbol_conf.demangle,
-		    "Disable symbol demangling"),
+		    "Symbol demangling. Enabled by default, use --no-demangle to disable."),
 	OPT_BOOLEAN(0, "demangle-kernel", &symbol_conf.demangle_kernel,
 		    "Enable kernel symbol demangling"),
 	OPT_BOOLEAN(0, "mem-mode", &report.mem_mode, "mem access profile"),
@@ -1639,7 +1641,7 @@ repeat:
 		symbol_conf.use_callchain = true;
 		callchain_register_param(&callchain_param);
 		if (sort_order == NULL)
-			sort_order = "srcline,symbol,dso";
+			sort_order = CALLCHAIN_BRANCH_SORT_ORDER;
 	}
 
 	if (report.mem_mode) {
@@ -1701,7 +1703,7 @@ repeat:
 		report.data_type = true;
 		annotate_opts.annotate_src = false;
 
-#ifndef HAVE_DWARF_GETLOCATIONS_SUPPORT
+#ifndef HAVE_LIBDW_SUPPORT
 		pr_err("Error: Data type profiling is disabled due to missing DWARF support\n");
 		goto error;
 #endif

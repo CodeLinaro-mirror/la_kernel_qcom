@@ -317,7 +317,6 @@ void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
 	struct folio_batch folios;
 	unsigned int refs[PAGEVEC_SIZE];
 
-	lru_add_drain();
 	folio_batch_init(&folios);
 	for (int i = 0; i < nr; i++) {
 		struct folio *folio = page_folio(encoded_page_ptr(pages[i]));
@@ -889,8 +888,7 @@ struct folio *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 static ssize_t vma_ra_enabled_show(struct kobject *kobj,
 				     struct kobj_attribute *attr, char *buf)
 {
-	return sysfs_emit(buf, "%s\n",
-			  enable_vma_readahead ? "true" : "false");
+	return sysfs_emit(buf, "%s\n", str_true_false(enable_vma_readahead));
 }
 static ssize_t vma_ra_enabled_store(struct kobject *kobj,
 				      struct kobj_attribute *attr,

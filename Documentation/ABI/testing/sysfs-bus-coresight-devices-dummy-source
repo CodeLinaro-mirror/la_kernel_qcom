@@ -1,6 +1,6 @@
 What:		/sys/bus/coresight/devices/dummy_source<N>/enable_source
-Date:		June 2024
-KernelVersion:	6.9
+Date:		Dec 2024
+KernelVersion:	6.14
 Contact:	Mao Jinlong <quic_jinlmao@quicinc.com>
 Description:	(RW) Enable/disable tracing of dummy source. A sink should be activated
 		before enabling the source. The path of coresight components linking
@@ -8,8 +8,8 @@ Description:	(RW) Enable/disable tracing of dummy source. A sink should be activ
 		coresight framework.
 
 What:		/sys/bus/coresight/devices/dummy_source<N>/traceid
-Date:		June 2024
-KernelVersion:	6.9
+Date:		Dec 2024
+KernelVersion:	6.14
 Contact:	Mao Jinlong <quic_jinlmao@quicinc.com>
 Description:	(R) Show the trace ID that will appear in the trace stream
 		coming from this trace entity.

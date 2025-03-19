@@ -258,6 +258,7 @@ int perf_mem_events__record_args(const char **rec_argv, int *argv_nr)
 	const char *s;
 	char *copy;
 	struct perf_cpu_map *cpu_map = NULL;
+	int ret;
 
 	while ((pmu = perf_pmus__scan_mem(pmu)) != NULL) {
 		for (int j = 0; j < PERF_MEM_EVENTS__MAX; j++) {
@@ -283,7 +284,9 @@ int perf_mem_events__record_args(const char **rec_argv, int *argv_nr)
 			rec_argv[i++] = "-e";
 			rec_argv[i++] = copy;
 
-			cpu_map = perf_cpu_map__merge(cpu_map, pmu->cpus);
+			ret = perf_cpu_map__merge(&cpu_map, pmu->cpus);
+			if (ret < 0)
+				return ret;
 		}
 	}
 
@@ -366,6 +369,12 @@ static const char * const mem_lvl[] = {
 };
 
 static const char * const mem_lvlnum[] = {
+	[PERF_MEM_LVLNUM_L1] = "L1",
+	[PERF_MEM_LVLNUM_L2] = "L2",
+	[PERF_MEM_LVLNUM_L3] = "L3",
+	[PERF_MEM_LVLNUM_L4] = "L4",
+	[PERF_MEM_LVLNUM_L2_MHB] = "L2 MHB",
+	[PERF_MEM_LVLNUM_MSC] = "Memory-side Cache",
 	[PERF_MEM_LVLNUM_UNC] = "Uncached",
 	[PERF_MEM_LVLNUM_CXL] = "CXL",
 	[PERF_MEM_LVLNUM_IO] = "I/O",
@@ -448,7 +457,7 @@ int perf_mem__lvl_scnprintf(char *out, size_t sz, const struct mem_info *mem_inf
 		if (mem_lvlnum[lvl])
 			l += scnprintf(out + l, sz - l, mem_lvlnum[lvl]);
 		else
-			l += scnprintf(out + l, sz - l, "L%d", lvl);
+			l += scnprintf(out + l, sz - l, "Unknown level %d", lvl);
 
 		l += scnprintf(out + l, sz - l, " %s", hit_miss);
 		return l;

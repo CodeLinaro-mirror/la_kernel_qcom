@@ -815,25 +815,32 @@ static const char *const phase_flag_groups[] = {
 static const char *const pll_bist_groups[] = {
 	"gpio107",
 };
+
 static const char *const pll_clk_groups[] = {
 	"gpio74",
 };
+
 static const char *const prng_rosc0_groups[] = {
 	"gpio57",
 };
+
 static const char *const prng_rosc1_groups[] = {
 	"gpio58",
 };
+
 static const char *const prng_rosc2_groups[] = {
 	"gpio59",
 };
+
 static const char *const prng_rosc3_groups[] = {
 	"gpio60",
 };
+
 static const char *const qdss_cti_groups[] = {
 	"gpio4", "gpio5", "gpio23", "gpio24", "gpio49", "gpio50",
 	"gpio51", "gpio52",
 };
+
 static const char *const qdss_gpio_groups[] = {
 	"gpio57", "gpio58", "gpio97", "gpio106",
 	"gpio59", "gpio107", "gpio60", "gpio108",
@@ -918,42 +925,55 @@ static const char *const qup2_se0_groups[] = {
 static const char *const sailss_emac0_groups[] = {
 	"gpio15", "gpio16",
 };
+
 static const char *const sailss_ospi_groups[] = {
 	"gpio15", "gpio16",
 };
+
 static const char *const sgmii_phy_groups[] = {
 	"gpio4",
 };
+
 static const char *const tb_trig_groups[] = {
 	"gpio14",
 };
+
 static const char *const tgu_ch0_groups[] = {
 	"gpio43",
 };
+
 static const char *const tgu_ch1_groups[] = {
 	"gpio44",
 };
+
 static const char *const tgu_ch2_groups[] = {
 	"gpio29",
 };
+
 static const char *const tgu_ch3_groups[] = {
 	"gpio30",
 };
+
 static const char *const tsense_pwm1_groups[] = {
 	"gpio79",
 };
+
 static const char *const tsense_pwm2_groups[] = {
 	"gpio78",
 };
+
 static const char *const tsense_pwm3_groups[] = {
 	"gpio77",
 };
+
 static const char *const tsense_pwm4_groups[] = {
 	"gpio76",
 };
+
 static const char *const usb2phy_ac_groups[] = {
 	"gpio7", "gpio8",
 };
+
 static const char *const vsense_trigger_groups[] = {
 	"gpio67",
 };
@@ -1089,7 +1109,7 @@ static const struct msm_pingroup qcs8300_groups[] = {
 	[11] = PINGROUP(11, qup2_se0, emac0_mcg1, _, _, _, _, _, _, _, _, _),
 	[12] = PINGROUP(12, qup2_se0, _, _, _, _, _, _, _, _, _, _),
 	[13] = PINGROUP(13, qup2_se0, _, _, _, _, _, _, _, _, _, _),
-	[14] = PINGROUP(14, qup2_se0, tb_trig, tb_trig, _, _, _, _, _, _, _, _),
+	[14] = PINGROUP(14, qup2_se0, tb_trig, _, _, _, _, _, _, _, _, _),
 	[15] = PINGROUP(15, qup2_se0, _, sailss_ospi, sailss_emac0, _, _, _, _, _, _, _),
 	[16] = PINGROUP(16, qup2_se0, _, _, sailss_ospi, sailss_emac0, _, _, _, _, _, _),
 	[17] = PINGROUP(17, qup0_se0, qup0_se1, ibi_i3c, _, _, _, _, _, _, _, _),
@@ -1119,10 +1139,10 @@ static const struct msm_pingroup qcs8300_groups[] = {
 	[38] = PINGROUP(38, qup1_se0, ibi_i3c, qup1_se1, aoss_cti, _, _, _, _, _, _, _),
 	[39] = PINGROUP(39, qup1_se1, ibi_i3c, qup1_se0, aoss_cti, _, _, _, _, _, _, _),
 	[40] = PINGROUP(40, qup1_se1, ibi_i3c, qup1_se0, aoss_cti, _, _, _, _, _, _, _),
-	[41] = PINGROUP(41, qup1_se3, qup1_se3, _, _, _, _, _, _, _, _, _),
-	[42] = PINGROUP(42, qup1_se3, qup1_se3, mdp_vsync, _, _, _, _, _, _, _, _),
-	[43] = PINGROUP(43, qup0_se7, qup0_se7, tgu_ch0, _, _, _, _, _, _, _, _),
-	[44] = PINGROUP(44, qup0_se7, qup0_se7, tgu_ch1, _, _, _, _, _, _, _, _),
+	[41] = PINGROUP(41, qup1_se3, _, _, _, _, _, _, _, _, _, _),
+	[42] = PINGROUP(42, qup1_se3, _, mdp_vsync, _, _, _, _, _, _, _, _),
+	[43] = PINGROUP(43, qup0_se7, _, tgu_ch0, _, _, _, _, _, _, _, _),
+	[44] = PINGROUP(44, qup0_se7, _, tgu_ch1, _, _, _, _, _, _, _, _),
 	[45] = PINGROUP(45, qup1_se4, hs1_mi2s, _, _, _, _, _, _, _, _, _),
 	[46] = PINGROUP(46, qup1_se4, hs1_mi2s, _, _, _, _, _, _, _, _, _),
 	[47] = PINGROUP(47, qup1_se4, hs1_mi2s, _, _, _, _, _, _, _, _, _),
@@ -1267,7 +1287,7 @@ static struct platform_driver qcs8300_pinctrl_driver = {
 		.of_match_table = qcs8300_pinctrl_of_match,
 	},
 	.probe = qcs8300_pinctrl_probe,
-	.remove_new = msm_pinctrl_remove,
+	.remove = msm_pinctrl_remove,
 };
 
 static int __init qcs8300_pinctrl_init(void)

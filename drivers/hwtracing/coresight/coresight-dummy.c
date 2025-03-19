@@ -82,7 +82,7 @@ static ssize_t traceid_show(struct device *dev,
 	struct dummy_drvdata *drvdata = dev_get_drvdata(dev->parent);
 
 	val = drvdata->traceid;
-	return scnprintf(buf, PAGE_SIZE, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 static DEVICE_ATTR_RO(traceid);
 
@@ -107,7 +107,7 @@ static int dummy_probe(struct platform_device *pdev)
 	struct coresight_platform_data *pdata;
 	struct dummy_drvdata *drvdata;
 	struct coresight_desc desc = { 0 };
-	int ret, trace_id;
+	int ret = 0, trace_id = 0;
 
 	drvdata = devm_kzalloc(dev, sizeof(*drvdata), GFP_KERNEL);
 	if (!drvdata)
@@ -125,16 +125,17 @@ static int dummy_probe(struct platform_device *pdev)
 		desc.ops = &dummy_source_cs_ops;
 		desc.groups = coresight_dummy_groups;
 
-		ret = coresight_get_source_traceid(dev, &trace_id);
+		ret = coresight_get_static_trace_id(dev, &trace_id);
 		if (!ret) {
-			/* Get the preferred id if id is set in device tree. */
-			ret = coresight_trace_id_get_system_id(trace_id);
-			if (ret < 0)
+			/* Get the static id if id is set in device tree. */
+			ret = coresight_trace_id_get_static_system_id(trace_id);
+			if (ret < 0) {
+				dev_err(dev, "Fail to get static id.\n");
 				return ret;
-
+			}
 		} else {
 			/* Get next available id if id is not set in device tree. */
-			trace_id = coresight_trace_id_get_system_id(TRACE_ID_ANY);
+			trace_id = coresight_trace_id_get_system_id();
 			if (trace_id < 0) {
 				ret = trace_id;
 				return ret;
@@ -156,8 +157,10 @@ static int dummy_probe(struct platform_device *pdev)
 	}
 
 	pdata = coresight_get_platform_data(dev);
-	if (IS_ERR(pdata))
-		return PTR_ERR(pdata);
+	if (IS_ERR(pdata)) {
+		ret = PTR_ERR(pdata);
+		goto free_id;
+	}
 	pdev->dev.platform_data = pdata;
 
 	drvdata->dev = &pdev->dev;
@@ -166,13 +169,23 @@ static int dummy_probe(struct platform_device *pdev)
 	desc.pdata = pdev->dev.platform_data;
 	desc.dev = &pdev->dev;
 	drvdata->csdev = coresight_register(&desc);
-	if (IS_ERR(drvdata->csdev))
-		return PTR_ERR(drvdata->csdev);
+	if (IS_ERR(drvdata->csdev)) {
+		ret = PTR_ERR(drvdata->csdev);
+		goto free_id;
+	}
 
 	pm_runtime_enable(dev);
 	dev_dbg(dev, "Dummy device initialized\n");
 
-	return 0;
+	ret = 0;
+	goto out;
+
+free_id:
+	if (IS_VALID_CS_TRACE_ID(drvdata->traceid))
+		coresight_trace_id_put_system_id(drvdata->traceid);
+
+out:
+	return ret;
 }
 
 static void dummy_remove(struct platform_device *pdev)
@@ -181,7 +194,7 @@ static void dummy_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *node = dev->of_node;
 
-	if (of_device_is_compatible(node, "arm,coresight-dummy-source"))
+	if (IS_VALID_CS_TRACE_ID(drvdata->traceid))
 		coresight_trace_id_put_system_id(drvdata->traceid);
 	pm_runtime_disable(dev);
 	coresight_unregister(drvdata->csdev);
@@ -195,7 +208,7 @@ static const struct of_device_id dummy_match[] = {
 
 static struct platform_driver dummy_driver = {
 	.probe	= dummy_probe,
-	.remove_new = dummy_remove,
+	.remove = dummy_remove,
 	.driver	= {
 		.name   = "coresight-dummy",
 		.of_match_table = dummy_match,

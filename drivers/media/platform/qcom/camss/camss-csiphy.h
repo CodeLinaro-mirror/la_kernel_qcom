@@ -26,6 +26,12 @@ struct csiphy_lane {
 	u8 pol;
 };
 
+/**
+ * struct csiphy_lanes_cfg - CSIPHY lanes configuration
+ * @num_data: number of data lanes
+ * @data:     data lanes configuration
+ * @clk:      clock lane configuration (only for D-PHY)
+ */
 struct csiphy_lanes_cfg {
 	int num_data;
 	struct csiphy_lane *data;
@@ -98,6 +104,8 @@ struct csiphy_device {
 	bool *rate_set;
 	int nclocks;
 	u32 timer_clk_rate;
+	struct regulator_bulk_data *supplies;
+	int num_supplies;
 	struct csiphy_config cfg;
 	struct v4l2_mbus_framefmt fmt[MSM_CSIPHY_PADS_NUM];
 	const struct csiphy_subdev_resources *res;

@@ -286,7 +286,7 @@
 
 &ethernet0 {
 	phy-mode = "2500base-x";
-	phy-handle = <&sgmii_phy0>;
+	phy-handle = <&phy0>;
 
 	pinctrl-0 = <&ethernet0_default>;
 	pinctrl-names = "default";
@@ -302,7 +302,7 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		sgmii_phy0: phy@8 {
+		phy0: phy@8 {
 			compatible = "ethernet-phy-id31c3.1c33";
 			reg = <0x8>;
 			device_type = "ethernet-phy";

@@ -43,14 +43,6 @@
 #define IS_VALID_CS_TRACE_ID(id)	\
 	((id > CORESIGHT_TRACE_ID_RES_0) && (id < CORESIGHT_TRACE_ID_RES_TOP))
 
-enum trace_id_flags {
-	TRACE_ID_ANY = 0x0,
-	TRACE_ID_WANT_ODD = 0x1,
-	TRACE_ID_WANT_PREFERRED = 0x2,
-};
-
-/* Allocate and release IDs for a single default trace ID map */
-
 /**
  * Read and optionally allocate a CoreSight trace ID and associate with a CPU.
  *
@@ -120,12 +112,18 @@ int coresight_trace_id_read_cpu_id_map(int cpu, struct coresight_trace_id_map *i
  *
  * Used to allocate IDs for system trace sources such as STM.
  *
- * @id: Preferred id value. If id is TRACE_ID_ANY, get a free id from id map.
- * If id is greater than TRACE_ID_ANY, get a preferred id.
+ * return: Trace ID or -EINVAL if allocation is impossible.
+ */
+int coresight_trace_id_get_system_id(void);
+
+/**
+ * Allocate a CoreSight static trace ID for a system component.
+ *
+ * Used to allocate static IDs for system trace sources such as dummy source.
  *
  * return: Trace ID or -EINVAL if allocation is impossible.
  */
-int coresight_trace_id_get_system_id(int id);
+int coresight_trace_id_get_static_system_id(int id);
 
 /**
  * Release an allocated system trace ID.
