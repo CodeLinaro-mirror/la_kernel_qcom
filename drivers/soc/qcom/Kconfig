@@ -311,6 +311,14 @@ config QCOM_SMEM
 	  The driver provides an interface to items in a heap shared among all
 	  processors in a Qualcomm platform.
 
+config QCOM_DBL
+	tristate "Qualcomm Doorbell driver (QCOM_DBL)"
+	help
+	  Say y here to enable support for the Qualcomm Doorbell driver.
+	  This driver allows clients to vote/unvote on a shared doorbell
+	  register to keep remote subsystem out of low power mode and
+          supports both synchronous and asynchronous voting.
+
 config QCOM_MEMORY_DUMP_V2
 	tristate "QCOM Memory Dump V2 Support"
 	help
