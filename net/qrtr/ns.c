@@ -3,7 +3,7 @@
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
  * Copyright (c) 2020, Linaro Ltd.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "qrtr: %s(): " fmt, __func__
@@ -21,7 +21,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/qrtr.h>
 
-#define NS_LOG_PAGE_CNT 4
+#define NS_LOG_PAGE_CNT 32
 static void *ns_ilc;
 #define NS_INFO(x, ...) ipc_log_string(ns_ilc, x, ##__VA_ARGS__)
 

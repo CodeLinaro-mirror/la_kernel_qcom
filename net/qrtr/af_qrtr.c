@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -23,7 +23,7 @@
 
 #include "qrtr.h"
 
-#define QRTR_LOG_PAGE_CNT 4
+#define QRTR_LOG_PAGE_CNT 64
 #define QRTR_INFO(ctx, x, ...)				\
 	ipc_log_string(ctx, x, ##__VA_ARGS__)
 
@@ -148,6 +148,11 @@ static unsigned int qrtr_wakeup_ms = CONFIG_QRTR_WAKEUP_MS;
 
 /* For local IPC logging context*/
 static void *qrtr_local_ilc;
+static void *qrtr_debug;
+
+#define MAX_QRTR_NODES 5
+struct qrtr_node *qrtr_node_ptrs[MAX_QRTR_NODES];
+int qrtr_node_count;
 
 /* for node ids */
 static RADIX_TREE(qrtr_nodes, GFP_ATOMIC);
@@ -646,6 +651,7 @@ static void qrtr_tx_resume(struct qrtr_node *node, struct sk_buff *skb)
 	unsigned long flags;
 	unsigned long key;
 
+	QRTR_INFO(qrtr_debug, "%s enter", __func__);
 	skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 	if (le32_to_cpu(pkt.cmd) != QRTR_TYPE_RESUME_TX)
 		return;
@@ -663,8 +669,10 @@ static void qrtr_tx_resume(struct qrtr_node *node, struct sk_buff *skb)
 
 	spin_lock_irqsave(&flow->lock, flags);
 	flow->pending = 0;
+	QRTR_INFO(qrtr_debug, "RX resume tx for: [0x%x:0x%x] %p\n", src.sq_node,
+		  src.sq_port, &flow->resume_tx);
 	wake_up_interruptible_all(&flow->resume_tx);
-
+	QRTR_INFO(qrtr_debug, "After wake_up : %p\n", &flow->resume_tx);
 	list_for_each_entry_safe(waiter, temp, &flow->waiters, node) {
 		list_del(&waiter->node);
 
@@ -680,6 +688,7 @@ static void qrtr_tx_resume(struct qrtr_node *node, struct sk_buff *skb)
 	spin_unlock_irqrestore(&flow->lock, flags);
 
 	consume_skb(skb);
+	QRTR_INFO(qrtr_debug, "%s exit", __func__);
 }
 
 /**
@@ -735,12 +744,14 @@ static int qrtr_tx_wait(struct qrtr_node *node, struct sockaddr_qrtr *to,
 		return 1;
 
 	spin_lock_irq(&flow->lock);
+	QRTR_INFO(qrtr_debug, "Bef wait_event_int: %p\n", &flow->resume_tx);
 	ret = wait_event_interruptible_lock_irq_timeout(flow->resume_tx,
 							flow->pending < QRTR_TX_FLOW_HIGH ||
 							flow->tx_failed ||
 							!node->ep,
 							flow->lock,
 							timeo);
+	QRTR_INFO(qrtr_debug, "Aft wait_event_int: %p\n", &flow->resume_tx);
 	if (ret < 0) {
 		confirm_rx = ret;
 	} else if (!node->ep) {
@@ -1325,6 +1336,7 @@ static void qrtr_fwd_ctrl_pkt(struct qrtr_node *src, struct sk_buff *skb)
 	struct qrtr_node *node;
 	struct qrtr_cb *cb = (struct qrtr_cb *)skb->cb;
 
+	QRTR_INFO(qrtr_debug, "Debug: %s enter\n", __func__);
 	down_read(&qrtr_epts_lock);
 	list_for_each_entry(node, &qrtr_all_epts, item) {
 		struct sockaddr_qrtr from;
@@ -1349,6 +1361,7 @@ static void qrtr_fwd_ctrl_pkt(struct qrtr_node *src, struct sk_buff *skb)
 		qrtr_node_enqueue(node, skbn, cb->type, &from, &to, 0);
 	}
 	up_read(&qrtr_epts_lock);
+	QRTR_INFO(qrtr_debug, "Debug: %s exit\n", __func__);
 }
 
 static void qrtr_fwd_pkt(struct sk_buff *skb, struct qrtr_cb *cb)
@@ -1357,6 +1370,7 @@ static void qrtr_fwd_pkt(struct sk_buff *skb, struct qrtr_cb *cb)
 	struct sockaddr_qrtr to = {AF_QIPCRTR, cb->dst_node, cb->dst_port};
 	struct qrtr_node *node;
 
+	QRTR_INFO(qrtr_debug, "Debug: %s to:[0x%x:0x%x]\n", __func__, cb->dst_node, cb->dst_port);
 	node = qrtr_node_lookup(cb->dst_node);
 	if (!node) {
 		kfree_skb(skb);
@@ -1365,6 +1379,7 @@ static void qrtr_fwd_pkt(struct sk_buff *skb, struct qrtr_cb *cb)
 
 	qrtr_node_enqueue(node, skb, cb->type, &from, &to, 0);
 	qrtr_node_release(node);
+	QRTR_INFO(qrtr_debug, "Debug: %s exit\n", __func__);
 }
 
 static int qrtr_sock_queue_ctrl_skb(struct qrtr_sock *ipc, struct sk_buff *skb)
@@ -1379,6 +1394,7 @@ static int qrtr_sock_queue_ctrl_skb(struct qrtr_sock *ipc, struct sk_buff *skb)
 			reinit_completion(&ipc->rx_queue_has_space);
 			ipc->signal_on_recv = true;
 			spin_unlock_irqrestore(&ipc->signal_lock, flags);
+			QRTR_INFO(qrtr_debug, "Debug: %s rc: %d\n", __func__, rc);
 			wait_for_completion(&ipc->rx_queue_has_space);
 		} else {
 			return rc;
@@ -1426,6 +1442,7 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 		node->ilc = ipc_log_context_create(QRTR_LOG_PAGE_CNT, name, 0);
 	}
 
+	QRTR_INFO(qrtr_debug, "%s enter nid:%d\n", __func__, node->nid);
 	while ((skb = skb_dequeue(&node->rx_queue)) != NULL) {
 		struct qrtr_cb *cb = (struct qrtr_cb *)skb->cb;
 		struct qrtr_sock *ipc;
@@ -1452,6 +1469,7 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 			}
 		}
 	}
+	QRTR_INFO(qrtr_debug, "%s exit nid:%d\n", __func__, node->nid);
 }
 
 static void qrtr_hello_work(struct kthread_work *work)
@@ -1548,6 +1566,9 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 	ep->node = node;
 
 	node->ws = wakeup_source_register(NULL, "qrtr_ws");
+
+	if (qrtr_node_count < MAX_QRTR_NODES)
+		qrtr_node_ptrs[qrtr_node_count++] = node;
 
 	kthread_queue_work(&node->kworker, &node->say_hello);
 	return 0;
@@ -1654,7 +1675,10 @@ void qrtr_endpoint_unregister(struct qrtr_endpoint *ep)
 		wake_up_interruptible_all(&flow->resume_tx);
 	}
 	mutex_unlock(&node->qrtr_tx_lock);
-
+	for (int i = 0; i < qrtr_node_count; ++i) {
+		if (qrtr_node_ptrs[i] == node)
+			qrtr_node_ptrs[i] = NULL;
+	}
 	qrtr_node_release(node);
 	ep->node = NULL;
 }
@@ -2259,6 +2283,7 @@ out:
 	if (ipc->us.sq_port == QRTR_PORT_CTRL) {
 		spin_lock_irqsave(&ipc->signal_lock, lock_flags);
 		if (ipc->signal_on_recv) {
+			QRTR_INFO(qrtr_debug, "Debug: %s by ns\n", __func__);
 			complete_all(&ipc->rx_queue_has_space);
 			ipc->signal_on_recv = false;
 		}
@@ -2546,6 +2571,11 @@ static int __init qrtr_proto_init(void)
 
 	qrtr_local_ilc = ipc_log_context_create(QRTR_LOG_PAGE_CNT,
 						"qrtr_local", 0);
+
+	qrtr_debug = ipc_log_context_create(QRTR_LOG_PAGE_CNT,
+					    "qrtr_debug", 0);
+	if (!qrtr_debug)
+		pr_err("Debug: ipc buff failure.\n");
 
 	rc = proto_register(&qrtr_proto, 1);
 	if (rc)
