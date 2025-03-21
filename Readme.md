@@ -1,7 +1,7 @@
 # Toshiba Electronic Devices & Storage Corporation TC956X PCIe Ethernet Host Driver
-Release Date: 11 Dec 2024
+Release Date: 31 May 2024
 
-Release Version: V_04-00-03
+Release Version: V_05-00
 
 TC956X PCIe EMAC driver is based on "Fedora 30, kernel-5.4.19", "Fedora 36, kernel-6.1.18" and "Fedora 39, kernel-6.6.1"
 
@@ -70,8 +70,8 @@ TC956X PCIe EMAC driver is based on "Fedora 30, kernel-5.4.19", "Fedora 36, kern
        argument info:
 	     mac0_interface: For PORT0 interface mode setting
 	     mac1_interface: For PORT1 interface mode setting
-	     x = [0: USXGMII, 1: XFI (default), 2: RGMII (unsupported), 3: SGMII, 4: 2500Base-X]
-	     y = [0: USXGMII, 1: XFI, 2: RGMII, 3: SGMII(default), 4: 2500Base-X]
+	     x = [0: USXGMII, 1: XFI (default), 2: RGMII (unsupported), 3: SGMII, 4: 2500Base-X, 5: USXGMII_10G, 6: USXGMII_5G, 7.USXGMII_2.5G]
+	     y = [0: USXGMII, 1: XFI, 2: RGMII, 3: SGMII(default), 4: 2500Base-X, 5: USXGMII_10G, 6: USXGMII_5G, 7.USXGMII_2.5G]
   
     If invalid and unsupported modes are passed as kernel module parameter, the default interface mode will be selected.
 
@@ -613,16 +613,12 @@ TC956X PCIe EMAC driver is based on "Fedora 30, kernel-5.4.19", "Fedora 36, kern
 3. Added support for 5G and 2.5G EEE activation (applicable for Kernel 6.3 onwards)
 4. TC956x switch to switch connection support (upto 2 level) over DSP ports
 
-## TC956X_Linux_Host_Driver_20240620_V_04-00-01
-1. PHY_INTERFACE_MODE_2500BASEX added to "supported" interface when SGMII interface is used.
-2. Coding guideline changes.
+## TC956X_Linux_Host_Driver_20240531_V_05-00
+1. Max outstanding request errata fix added
+2. Lower speed (1G, 100M, 10M) supported for USXGMII interface
+3. New module parameters USXGMII_10G, USXGMII_5G, USXGMII_2.5G supported for different MAC speed configurations.
+4. MMC Control register initialised during link change, when link_down_macrst is enabled.
+5. For 5.4 kernel maximum size for parsing config file is updated.
+6. Added support for FPE TC command.
+7. Error handling added for oversize gptp packets
 
-## TC956X_Linux_Host_Driver_20241206_V_04-00-02
-1. Driver compilation warnings fixed for CCflags "Wmissing-prototypes" which is added in driver Makefile
-2. Driver modification to support PHY_INTERFACE_MODE_10GBASER interface type
-3. Driver modification to use global array for 'WOL' device name during 'IRQ' registration
-4. Replaced 'sprintf' with 'snprintf', due to restriction in some environment.
-
-## TC956X_Linux_Host_Driver_20241211_V_04-00-03
-1. Modification to support port interface setting overlay from dts.
-2. Driver modification to disable phydev private flag access.

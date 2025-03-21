@@ -51,6 +51,8 @@
  *  VERSION     : 04-00
  *  29 Mar 2024 : 1. Support for without MDIO and without PHY case
  *  VERSION     : 04-00
+ *  31 May 2024 : 1. Added Max outstanding request Errata fix
+ *  VERSION     : 05-00
  */
 
 #include <linux/iopoll.h>
@@ -114,10 +116,12 @@ static void dwxgmac2_dma_init_rx_chan(struct tc956xmac_priv *priv,
 	value |= (rxpbl << XGMAC_RxPBL_SHIFT) & XGMAC_RxPBL;
 	writel(value, ioaddr + XGMAC_DMA_CH_RX_CONTROL(chan));
 
-	/* Due to the erratum in XGMAC 3.01a,  DSPW=0, OWRQ=3 needs to be set */
 	value = readl(ioaddr + XGMAC_DMA_CH_RX_CONTROL2(chan));
 	value &= ~XGMAC_OWRQ;
-	value |= (3 << XGMAC_OWRQ_SHIFT);
+	if (priv->plat->RevID == REV_ID1)
+		value |= (3 << XGMAC_OWRQ_SHIFT); /* Due to the erratum in XGMAC 3.01a,  DSPW=0, OWRQ=3 needs to be set */
+	else if (priv->plat->RevID == REV_ID2)
+		value |= (0 << XGMAC_OWRQ_SHIFT);
 	writel(value, ioaddr + XGMAC_DMA_CH_RX_CONTROL2(chan));
 
 	if (likely(dma_cfg->eame))

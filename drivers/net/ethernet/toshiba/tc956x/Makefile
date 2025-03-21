@@ -79,7 +79,6 @@ ifeq ($(TC956XMAC_SELFTESTS), 1)
 endif
 
 endif
-ccflags-y := -Wmissing-prototypes
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules

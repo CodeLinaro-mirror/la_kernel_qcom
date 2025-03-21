@@ -64,10 +64,8 @@
  *  13 Feb 2024 : 1. Merged CPE and Automotive package
  *                2. Updated with Register Configuration Check.
  *  VERSION     : 04-00
- *  06 Dec 2024 : 1. Modification to support PHY_INTERFACE_MODE_10GBASER interface type
- *  VERSION     : 04-00-02
- *  11 Dec 2024 : 1. Modification to support port interface setting overlay from dts.
- *  VERSION     : 04-00-03
+ *  31 May 2024 : 1. Modified for TC FPE support
+ *  VERSION     : 05-00
  */
 
 #include <linux/bitrev.h>
@@ -145,17 +143,12 @@ static void dwxgmac2_core_init(struct tc956xmac_priv *priv,
 		}
 	}
 #ifndef TC956X
-	if ((priv->plat->interface == PHY_INTERFACE_MODE_RGMII) ||
-		(priv->plat->interface == PHY_INTERFACE_MODE_RGMII_ID))
+	if (priv->plat->interface == PHY_INTERFACE_MODE_RGMII)
 		tx |= hw->link.speed1000;
 	else if (priv->plat->interface == PHY_INTERFACE_MODE_SGMII)
 		tx |= hw->link.speed2500;
 	else if ((priv->plat->interface == PHY_INTERFACE_MODE_USXGMII) ||
-		(priv->plat->interface == PHY_INTERFACE_MODE_10GKR)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-			|| (priv->plat->interface == PHY_INTERFACE_MODE_10GBASER)
-#endif
-			)
+		(priv->plat->interface == PHY_INTERFACE_MODE_10GKR))
 		tx |= hw->link.xgmii.speed10000;
 #endif
 	writel(tx, ioaddr + XGMAC_TX_CONFIG);
@@ -3089,7 +3082,6 @@ static int dwxgmac3_est_configure(struct tc956xmac_priv *priv,
 	return 0;
 }
 
-#ifdef TC956X_UNSUPPORTED_UNTESTED_FEATURE
 static void dwxgmac3_fpe_configure(struct tc956xmac_priv *priv,
 				   void __iomem *ioaddr, u32 num_txq,
 				   u32 num_rxq, bool enable)
@@ -3110,11 +3102,24 @@ static void dwxgmac3_fpe_configure(struct tc956xmac_priv *priv,
 	value |= ((num_rxq - 1) << XGMAC_RQ_SHIFT) & XGMAC_RQ;
 	writel(value, ioaddr + XGMAC_RXQ_CTRL1);
 
+	value = readl(priv->ioaddr + XGMAC_MTL_FPE_CTRL_STS);
+	value &= ~(XGMAC_MTL_FPE_PEC_MASK | XGMAC_MTL_FPE_AFSZ_MASK);
+	value |= ((enable << XGMAC_MTL_FPE_PEC_SHIFT) & XGMAC_MTL_FPE_PEC_MASK) |
+			(XGMAC_AFSZ_64BYTES & XGMAC_MTL_FPE_AFSZ_MASK);
+	writel(value, priv->ioaddr + XGMAC_MTL_FPE_CTRL_STS);
+
+	value = readl(priv->ioaddr + XGMAC_MTL_FPE_ADVANCE);
+	value &= ~(XGMAC_MTL_FPE_HOLD_ADVANCE_MASK | XGMAC_MTL_FPE_RELEASE_ADVANCE_MASK);
+	value |= ((XGMAC_RADV << XGMAC_MTL_FPE_ADVANCE_SHIFT) & XGMAC_MTL_FPE_RELEASE_ADVANCE_MASK) |
+			(XGMAC_HADV & XGMAC_MTL_FPE_HOLD_ADVANCE_MASK);
+	writel(value, priv->ioaddr + XGMAC_MTL_FPE_ADVANCE);
+
 	value = readl(ioaddr + XGMAC_FPE_CTRL_STS);
 	value |= XGMAC_EFPE;
 	writel(value, ioaddr + XGMAC_FPE_CTRL_STS);
 }
 
+#ifdef TC956X_UNSUPPORTED_UNTESTED_FEATURE
 static void dwxgmac3_set_ptp_offload(struct tc956xmac_priv *priv,
 					void __iomem *ioaddr, bool en)
 {
