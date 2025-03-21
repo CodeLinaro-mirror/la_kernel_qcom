@@ -50,7 +50,7 @@ static void check_hibernation_swap(void *data, struct block_device *dev,
 	if (dev == hiber_bdev)
 		*hib_swap = true;
 	else
-		*hib_swap = false;
+		*hib_swap = true;
 }
 
 static void save_cpu_resume(void *data, u64 *addr, u64 phys_addr)

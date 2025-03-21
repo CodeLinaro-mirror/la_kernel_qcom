@@ -139,6 +139,7 @@ def define_neo_la():
         "drivers/soc/qcom/qcom_cpu_vendor_hooks.ko",
         "drivers/soc/qcom/qcom_cpuss_sleep_stats.ko",
         "drivers/soc/qcom/qcom_logbuf_vendor_hooks.ko",
+        "drivers/soc/qcom/qcom_hib.ko",
         "drivers/soc/qcom/qcom_ramdump.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/qcom_soc_wdt.ko",
