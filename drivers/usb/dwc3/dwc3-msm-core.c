@@ -6358,7 +6358,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	struct device	*dev = &pdev->dev;
 	struct dwc3_msm *mdwc;
 	struct resource *res;
-	int ret = 0, i;
+	int ret, i;
 	u32 val;
 
 	mdwc = devm_kzalloc(&pdev->dev, sizeof(*mdwc), GFP_KERNEL);
@@ -6568,7 +6568,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-	if (dwc3_msm_check_extcon_prop(pdev))
+	ret = dwc3_msm_check_extcon_prop(pdev);
+	if (ret < 0)
 		goto put_dwc3;
 
 
