@@ -24,6 +24,7 @@ load(":image_opts.bzl", "boot_image_opts")
 load(":msm_abl.bzl", "define_abl_dist")
 load(":msm_common.bzl", "define_top_level_config", "gen_config_without_source_lines", "get_out_dir")
 load(":msm_dtc.bzl", "define_dtc_dist")
+load(":msm_openssl.bzl", "define_openssl_dist")
 load(":target_variants.bzl", "le_variants")
 
 def define_make_le_dtb_img(target, dtb_list, page_size):
@@ -315,6 +316,8 @@ def define_msm_le(
     define_abl_dist(target, msm_target, variant)
 
     define_dtc_dist(target, msm_target, variant)
+
+    define_openssl_dist(target, msm_target, variant)
 
     if "allyes" in target:
         gen_allyes_files(le_target, target)

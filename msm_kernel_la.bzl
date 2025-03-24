@@ -1,3 +1,13 @@
+load(
+    "//build:msm_kernel_extensions.bzl",
+    "define_extras",
+    "get_build_config_fragments",
+    "get_dtb_list",
+    "get_dtbo_list",
+    "get_dtstree",
+    "get_gki_ramdisk_prebuilt_binary",
+    "get_vendor_ramdisk_binaries",
+)
 load("//build/bazel_common_rules/dist:dist.bzl", "copy_to_dist_dir")
 load(
     "//build/kernel/kleaf:kernel.bzl",
@@ -13,21 +23,12 @@ load(
     "super_image",
     "unsparsed_image",
 )
-load(
-    "//build:msm_kernel_extensions.bzl",
-    "define_extras",
-    "get_build_config_fragments",
-    "get_dtb_list",
-    "get_dtbo_list",
-    "get_dtstree",
-    "get_gki_ramdisk_prebuilt_binary",
-    "get_vendor_ramdisk_binaries",
-)
-load(":msm_common.bzl", "define_top_level_config", "gen_config_without_source_lines", "get_out_dir")
-load(":msm_dtc.bzl", "define_dtc_dist")
-load(":msm_abl.bzl", "define_abl_dist")
 load(":avb_boot_img.bzl", "avb_sign_boot_image")
 load(":image_opts.bzl", "boot_image_opts")
+load(":msm_abl.bzl", "define_abl_dist")
+load(":msm_common.bzl", "define_top_level_config", "gen_config_without_source_lines", "get_out_dir")
+load(":msm_dtc.bzl", "define_dtc_dist")
+load(":msm_openssl.bzl", "define_openssl_dist")
 load(":target_variants.bzl", "la_variants")
 
 def _define_build_config(
@@ -520,5 +521,7 @@ def define_msm_la(
     define_abl_dist(target, msm_target, variant)
 
     define_dtc_dist(target, msm_target, variant)
+
+    define_openssl_dist(target, msm_target, variant)
 
     define_extras(target)

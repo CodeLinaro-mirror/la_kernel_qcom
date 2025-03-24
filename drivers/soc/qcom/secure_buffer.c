@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2011 Google, Inc
  * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/highmem.h>
@@ -591,6 +591,28 @@ int hyp_assign_table(struct sg_table *table,
 				 dest_vmids, dest_perms, dest_nelems, true);
 }
 EXPORT_SYMBOL(hyp_assign_table);
+
+int hyp_assign_phys(phys_addr_t addr, u64 size, u32 *source_vm_list,
+			int source_nelems, int *dest_vmids,
+			int *dest_perms, int dest_nelems)
+{
+	struct sg_table table;
+	int ret;
+
+	if (!qcom_secure_buffer_dev)
+		return -EPROBE_DEFER;
+	ret = sg_alloc_table(&table, 1, GFP_KERNEL);
+	if (ret)
+		return ret;
+	sg_set_page(table.sgl, phys_to_page(addr), size, 0);
+
+	ret = hyp_assign_table(&table, source_vm_list, source_nelems,
+			       dest_vmids, dest_perms, dest_nelems);
+
+	sg_free_table(&table);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(hyp_assign_phys);
 
 const char *msm_secure_vmid_to_string(int secure_vmid)
 {

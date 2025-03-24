@@ -30,7 +30,15 @@ br_netif_receive_skb(struct net *net, struct sock *sk, struct sk_buff *skb)
 	return netif_receive_skb(skb);
 }
 
-static int br_pass_frame_up(struct sk_buff *skb, bool promisc)
+/* Hook for external Multicast handler */
+br_multicast_handle_hook_t __rcu *br_multicast_handle_hook __read_mostly;
+EXPORT_SYMBOL_GPL(br_multicast_handle_hook);
+
+/* Hook for external forwarding logic */
+br_get_dst_hook_t __rcu *br_get_dst_hook __read_mostly;
+EXPORT_SYMBOL_GPL(br_get_dst_hook);
+
+int br_pass_frame_up(struct sk_buff *skb, bool promisc)
 {
 	struct net_device *indev, *brdev = BR_INPUT_SKB_CB(skb)->brdev;
 	struct net_bridge *br = netdev_priv(brdev);
@@ -67,10 +75,11 @@ static int br_pass_frame_up(struct sk_buff *skb, bool promisc)
 
 	BR_INPUT_SKB_CB(skb)->promisc = promisc;
 
-	return NF_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_IN,
+	return BR_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_IN,
 		       dev_net(indev), NULL, skb, indev, NULL,
 		       br_netif_receive_skb);
 }
+EXPORT_SYMBOL_GPL(br_pass_frame_up);
 
 /* note: already called with rcu_read_lock */
 int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
@@ -85,6 +94,9 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	struct net_bridge_vlan *vlan;
 	struct net_bridge *br;
 	bool promisc;
+	br_multicast_handle_hook_t *multicast_handle_hook;
+	struct net_bridge_port *pdst = NULL;
+	br_get_dst_hook_t *get_dst_hook = rcu_dereference(br_get_dst_hook);
 	u16 vid = 0;
 	u8 state;
 
@@ -180,6 +192,10 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 	switch (pkt_type) {
 	case BR_PKT_MULTICAST:
+		multicast_handle_hook = rcu_dereference(br_multicast_handle_hook);
+		if (!__br_get(multicast_handle_hook, true, p, skb))
+			goto out;
+
 		mdst = br_mdb_get(brmctx, skb, vid);
 		if ((mdst || BR_INPUT_SKB_CB_MROUTERS_ONLY(skb)) &&
 		    br_multicast_querier_exists(brmctx, eth_hdr(skb), mdst)) {
@@ -195,7 +211,13 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		}
 		break;
 	case BR_PKT_UNICAST:
-		dst = br_fdb_find_rcu(br, eth_hdr(skb)->h_dest, vid);
+		pdst = __br_get(get_dst_hook, NULL, p, &skb);
+		if (pdst) {
+			if (!skb)
+				goto out;
+		} else {
+			dst = br_fdb_find_rcu(br, eth_hdr(skb)->h_dest, vid);
+		}
 		break;
 	default:
 		break;
@@ -211,12 +233,18 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 			dst->used = now;
 		br_forward(dst->dst, skb, local_rcv, false);
 	} else {
+		if (pdst) {
+			br_forward(pdst, skb, local_rcv, false);
+			goto out1;
+		}
+
 		if (!mcast_hit)
 			br_flood(br, skb, pkt_type, local_rcv, false, vid);
 		else
 			br_multicast_flood(mdst, skb, brmctx, local_rcv, false);
 	}
 
+out1:
 	if (local_rcv)
 		return br_pass_frame_up(skb, promisc);
 
@@ -244,7 +272,10 @@ static void __br_handle_local_finish(struct sk_buff *skb)
 /* note: already called with rcu_read_lock */
 static int br_handle_local_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	__br_handle_local_finish(skb);
+	struct net_bridge_port *p = br_port_get_rcu(skb->dev);
+
+	if (p->state != BR_STATE_DISABLED)
+		__br_handle_local_finish(skb);
 
 	/* return 1 to signal the okfn() was called so it's ok to use the skb */
 	return 1;
@@ -364,6 +395,8 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 		fwd_mask |= p->group_fwd_mask;
 		switch (dest[5]) {
 		case 0x00:	/* Bridge Group Address */
+			if (p->flags & BR_BPDU_FILTER)
+				goto drop;
 			/* If STP is turned off,
 			   then must forward to keep loop detection */
 			if (p->br->stp_enabled == BR_NO_STP ||
@@ -398,7 +431,7 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 		 *   - returns = 0 (stolen/nf_queue)
 		 * Thus return 1 from the okfn() to signal the skb is ok to pass
 		 */
-		if (NF_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_IN,
+		if (BR_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_IN,
 			    dev_net(skb->dev), NULL, skb, skb->dev, NULL,
 			    br_handle_local_finish) == 1) {
 			return RX_HANDLER_PASS;
@@ -415,6 +448,19 @@ forward:
 		goto defer_stp_filtering;
 
 	switch (p->state) {
+	case BR_STATE_DISABLED:
+		if (skb->protocol == htons(ETH_P_PAE)) {
+			if (ether_addr_equal(p->br->dev->dev_addr, dest))
+				skb->pkt_type = PACKET_HOST;
+
+			if (BR_HOOK(NFPROTO_BRIDGE, NF_BR_PRE_ROUTING,
+				    dev_net(skb->dev), NULL, skb, skb->dev, NULL,
+				    br_handle_local_finish) == 1) {
+				return RX_HANDLER_PASS;
+			}
+		}
+		goto drop;
+
 	case BR_STATE_FORWARDING:
 	case BR_STATE_LEARNING:
 defer_stp_filtering:

@@ -742,6 +742,28 @@ static struct ip_tunnel_info *skb_tunnel_info_txcheck(struct sk_buff *skb)
 	return tun_info;
 }
 
+bool gre6_tunnel_is_fallback_dev(struct net_device *dev)
+{
+	struct net *net;
+	struct net_device *fb_tunnel_dev = NULL;
+	struct ip6gre_net *itn = NULL;
+
+	net = dev_net(dev);
+	if (!net)
+		return false;
+
+	if (dev->rtnl_link_ops && !strcmp(dev->rtnl_link_ops->kind, "ip6gre"))
+		itn = net_generic(net, ip6gre_net_id);
+
+	if (!itn)
+		return false;
+
+	fb_tunnel_dev = itn->fb_tunnel_dev;
+
+	return (fb_tunnel_dev == dev);
+}
+EXPORT_SYMBOL_GPL(gre6_tunnel_is_fallback_dev);
+
 static netdev_tx_t __gre6_xmit(struct sk_buff *skb,
 			       struct net_device *dev, __u8 dsfield,
 			       struct flowi6 *fl6, int encap_limit,
@@ -1941,6 +1963,7 @@ static void ip6gre_tap_setup(struct net_device *dev)
 
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 	dev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
+	dev->priv_flags_ext |= IFF_EXT_GRE_V6_TAP;
 	netif_keep_dst(dev);
 }
 

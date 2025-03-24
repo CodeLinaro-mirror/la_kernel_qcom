@@ -25,10 +25,41 @@ MODULE_AUTHOR("Rusty Russell <rusty@rustcorp.com.au>");
 MODULE_DESCRIPTION("ftp NAT helper");
 MODULE_ALIAS_NF_NAT_HELPER(NAT_HELPER_NAME);
 
+static ushort psid;
+module_param(psid, ushort, 0644);
+MODULE_PARM_DESC(psid, "MAP_E devices's psid");
+
+static uint psid_len;
+module_param(psid_len, uint, 0644);
+MODULE_PARM_DESC(psid_len, "MAP_E devices's psid length");
+
+static uint offset;
+module_param(offset, uint, 0644);
+MODULE_PARM_DESC(offset, "MAP_E devices's psid offset");
+
 /* FIXME: Time out? --RR */
 
 static struct nf_conntrack_nat_helper nat_helper_ftp =
 	NF_CT_NAT_HELPER_INIT(NAT_HELPER_NAME);
+
+/**
+ * nf_nat_port_valid_check - check the port is in the range of psid
+ *   @skb the packets to be translated
+ *   @port the port to be checked.
+ **/
+static int nf_nat_port_valid_check(struct sk_buff *skb, u16 port)
+{
+	if (psid == 0 || psid_len == 0 || offset == 0)
+		return 1;
+
+	if ((psid_len + offset) > 16)
+		return 1;
+
+	if ((((port >> (16 - psid_len - offset)) & ((1 << psid_len) - 1))) == psid)
+		return 1;
+
+	return 0;
+}
 
 static int nf_nat_ftp_fmt_cmd(struct nf_conn *ct, enum nf_ct_ftp_type type,
 			      char *buffer, size_t buflen,
@@ -69,11 +100,13 @@ static unsigned int nf_nat_ftp(struct sk_buff *skb,
 			       struct nf_conntrack_expect *exp)
 {
 	union nf_inet_addr newaddr;
-	u_int16_t port;
+	u16 port;
 	int dir = CTINFO2DIR(ctinfo);
 	struct nf_conn *ct = exp->master;
 	char buffer[sizeof("|1||65535|") + INET6_ADDRSTRLEN];
 	unsigned int buflen;
+	static const unsigned int max_attempts = 128;
+	int range, attempts_left;
 
 	pr_debug("type %i, off %u len %u\n", type, matchoff, matchlen);
 
@@ -86,7 +119,35 @@ static unsigned int nf_nat_ftp(struct sk_buff *skb,
 	 * this one. */
 	exp->expectfn = nf_nat_follow_master;
 
-	port = nf_nat_exp_find_port(exp, ntohs(exp->saved_proto.tcp.port));
+	/* In the case of MAP-E, the FTP ALG source port number must use its own
+	 * PSID. Otherwise the returned packets from ftp server will use other
+	 * than its own IPv6 address.
+	 * so let the check hook to validate the port
+	 */
+
+	port = ntohs(exp->saved_proto.tcp.port);
+	range = USHRT_MAX - port;
+	attempts_left = range;
+
+	if (attempts_left > max_attempts)
+		attempts_left = max_attempts;
+
+	for (; port != 0; port++) {
+		int ret;
+
+		if (!nf_nat_port_valid_check(skb, port))
+			continue;
+
+		exp->tuple.dst.u.tcp.port = htons(port);
+		ret = nf_ct_expect_related(exp, 0);
+		if (ret == 0)
+			break;
+		else if (ret != -EBUSY || (--attempts_left < 0)) {
+			port = 0;
+			break;
+		}
+	}
+
 	if (port == 0) {
 		nf_ct_helper_log(skb, exp->master, "all ports in use");
 		return NF_DROP;

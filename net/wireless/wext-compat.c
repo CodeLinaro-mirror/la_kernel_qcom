@@ -937,8 +937,13 @@ static int cfg80211_wext_siwtxpower(struct net_device *dev,
 	if (data->txpower.flags & IW_TXPOW_RANGE)
 		return -EINVAL;
 
-	if (!rdev->ops->set_tx_power)
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+	    !rdev->ops->set_tx_power_link) {
 		return -EOPNOTSUPP;
+	} else {
+		if (!rdev->ops->set_tx_power)
+			return -EOPNOTSUPP;
+	}
 
 	/* only change when not disabling */
 	if (!data->txpower.disabled) {
@@ -973,7 +978,11 @@ static int cfg80211_wext_siwtxpower(struct net_device *dev,
 	}
 
 	wiphy_lock(&rdev->wiphy);
-	ret = rdev_set_tx_power(rdev, wdev, type, DBM_TO_MBM(dbm));
+
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+		ret = rdev_set_tx_power_mlo(rdev, wdev, type, DBM_TO_MBM(dbm), -1);
+	else
+		ret = rdev_set_tx_power(rdev, wdev, type, DBM_TO_MBM(dbm));
 	wiphy_unlock(&rdev->wiphy);
 
 	return ret;

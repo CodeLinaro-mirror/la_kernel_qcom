@@ -24,6 +24,7 @@ load(":image_opts.bzl", "boot_image_opts")
 load(":msm_abl.bzl", "define_abl_dist")
 load(":msm_common.bzl", "define_top_level_config", "gen_config_without_source_lines", "get_out_dir")
 load(":msm_dtc.bzl", "define_dtc_dist")
+load(":msm_openssl.bzl", "define_openssl_dist")
 load(":msm_prebuilt.bzl", "define_prebuilt_lib_copy")
 load(":target_variants.bzl", "le_32_variants")
 
@@ -137,7 +138,6 @@ def _define_kernel_build(
 
     out_list.extend([
         "scripts/sign-file",
-        "certs/signing_key.pem",
         "certs/signing_key.x509",
         "usr/gen_init_cpio",
     ])
@@ -151,6 +151,8 @@ def _define_kernel_build(
         dtstree = dtstree,
         kmi_symbol_list = None,
         additional_kmi_symbol_lists = None,
+        module_signing_key = ":signing_key",
+        system_trusted_key = ":verity_cert.pem",
         visibility = ["//visibility:public"],
     )
 
@@ -307,6 +309,8 @@ def define_msm_le_32(
     define_abl_dist(target, msm_target, variant)
 
     define_dtc_dist(target, msm_target, variant)
+
+    define_openssl_dist(target, msm_target, variant)
 
     define_prebuilt_lib_copy(target, msm_target, variant)
 

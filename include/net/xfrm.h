@@ -291,6 +291,21 @@ struct xfrm_state {
 	void			*data;
 };
 
+enum xfrm_event_type {
+	XFRM_EVENT_NONE = 0,
+	XFRM_EVENT_STATE_ADD,
+	XFRM_EVENT_STATE_DEL,
+	XFRM_EVENT_MAX
+};
+
+struct xfrm_event_notifier {
+	struct list_head list;
+	void (*state_notify)(struct xfrm_state *x, enum xfrm_event_type event);
+};
+
+int xfrm_event_register_notifier(struct net *net, struct xfrm_event_notifier *event);
+void xfrm_event_unregister_notifier(struct net *net, struct xfrm_event_notifier *event);
+
 static inline struct net *xs_net(struct xfrm_state *x)
 {
 	return read_pnet(&x->xs_net);
@@ -299,6 +314,7 @@ static inline struct net *xs_net(struct xfrm_state *x)
 /* xflags - make enum if more show up */
 #define XFRM_TIME_DEFER	1
 #define XFRM_SOFT_EXPIRE 2
+#define XFRM_STATE_OFFLOAD_NSS 4
 
 enum {
 	XFRM_STATE_VOID,
@@ -395,6 +411,8 @@ int xfrm_state_register_afinfo(struct xfrm_state_afinfo *afinfo);
 int xfrm_state_unregister_afinfo(struct xfrm_state_afinfo *afinfo);
 struct xfrm_state_afinfo *xfrm_state_get_afinfo(unsigned int family);
 struct xfrm_state_afinfo *xfrm_state_afinfo_get_rcu(unsigned int family);
+struct xfrm_state_afinfo *xfrm_state_update_afinfo(unsigned int family,
+						   struct xfrm_state_afinfo *new);
 
 struct xfrm_input_afinfo {
 	u8			family;
@@ -425,6 +443,8 @@ struct xfrm_type {
 	int			(*output)(struct xfrm_state *, struct sk_buff *pskb);
 	int			(*reject)(struct xfrm_state *, struct sk_buff *,
 					  const struct flowi *);
+	/* Estimate maximal size of result of transformation of a dgram */
+	u32			(*get_mtu)(struct xfrm_state *x, int size);
 };
 
 int xfrm_register_type(const struct xfrm_type *type, unsigned short family);
@@ -1605,6 +1625,7 @@ struct xfrm_state *xfrm_state_lookup_byaddr(struct net *net, u32 mark,
 					    const xfrm_address_t *saddr,
 					    u8 proto,
 					    unsigned short family);
+void xfrm_state_change_notify(struct xfrm_state *x, enum xfrm_event_type);
 #ifdef CONFIG_XFRM_SUB_POLICY
 void xfrm_tmpl_sort(struct xfrm_tmpl **dst, struct xfrm_tmpl **src, int n,
 		    unsigned short family);
@@ -1649,7 +1670,7 @@ void xfrm_sad_getinfo(struct net *net, struct xfrmk_sadinfo *si);
 void xfrm_spd_getinfo(struct net *net, struct xfrmk_spdinfo *si);
 u32 xfrm_replay_seqhi(struct xfrm_state *x, __be32 net_seq);
 int xfrm_init_replay(struct xfrm_state *x, struct netlink_ext_ack *extack);
-u32 xfrm_state_mtu(struct xfrm_state *x, int mtu);
+int xfrm_state_mtu(struct xfrm_state *x, int mtu);
 int __xfrm_init_state(struct xfrm_state *x, bool init_replay, bool offload,
 		      struct netlink_ext_ack *extack);
 int xfrm_init_state(struct xfrm_state *x);

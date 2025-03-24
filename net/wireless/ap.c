@@ -41,11 +41,19 @@ static int ___cfg80211_stop_ap(struct cfg80211_registered_device *rdev,
 
 	err = rdev_stop_ap(rdev, dev, link_id, &params);
 	if (!err) {
-		wdev->conn_owner_nlportid = 0;
 		wdev->links[link_id].ap.beacon_interval = 0;
 		memset(&wdev->links[link_id].ap.chandef, 0,
 		       sizeof(wdev->links[link_id].ap.chandef));
-		wdev->u.ap.ssid_len = 0;
+
+		if (!params.reconfig) {
+			/* Clear this only when the stop is NOT received for
+			 * MLO Reconfig link removal as other link(s) will
+			 * still be active.
+			 */
+			wdev->conn_owner_nlportid = 0;
+			wdev->u.ap.ssid_len = 0;
+		}
+
 		rdev_set_qos_map(rdev, dev, NULL);
 		if (notify)
 			nl80211_send_ap_stopped(wdev, link_id);

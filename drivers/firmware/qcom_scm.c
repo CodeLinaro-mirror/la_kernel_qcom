@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2010,2015,2019 The Linux Foundation. All rights reserved.
  * Copyright (C) 2015 Linaro Ltd.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt)     "qcom-scm: %s: " fmt, __func__
 
@@ -33,6 +33,16 @@
 
 #include "qcom_scm.h"
 #include "qtee_shmbridge_internal.h"
+
+#if IS_ENABLED(CONFIG_QCOM_SCM_ALLOC_FROM_SHM_BRIDGE)
+#include <linux/qtee_shmbridge.h>
+static int qcom_scm_assign_mem_regions_from_shm_bridge(
+				struct qcom_scm_mem_map_info *mem_regions,
+				size_t mem_regions_sz, u32 *srcvms,
+				size_t src_sz,
+				struct qcom_scm_current_perm_info *newvms,
+				size_t newvms_sz);
+#endif
 
 static bool download_mode = IS_ENABLED(CONFIG_QCOM_SCM_DOWNLOAD_MODE_DEFAULT);
 module_param(download_mode, bool, 0);
@@ -1450,6 +1460,74 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 }
 EXPORT_SYMBOL_GPL(qcom_scm_assign_mem);
 
+#if IS_ENABLED(CONFIG_QCOM_SCM_ALLOC_FROM_SHM_BRIDGE)
+static int qcom_scm_assign_mem_regions_from_shm_bridge(
+				struct qcom_scm_mem_map_info *mem_regions,
+				size_t mem_regions_sz, u32 *srcvms,
+				size_t src_sz,
+				struct qcom_scm_current_perm_info *newvms,
+				size_t newvms_sz)
+{
+	int ret;
+	size_t alloc_len = 0;
+	struct qtee_shm shm_mem_regions = {0};
+	struct qtee_shm shm_srcvms = {0};
+	struct qtee_shm shm_newvms = {0};
+	bool use_qtee_shmbridge = qtee_shmbridge_is_enabled();
+
+	if (use_qtee_shmbridge) {
+		/* allocate mem_regions from shmbridge */
+		alloc_len = mem_regions_sz;
+		ret = qtee_shmbridge_allocate_shm(alloc_len, &shm_mem_regions);
+		if (ret)
+			goto exit;
+		memcpy(shm_mem_regions.vaddr, mem_regions, mem_regions_sz);
+		qtee_shmbridge_flush_shm_buf(&shm_mem_regions);
+
+		/* allocate srcvms from shmbridge */
+		alloc_len = src_sz;
+		ret = qtee_shmbridge_allocate_shm(alloc_len, &shm_srcvms);
+		if (ret)
+			goto free_mem_regions;
+		memcpy(shm_srcvms.vaddr, srcvms, src_sz);
+		qtee_shmbridge_flush_shm_buf(&shm_srcvms);
+
+		/* allocate newvms from shmbridge */
+		alloc_len = newvms_sz;
+		ret = qtee_shmbridge_allocate_shm(alloc_len, &shm_newvms);
+		if (ret)
+			goto free_srcvms;
+		memcpy(shm_newvms.vaddr, newvms, newvms_sz);
+		qtee_shmbridge_flush_shm_buf(&shm_newvms);
+
+		ret = __qcom_scm_assign_mem(__scm ? __scm->dev : NULL,
+					shm_mem_regions.paddr, mem_regions_sz,
+					shm_srcvms.paddr, src_sz,
+					shm_newvms.paddr, newvms_sz);
+		goto free_newvms;
+	} else {
+		ret = __qcom_scm_assign_mem(__scm ? __scm->dev : NULL,
+				     virt_to_phys(mem_regions), mem_regions_sz,
+				     virt_to_phys(srcvms), src_sz,
+				     virt_to_phys(newvms), newvms_sz);
+		goto exit;
+	}
+
+free_newvms:
+	qtee_shmbridge_inv_shm_buf(&shm_newvms);
+	qtee_shmbridge_free_shm(&shm_newvms);
+free_srcvms:
+	qtee_shmbridge_inv_shm_buf(&shm_srcvms);
+	qtee_shmbridge_free_shm(&shm_srcvms);
+free_mem_regions:
+	qtee_shmbridge_inv_shm_buf(&shm_mem_regions);
+	qtee_shmbridge_free_shm(&shm_mem_regions);
+
+exit:
+	return ret;
+}
+#endif
+
 /**
  * qcom_scm_assign_mem_regions() - Make a secure call to reassign memory
  *				   ownership of several memory regions
@@ -1470,6 +1548,7 @@ EXPORT_SYMBOL_GPL(qcom_scm_assign_mem);
  *
  * Return negative errno on failure, 0 on success.
  */
+#if !IS_ENABLED(CONFIG_QCOM_SCM_ALLOC_FROM_SHM_BRIDGE)
 int qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
 				size_t mem_regions_sz, u32 *srcvms,
 				size_t src_sz,
@@ -1477,10 +1556,21 @@ int qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
 				size_t newvms_sz)
 {
 	return __qcom_scm_assign_mem(__scm ? __scm->dev : NULL,
-				     virt_to_phys(mem_regions), mem_regions_sz,
-				     virt_to_phys(srcvms), src_sz,
-				     virt_to_phys(newvms), newvms_sz);
+					virt_to_phys(mem_regions), mem_regions_sz,
+					virt_to_phys(srcvms), src_sz,
+					virt_to_phys(newvms), newvms_sz);
 }
+#else
+int qcom_scm_assign_mem_regions(struct qcom_scm_mem_map_info *mem_regions,
+				size_t mem_regions_sz, u32 *srcvms,
+				size_t src_sz,
+				struct qcom_scm_current_perm_info *newvms,
+				size_t newvms_sz)
+{
+	return qcom_scm_assign_mem_regions_from_shm_bridge(mem_regions,
+					mem_regions_sz, srcvms, src_sz, newvms, newvms_sz);
+}
+#endif
 EXPORT_SYMBOL(qcom_scm_assign_mem_regions);
 
 /**

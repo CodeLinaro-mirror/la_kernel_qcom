@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2013, 2015-2017, 2019-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -751,8 +751,8 @@ static ssize_t hbeat_val0_store(struct device *dev,
 	spin_lock_irqsave(&drvdata->spin_lock, flags);
 
 	drvdata->hbeat_val0 = val;
-	val_lo = val & 0xFFFFFFFF;
-	val_hi = val >> 32;
+	val_lo = (u32)((u64)val & 0xFFFFFFFF);
+	val_hi = (u32)((u64)val >> 32);
 
 	CSR_UNLOCK(drvdata);
 	csr_writel(drvdata, val_lo, CSR_TS_HBEAT_VAL0_LO);
@@ -799,8 +799,8 @@ static ssize_t hbeat_val1_store(struct device *dev,
 	spin_lock_irqsave(&drvdata->spin_lock, flags);
 
 	drvdata->hbeat_val1 = val;
-	val_lo = val & 0xFFFFFFFF;
-	val_hi = val >> 32;
+	val_lo = (u32)((u64)val & 0xFFFFFFFF);
+	val_hi = (u32)((u64)val >> 32);
 
 	CSR_UNLOCK(drvdata);
 	csr_writel(drvdata, val_lo, CSR_TS_HBEAT_VAL1_LO);
@@ -847,8 +847,8 @@ static ssize_t hbeat_mask0_store(struct device *dev,
 	spin_lock_irqsave(&drvdata->spin_lock, flags);
 
 	drvdata->hbeat_mask0 = val;
-	val_lo = val & 0xFFFFFFFF;
-	val_hi = val >> 32;
+	val_lo = (u32)((u64)val & 0xFFFFFFFF);
+	val_hi = (u32)((u64)val >> 32);
 
 	CSR_UNLOCK(drvdata);
 	csr_writel(drvdata, val_lo, CSR_TS_HBEAT_MASK0_LO);
@@ -895,8 +895,8 @@ static ssize_t hbeat_mask1_store(struct device *dev,
 	spin_lock_irqsave(&drvdata->spin_lock, flags);
 
 	drvdata->hbeat_mask1 = val;
-	val_lo = val & 0xFFFFFFFF;
-	val_hi = val >> 32;
+	val_lo = (u32)((u64)val & 0xFFFFFFFF);
+	val_hi = (u32)((u64)val >> 32);
 
 	CSR_UNLOCK(drvdata);
 	csr_writel(drvdata, val_lo, CSR_TS_HBEAT_MASK1_LO);

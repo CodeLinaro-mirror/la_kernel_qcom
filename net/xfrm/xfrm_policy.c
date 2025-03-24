@@ -2679,7 +2679,9 @@ static struct dst_entry *xfrm_bundle_create(struct xfrm_policy *policy,
 			if (xfrm[i]->props.smark.v || xfrm[i]->props.smark.m)
 				mark = xfrm_smark_get(fl->flowi_mark, xfrm[i]);
 
-			if (xfrm[i]->xso.type != XFRM_DEV_OFFLOAD_PACKET)
+			if (xfrm[i]->xso.type != XFRM_DEV_OFFLOAD_PACKET ||
+			    (xfrm[i]->xso.type == XFRM_DEV_OFFLOAD_PACKET &&
+			     xfrm[i]->props.family != AF_INET))
 				family = xfrm[i]->props.family;
 
 			oif = fl->flowi_oif ? : fl->flowi_l3mdev;
@@ -4213,6 +4215,10 @@ static int __net_init xfrm_net_init(struct net *net)
 	spin_lock_init(&net->xfrm.xfrm_policy_lock);
 	seqcount_spinlock_init(&net->xfrm.xfrm_policy_hash_generation, &net->xfrm.xfrm_policy_lock);
 	mutex_init(&net->xfrm.xfrm_cfg_mutex);
+	spin_lock_init(&net->xfrm.xfrm_event_lock);
+
+	INIT_LIST_HEAD(&net->xfrm.event_notifier_list);
+
 	net->xfrm.policy_default[XFRM_POLICY_IN] = XFRM_USERPOLICY_ACCEPT;
 	net->xfrm.policy_default[XFRM_POLICY_FWD] = XFRM_USERPOLICY_ACCEPT;
 	net->xfrm.policy_default[XFRM_POLICY_OUT] = XFRM_USERPOLICY_ACCEPT;

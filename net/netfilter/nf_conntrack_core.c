@@ -45,6 +45,9 @@
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <net/netfilter/nf_conntrack_timestamp.h>
 #include <net/netfilter/nf_conntrack_timeout.h>
+#ifdef CONFIG_NF_CONNTRACK_DSCPREMARK_EXT
+#include <net/netfilter/nf_conntrack_dscpremark_ext.h>
+#endif
 #include <net/netfilter/nf_conntrack_labels.h>
 #include <net/netfilter/nf_conntrack_synproxy.h>
 #include <net/netfilter/nf_nat.h>
@@ -1788,6 +1791,9 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 	nf_ct_acct_ext_add(ct, GFP_ATOMIC);
 	nf_ct_tstamp_ext_add(ct, GFP_ATOMIC);
 	nf_ct_labels_ext_add(ct);
+#ifdef CONFIG_NF_CONNTRACK_DSCPREMARK_EXT
+	nf_ct_dscpremark_ext_add(ct, GFP_ATOMIC);
+#endif
 
 #ifdef CONFIG_NF_CONNTRACK_EVENTS
 	ecache = tmpl ? nf_ct_ecache_find(tmpl) : NULL;
@@ -2102,9 +2108,6 @@ void nf_conntrack_alter_reply(struct nf_conn *ct,
 			      const struct nf_conntrack_tuple *newreply)
 {
 	struct nf_conn_help *help = nfct_help(ct);
-
-	/* Should be unconfirmed, so not in hash table yet */
-	WARN_ON(nf_ct_is_confirmed(ct));
 
 	nf_ct_dump_tuple(newreply);
 
@@ -2902,6 +2905,9 @@ int nf_conntrack_init_net(struct net *net)
 	nf_conntrack_ecache_pernet_init(net);
 	nf_conntrack_proto_pernet_init(net);
 
+#ifdef CONFIG_NF_CONNTRACK_CHAIN_EVENTS
+	ATOMIC_INIT_NOTIFIER_HEAD(&net->ct.nf_conntrack_chain);
+#endif
 	return 0;
 
 err_expect:
