@@ -191,6 +191,7 @@ def define_qcs610():
         "net/vmw_vsock/vmw_vsock_virtio_transport.ko",
         "sound/soc/soc-topology-test.ko",
         "sound/soc/soc-utils-test.ko",
+	"drivers/soc/qcom/cx_ipeak.ko",
     ]
 
     _qcs610_debug_in_tree_modules = _qcs610_in_tree_modules + [
