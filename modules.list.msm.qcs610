@@ -60,3 +60,4 @@ icc-bcm-voter.ko
 icc-debug.ko
 qnoc-qos.ko
 qnoc-sm6150.ko
+cx_ipeak.ko
