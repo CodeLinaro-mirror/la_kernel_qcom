@@ -19,7 +19,6 @@ memory_dump_v2.ko
 qcom-scm.ko
 pinctrl-msm.ko
 pinctrl-sm6150.ko
-llcc-qcom.ko
 qcom_hwspinlock.ko
 nvmem_qfprom.ko
 qfprom-sys.ko
