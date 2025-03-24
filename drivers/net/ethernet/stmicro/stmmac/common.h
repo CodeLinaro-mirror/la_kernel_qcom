@@ -321,6 +321,7 @@ enum packets_types {
 	PACKET_DCBCPQ = 0x3, /* DCB Control Packets */
 	PACKET_UPQ = 0x4, /* Untagged Packets */
 	PACKET_MCBCQ = 0x5, /* Multicast & Broadcast Packets */
+	PACKET_MAX,
 };
 
 /* Rx IPC status */
