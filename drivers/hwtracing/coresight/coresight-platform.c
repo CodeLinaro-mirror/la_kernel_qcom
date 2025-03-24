@@ -855,15 +855,6 @@ int coresight_get_cpu(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(coresight_get_cpu);
 
-int coresight_get_source_traceid(struct device *dev, u32 *id)
-{
-	if (!is_of_node(dev->fwnode))
-		return -EINVAL;
-
-	return of_coresight_get_trace_id(dev, id);
-}
-EXPORT_SYMBOL_GPL(coresight_get_source_traceid);
-
 const char *coresight_get_device_name(struct device *dev)
 {
 	if (is_of_node(dev->fwnode))
@@ -872,6 +863,12 @@ const char *coresight_get_device_name(struct device *dev)
 		return NULL;
 }
 EXPORT_SYMBOL_GPL(coresight_get_device_name);
+
+int coresight_get_static_trace_id(struct device *dev, u32 *id)
+{
+	return fwnode_property_read_u32(dev_fwnode(dev), "arm,static-trace-id", id);
+}
+EXPORT_SYMBOL_GPL(coresight_get_static_trace_id);
 
 struct coresight_platform_data *
 coresight_get_platform_data(struct device *dev)

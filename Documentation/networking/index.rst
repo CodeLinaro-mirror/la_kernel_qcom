@@ -14,6 +14,7 @@ Contents:
    can
    can_ucan_protocol
    device_drivers/index
+   diagnostic/index
    dsa/index
    devlink/index
    caif/index
@@ -85,6 +86,7 @@ Contents:
    netdevices
    netfilter-sysctl
    netif-msg
+   netmem
    nexthop-group-resilient
    nf_conntrack-sysctl
    nf_flowtable

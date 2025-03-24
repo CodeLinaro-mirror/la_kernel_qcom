@@ -50,18 +50,11 @@ struct adreno_smmu_fault_info {
  *                 the GPU driver must call resume_translation()
  * @resume_translation: Resume translation after a fault
  *
- * *CAUTION* : PRR callbacks (set_prr_bit/set_prr_addr) are NULL terminated for
- *             targets without PRR support. Exercise caution and verify target
- *             capabilities before invoking these callbacks to prevent potential
- *             runtime errors or unexpected behavior.
- *
- * @set_prr_bit:   Extendible interface to be used by GPU to modify the
- *		   ACTLR register bits, currently used to configure
- *		   Partially-Resident-Region (PRR) bit for feature's
- *		   setup and reset sequence as requested.
- * @set_prr_addr:  Configure the PRR_CFG_*ADDR register with the
- *		   physical address of PRR page passed from
- *		   GPU driver.
+ * @set_prr_bit:   [optional] Configure the GPU's Partially Resident
+ *                 Region (PRR) bit in the ACTLR register.
+ * @set_prr_addr:  [optional] Configure the PRR_CFG_*ADDR register with
+ *                 the physical address of PRR page passed from GPU
+ *                 driver.
  *
  * The GPU driver (drm/msm) and adreno-smmu work together for controlling
  * the GPU's SMMU instance.  This is by necessity, as the GPU is directly

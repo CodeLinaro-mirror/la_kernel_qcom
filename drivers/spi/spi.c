@@ -410,19 +410,21 @@ static int spi_probe(struct device *dev)
 {
 	const struct spi_driver		*sdrv = to_spi_driver(dev->driver);
 	struct spi_device		*spi = to_spi_device(dev);
+	struct fwnode_handle		*fwnode = dev_fwnode(dev);
 	int ret;
 
 	ret = of_clk_set_defaults(dev->of_node, false);
 	if (ret)
 		return ret;
 
-	if (dev->of_node) {
+	if (is_of_node(fwnode))
 		spi->irq = of_irq_get(dev->of_node, 0);
-		if (spi->irq == -EPROBE_DEFER)
-			return -EPROBE_DEFER;
-		if (spi->irq < 0)
-			spi->irq = 0;
-	}
+	else if (is_acpi_device_node(fwnode) && spi->irq < 0)
+		spi->irq = acpi_dev_gpio_irq_get(to_acpi_device_node(fwnode), 0);
+	if (spi->irq == -EPROBE_DEFER)
+		return dev_err_probe(dev, spi->irq, "Failed to get irq\n");
+	if (spi->irq < 0)
+		spi->irq = 0;
 
 	ret = dev_pm_domain_attach(dev, true);
 	if (ret)
@@ -864,15 +866,18 @@ EXPORT_SYMBOL_GPL(spi_new_device);
  */
 void spi_unregister_device(struct spi_device *spi)
 {
+	struct fwnode_handle *fwnode;
+
 	if (!spi)
 		return;
 
-	if (spi->dev.of_node) {
-		of_node_clear_flag(spi->dev.of_node, OF_POPULATED);
-		of_node_put(spi->dev.of_node);
+	fwnode = dev_fwnode(&spi->dev);
+	if (is_of_node(fwnode)) {
+		of_node_clear_flag(to_of_node(fwnode), OF_POPULATED);
+		of_node_put(to_of_node(fwnode));
+	} else if (is_acpi_device_node(fwnode)) {
+		acpi_device_clear_enumerated(to_acpi_device_node(fwnode));
 	}
-	if (ACPI_COMPANION(&spi->dev))
-		acpi_device_clear_enumerated(ACPI_COMPANION(&spi->dev));
 	device_remove_software_node(&spi->dev);
 	device_del(&spi->dev);
 	spi_cleanup(spi);
@@ -984,9 +989,6 @@ static void spi_res_free(void *res)
 {
 	struct spi_res *sres = container_of(res, struct spi_res, data);
 
-	if (!res)
-		return;
-
 	WARN_ON(!list_empty(&sres->entry));
 	kfree(sres);
 }
@@ -1052,7 +1054,7 @@ static void spi_toggle_csgpiod(struct spi_device *spi, u8 idx, bool enable, bool
 	 * ambiguity. That's why we use enable, that takes SPI_CS_HIGH
 	 * into account.
 	 */
-	if (has_acpi_companion(&spi->dev))
+	if (is_acpi_device_node(dev_fwnode(&spi->dev)))
 		gpiod_set_value_cansleep(spi_get_csgpiod(spi, idx), !enable);
 	else
 		/* Polarity handled by GPIO library */
@@ -2053,7 +2055,7 @@ static int spi_init_queue(struct spi_controller *ctlr)
 	ctlr->busy = false;
 	ctlr->queue_empty = true;
 
-	ctlr->kworker = kthread_create_worker(0, dev_name(&ctlr->dev));
+	ctlr->kworker = kthread_run_worker(0, dev_name(&ctlr->dev));
 	if (IS_ERR(ctlr->kworker)) {
 		dev_err(&ctlr->dev, "failed to create message pump kworker\n");
 		return PTR_ERR(ctlr->kworker);
@@ -2454,7 +2456,7 @@ static int of_spi_parse_dt(struct spi_controller *ctlr, struct spi_device *spi,
 			nc, rc);
 		return rc;
 	}
-	if ((of_property_read_bool(nc, "parallel-memories")) &&
+	if ((of_property_present(nc, "parallel-memories")) &&
 	    (!(ctlr->flags & SPI_CONTROLLER_MULTI_CS))) {
 		dev_err(&ctlr->dev, "SPI controller doesn't support multi CS\n");
 		return -EINVAL;
@@ -2869,9 +2871,6 @@ static acpi_status acpi_register_spi_device(struct spi_controller *ctlr,
 	acpi_set_modalias(adev, acpi_device_hid(adev), spi->modalias,
 			  sizeof(spi->modalias));
 
-	if (spi->irq < 0)
-		spi->irq = acpi_dev_gpio_irq_get(adev, 0);
-
 	acpi_device_set_enumerated(adev);
 
 	adev->power.flags.ignore_parent = true;
@@ -2926,7 +2925,7 @@ static void spi_controller_release(struct device *dev)
 	kfree(ctlr);
 }
 
-static struct class spi_master_class = {
+static const struct class spi_master_class = {
 	.name		= "spi_master",
 	.dev_release	= spi_controller_release,
 	.dev_groups	= spi_master_groups,
@@ -3016,7 +3015,7 @@ static const struct attribute_group *spi_slave_groups[] = {
 	NULL,
 };
 
-static struct class spi_slave_class = {
+static const struct class spi_slave_class = {
 	.name		= "spi_slave",
 	.dev_release	= spi_controller_release,
 	.dev_groups	= spi_slave_groups,
@@ -3238,9 +3237,9 @@ static int spi_controller_id_alloc(struct spi_controller *ctlr, int start, int e
 }
 
 /**
- * spi_register_controller - register SPI master or slave controller
- * @ctlr: initialized master, originally from spi_alloc_master() or
- *	spi_alloc_slave()
+ * spi_register_controller - register SPI host or target controller
+ * @ctlr: initialized controller, originally from spi_alloc_host() or
+ *	spi_alloc_target()
  * Context: can sleep
  *
  * SPI controllers connect to their drivers using some non-SPI bus,
@@ -3390,11 +3389,11 @@ static void devm_spi_unregister(struct device *dev, void *res)
 }
 
 /**
- * devm_spi_register_controller - register managed SPI master or slave
+ * devm_spi_register_controller - register managed SPI host or target
  *	controller
  * @dev:    device managing SPI controller
- * @ctlr: initialized controller, originally from spi_alloc_master() or
- *	spi_alloc_slave()
+ * @ctlr: initialized controller, originally from spi_alloc_host() or
+ *	spi_alloc_target()
  * Context: can sleep
  *
  * Register a SPI device as with spi_register_controller() which will
@@ -3478,7 +3477,7 @@ void spi_unregister_controller(struct spi_controller *ctlr)
 
 	/*
 	 * Release the last reference on the controller if its driver
-	 * has not yet been converted to devm_spi_alloc_master/slave().
+	 * has not yet been converted to devm_spi_alloc_host/target().
 	 */
 	if (!ctlr->devm_allocated)
 		put_device(&ctlr->dev);
@@ -4837,7 +4836,7 @@ extern struct notifier_block spi_of_notifier;
 #if IS_ENABLED(CONFIG_ACPI)
 static int spi_acpi_controller_match(struct device *dev, const void *data)
 {
-	return ACPI_COMPANION(dev->parent) == data;
+	return device_match_acpi_dev(dev->parent, data);
 }
 
 struct spi_controller *acpi_spi_find_controller_by_adev(struct acpi_device *adev)

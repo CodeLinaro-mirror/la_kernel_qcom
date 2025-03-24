@@ -111,11 +111,11 @@
 	};
 };
 
-&CPU6 {
+&cpu6 {
 	enable-method = "none";
 };
 
-&CPU7 {
+&cpu7 {
 	enable-method = "none";
 };
 

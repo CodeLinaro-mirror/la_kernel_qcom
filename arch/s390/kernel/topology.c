@@ -26,6 +26,7 @@
 #include <linux/node.h>
 #include <asm/hiperdispatch.h>
 #include <asm/sysinfo.h>
+#include <asm/asm.h>
 
 #define PTF_HORIZONTAL	(0UL)
 #define PTF_VERTICAL	(1UL)
@@ -224,15 +225,15 @@ static void topology_update_polarization_simple(void)
 
 static int ptf(unsigned long fc)
 {
-	int rc;
+	int cc;
 
 	asm volatile(
-		"	.insn	rre,0xb9a20000,%1,%1\n"
-		"	ipm	%0\n"
-		"	srl	%0,28\n"
-		: "=d" (rc)
-		: "d" (fc)  : "cc");
-	return rc;
+		"	.insn	rre,0xb9a20000,%[fc],%[fc]\n"
+		CC_IPM(cc)
+		: CC_OUT(cc, cc)
+		: [fc] "d" (fc)
+		: CC_CLOBBER);
+	return CC_TRANSFORM(cc);
 }
 
 int topology_set_cpu_management(int fc)
@@ -370,7 +371,7 @@ static void set_topology_timer(void)
 	if (atomic_add_unless(&topology_poll, -1, 0))
 		mod_timer(&topology_timer, jiffies + msecs_to_jiffies(100));
 	else
-		mod_timer(&topology_timer, jiffies + msecs_to_jiffies(60 * MSEC_PER_SEC));
+		mod_timer(&topology_timer, jiffies + secs_to_jiffies(60));
 }
 
 void topology_expect_change(void)
@@ -412,7 +413,7 @@ static ssize_t dispatching_show(struct device *dev,
 	ssize_t count;
 
 	mutex_lock(&smp_cpu_state_mutex);
-	count = sprintf(buf, "%d\n", cpu_management);
+	count = sysfs_emit(buf, "%d\n", cpu_management);
 	mutex_unlock(&smp_cpu_state_mutex);
 	return count;
 }
@@ -443,19 +444,19 @@ static ssize_t cpu_polarization_show(struct device *dev,
 	mutex_lock(&smp_cpu_state_mutex);
 	switch (smp_cpu_get_polarization(cpu)) {
 	case POLARIZATION_HRZ:
-		count = sprintf(buf, "horizontal\n");
+		count = sysfs_emit(buf, "horizontal\n");
 		break;
 	case POLARIZATION_VL:
-		count = sprintf(buf, "vertical:low\n");
+		count = sysfs_emit(buf, "vertical:low\n");
 		break;
 	case POLARIZATION_VM:
-		count = sprintf(buf, "vertical:medium\n");
+		count = sysfs_emit(buf, "vertical:medium\n");
 		break;
 	case POLARIZATION_VH:
-		count = sprintf(buf, "vertical:high\n");
+		count = sysfs_emit(buf, "vertical:high\n");
 		break;
 	default:
-		count = sprintf(buf, "unknown\n");
+		count = sysfs_emit(buf, "unknown\n");
 		break;
 	}
 	mutex_unlock(&smp_cpu_state_mutex);
@@ -479,7 +480,7 @@ static ssize_t cpu_dedicated_show(struct device *dev,
 	ssize_t count;
 
 	mutex_lock(&smp_cpu_state_mutex);
-	count = sprintf(buf, "%d\n", topology_cpu_dedicated(cpu));
+	count = sysfs_emit(buf, "%d\n", topology_cpu_dedicated(cpu));
 	mutex_unlock(&smp_cpu_state_mutex);
 	return count;
 }
@@ -547,12 +548,19 @@ static void __init alloc_masks(struct sysinfo_15_1_x *info,
 		nr_masks *= info->mag[TOPOLOGY_NR_MAG - offset - 1 - i];
 	nr_masks = max(nr_masks, 1);
 	for (i = 0; i < nr_masks; i++) {
-		mask->next = memblock_alloc(sizeof(*mask->next), 8);
-		if (!mask->next)
-			panic("%s: Failed to allocate %zu bytes align=0x%x\n",
-			      __func__, sizeof(*mask->next), 8);
+		mask->next = memblock_alloc_or_panic(sizeof(*mask->next), 8);
 		mask = mask->next;
 	}
+}
+
+static int __init detect_polarization(union topology_entry *tle)
+{
+	struct topology_core *tl_core;
+
+	while (tle->nl)
+		tle = next_tle(tle);
+	tl_core = (struct topology_core *)tle;
+	return tl_core->pp != POLARIZATION_HRZ;
 }
 
 void __init topology_init_early(void)
@@ -568,12 +576,10 @@ void __init topology_init_early(void)
 	}
 	if (!MACHINE_HAS_TOPOLOGY)
 		goto out;
-	tl_info = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
-	if (!tl_info)
-		panic("%s: Failed to allocate %lu bytes align=0x%lx\n",
-		      __func__, PAGE_SIZE, PAGE_SIZE);
+	tl_info = memblock_alloc_or_panic(PAGE_SIZE, PAGE_SIZE);
 	info = tl_info;
 	store_topology(info);
+	cpu_management = detect_polarization(info->tle);
 	pr_info("The CPU configuration topology of the machine is: %d %d %d %d %d %d / %d\n",
 		info->mag[0], info->mag[1], info->mag[2], info->mag[3],
 		info->mag[4], info->mag[5], info->mnest);
@@ -661,7 +667,7 @@ static int polarization_ctl_handler(const struct ctl_table *ctl, int write,
 	return set_polarization(polarization);
 }
 
-static struct ctl_table topology_ctl_table[] = {
+static const struct ctl_table topology_ctl_table[] = {
 	{
 		.procname	= "topology",
 		.mode		= 0644,

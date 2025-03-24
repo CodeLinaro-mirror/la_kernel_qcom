@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/unaligned.h>
 #include <linux/bitfield.h>
+#include <linux/pci.h>
 
 #include "xhci.h"
 #include "xhci-trace.h"
@@ -770,8 +771,15 @@ static int xhci_exit_test_mode(struct xhci_hcd *xhci)
 enum usb_link_tunnel_mode xhci_port_is_tunneled(struct xhci_hcd *xhci,
 						struct xhci_port *port)
 {
+	struct usb_hcd *hcd;
 	void __iomem *base;
 	u32 offset;
+
+	/* Don't try and probe this capability for non-Intel hosts */
+	hcd = xhci_to_hcd(xhci);
+	if (!dev_is_pci(hcd->self.controller) ||
+	    to_pci_dev(hcd->self.controller)->vendor != PCI_VENDOR_ID_INTEL)
+		return USB_LINK_UNKNOWN;
 
 	base = &xhci->cap_regs->hc_capbase;
 	offset = xhci_find_next_ext_cap(base, 0, XHCI_EXT_CAPS_INTEL_SPR_SHADOW);
@@ -946,9 +954,9 @@ static int xhci_handle_usb2_port_link_resume(struct xhci_port *port,
 	}
 	/* did port event handler already start resume timing? */
 	if (!port->resume_timestamp) {
-		/* If not, maybe we are in a host initated resume? */
+		/* If not, maybe we are in a host initiated resume? */
 		if (test_bit(wIndex, &bus_state->resuming_ports)) {
-			/* Host initated resume doesn't time the resume
+			/* Host initiated resume doesn't time the resume
 			 * signalling using resume_done[].
 			 * It manually sets RESUME state, sleeps 20ms
 			 * and sets U0 state. This should probably be
@@ -1924,7 +1932,7 @@ int xhci_bus_resume(struct usb_hcd *hcd)
 				/* resume already initiated */
 				break;
 			default:
-				/* not in a resumeable state, ignore it */
+				/* not in a resumable state, ignore it */
 				clear_bit(port_index,
 					  &bus_state->bus_suspended);
 				break;

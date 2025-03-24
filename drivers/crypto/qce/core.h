@@ -6,13 +6,16 @@
 #ifndef _CORE_H_
 #define _CORE_H_
 
+#include <linux/mutex.h>
+#include <linux/workqueue.h>
+
 #include "dma.h"
 
 /**
  * struct qce_device - crypto engine device structure
  * @queue: crypto request queue
  * @lock: the lock protects queue and req
- * @done_tasklet: done tasklet object
+ * @done_work: workqueue context
  * @req: current active request
  * @result: result of current transform
  * @base: virtual IO base
@@ -28,8 +31,8 @@
  */
 struct qce_device {
 	struct crypto_queue queue;
-	spinlock_t lock;
-	struct tasklet_struct done_tasklet;
+	struct mutex lock;
+	struct work_struct done_work;
 	struct crypto_async_request *req;
 	int result;
 	void __iomem *base;
@@ -42,11 +45,6 @@ struct qce_device {
 	int (*async_req_enqueue)(struct qce_device *qce,
 				 struct crypto_async_request *req);
 	void (*async_req_done)(struct qce_device *qce, int ret);
-	u32 icc_bw;
-	dma_addr_t base_dma;
-	__le32 *reg_read_buf;
-	dma_addr_t reg_buf_phys;
-	bool qce_cmd_desc_enable;
 };
 
 /**
@@ -63,12 +61,4 @@ struct qce_algo_ops {
 	int (*async_req_handle)(struct crypto_async_request *async_req);
 };
 
-int qce_write_reg_dma(struct qce_device *qce, unsigned int offset, u32 val,
-		      int cnt);
-int qce_read_reg_dma(struct qce_device *qce, unsigned int offset, void *buff,
-		     int cnt);
-void qce_clear_bam_transaction(struct qce_device *qce);
-int qce_submit_cmd_desc(struct qce_device *qce, unsigned long flags);
-int qce_bam_acquire_lock(struct qce_device *qce);
-int qce_bam_release_lock(struct qce_device *qce);
 #endif /* _CORE_H_ */

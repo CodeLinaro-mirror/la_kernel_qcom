@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
- *
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Description: CoreSight System Trace Macrocell driver
@@ -35,7 +34,6 @@
 
 #include "coresight-priv.h"
 #include "coresight-trace-id.h"
-#include "coresight-common.h"
 
 #define STMDMASTARTR			0xc04
 #define STMDMASTOPR			0xc08
@@ -210,8 +208,6 @@ static int stm_enable(struct coresight_device *csdev, struct perf_event *event,
 		return -EBUSY;
 	}
 
-	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true);
-
 	pm_runtime_get_sync(csdev->dev.parent);
 
 	spin_lock(&drvdata->spinlock);
@@ -282,8 +278,6 @@ static void stm_disable(struct coresight_device *csdev,
 		pm_runtime_put(csdev->dev.parent);
 
 		coresight_set_mode(csdev, CS_MODE_DISABLED);
-		coresight_csr_set_etr_atid(csdev, drvdata->traceid, false);
-
 		dev_dbg(&csdev->dev, "STM tracing disabled\n");
 	}
 }
@@ -909,7 +903,7 @@ static int __stm_probe(struct device *dev, struct resource *res)
 		goto stm_unregister;
 	}
 
-	trace_id = coresight_trace_id_get_system_id(TRACE_ID_ANY);
+	trace_id = coresight_trace_id_get_system_id();
 	if (trace_id < 0) {
 		ret = trace_id;
 		goto cs_unregister;
@@ -1043,7 +1037,7 @@ MODULE_DEVICE_TABLE(acpi, stm_acpi_ids);
 
 static struct platform_driver stm_platform_driver = {
 	.probe	= stm_platform_probe,
-	.remove_new = stm_platform_remove,
+	.remove = stm_platform_remove,
 	.driver	= {
 		.name			= "coresight-stm-platform",
 		.acpi_match_table	= ACPI_PTR(stm_acpi_ids),

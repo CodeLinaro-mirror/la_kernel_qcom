@@ -181,6 +181,20 @@
 		};
 	};
 
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		pinctrl-0 = <&kypd_vol_up_n>;
+		pinctrl-names = "default";
+
+		key-volume-up {
+			label = "Volume Up";
+			gpios = <&pm7325_gpios 6 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEUP>;
+			linux,can-disable;
+		};
+	};
+
 	pmic-glink {
 		compatible = "qcom,qcm6490-pmic-glink", "qcom,pmic-glink";
 
@@ -821,47 +835,161 @@
 	status = "disabled";
 };
 
+&lpass_dmic01_clk {
+	drive-strength = <8>;
+	bias-disable;
+};
+
+&lpass_dmic01_data {
+	bias-pull-down;
+};
+
+&lpass_dmic23_clk {
+	drive-strength = <8>;
+	bias-disable;
+};
+
+&lpass_dmic23_data {
+	bias-pull-down;
+};
+
+&lpass_dmic45_clk {
+	drive-strength = <8>;
+	bias-disable;
+};
+
+&lpass_dmic45_data {
+	bias-pull-down;
+};
+
+&lpass_wsa_swr_clk {
+	drive-strength = <2>;
+	slew-rate = <1>;
+	bias-disable;
+};
+
+&lpass_wsa_swr_data {
+	drive-strength = <2>;
+	slew-rate = <1>;
+	bias-bus-hold;
+};
+
 &lpasscc {
 	status = "disabled";
 };
 
+&mdss {
+	status = "okay";
+};
+
+&mdss_dp_out {
+	data-lanes = <0 1>;
+	remote-endpoint = <&usb_dp_qmpphy_dp_in>;
+};
+
+&mdss_dsi {
+	vdda-supply = <&vreg_l6b_1p2>;
+	status = "okay";
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&lt9611_a>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss_dsi_phy {
+	vdds-supply = <&vreg_l10c_0p88>;
+	status = "okay";
+};
+
+&mdss_edp {
+	status = "okay";
+};
+
+&mdss_edp_out {
+	data-lanes = <0 1 2 3>;
+	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
+
+	remote-endpoint = <&dp_connector_in>;
+};
+
+&mdss_edp_phy {
+	status = "okay";
+};
+
+&pcie1 {
+	perst-gpios = <&tlmm 2 GPIO_ACTIVE_LOW>;
+
+	pinctrl-0 = <&pcie1_reset_n>, <&pcie1_wake_n>, <&pcie1_clkreq_n>;
+	pinctrl-names = "default";
+
+	iommu-map = <0x0 &apps_smmu 0x1c80 0x1>,
+		    <0x100 &apps_smmu 0x1c81 0x1>,
+		    <0x208 &apps_smmu 0x1c84 0x1>,
+		    <0x210 &apps_smmu 0x1c85 0x1>,
+		    <0x218 &apps_smmu 0x1c86 0x1>,
+		    <0x300 &apps_smmu 0x1c87 0x1>,
+		    <0x400 &apps_smmu 0x1c88 0x1>,
+		    <0x500 &apps_smmu 0x1c89 0x1>,
+		    <0x501 &apps_smmu 0x1c90 0x1>;
+
+	status = "okay";
+};
+
+&pcie1_phy {
+	vdda-phy-supply = <&vreg_l10c_0p88>;
+	vdda-pll-supply = <&vreg_l6b_1p2>;
+
+	status = "okay";
+};
+
 &pm7325_gpios {
-	key_vol_up_default: key-vol-up-state {
+	kypd_vol_up_n: kypd-vol-up-n-state {
 		pins = "gpio6";
-		function = "normal";
-		input-enable;
+		function = PMIC_GPIO_FUNC_NORMAL;
+		power-source = <1>;
 		bias-pull-up;
-		power-source = <0>;
-		qcom,drive-strength = <3>;
+		input-enable;
 	};
 };
 
-&pm7325_temp_alarm {
-	io-channels = <&pmk8350_vadc PM7325_ADC7_DIE_TEMP>;
-	io-channel-names = "thermal";
-};
-
 &pm8350c_pwm {
+	nvmem = <&pmk8350_sdam_21>,
+		<&pmk8350_sdam_22>;
+	nvmem-names = "lpg_chan_sdam",
+		      "lut_sdam";
+
 	#address-cells = <1>;
 	#size-cells = <0>;
+
 	status = "okay";
 
 	led@1 {
 		reg = <1>;
-		color = <LED_COLOR_ID_RED>;
-		label = "red";
+		color = <LED_COLOR_ID_GREEN>;
+		function = LED_FUNCTION_INDICATOR;
+		function-enumerator = <3>;
+		linux,default-trigger = "none";
+		default-state = "off";
+		panic-indicator;
 	};
 
 	led@2 {
 		reg = <2>;
 		color = <LED_COLOR_ID_GREEN>;
-		label = "green";
+		function = LED_FUNCTION_INDICATOR;
+		function-enumerator = <2>;
+		linux,default-trigger = "none";
+		default-state = "off";
 	};
 
 	led@3 {
 		reg = <3>;
-		color = <LED_COLOR_ID_BLUE>;
-		label = "blue";
+		color = <LED_COLOR_ID_GREEN>;
+		function = LED_FUNCTION_INDICATOR;
+		function-enumerator = <1>;
+		linux,default-trigger = "none";
+		default-state = "off";
 	};
 };
 
@@ -942,114 +1070,7 @@
 
 &pon_resin {
 	linux,code = <KEY_VOLUMEDOWN>;
-	status = "okay";
-};
 
-&lpass_dmic01_clk {
-	drive-strength = <8>;
-	bias-disable;
-};
-
-&lpass_dmic01_data {
-	bias-pull-down;
-};
-
-&lpass_dmic23_clk {
-	drive-strength = <8>;
-	bias-disable;
-};
-
-&lpass_dmic23_data {
-	bias-pull-down;
-};
-
-&lpass_dmic45_clk {
-	drive-strength = <8>;
-	bias-disable;
-};
-
-&lpass_dmic45_data {
-	bias-pull-down;
-};
-
-&lpass_wsa_swr_clk {
-	drive-strength = <2>;
-	slew-rate = <1>;
-	bias-disable;
-};
-
-&lpass_wsa_swr_data {
-	drive-strength = <2>;
-	slew-rate = <1>;
-	bias-bus-hold;
-};
-
-&pcie1 {
-	perst-gpios = <&tlmm 2 GPIO_ACTIVE_LOW>;
-
-	pinctrl-0 = <&pcie1_reset_n>, <&pcie1_wake_n>, <&pcie1_clkreq_n>;
-	pinctrl-names = "default";
-
-	iommu-map = <0x0 &apps_smmu 0x1c80 0x1>,
-		    <0x100 &apps_smmu 0x1c81 0x1>,
-		    <0x208 &apps_smmu 0x1c84 0x1>,
-		    <0x210 &apps_smmu 0x1c85 0x1>,
-		    <0x218 &apps_smmu 0x1c86 0x1>,
-		    <0x300 &apps_smmu 0x1c87 0x1>,
-		    <0x400 &apps_smmu 0x1c88 0x1>,
-		    <0x500 &apps_smmu 0x1c89 0x1>,
-		    <0x501 &apps_smmu 0x1c90 0x1>;
-
-	status = "okay";
-};
-
-&pcie1_phy {
-	vdda-phy-supply = <&vreg_l10c_0p88>;
-	vdda-pll-supply = <&vreg_l6b_1p2>;
-
-	status = "okay";
-};
-
-&mdss {
-	status = "okay";
-};
-
-&mdss_dp_out {
-	data-lanes = <0 1>;
-	remote-endpoint = <&usb_dp_qmpphy_dp_in>;
-};
-
-&mdss_dsi {
-	vdda-supply = <&vreg_l6b_1p2>;
-	status = "okay";
-};
-
-&mdss_dsi0_out {
-	remote-endpoint = <&lt9611_a>;
-	data-lanes = <0 1 2 3>;
-};
-
-&mdss_dsi_phy {
-	vdds-supply = <&vreg_l10c_0p88>;
-	status = "okay";
-};
-
-&mdss_edp {
-	status = "okay";
-};
-
-&mdss_edp_out {
-	data-lanes = <0 1 2 3>;
-	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
-
-	remote-endpoint = <&dp_connector_in>;
-};
-
-&mdss_edp_phy {
-	status = "okay";
-};
-
-&pmk8350_rtc {
 	status = "okay";
 };
 
@@ -1122,12 +1143,24 @@
 };
 
 &remoteproc_mpss {
-	firmware-name = "qcom/qcs6490/modem.mdt";
+	firmware-name = "qcom/qcs6490/modem.mbn";
 	status = "okay";
 };
 
 &remoteproc_wpss {
 	firmware-name = "qcom/qcs6490/wpss.mbn";
+	status = "okay";
+};
+
+&sdhc_2 {
+	pinctrl-0 = <&sdc2_clk>, <&sdc2_cmd>, <&sdc2_data>, <&sd_cd>;
+	pinctrl-1 = <&sdc2_clk_sleep>, <&sdc2_cmd_sleep>, <&sdc2_data_sleep>, <&sd_cd>;
+
+	vmmc-supply = <&vreg_l9c_2p96>;
+	vqmmc-supply = <&vreg_l6c_2p96>;
+
+	cd-gpios = <&tlmm 91 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
 };
 
@@ -1182,21 +1215,6 @@
 		function = "gpio";
 		output-low;
 		bias-disable;
-	};
-
-	pcie1_reset_n: pcie1-reset-n-state {
-		pins = "gpio2";
-		function = "gpio";
-		drive-strength = <16>;
-		output-low;
-		bias-disable;
-	};
-
-	pcie1_wake_n: pcie1-wake-n-state {
-		pins = "gpio3";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-up;
 	};
 
 	qup_uart7_sleep_cts: qup-uart7-sleep-cts-state {
@@ -1303,18 +1321,6 @@
 	status = "okay";
 };
 
-&sdhc_2 {
-	status = "okay";
-
-	pinctrl-0 = <&sdc2_clk>, <&sdc2_cmd>, <&sdc2_data>, <&sd_cd>;
-	pinctrl-1 = <&sdc2_clk_sleep>, <&sdc2_cmd_sleep>, <&sdc2_data_sleep>, <&sd_cd>;
-
-	vmmc-supply = <&vreg_l9c_2p96>;
-	vqmmc-supply = <&vreg_l6c_2p96>;
-
-	cd-gpios = <&tlmm 91 GPIO_ACTIVE_LOW>;
-};
-
 &usb_1 {
 	status = "okay";
 };
@@ -1380,6 +1386,10 @@
 	status = "okay";
 };
 
+&venus {
+	status = "okay";
+};
+
 &wifi {
 	memory-region = <&wlan_fw_mem>;
 	qcom,ath11k-calibration-variant = "Qualcomm_rb3gen2";
@@ -1405,12 +1415,42 @@
 	};
 };
 
+&sdc2_clk {
+	bias-disable;
+	drive-strength = <16>;
+};
+
+&sdc2_cmd {
+	bias-pull-up;
+	drive-strength = <10>;
+};
+
+&sdc2_data {
+	bias-pull-up;
+	drive-strength = <10>;
+};
+
 &tlmm {
 	lt9611_irq_pin: lt9611-irq-state {
 		pins = "gpio24";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-disable;
+	};
+
+	pcie1_reset_n: pcie1-reset-n-state {
+		pins = "gpio2";
+		function = "gpio";
+		drive-strength = <16>;
+		output-low;
+		bias-disable;
+	};
+
+	pcie1_wake_n: pcie1-wake-n-state {
+		pins = "gpio3";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
 	};
 
 	usb2_id_det_default: usb2_id_det_default {

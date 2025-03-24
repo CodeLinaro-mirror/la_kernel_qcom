@@ -608,12 +608,6 @@ bool clk_hw_is_prepared(const struct clk_hw *hw)
 }
 EXPORT_SYMBOL_GPL(clk_hw_is_prepared);
 
-bool clk_hw_rate_is_protected(const struct clk_hw *hw)
-{
-	return clk_core_rate_is_protected(hw->core);
-}
-EXPORT_SYMBOL_GPL(clk_hw_rate_is_protected);
-
 bool clk_hw_is_enabled(const struct clk_hw *hw)
 {
 	return clk_core_is_enabled(hw->core);
@@ -5391,8 +5385,10 @@ const char *of_clk_get_parent_name(const struct device_node *np, int index)
 		count++;
 	}
 	/* We went off the end of 'clock-indices' without finding it */
-	if (of_property_present(clkspec.np, "clock-indices") && !found)
+	if (of_property_present(clkspec.np, "clock-indices") && !found) {
+		of_node_put(clkspec.np);
 		return NULL;
+	}
 
 	if (of_property_read_string_index(clkspec.np, "clock-output-names",
 					  index,

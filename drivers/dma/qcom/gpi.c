@@ -1760,7 +1760,7 @@ static int gpi_create_spi_tre(struct gchan *chan, struct gpi_desc *desc,
 	struct gpi_tre *tre;
 	unsigned int i;
 	u8 *buf;
-	int len = 0;
+	int len;
 
 	/* first create config tre if applicable */
 	if (direction == DMA_MEM_TO_DEV && spi->set_config) {

@@ -39,6 +39,7 @@
 #include <linux/fsnotify.h>
 #include <linux/seq_file.h>
 #include <linux/rhashtable.h>
+#include <linux/nfslocalio.h>
 
 #include "vfs.h"
 #include "nfsd.h"
@@ -391,19 +392,19 @@ nfsd_file_put(struct nfsd_file *nf)
 }
 
 /**
- * nfsd_file_put_local - put the reference to nfsd_file and local nfsd_serv
- * @nf: nfsd_file of which to put the references
+ * nfsd_file_put_local - put nfsd_file reference and arm nfsd_net_put in caller
+ * @nf: nfsd_file of which to put the reference
  *
- * First put the reference of the nfsd_file and then put the
- * reference to the associated nn->nfsd_serv.
+ * First save the associated net to return to caller, then put
+ * the reference of the nfsd_file.
  */
-void
-nfsd_file_put_local(struct nfsd_file *nf) __must_hold(rcu)
+struct net *
+nfsd_file_put_local(struct nfsd_file *nf)
 {
 	struct net *net = nf->nf_net;
 
 	nfsd_file_put(nf);
-	nfsd_serv_put(net);
+	return net;
 }
 
 /**
@@ -445,11 +446,20 @@ nfsd_file_dispose_list_delayed(struct list_head *dispose)
 						struct nfsd_file, nf_gc);
 		struct nfsd_net *nn = net_generic(nf->nf_net, nfsd_net_id);
 		struct nfsd_fcache_disposal *l = nn->fcache_disposal;
+		struct svc_serv *serv;
 
 		spin_lock(&l->lock);
 		list_move_tail(&nf->nf_gc, &l->freeme);
 		spin_unlock(&l->lock);
-		svc_wake_up(nn->nfsd_serv);
+
+		/*
+		 * The filecache laundrette is shut down after the
+		 * nn->nfsd_serv pointer is cleared, but before the
+		 * svc_serv is freed.
+		 */
+		serv = nn->nfsd_serv;
+		if (serv)
+			svc_wake_up(serv);
 	}
 }
 
@@ -487,7 +497,6 @@ void nfsd_file_net_dispose(struct nfsd_net *nn)
  * nfsd_file_lru_cb - Examine an entry on the LRU list
  * @item: LRU entry to examine
  * @lru: controlling LRU
- * @lock: LRU list lock (unused)
  * @arg: dispose list
  *
  * Return values:
@@ -497,9 +506,7 @@ void nfsd_file_net_dispose(struct nfsd_net *nn)
  */
 static enum lru_status
 nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
-		 spinlock_t *lock, void *arg)
-	__releases(lock)
-	__acquires(lock)
+		 void *arg)
 {
 	struct list_head *head = arg;
 	struct nfsd_file *nf = list_entry(item, struct nfsd_file, nf_lru);
@@ -836,6 +843,14 @@ __nfsd_file_cache_purge(struct net *net)
 	struct nfsd_file *nf;
 	LIST_HEAD(dispose);
 
+#if IS_ENABLED(CONFIG_NFS_LOCALIO)
+	if (net) {
+		struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+		nfs_localio_invalidate_clients(&nn->local_clients,
+					       &nn->local_clients_lock);
+	}
+#endif
+
 	rhltable_walk_enter(&nfsd_file_rhltable, &iter);
 	do {
 		rhashtable_walk_start(&iter);
@@ -1050,7 +1065,7 @@ retry:
 		 * the last one however, since we should hold another.
 		 */
 		if (nfsd_file_lru_remove(nf))
-			WARN_ON_ONCE(refcount_dec_and_test(&nf->nf_ref));
+			refcount_dec(&nf->nf_ref);
 		goto wait_for_construction;
 	}
 
@@ -1123,8 +1138,7 @@ open_file:
 			status = nfs_ok;
 			trace_nfsd_file_opened(nf, status);
 		} else {
-			ret = nfsd_open_verified(rqstp, fhp, may_flags,
-						 &nf->nf_file);
+			ret = nfsd_open_verified(fhp, may_flags, &nf->nf_file);
 			if (ret == -EOPENSTALE && stale_retry) {
 				stale_retry = false;
 				nfsd_file_unhash(nf);
@@ -1226,10 +1240,9 @@ nfsd_file_acquire(struct svc_rqst *rqstp, struct svc_fh *fhp,
  * a file.  The security implications of this should be carefully
  * considered before use.
  *
- * The nfsd_file object returned by this API is reference-counted
- * and garbage-collected. The object is retained for a few
- * seconds after the final nfsd_file_put() in case the caller
- * wants to re-use it.
+ * The nfsd_file_object returned by this API is reference-counted
+ * but not garbage-collected. The object is unhashed after the
+ * final nfsd_file_put().
  *
  * Return values:
  *   %nfs_ok - @pnf points to an nfsd_file with its reference
@@ -1251,8 +1264,8 @@ nfsd_file_acquire_local(struct net *net, struct svc_cred *cred,
 	__be32 beres;
 
 	beres = nfsd_file_do_acquire(NULL, net, cred, client,
-				     fhp, may_flags, NULL, pnf, true);
-	revert_creds(save_cred);
+				     fhp, may_flags, NULL, pnf, false);
+	put_cred(revert_creds(save_cred));
 	return beres;
 }
 

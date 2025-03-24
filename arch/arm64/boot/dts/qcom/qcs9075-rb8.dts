@@ -600,11 +600,11 @@
 	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
 };
 
-&mdss0_edp_phy {
+&mdss0_dp0_phy {
 	status = "okay";
 };
 
-&mdss0_edp1_phy {
+&mdss0_dp1_phy {
 	status = "okay";
 };
 

@@ -148,7 +148,7 @@ static struct platform_driver lpi_pinctrl_driver = {
 		   .pm = &lpi_pinctrl_pm_ops,
 	},
 	.probe = lpi_pinctrl_probe,
-	.remove_new = lpi_pinctrl_remove,
+	.remove = lpi_pinctrl_remove,
 };
 
 module_platform_driver(lpi_pinctrl_driver);

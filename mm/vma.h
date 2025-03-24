@@ -139,15 +139,10 @@ void validate_mm(struct mm_struct *mm);
 #define validate_mm(mm) do { } while (0)
 #endif
 
-/* Required for expand_downwards(). */
-void anon_vma_interval_tree_pre_update_vma(struct vm_area_struct *vma);
-
-/* Required for expand_downwards(). */
-void anon_vma_interval_tree_post_update_vma(struct vm_area_struct *vma);
-
-int vma_expand(struct vma_merge_struct *vmg);
-int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
-	       unsigned long start, unsigned long end, pgoff_t pgoff);
+__must_check int vma_expand(struct vma_merge_struct *vmg);
+__must_check int vma_shrink(struct vma_iterator *vmi,
+		struct vm_area_struct *vma,
+		unsigned long start, unsigned long end, pgoff_t pgoff);
 
 static inline int vma_iter_store_gfp(struct vma_iterator *vmi,
 			struct vm_area_struct *vma, gfp_t gfp)
@@ -165,99 +160,6 @@ static inline int vma_iter_store_gfp(struct vma_iterator *vmi,
 	return 0;
 }
 
-#ifdef CONFIG_MMU
-/*
- * init_vma_munmap() - Initializer wrapper for vma_munmap_struct
- * @vms: The vma munmap struct
- * @vmi: The vma iterator
- * @vma: The first vm_area_struct to munmap
- * @start: The aligned start address to munmap
- * @end: The aligned end address to munmap
- * @uf: The userfaultfd list_head
- * @unlock: Unlock after the operation.  Only unlocked on success
- */
-static inline void init_vma_munmap(struct vma_munmap_struct *vms,
-		struct vma_iterator *vmi, struct vm_area_struct *vma,
-		unsigned long start, unsigned long end, struct list_head *uf,
-		bool unlock)
-{
-	vms->vmi = vmi;
-	vms->vma = vma;
-	if (vma) {
-		vms->start = start;
-		vms->end = end;
-	} else {
-		vms->start = vms->end = 0;
-	}
-	vms->unlock = unlock;
-	vms->uf = uf;
-	vms->vma_count = 0;
-	vms->nr_pages = vms->locked_vm = vms->nr_accounted = 0;
-	vms->exec_vm = vms->stack_vm = vms->data_vm = 0;
-	vms->unmap_start = FIRST_USER_ADDRESS;
-	vms->unmap_end = USER_PGTABLES_CEILING;
-	vms->clear_ptes = false;
-}
-#endif
-
-int vms_gather_munmap_vmas(struct vma_munmap_struct *vms,
-		struct ma_state *mas_detach);
-
-void vms_complete_munmap_vmas(struct vma_munmap_struct *vms,
-		struct ma_state *mas_detach);
-
-void vms_clean_up_area(struct vma_munmap_struct *vms,
-		struct ma_state *mas_detach);
-
-/*
- * reattach_vmas() - Undo any munmap work and free resources
- * @mas_detach: The maple state with the detached maple tree
- *
- * Reattach any detached vmas and free up the maple tree used to track the vmas.
- */
-static inline void reattach_vmas(struct ma_state *mas_detach)
-{
-	struct vm_area_struct *vma;
-
-	mas_set(mas_detach, 0);
-	mas_for_each(mas_detach, vma, ULONG_MAX)
-		vma_mark_detached(vma, false);
-
-	__mt_destroy(mas_detach->tree);
-}
-
-/*
- * vms_abort_munmap_vmas() - Undo as much as possible from an aborted munmap()
- * operation.
- * @vms: The vma unmap structure
- * @mas_detach: The maple state with the detached maple tree
- *
- * Reattach any detached vmas, free up the maple tree used to track the vmas.
- * If that's not possible because the ptes are cleared (and vm_ops->closed() may
- * have been called), then a NULL is written over the vmas and the vmas are
- * removed (munmap() completed).
- */
-static inline void vms_abort_munmap_vmas(struct vma_munmap_struct *vms,
-		struct ma_state *mas_detach)
-{
-	struct ma_state *mas = &vms->vmi->mas;
-	if (!vms->nr_pages)
-		return;
-
-	if (vms->clear_ptes)
-		return reattach_vmas(mas_detach);
-
-	/*
-	 * Aborting cannot just call the vm_ops open() because they are often
-	 * not symmetrical and state data has been lost.  Resort to the old
-	 * failure method of leaving a gap where the MAP_FIXED mapping failed.
-	 */
-	mas_set_range(mas, vms->start, vms->end - 1);
-	mas_store_gfp(mas, NULL, GFP_KERNEL|__GFP_NOFAIL);
-	/* Clean up the insertion of the unfortunate gap */
-	vms_complete_munmap_vmas(vms, mas_detach);
-}
-
 int
 do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		    struct mm_struct *mm, unsigned long start,
@@ -273,13 +175,14 @@ void unmap_region(struct ma_state *mas, struct vm_area_struct *vma,
 		struct vm_area_struct *prev, struct vm_area_struct *next);
 
 /* We are about to modify the VMA's flags. */
-struct vm_area_struct *vma_modify_flags(struct vma_iterator *vmi,
+__must_check struct vm_area_struct
+*vma_modify_flags(struct vma_iterator *vmi,
 		struct vm_area_struct *prev, struct vm_area_struct *vma,
 		unsigned long start, unsigned long end,
 		unsigned long new_flags);
 
 /* We are about to modify the VMA's flags and/or anon_name. */
-struct vm_area_struct
+__must_check struct vm_area_struct
 *vma_modify_flags_name(struct vma_iterator *vmi,
 		       struct vm_area_struct *prev,
 		       struct vm_area_struct *vma,
@@ -289,7 +192,7 @@ struct vm_area_struct
 		       struct anon_vma_name *new_name);
 
 /* We are about to modify the VMA's memory policy. */
-struct vm_area_struct
+__must_check struct vm_area_struct
 *vma_modify_policy(struct vma_iterator *vmi,
 		   struct vm_area_struct *prev,
 		   struct vm_area_struct *vma,
@@ -297,7 +200,7 @@ struct vm_area_struct
 		   struct mempolicy *new_pol);
 
 /* We are about to modify the VMA's flags and/or uffd context. */
-struct vm_area_struct
+__must_check struct vm_area_struct
 *vma_modify_flags_uffd(struct vma_iterator *vmi,
 		       struct vm_area_struct *prev,
 		       struct vm_area_struct *vma,
@@ -305,11 +208,13 @@ struct vm_area_struct
 		       unsigned long new_flags,
 		       struct vm_userfaultfd_ctx new_ctx);
 
-struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg);
+__must_check struct vm_area_struct
+*vma_merge_new_range(struct vma_merge_struct *vmg);
 
-struct vm_area_struct *vma_merge_extend(struct vma_iterator *vmi,
-					struct vm_area_struct *vma,
-					unsigned long delta);
+__must_check struct vm_area_struct
+*vma_merge_extend(struct vma_iterator *vmi,
+		  struct vm_area_struct *vma,
+		  unsigned long delta);
 
 void unlink_file_vma_batch_init(struct unlink_vma_file_batch *vb);
 
@@ -335,6 +240,16 @@ bool vma_wants_writenotify(struct vm_area_struct *vma, pgprot_t vm_page_prot);
 
 int mm_take_all_locks(struct mm_struct *mm);
 void mm_drop_all_locks(struct mm_struct *mm);
+
+unsigned long mmap_region(struct file *file, unsigned long addr,
+		unsigned long len, vm_flags_t vm_flags, unsigned long pgoff,
+		struct list_head *uf);
+
+int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *brkvma,
+		 unsigned long addr, unsigned long request, unsigned long flags);
+
+unsigned long unmapped_area(struct vm_unmapped_area_info *info);
+unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info);
 
 static inline bool vma_wants_manual_pte_write_upgrade(struct vm_area_struct *vma)
 {
@@ -560,5 +475,13 @@ static inline bool can_modify_vma_madv(struct vm_area_struct *vma, int behavior)
 }
 
 #endif
+
+#if defined(CONFIG_STACK_GROWSUP)
+int expand_upwards(struct vm_area_struct *vma, unsigned long address);
+#endif
+
+int expand_downwards(struct vm_area_struct *vma, unsigned long address);
+
+int __vm_munmap(unsigned long start, size_t len, bool unlock);
 
 #endif	/* __MM_VMA_H */

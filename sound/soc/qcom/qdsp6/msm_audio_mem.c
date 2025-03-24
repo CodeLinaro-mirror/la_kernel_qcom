@@ -27,7 +27,7 @@
 #include <soc/qcom/secure_buffer.h>
 #include "msm_audio_mem.h"
 
-MODULE_IMPORT_NS(DMA_BUF);
+MODULE_IMPORT_NS("DMA_BUF");
 
 #define MSM_AUDIO_MEM_PROBED (1 << 0)
 

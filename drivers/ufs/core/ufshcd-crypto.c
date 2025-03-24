@@ -17,20 +17,13 @@ static const struct ufs_crypto_alg_entry {
 	},
 };
 
-static int ufshcd_program_key(struct ufs_hba *hba,
-			      const struct blk_crypto_key *bkey,
-			      const union ufs_crypto_cfg_entry *cfg, int slot)
+static void ufshcd_program_key(struct ufs_hba *hba,
+			       const union ufs_crypto_cfg_entry *cfg, int slot)
 {
 	int i;
 	u32 slot_offset = hba->crypto_cfg_register + slot * sizeof(*cfg);
-	int err = 0;
 
 	ufshcd_hold(hba);
-
-	if (hba->vops && hba->vops->program_key) {
-		err = hba->vops->program_key(hba, bkey, cfg, slot);
-		goto out;
-	}
 
 	/* Ensure that CFGE is cleared before programming the key */
 	ufshcd_writel(hba, 0, slot_offset + 16 * sizeof(cfg->reg_val[0]));
@@ -44,17 +37,14 @@ static int ufshcd_program_key(struct ufs_hba *hba,
 	/* Dword 16 must be written last */
 	ufshcd_writel(hba, le32_to_cpu(cfg->reg_val[16]),
 		      slot_offset + 16 * sizeof(cfg->reg_val[0]));
-out:
 	ufshcd_release(hba);
-	return err;
 }
 
 static int ufshcd_crypto_keyslot_program(struct blk_crypto_profile *profile,
 					 const struct blk_crypto_key *key,
 					 unsigned int slot)
 {
-	struct ufs_hba *hba =
-		container_of(profile, struct ufs_hba, crypto_profile);
+	struct ufs_hba *hba = ufs_hba_from_crypto_profile(profile);
 	const union ufs_crypto_cap_entry *ccap_array = hba->crypto_cap_array;
 	const struct ufs_crypto_alg_entry *alg =
 			&ufs_crypto_algs[key->crypto_cfg.crypto_mode];
@@ -62,7 +52,6 @@ static int ufshcd_crypto_keyslot_program(struct blk_crypto_profile *profile,
 	int i;
 	int cap_idx = -1;
 	union ufs_crypto_cfg_entry cfg = {};
-	int err;
 
 	BUILD_BUG_ON(UFS_CRYPTO_KEY_SIZE_INVALID != 0);
 	for (i = 0; i < hba->crypto_capabilities.num_crypto_cap; i++) {
@@ -81,36 +70,34 @@ static int ufshcd_crypto_keyslot_program(struct blk_crypto_profile *profile,
 	cfg.crypto_cap_idx = cap_idx;
 	cfg.config_enable = UFS_CRYPTO_CONFIGURATION_ENABLE;
 
-	if (key->crypto_cfg.key_type != BLK_CRYPTO_KEY_TYPE_HW_WRAPPED) {
-		if (ccap_array[cap_idx].algorithm_id == UFS_CRYPTO_ALG_AES_XTS) {
-			/* In XTS mode, the blk_crypto_key's size is already doubled */
-			memcpy(cfg.crypto_key, key->raw, key->size/2);
-			memcpy(cfg.crypto_key + UFS_CRYPTO_KEY_MAX_SIZE/2,
-			       key->raw + key->size/2, key->size/2);
-		} else {
-			memcpy(cfg.crypto_key, key->raw, key->size);
-		}
+	if (ccap_array[cap_idx].algorithm_id == UFS_CRYPTO_ALG_AES_XTS) {
+		/* In XTS mode, the blk_crypto_key's size is already doubled */
+		memcpy(cfg.crypto_key, key->raw, key->size/2);
+		memcpy(cfg.crypto_key + UFS_CRYPTO_KEY_MAX_SIZE/2,
+		       key->raw + key->size/2, key->size/2);
+	} else {
+		memcpy(cfg.crypto_key, key->raw, key->size);
 	}
 
-	err = ufshcd_program_key(hba, key, &cfg, slot);
+	ufshcd_program_key(hba, &cfg, slot);
 
 	memzero_explicit(&cfg, sizeof(cfg));
-	return err;
+	return 0;
 }
 
 static int ufshcd_crypto_keyslot_evict(struct blk_crypto_profile *profile,
 				       const struct blk_crypto_key *key,
 				       unsigned int slot)
 {
-	struct ufs_hba *hba =
-		container_of(profile, struct ufs_hba, crypto_profile);
+	struct ufs_hba *hba = ufs_hba_from_crypto_profile(profile);
 	/*
 	 * Clear the crypto cfg on the device. Clearing CFGE
 	 * might not be sufficient, so just clear the entire cfg.
 	 */
 	union ufs_crypto_cfg_entry cfg = {};
 
-	return ufshcd_program_key(hba, NULL, &cfg, slot);
+	ufshcd_program_key(hba, &cfg, slot);
+	return 0;
 }
 
 /*
@@ -131,66 +118,9 @@ bool ufshcd_crypto_enable(struct ufs_hba *hba)
 	return true;
 }
 
-
-static int ufshcd_crypto_derive_sw_secret(struct blk_crypto_profile *profile,
-				const u8 wrapped_key[], size_t wrapped_key_size,
-				u8 sw_secret[BLK_CRYPTO_SW_SECRET_SIZE])
-{
-	struct ufs_hba *hba =
-		container_of(profile, struct ufs_hba, crypto_profile);
-
-	if (hba->vops && hba->vops->derive_sw_secret)
-		return  hba->vops->derive_sw_secret(hba, wrapped_key,
-						 wrapped_key_size, sw_secret);
-
-	return -EOPNOTSUPP;
-}
-
-static int ufshcd_crypto_generate_key(struct blk_crypto_profile *profile,
-				      u8 lt_key[BLK_CRYPTO_MAX_HW_WRAPPED_KEY_SIZE])
-{
-	struct ufs_hba *hba =
-		container_of(profile, struct ufs_hba, crypto_profile);
-
-	if (hba->vops && hba->vops->generate_key)
-		return  hba->vops->generate_key(hba, lt_key);
-
-	return -EOPNOTSUPP;
-}
-
-static int ufshcd_crypto_prepare_key(struct blk_crypto_profile *profile,
-				     const u8 *lt_key, size_t lt_key_size,
-				     u8 eph_key[BLK_CRYPTO_MAX_HW_WRAPPED_KEY_SIZE])
-{
-	struct ufs_hba *hba =
-		container_of(profile, struct ufs_hba, crypto_profile);
-
-	if (hba->vops && hba->vops->prepare_key)
-		return  hba->vops->prepare_key(hba, lt_key, lt_key_size, eph_key);
-
-	return -EOPNOTSUPP;
-}
-
-static int ufshcd_crypto_import_key(struct blk_crypto_profile *profile,
-				    const u8 *imp_key, size_t imp_key_size,
-				    u8 lt_key[BLK_CRYPTO_MAX_HW_WRAPPED_KEY_SIZE])
-{
-	struct ufs_hba *hba =
-		container_of(profile, struct ufs_hba, crypto_profile);
-
-	if (hba->vops && hba->vops->import_key)
-		return  hba->vops->import_key(hba, imp_key, imp_key_size, lt_key);
-
-	return -EOPNOTSUPP;
-}
-
 static const struct blk_crypto_ll_ops ufshcd_crypto_ops = {
 	.keyslot_program	= ufshcd_crypto_keyslot_program,
 	.keyslot_evict		= ufshcd_crypto_keyslot_evict,
-	.derive_sw_secret	= ufshcd_crypto_derive_sw_secret,
-	.generate_key		= ufshcd_crypto_generate_key,
-	.prepare_key		= ufshcd_crypto_prepare_key,
-	.import_key		= ufshcd_crypto_import_key,
 };
 
 static enum blk_crypto_mode_num
@@ -255,13 +185,6 @@ int ufshcd_hba_init_crypto_capabilities(struct ufs_hba *hba)
 	hba->crypto_profile.ll_ops = ufshcd_crypto_ops;
 	/* UFS only supports 8 bytes for any DUN */
 	hba->crypto_profile.max_dun_bytes_supported = 8;
-	if (hba->quirks & UFSHCD_QUIRK_USES_WRAPPED_CRYPTO_KEYS)
-		hba->crypto_profile.key_types_supported =
-				BLK_CRYPTO_KEY_TYPE_HW_WRAPPED;
-	else
-		hba->crypto_profile.key_types_supported =
-				BLK_CRYPTO_KEY_TYPE_STANDARD;
-
 	hba->crypto_profile.dev = hba->dev;
 
 	/*
