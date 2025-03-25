@@ -637,7 +637,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 					     IIO_EV_TYPE_THRESH,
 					     IIO_EV_DIR_FALLING);
 		iio_push_event(iio_dev, event,
-			       iio_get_time_ns(iio_dev));
+			       st_asm330lhhx_get_times_ns());
 	}
 
 	if ((reg_src[0] & ST_ASM330LHHX_WAKE_UP_SRC_WU_IA_MASK) &&
@@ -649,7 +649,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 							  IIO_MOD_Z,
 							  IIO_EV_TYPE_THRESH,
 							  IIO_EV_DIR_RISING),
-							  iio_get_time_ns(iio_dev));
+							  st_asm330lhhx_get_times_ns());
 		}
 
 		if (reg_src[0] & ST_ASM330LHHX_Y_WU_MASK) {
@@ -658,7 +658,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 							  IIO_MOD_Y,
 							  IIO_EV_TYPE_THRESH,
 							  IIO_EV_DIR_RISING),
-							  iio_get_time_ns(iio_dev));
+							  st_asm330lhhx_get_times_ns());
 		}
 
 		if (reg_src[0] & ST_ASM330LHHX_X_WU_MASK) {
@@ -667,7 +667,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 							  IIO_MOD_X,
 							  IIO_EV_TYPE_THRESH,
 							  IIO_EV_DIR_RISING),
-							  iio_get_time_ns(iio_dev));
+							  st_asm330lhhx_get_times_ns());
 		}
 	}
 
@@ -684,7 +684,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 							  IIO_MOD_Z,
 							  IIO_EV_TYPE_CHANGE,
 							  dir),
-				       iio_get_time_ns(iio_dev));
+				       st_asm330lhhx_get_times_ns());
 		}
 
 		if (reg_src[2] & (ST_ASM330LHHX_YH_MASK | ST_ASM330LHHX_YL_MASK)) {
@@ -695,7 +695,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 							  IIO_MOD_Y,
 							  IIO_EV_TYPE_CHANGE,
 							  dir),
-				       iio_get_time_ns(iio_dev));
+				       st_asm330lhhx_get_times_ns());
 		}
 
 		if (reg_src[2] & (ST_ASM330LHHX_XH_MASK | ST_ASM330LHHX_XL_MASK)) {
@@ -706,7 +706,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 							  IIO_MOD_X,
 							  IIO_EV_TYPE_CHANGE,
 							  dir),
-				       iio_get_time_ns(iio_dev));
+				       st_asm330lhhx_get_times_ns());
 		}
 	}
 

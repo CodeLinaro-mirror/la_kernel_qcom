@@ -40,7 +40,7 @@ static void st_asm330lhhx_read_hw_timestamp(struct st_asm330lhhx_hw *hw)
 	if (err < 0)
 		return;
 
-	timestamp_cpu = st_asm330lhhx_get_time_ns(hw->iio_devs[0]) -
+	timestamp_cpu = st_asm330lhhx_get_times_ns() -
 			ST_ASM330LHHX_TSYNC_OFFSET_NS;
 
 	eventLSB = IIO_EVENT_CODE(IIO_COUNT, 0, 0, 0,

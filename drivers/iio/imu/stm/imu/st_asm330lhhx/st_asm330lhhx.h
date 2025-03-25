@@ -293,6 +293,16 @@
 	.ext_info = ex_info,						\
 }
 
+#ifdef CONFIG_ENABLE_ASM_ACC_GYRO_BUFFERING
+#define ASM_MAXSAMPLE        4000
+#define G_MAX                    23920640
+struct asm_sample {
+	int xyz[3];
+	unsigned int tsec;
+	unsigned long long tnsec;
+};
+#endif
+
 static const struct iio_event_spec st_asm330lhhx_flush_event = {
 	.type = STM_IIO_EV_TYPE_FIFO_FLUSH,
 	.dir = IIO_EV_DIR_EITHER,
@@ -748,6 +758,19 @@ struct st_asm330lhhx_sensor {
 	u8 status_reg;
 	u8 outreg_addr;
 	enum st_asm330lhhx_fsm_mlc_enable_id status;
+#ifdef CONFIG_ENABLE_ASM_ACC_GYRO_BUFFERING
+	bool read_boot_sample;
+	int bufsample_cnt;
+	bool buffer_asm_samples;
+	struct kmem_cache *asm_cachepool;
+	struct asm_sample *asm_samplist[ASM_MAXSAMPLE];
+	ktime_t timestamp;
+	int max_buffer_time;
+	struct input_dev *buf_dev;
+	int report_evt_cnt;
+	struct mutex sensor_buff;
+	bool enable;
+#endif
 };
 
 /**
@@ -853,6 +876,8 @@ struct st_asm330lhhx_hw {
 	s64 ts;
 	u8 i2c_master_pu;
 	u32 module_id;
+	bool asm330_hrtimer;
+	struct hrtimer st_asm330lhhx_hrtimer;
 
 	const struct st_asm330lhhx_odr_table_entry *odr_table_entry;
 	struct iio_dev *iio_devs[ST_ASM330LHHX_ID_MAX];
@@ -1071,6 +1096,14 @@ static inline s64 st_asm330lhhx_get_time_ns(struct iio_dev *iio_dev)
         return iio_get_time_ns(iio_dev);
 }
 
+static inline s64 st_asm330lhhx_get_times_ns(void)
+{
+	struct timespec64 ts;
+
+	ktime_get_boottime_ts64(&ts);
+	return timespec64_to_ns(&ts);
+}
+
 static inline int
 st_asm330lhhx_read_page_locked(struct st_asm330lhhx_hw *hw,
 			       unsigned int addr,
@@ -1214,6 +1247,11 @@ int st_asm330lhhx_set_fifo_mode(struct st_asm330lhhx_hw *hw,
 int __st_asm330lhhx_set_sensor_batching_odr(struct st_asm330lhhx_sensor *sensor,
 					    bool enable);
 int st_asm330lhhx_update_batching(struct iio_dev *iio_dev, bool enable);
+int st_asm330lhhx_update_fifo(struct st_asm330lhhx_sensor *sensor, bool enable);
+int asm330lhhx_check_acc_gyro_early_buff_enable_flag(
+				struct st_asm330lhhx_sensor *sensor);
+void st_asm330lhhx_set_cpu_idle_state(bool value);
+void st_asm330lhhx_hrtimer_reset(struct st_asm330lhhx_hw *hw, s64 irq_delta_ts);
 int st_asm330lhhx_reset_hwts(struct st_asm330lhhx_hw *hw);
 int st_asm330lhhx_shub_probe(struct st_asm330lhhx_hw *hw);
 int st_asm330lhhx_shub_set_enable(struct st_asm330lhhx_sensor *sensor,
