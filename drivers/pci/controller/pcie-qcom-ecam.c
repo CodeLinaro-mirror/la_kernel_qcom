@@ -512,6 +512,19 @@ static int qcom_pcie_ecam_resume_noirq(struct device *dev)
 	return pm_runtime_get_sync(dev);
 }
 
+static void qcom_pcie_ecam_shutdown(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int ret = 0;
+
+	if (atomic_read(&dev->power.usage_count) > 1)
+		pm_runtime_put_noidle(dev);
+
+	ret = pm_runtime_put_sync(dev);
+	if (ret)
+		dev_err(dev, "fail to shutdown pcie controller: %d\n", ret);
+}
+
 static int qcom_pcie_ecam_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -568,6 +581,7 @@ MODULE_DEVICE_TABLE(of, qcom_pcie_ecam_of_match);
 
 static struct platform_driver qcom_pcie_ecam_driver = {
 	.probe	= qcom_pcie_ecam_probe,
+	.shutdown  = qcom_pcie_ecam_shutdown,
 	.driver	= {
 		.name			= "qcom-pcie-ecam-rc",
 		.suppress_bind_attrs	= true,
