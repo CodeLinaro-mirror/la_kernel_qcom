@@ -66,3 +66,4 @@ void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
 
 	xen_setup_dma_ops(dev);
 }
+EXPORT_SYMBOL_GPL(arch_setup_dma_ops);
