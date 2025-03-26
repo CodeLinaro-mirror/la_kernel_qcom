@@ -368,11 +368,12 @@ static int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw)
 	bool already_updated = false;
 	__le64 hw_timestamp_push;
 	struct iio_dev *iio_dev;
-	s64 ts_irq, hw_ts_old;
 	__le16 fifo_status;
 	u16 fifo_depth;
 	s16 drdymask;
 	u16 wtm_ia;
+	s64 ts_irq;
+	s64 delta;
 	u32 val;
 
 	/* return if FIFO is already disabled */
@@ -408,6 +409,9 @@ static int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw)
 
 	fifo_len = fifo_depth * ST_ASM330LHHX_FIFO_SAMPLE_SIZE;
 	read_len = 0;
+	ts_irq = hw->ts - hw->delta_ts;
+	delta = div_s64(hw->delta_ts, fifo_depth);
+
 	while (read_len < fifo_len) {
 		word_len = min_t(int, fifo_len - read_len, sizeof(buf));
 		err = st_asm330lhhx_read_locked(hw,
@@ -419,6 +423,7 @@ static int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw)
 		for (i = 0; i < word_len; i += ST_ASM330LHHX_FIFO_SAMPLE_SIZE) {
 			ptr = &buf[i + ST_ASM330LHHX_TAG_SIZE];
 			tag = buf[i] >> 3;
+			ts_irq += delta;
 
 			if (tag == ST_ASM330LHHX_TS_TAG) {
 				val = get_unaligned_le32(ptr);
@@ -431,8 +436,6 @@ static int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw)
 				}
 
 				hw->val_ts_old = val;
-
-				hw_ts_old = hw->hw_ts;
 
 #if defined(CONFIG_IIO_ST_ASM330LHHX_ASYNC_HW_TIMESTAMP)
 				spin_lock_irq(&hw->hwtimestamp_lock);
@@ -447,20 +450,10 @@ static int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw)
 
 				hw->hw_ts = (val + ((s64)hw->hw_ts_high_fifo << 32)) *
 					    hw->ts_delta_ns;
-				hw->ts_offset = st_asm330lhhx_ewma(hw->ts_offset,
-						ts_irq - hw->hw_ts,
-						ST_ASM330LHHX_EWMA_LEVEL);
 
 				if (!test_bit(ST_ASM330LHHX_HW_FLUSH, &hw->state))
 					/* sync ap timestamp and sensor one */
 					st_asm330lhhx_sync_hw_ts(hw, ts_irq);
-
-				ts_irq += hw->hw_ts;
-
-				if (!hw->tsample)
-					hw->tsample = hw->ts_offset + hw->hw_ts;
-				else
-					hw->tsample = hw->tsample + hw->hw_ts - hw_ts_old;
 			} else {
 				struct st_asm330lhhx_sensor *sensor;
 
@@ -480,9 +473,7 @@ static int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw)
 				}
 
 				memcpy(iio_buf, ptr, ST_ASM330LHHX_SAMPLE_SIZE);
-				hw->tsample = min_t(s64,
-						    st_asm330lhhx_get_times_ns(),
-						    hw->tsample);
+				hw->tsample = hw->hw_ts + hw->ts_offset;
 
 #if defined(CONFIG_IIO_ST_ASM330LHHX_ASYNC_HW_TIMESTAMP)
 				spin_lock_irq(&hw->hwtimestamp_lock);
