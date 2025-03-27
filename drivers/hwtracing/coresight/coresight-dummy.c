@@ -103,14 +103,6 @@ static int dummy_source_enable(struct coresight_device *csdev,
 			dev_err(drvdata->dev, "Assign dummy source atid fail\n");
 			return ret;
 		}
-	} else {
-		if (drvdata->traceid < CORESIGHT_TRACE_ID_RES_TOP) {
-			ret = coresight_trace_id_reserve_id(drvdata->traceid);
-			if (ret) {
-				dev_err(drvdata->dev, "Reserve atid: %d fail\n", drvdata->traceid);
-				return ret;
-			}
-		}
 	}
 
 	coresight_csr_set_etr_atid(csdev, drvdata->traceid, true, NULL);
@@ -198,6 +190,7 @@ static int dummy_probe(struct platform_device *pdev)
 	struct dummy_drvdata *drvdata;
 	struct coresight_desc desc = { 0 };
 	int trace_id;
+	int ret;
 
 	if (of_device_is_compatible(node, "arm,coresight-dummy-source")) {
 
@@ -246,6 +239,11 @@ static int dummy_probe(struct platform_device *pdev)
 	if (of_device_is_compatible(node, "arm,coresight-dummy-source")) {
 		if (!of_property_read_u32(pdev->dev.of_node, "atid", &trace_id)) {
 			drvdata->static_atid = true;
+			ret = coresight_trace_id_reserve_id(trace_id);
+			if (ret) {
+				dev_err(drvdata->dev, "Reserve atid: %d fail\n", drvdata->traceid);
+				return ret;
+			}
 			drvdata->traceid = (u8)trace_id;
 		}
 	}
