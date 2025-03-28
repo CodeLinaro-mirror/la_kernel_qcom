@@ -83,6 +83,9 @@ struct dwc3_qcom {
 	struct dwc3_qcom_port	ports[DWC3_QCOM_MAX_PORTS];
 	u8			num_ports;
 
+	/* VBUS regulator for host mode */
+	struct regulator	*vbus_reg[DWC3_QCOM_MAX_PORTS];
+
 	struct extcon_dev	*edev;
 	struct extcon_dev	*host_edev;
 	struct notifier_block	vbus_nb;
@@ -427,6 +430,31 @@ static void dwc3_qcom_enable_interrupts(struct dwc3_qcom *qcom)
 		dwc3_qcom_enable_port_interrupts(&qcom->ports[i]);
 }
 
+static void dwc3_qcom_vbus_regulator_enable(struct dwc3_qcom *qcom, bool on)
+{
+	int i, ret;
+
+	for (i = 0; i < DWC3_QCOM_MAX_PORTS; i++) {
+		if (qcom->vbus_reg[i]) {
+			if (on) {
+				ret = regulator_enable(qcom->vbus_reg[i]);
+				if (ret) {
+					dev_err(qcom->dev,
+						"Failed to enable vbus_reg[%d], ret= %d\n"
+											, i, ret);
+				}
+			} else {
+				ret = regulator_disable(qcom->vbus_reg[i]);
+				if (ret) {
+					dev_err(qcom->dev,
+						"Failed to disable vbus_reg[%d], ret= %d\n"
+											, i, ret);
+				}
+			}
+		}
+	}
+}
+
 static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 {
 	u32 val;
@@ -458,6 +486,9 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 		dwc3_qcom_enable_interrupts(qcom);
 	}
 
+	if (!wakeup)
+		dwc3_qcom_vbus_regulator_enable(qcom, false);
+
 	qcom->is_suspended = true;
 
 	return 0;
@@ -470,6 +501,9 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 
 	if (!qcom->is_suspended)
 		return 0;
+
+	if (!wakeup)
+		dwc3_qcom_vbus_regulator_enable(qcom, true);
 
 	if (dwc3_qcom_is_host(qcom) && wakeup)
 		dwc3_qcom_disable_interrupts(qcom);
@@ -748,6 +782,32 @@ static int dwc3_qcom_of_register_core(struct platform_device *pdev)
 	return ret;
 }
 
+static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
+{
+	char	regulator_name[20];
+	int	i;
+
+	qcom->vbus_reg[0] = devm_regulator_get_optional(qcom->dev, "vbus_dwc3");
+	if (!IS_ERR_OR_NULL(qcom->vbus_reg[0])) {
+		dev_err(qcom->dev, "Failed to get vbus regulator(vbus_dwc3) err: %d\n",
+							PTR_ERR(qcom->vbus_reg[0]));
+		return;
+	}
+	/* If the vbus_dwc3 regulator is not obtained,
+	 * proceed to check for vbus_dwc3_* regulators
+	 */
+	for (i = 0; i < DWC3_QCOM_MAX_PORTS; i++) {
+		snprintf(regulator_name, sizeof(regulator_name),
+							"vbus_dwc3_%d", i);
+		qcom->vbus_reg[i] = devm_regulator_get_optional(
+						qcom->dev, regulator_name);
+		if (!IS_ERR_OR_NULL(qcom->vbus_reg[i])) {
+			dev_err(qcom->dev, "Failed to get vbus regulator err: %d index:%d\n",
+								PTR_ERR(qcom->vbus_reg[i]), i);
+		}
+	}
+}
+
 static int dwc3_qcom_probe(struct platform_device *pdev)
 {
 	struct device_node	*np = pdev->dev.of_node;
@@ -833,6 +893,9 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	if (ret)
 		goto interconnect_exit;
 
+	dwc3_qcom_vbus_regulator_get(qcom);
+	dwc3_qcom_vbus_regulator_enable(qcom, true);
+
 	wakeup_source = of_property_read_bool(dev->of_node, "wakeup-source");
 	device_init_wakeup(&pdev->dev, wakeup_source);
 	device_init_wakeup(&qcom->dwc3->dev, wakeup_source);
@@ -874,6 +937,8 @@ static void dwc3_qcom_remove(struct platform_device *pdev)
 	qcom->num_clocks = 0;
 
 	dwc3_qcom_interconnect_exit(qcom);
+	dwc3_qcom_vbus_regulator_enable(qcom, false);
+
 	pm_runtime_allow(dev);
 	pm_runtime_disable(dev);
 }
