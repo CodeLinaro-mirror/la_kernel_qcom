@@ -15,7 +15,7 @@ def define_prebuilt_lib_copy(target, msm_target, variant):
     #linux-x86
     copy_to_dist_dir(
         name = "{}_lib_dist".format(target),
-        data = ["//prebuilts/kernel-build-tools:linux-x86-libs"],
+        data = ["//prebuilts/kernel-build-tools:linux-x86-libs", "@openssl//:libcrypto.so.3"],
         dist_dir = "{}/out".format(get_out_dir(msm_target, variant)),
         flat = True,
         wipe_dist_dir = False,
