@@ -32,6 +32,8 @@ pinctrl-msm.ko
 pinctrl-sm6150.ko
 llcc-qcom.ko
 qcom_hwspinlock.ko
+nvmem_qfprom.ko
+qfprom-sys.ko
 secure_buffer.ko
 socinfo.ko
 iommu-logger.ko
@@ -51,6 +53,10 @@ qcom_rpmh.ko
 cmd-db.ko
 qcom_ice.ko
 gdsc-regulator.ko
+spmi-pmic-arb.ko
+spmi-pmic-arb-debug.ko
+pinctrl-spmi-gpio.ko
+pinctrl-spmi-mpp.ko
 proxy-consumer.ko
 rpmh-regulator.ko
 gcc-sm6150.ko
