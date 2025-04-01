@@ -1038,6 +1038,7 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 				skb->dev = ndev;
 				skb->pkt_type = PACKET_HOST;
 				eth_skb_pkt_type(skb, ndev);
+				count_rx(ndev, skb->len);
 				ret = RX_HANDLER_ANOTHER;
 				goto out;
 			}
@@ -1056,6 +1057,7 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 				/* exact match, divert skb to this port */
 				skb->dev = ndev;
 				skb->pkt_type = PACKET_HOST;
+				count_rx(ndev, skb->len);
 				ret = RX_HANDLER_ANOTHER;
 				goto out;
 			} else if (is_multicast_ether_addr_64bits(
@@ -1067,11 +1069,12 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 
 				nskb->dev = ndev;
 				eth_skb_pkt_type(nskb, ndev);
-
+				count_rx(ndev, nskb->len);
 				__netif_rx(nskb);
 			} else if (ndev->flags & IFF_PROMISC) {
 				skb->dev = ndev;
 				skb->pkt_type = PACKET_HOST;
+				count_rx(ndev, skb->len);
 				ret = RX_HANDLER_ANOTHER;
 				goto out;
 			}
