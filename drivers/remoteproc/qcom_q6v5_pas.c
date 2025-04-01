@@ -36,6 +36,9 @@
 #include <linux/refcount.h>
 #include <trace/events/rproc_qcom.h>
 #include <linux/interconnect.h>
+#if IS_ENABLED(CONFIG_FIRMWARE_FAIL_SAFE)
+#include <linux/reboot.h>
+#endif
 
 #include "qcom_common.h"
 #include "qcom_pil_info.h"
@@ -419,6 +422,14 @@ release_dtb_firmware:
 
 exit_load:
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "exit");
+#if IS_ENABLED(CONFIG_FIRMWARE_FAIL_SAFE)
+	if (ret) {
+		dev_err(adsp->dev,
+			"Load failed for remoteproc %s, Rebooting the device for slot switch\n",
+			rproc->name);
+		kernel_restart("firmware auth failed");
+	}
+#endif
 
 	return ret;
 }
@@ -634,6 +645,14 @@ static int adsp_start(struct rproc *rproc)
 	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
 
 	trace_rproc_qcom_event(dev_name(adsp->dev), "Q6_auth_reset", "exit");
+#if IS_ENABLED(CONFIG_FIRMWARE_FAIL_SAFE)
+	if (ret) {
+		dev_err(adsp->dev,
+			"Auth and reset failed for remoteproc %s, Rebooting the device for slot switch\n",
+			rproc->name);
+		kernel_restart("firmware auth failed");
+	}
+#endif
 	if (ret)
 		panic("Panicking, auth and reset failed for remoteproc %s ret=%d\n",
 				rproc->name, ret);
