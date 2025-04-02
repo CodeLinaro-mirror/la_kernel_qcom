@@ -6092,7 +6092,7 @@
 		};
 
 		dispcc: clock-controller@af00000 {
-			compatible = "qcom,sa8775p-dispcc";
+			compatible = "qcom,sa8775p-dispcc0";
 			reg = <0x0 0x0af00000 0x0 0x20000>;
 			clocks = <&gcc GCC_DISP_AHB_CLK>,
 				 <&rpmhcc RPMH_CXO_CLK>,
