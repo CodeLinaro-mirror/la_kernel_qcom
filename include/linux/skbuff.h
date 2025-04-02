@@ -985,10 +985,6 @@ struct sk_buff {
 #if IS_ENABLED(CONFIG_NETFILTER_XT_TARGET_TRACE) || IS_ENABLED(CONFIG_NF_TABLES)
 	__u8			nf_trace:1;
 #endif
-
-#ifdef CONFIG_ENABLE_SFE
-	__u8			fast_forwarded:1;
-#endif
 #ifdef CONFIG_NET_SWITCHDEV
 	__u8			offload_fwd_mark:1;
 	__u8			offload_l3_fwd_mark:1;
