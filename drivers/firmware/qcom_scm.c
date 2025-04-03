@@ -2683,13 +2683,10 @@ static int qcom_scm_query_wq_queue_info(struct qcom_scm *scm)
 	return ret;
 }
 
-bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed)
+bool qcom_scm_multi_call_allow(bool multicall_allowed)
 {
-	struct qcom_scm *scm;
-
-	scm = dev_get_drvdata(dev);
 	if (multicall_allowed &&
-		scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
+		__scm && __scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
 		return true;
 
 	return false;

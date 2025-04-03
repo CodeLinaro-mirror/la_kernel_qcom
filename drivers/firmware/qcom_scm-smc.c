@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015,2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023,2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/io.h>
@@ -166,7 +166,7 @@ static int __scm_smc_do(struct device *dev, struct arm_smccc_args *smc,
 			bool multicall_allowed)
 {
 	int ret, retry_count = 0;
-	bool multi_smc_call = qcom_scm_multi_call_allow(dev, multicall_allowed);
+	bool multi_smc_call = qcom_scm_multi_call_allow(multicall_allowed);
 
 	if (call_type == QCOM_SCM_CALL_ATOMIC) {
 		__scm_smc_do_quirk(smc, res);
