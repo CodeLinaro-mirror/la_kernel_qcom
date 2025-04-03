@@ -1709,11 +1709,6 @@ static void dwc3_get_software_properties(struct dwc3 *dwc)
 				break;
 		}
 	}
-
-	for (tmpdev = dwc->dev; tmpdev; tmpdev = tmpdev->parent) {
-		dwc->xhci_reset_on_resume = device_property_read_bool(tmpdev,
-						"xhci-reset-on-resume");
-	}
 }
 
 /* check whether the core supports IMOD */
