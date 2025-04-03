@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
@@ -7649,10 +7649,13 @@ static irqreturn_t handle_global_irq(int irq, void *data)
 		goto done;
 	}
 
-	/* Not handling the interrupts when we are in drv suspend */
+	/*
+	 * Not handling the interrupts when the resources are not
+	 * initialized or when we are in drv suspend.
+	 */
 	if (!dev->cfg_access) {
 		PCIE_DBG2(dev,
-			"PCIe: RC%d is currently in drv suspend.\n",
+			"PCIe: RC%d: Either in drv suspend or res init not done\n",
 			dev->rc_idx);
 		goto done;
 	}
@@ -10194,7 +10197,7 @@ static int __init pcie_init(void)
 				rc_name, i);
 		spin_lock_init(&msm_pcie_dev[i].cfg_lock);
 		spin_lock_init(&msm_pcie_dev[i].evt_reg_list_lock);
-		msm_pcie_dev[i].cfg_access = true;
+		msm_pcie_dev[i].cfg_access = false;
 		mutex_init(&msm_pcie_dev[i].enumerate_lock);
 		mutex_init(&msm_pcie_dev[i].setup_lock);
 		mutex_init(&msm_pcie_dev[i].recovery_lock);
