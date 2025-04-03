@@ -536,8 +536,11 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 				   struct dma_desc *p, struct sk_buff *skb)
 {
+	const struct dwxgmac_addrs *dwxgmac_addrs = priv->plat->dwxgmac_addrs;
 	struct skb_shared_hwtstamps shhwtstamp;
+	void __iomem *ioaddr = priv->hw->pcsr;
 	bool found = false;
+	u32 pktid;
 	u64 ns = 0;
 
 	if (!priv->hwts_tx_en)
@@ -546,6 +549,9 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 	/* exit if skb doesn't support hw tstamp */
 	if (likely(!skb || !(skb_shinfo(skb)->tx_flags & SKBTX_IN_PROGRESS)))
 		return;
+
+	if (priv->plat->insert_ts_pktid)
+		pktid = readl(ioaddr + XGMAC_TXTIMESTAMP_STATUS_PKTID(dwxgmac_addrs));
 
 	/* check tx tstamp status */
 	if (stmmac_get_tx_timestamp_status(priv, p)) {
@@ -947,6 +953,9 @@ static struct phylink_pcs *stmmac_mac_select_pcs(struct phylink_config *config,
 	if (priv->hw->lynx_pcs)
 		return priv->hw->lynx_pcs;
 
+	if (priv->plat->qcom_pcs)
+		return priv->plat->qcom_pcs;
+
 	return NULL;
 }
 
@@ -1014,6 +1023,15 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		case SPEED_2500:
 			ctrl |= priv->hw->link.xgmii.speed2500;
 			break;
+		case SPEED_1000:
+			ctrl |= priv->hw->link.speed1000;
+			break;
+		case SPEED_100:
+			ctrl |= priv->hw->link.speed100;
+			break;
+		case SPEED_10:
+			ctrl |= priv->hw->link.speed10;
+			break;
 		default:
 			return;
 		}
@@ -1039,6 +1057,34 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 			break;
 		case SPEED_1000:
 			ctrl |= priv->hw->link.speed1000;
+			break;
+		default:
+			return;
+		}
+	} else if (interface == PHY_INTERFACE_MODE_10GBASER) {
+		switch (speed) {
+		case SPEED_10000:
+			ctrl |= priv->hw->link.xgmii.speed10000;
+			break;
+		default:
+			return;
+		}
+	} else if (interface == PHY_INTERFACE_MODE_5GBASER) {
+		switch (speed) {
+		case SPEED_5000:
+			ctrl |= priv->hw->link.xgmii.speed5000;
+			break;
+		case SPEED_2500:
+			ctrl |= priv->hw->link.xgmii.speed2500;
+			break;
+		case SPEED_1000:
+			ctrl |= priv->hw->link.speed1000;
+			break;
+		case SPEED_100:
+			ctrl |= priv->hw->link.speed100;
+			break;
+		case SPEED_10:
+			ctrl |= priv->hw->link.speed10;
 			break;
 		default:
 			return;
@@ -2863,7 +2909,8 @@ static void stmmac_dma_interrupt(struct stmmac_priv *priv)
 static void stmmac_mmc_setup(struct stmmac_priv *priv)
 {
 	unsigned int mode = MMC_CNTRL_RESET_ON_READ | MMC_CNTRL_COUNTER_RESET |
-			    MMC_CNTRL_PRESET | MMC_CNTRL_FULL_HALF_PRESET;
+			    MMC_CNTRL_PRESET | MMC_CNTRL_FULL_HALF_PRESET |
+			    MMC_CNTRL_DRCHM;
 
 	stmmac_mmc_intr_all_mask(priv, priv->mmcaddr);
 
@@ -2920,9 +2967,11 @@ static void stmmac_check_ether_addr(struct stmmac_priv *priv)
  */
 static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 {
-	u32 rx_channels_count = priv->plat->rx_queues_to_use;
-	u32 tx_channels_count = priv->plat->tx_queues_to_use;
-	u32 dma_csr_ch = max(rx_channels_count, tx_channels_count);
+	u32 rx_channels_enabled = priv->plat->rx_queues_to_use;
+	u32 tx_channels_enabled = priv->plat->tx_queues_to_use;
+	u32 rx_channels_supported = priv->dma_cap.number_rx_channel;
+	u32 tx_channels_supported = priv->dma_cap.number_tx_channel;
+	u32 dma_csr_ch = max(rx_channels_enabled, tx_channels_enabled);
 	struct stmmac_rx_queue *rx_q;
 	struct stmmac_tx_queue *tx_q;
 	u32 chan = 0;
@@ -2956,7 +3005,7 @@ static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 	}
 
 	/* DMA RX Channel Configuration */
-	for (chan = 0; chan < rx_channels_count; chan++) {
+	for (chan = 0; chan < rx_channels_enabled; chan++) {
 		rx_q = &priv->dma_conf.rx_queue[chan];
 
 		stmmac_init_rx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
@@ -2970,7 +3019,7 @@ static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 	}
 
 	/* DMA TX Channel Configuration */
-	for (chan = 0; chan < tx_channels_count; chan++) {
+	for (chan = 0; chan < tx_channels_enabled ; chan++) {
 		tx_q = &priv->dma_conf.tx_queue[chan];
 
 		stmmac_init_tx_chan(priv, priv->ioaddr, priv->plat->dma_cfg,
@@ -2979,6 +3028,18 @@ static int stmmac_init_dma_engine(struct stmmac_priv *priv)
 		tx_q->tx_tail_addr = tx_q->dma_tx_phy;
 		stmmac_set_tx_tail_ptr(priv, priv->ioaddr,
 				       tx_q->tx_tail_addr, chan);
+	}
+
+	if (priv->plat->has_hdma) {
+		/* DMA RX Mapping Configuration for offline channels */
+		for (chan = rx_channels_enabled; chan < rx_channels_supported; chan++)
+			stmmac_map_rx_offline_chan(priv, priv->ioaddr, priv->plat->dma_cfg, chan);
+
+		/* DMA TX Mapping Configuration for offline channels */
+		for (chan = tx_channels_enabled; chan < tx_channels_supported; chan++)
+			stmmac_map_tx_offline_chan(priv, priv->ioaddr, priv->plat->dma_cfg, chan);
+
+		stmmac_desc_cache_compute(priv, priv->ioaddr);
 	}
 
 	return ret;
@@ -3699,6 +3760,7 @@ static int stmmac_request_irq_single(struct net_device *dev)
 	/* Request the Wake IRQ in case of another line
 	 * is used for WoL
 	 */
+	priv->wol_irq_disabled = true;
 	if (priv->wol_irq > 0 && priv->wol_irq != dev->irq) {
 		ret = request_irq(priv->wol_irq, stmmac_interrupt,
 				  IRQF_SHARED, dev->name, dev);
@@ -4147,17 +4209,31 @@ static netdev_tx_t stmmac_tso_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct dma_desc *desc, *first, *mss_desc = NULL;
 	struct stmmac_priv *priv = netdev_priv(dev);
-	int nfrags = skb_shinfo(skb)->nr_frags;
-	u32 queue = skb_get_queue_mapping(skb);
+	int tmp_pay_len = 0, first_tx, nfrags;
 	unsigned int first_entry, tx_packets;
 	struct stmmac_txq_stats *txq_stats;
-	int tmp_pay_len = 0, first_tx;
 	struct stmmac_tx_queue *tx_q;
-	bool has_vlan, set_ic;
+	u32 pay_len, mss, queue;
 	u8 proto_hdr_len, hdr;
-	u32 pay_len, mss;
-	dma_addr_t des;
+	dma_addr_t tso_des, des;
+	bool set_ic;
 	int i;
+
+	/* Always insert VLAN tag to SKB payload for TSO frames.
+	 *
+	 * Never insert VLAN tag by HW, since segments splited by
+	 * TSO engine will be un-tagged by mistake.
+	 */
+	if (skb_vlan_tag_present(skb)) {
+		skb = __vlan_hwaccel_push_inside(skb);
+		if (unlikely(!skb)) {
+			priv->xstats.tx_dropped++;
+			return NETDEV_TX_OK;
+		}
+	}
+
+	nfrags = skb_shinfo(skb)->nr_frags;
+	queue = skb_get_queue_mapping(skb);
 
 	tx_q = &priv->dma_conf.tx_queue[queue];
 	txq_stats = &priv->xstats.txq_stats[queue];
@@ -4211,9 +4287,6 @@ static netdev_tx_t stmmac_tso_xmit(struct sk_buff *skb, struct net_device *dev)
 			skb->data_len);
 	}
 
-	/* Check if VLAN can be inserted by HW */
-	has_vlan = stmmac_vlan_insert(priv, skb, tx_q);
-
 	first_entry = tx_q->cur_tx;
 	WARN_ON(tx_q->tx_skbuff[first_entry]);
 
@@ -4223,19 +4296,11 @@ static netdev_tx_t stmmac_tso_xmit(struct sk_buff *skb, struct net_device *dev)
 		desc = &tx_q->dma_tx[first_entry];
 	first = desc;
 
-	if (has_vlan)
-		stmmac_set_desc_vlan(priv, first, STMMAC_VLAN_INSERT);
-
 	/* first descriptor: fill Headers on Buf1 */
 	des = dma_map_single(priv->device, skb->data, skb_headlen(skb),
 			     DMA_TO_DEVICE);
 	if (dma_mapping_error(priv->device, des))
 		goto dma_map_err;
-
-	tx_q->tx_skbuff_dma[first_entry].buf = des;
-	tx_q->tx_skbuff_dma[first_entry].len = skb_headlen(skb);
-	tx_q->tx_skbuff_dma[first_entry].map_as_page = false;
-	tx_q->tx_skbuff_dma[first_entry].buf_type = STMMAC_TXBUF_T_SKB;
 
 	if (priv->dma_cap.addr64 <= 32) {
 		first->des0 = cpu_to_le32(des);
@@ -4246,14 +4311,32 @@ static netdev_tx_t stmmac_tso_xmit(struct sk_buff *skb, struct net_device *dev)
 
 		/* If needed take extra descriptors to fill the remaining payload */
 		tmp_pay_len = pay_len - TSO_MAX_BUFF_SIZE;
+		tso_des = des;
 	} else {
 		stmmac_set_desc_addr(priv, first, des);
 		tmp_pay_len = pay_len;
-		des += proto_hdr_len;
+		tso_des = des + proto_hdr_len;
 		pay_len = 0;
 	}
 
-	stmmac_tso_allocator(priv, des, tmp_pay_len, (nfrags == 0), queue);
+	stmmac_tso_allocator(priv, tso_des, tmp_pay_len, (nfrags == 0), queue);
+
+	/* In case two or more DMA transmit descriptors are allocated for this
+	 * non-paged SKB data, the DMA buffer address should be saved to
+	 * tx_q->tx_skbuff_dma[].buf corresponding to the last descriptor,
+	 * and leave the other tx_q->tx_skbuff_dma[].buf as NULL to guarantee
+	 * that stmmac_tx_clean() does not unmap the entire DMA buffer too early
+	 * since the tail areas of the DMA buffer can be accessed by DMA engine
+	 * sooner or later.
+	 * By saving the DMA buffer address to tx_q->tx_skbuff_dma[].buf
+	 * corresponding to the last descriptor, stmmac_tx_clean() will unmap
+	 * this DMA buffer right after the DMA engine completely finishes the
+	 * full buffer transmission.
+	 */
+	tx_q->tx_skbuff_dma[tx_q->cur_tx].buf = des;
+	tx_q->tx_skbuff_dma[tx_q->cur_tx].len = skb_headlen(skb);
+	tx_q->tx_skbuff_dma[tx_q->cur_tx].map_as_page = false;
+	tx_q->tx_skbuff_dma[tx_q->cur_tx].buf_type = STMMAC_TXBUF_T_SKB;
 
 	/* Prepare fragments */
 	for (i = 0; i < nfrags; i++) {
@@ -4401,6 +4484,34 @@ static bool stmmac_has_ip_ethertype(struct sk_buff *skb)
 		(proto == htons(ETH_P_IP) || proto == htons(ETH_P_IPV6));
 }
 
+#define STMMAC_MAX_PID 1023
+
+static void stmmac_hw_ts_insert(struct stmmac_priv *priv, struct stmmac_tx_queue *tx_q)
+{
+	struct dma_desc *p;
+
+	if (!priv->plat->insert_ts_pktid)
+		return;
+
+	if (priv->extend_desc)
+		p = &tx_q->dma_etx[tx_q->cur_tx].basic;
+	else if (tx_q->tbs & STMMAC_TBS_AVAIL)
+		p = &tx_q->dma_entx[tx_q->cur_tx].basic;
+	else
+		p = &tx_q->dma_tx[tx_q->cur_tx];
+
+	tx_q->pid = (tx_q->pid + 1) % STMMAC_MAX_PID;
+
+	/*this condition will be hit when 1023%1023 is 0*/
+	if (tx_q->pid == 0)
+		tx_q->pid = 1;
+
+	stmmac_set_desc_hw_ts(priv, p, tx_q->pid);
+	stmmac_set_tx_owner(priv, p);
+
+	tx_q->cur_tx = STMMAC_GET_ENTRY(tx_q->cur_tx, priv->dma_conf.dma_tx_size);
+}
+
 /**
  *  stmmac_xmit - Tx entry point of the driver
  *  @skb : the socket buffer
@@ -4452,6 +4563,11 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 		return NETDEV_TX_BUSY;
 	}
+
+	/* Check if HW TS can be inserted by HW */
+	if (unlikely((skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) &&
+		     priv->hwts_tx_en))
+		stmmac_hw_ts_insert(priv, tx_q);
 
 	/* Check if VLAN can be inserted by HW */
 	has_vlan = stmmac_vlan_insert(priv, skb, tx_q);
@@ -6509,7 +6625,7 @@ static u32 stmmac_vid_crc32_le(__le16 vid_le)
 static int stmmac_vlan_update(struct stmmac_priv *priv, bool is_double)
 {
 	u32 crc, hash = 0;
-	__le16 pmatch = 0;
+	u16 pmatch = 0;
 	int count = 0;
 	u16 vid = 0;
 
@@ -6524,7 +6640,7 @@ static int stmmac_vlan_update(struct stmmac_priv *priv, bool is_double)
 		if (count > 2) /* VID = 0 always passes filter */
 			return -EOPNOTSUPP;
 
-		pmatch = cpu_to_le16(vid);
+		pmatch = vid;
 		hash = 0;
 	}
 
@@ -7563,8 +7679,6 @@ int stmmac_dvr_probe(struct device *device,
 		ndev->features |= NETIF_F_RXHASH;
 
 	ndev->vlan_features |= ndev->features;
-	/* TSO doesn't work on VLANs yet */
-	ndev->vlan_features &= ~NETIF_F_TSO;
 
 	/* MTU range: 46 - hw-specific max */
 	ndev->min_mtu = ETH_ZLEN - ETH_HLEN;

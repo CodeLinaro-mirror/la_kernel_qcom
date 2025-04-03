@@ -214,17 +214,7 @@ config MTK_ADSP_IPC
 
 config QCOM_SCM
 	tristate
-
-config QCOM_SCM_DOWNLOAD_MODE_DEFAULT
-	bool "Qualcomm download mode enabled by default"
-	depends on QCOM_SCM
-	help
-	  A device with "download mode" enabled will upon an unexpected
-	  warm-restart enter a special debug mode that allows the user to
-	  "download" memory content over USB for offline postmortem analysis.
-	  The feature can be enabled/disabled on the kernel command line.
-
-	  Say Y here to enable "download mode" by default.
+	select QCOM_TZMEM
 
 config QCOM_SCM_ADDON
 	bool "Qualcomm SCM Addon Support"
@@ -246,6 +236,7 @@ config QTEE_SHM_BRIDGE
 config SYSFB
 	bool
 	select BOOT_VESA_SUPPORT
+	select SCREEN_INFO
 
 config SYSFB_SIMPLEFB
 	bool "Mark VGA/VBE/EFI FB as generic system framebuffer"

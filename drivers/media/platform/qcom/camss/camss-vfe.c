@@ -14,6 +14,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/spinlock_types.h>
 #include <linux/spinlock.h>
@@ -271,6 +272,7 @@ const struct camss_formats vfe_formats_rdi_845 = {
 	.formats = formats_rdi_845
 };
 
+/* TODO: Replace with pix formats */
 const struct camss_formats vfe_formats_pix_845 = {
 	.nformats = ARRAY_SIZE(formats_rdi_845),
 	.formats = formats_rdi_845
@@ -331,11 +333,14 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
 			return sink_code;
 		}
 		break;
-	case CAMSS_8x96:
 	case CAMSS_660:
-	case CAMSS_845:
-	case CAMSS_8250:
 	case CAMSS_7280:
+	case CAMSS_8x96:
+	case CAMSS_8250:
+	case CAMSS_8280XP:
+	case CAMSS_845:
+	case CAMSS_8775P:
+	case CAMSS_8300:
 		switch (sink_code) {
 		case MEDIA_BUS_FMT_YUYV8_1X16:
 		{
@@ -404,15 +409,17 @@ int vfe_reset(struct vfe_device *vfe)
 {
 	unsigned long time;
 
-	reinit_completion(&vfe->reset_complete);
+	if (vfe->res->hw_ops->global_reset) {
+		reinit_completion(&vfe->reset_complete);
 
-	vfe->res->hw_ops->global_reset(vfe);
+		vfe->res->hw_ops->global_reset(vfe);
 
-	time = wait_for_completion_timeout(&vfe->reset_complete,
-		msecs_to_jiffies(VFE_RESET_TIMEOUT_MS));
-	if (!time) {
-		dev_err(vfe->camss->dev, "VFE%d reset timeout\n", vfe->id);
-		return -EIO;
+		time = wait_for_completion_timeout(&vfe->reset_complete,
+			msecs_to_jiffies(VFE_RESET_TIMEOUT_MS));
+		if (!time) {
+			dev_err(vfe->camss->dev, "VFE reset timeout\n");
+			return -EIO;
+		}
 	}
 
 	return 0;
@@ -586,6 +593,40 @@ void vfe_isr_reset_ack(struct vfe_device *vfe)
 	complete(&vfe->reset_complete);
 }
 
+/*
+ * vfe_pm_domain_off - Disable power domains specific to this VFE.
+ * @vfe: VFE Device
+ */
+void vfe_pm_domain_off(struct vfe_device *vfe)
+{
+	if (!vfe->genpd)
+		return;
+
+	device_link_del(vfe->genpd_link);
+	vfe->genpd_link = NULL;
+}
+
+/*
+ * vfe_pm_domain_on - Enable power domains specific to this VFE.
+ * @vfe: VFE Device
+ */
+int vfe_pm_domain_on(struct vfe_device *vfe)
+{
+	struct camss *camss = vfe->camss;
+
+	if (!vfe->genpd)
+		return 0;
+
+	vfe->genpd_link = device_link_add(camss->dev, vfe->genpd,
+					  DL_FLAG_STATELESS |
+					  DL_FLAG_PM_RUNTIME |
+					  DL_FLAG_RPM_ACTIVE);
+	if (!vfe->genpd_link)
+		return -EINVAL;
+
+	return 0;
+}
+
 static int vfe_match_clock_names(struct vfe_device *vfe,
 				 struct camss_clock *clock)
 {
@@ -597,7 +638,8 @@ static int vfe_match_clock_names(struct vfe_device *vfe,
 
 	return (!strcmp(clock->name, vfe_name) ||
 		!strcmp(clock->name, vfe_lite_name) ||
-		!strcmp(clock->name, "vfe_lite"));
+		!strcmp(clock->name, "vfe_lite") ||
+		!strcmp(clock->name, "camnoc_axi"));
 }
 
 /*
@@ -626,8 +668,6 @@ static int vfe_set_clock_rates(struct vfe_device *vfe)
 		if (vfe_match_clock_names(vfe, clock)) {
 			u64 min_rate = 0;
 			long rate;
-			if (!clock->nfreqs || !clock->freq)
-				continue;
 
 			for (j = VFE_LINE_RDI0; j < vfe->res->line_num; j++) {
 				u32 tmp;
@@ -757,6 +797,7 @@ int vfe_get(struct vfe_device *vfe)
 		if (ret < 0)
 			goto error_pm_domain;
 
+		dev_pm_genpd_set_performance_state(vfe->camss->dev, RPMP_PERF_STATE_NOM);
 		ret = pm_runtime_resume_and_get(vfe->camss->dev);
 		if (ret < 0)
 			goto error_domain_off;
@@ -818,7 +859,8 @@ void vfe_put(struct vfe_device *vfe)
 	} else if (vfe->power_count == 1) {
 		if (vfe->was_streaming) {
 			vfe->was_streaming = 0;
-			vfe->res->hw_ops->vfe_halt(vfe);
+			if (vfe->res->hw_ops->vfe_halt)
+				vfe->res->hw_ops->vfe_halt(vfe);
 		}
 		camss_disable_clocks(vfe->nclocks, vfe->clock);
 		pm_runtime_put_sync(vfe->camss->dev);
@@ -929,7 +971,7 @@ static int vfe_set_stream(struct v4l2_subdev *sd, int enable)
 /*
  * __vfe_get_format - Get pointer to format structure
  * @line: VFE line
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @pad: pad from which format is requested
  * @which: TRY or ACTIVE format
  *
@@ -951,7 +993,7 @@ __vfe_get_format(struct vfe_line *line,
 /*
  * __vfe_get_compose - Get pointer to compose selection structure
  * @line: VFE line
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @which: TRY or ACTIVE format
  *
  * Return pointer to TRY or ACTIVE compose rectangle structure
@@ -971,7 +1013,7 @@ __vfe_get_compose(struct vfe_line *line,
 /*
  * __vfe_get_crop - Get pointer to crop selection structure
  * @line: VFE line
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @which: TRY or ACTIVE format
  *
  * Return pointer to TRY or ACTIVE crop rectangle structure
@@ -991,7 +1033,7 @@ __vfe_get_crop(struct vfe_line *line,
 /*
  * vfe_try_format - Handle try format by pad subdev method
  * @line: VFE line
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @pad: pad on which format is requested
  * @fmt: pointer to v4l2 format structure
  * @which: wanted subdev format
@@ -1052,7 +1094,7 @@ static void vfe_try_format(struct vfe_line *line,
 /*
  * vfe_try_compose - Handle try compose selection by pad subdev method
  * @line: VFE line
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @rect: pointer to v4l2 rect structure
  * @which: wanted subdev format
  */
@@ -1091,7 +1133,7 @@ static void vfe_try_compose(struct vfe_line *line,
 /*
  * vfe_try_crop - Handle try crop selection by pad subdev method
  * @line: VFE line
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @rect: pointer to v4l2 rect structure
  * @which: wanted subdev format
  */
@@ -1134,7 +1176,7 @@ static void vfe_try_crop(struct vfe_line *line,
 /*
  * vfe_enum_mbus_code - Handle pixel format enumeration
  * @sd: VFE V4L2 subdevice
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @code: pointer to v4l2_subdev_mbus_code_enum structure
  *
  * return -EINVAL or zero on success
@@ -1168,7 +1210,7 @@ static int vfe_enum_mbus_code(struct v4l2_subdev *sd,
 /*
  * vfe_enum_frame_size - Handle frame size enumeration
  * @sd: VFE V4L2 subdevice
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @fse: pointer to v4l2_subdev_frame_size_enum structure
  *
  * Return -EINVAL or zero on success
@@ -1206,7 +1248,7 @@ static int vfe_enum_frame_size(struct v4l2_subdev *sd,
 /*
  * vfe_get_format - Handle get format by pads subdev method
  * @sd: VFE V4L2 subdevice
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @fmt: pointer to v4l2 subdev format structure
  *
  * Return -EINVAL or zero on success
@@ -1234,7 +1276,7 @@ static int vfe_set_selection(struct v4l2_subdev *sd,
 /*
  * vfe_set_format - Handle set format by pads subdev method
  * @sd: VFE V4L2 subdevice
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @fmt: pointer to v4l2 subdev format structure
  *
  * Return -EINVAL or zero on success
@@ -1285,7 +1327,7 @@ static int vfe_set_format(struct v4l2_subdev *sd,
 /*
  * vfe_get_selection - Handle get selection by pads subdev method
  * @sd: VFE V4L2 subdevice
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @sel: pointer to v4l2 subdev selection structure
  *
  * Return -EINVAL or zero on success
@@ -1355,7 +1397,7 @@ static int vfe_get_selection(struct v4l2_subdev *sd,
 /*
  * vfe_set_selection - Handle set selection by pads subdev method
  * @sd: VFE V4L2 subdevice
- * @cfg: V4L2 subdev pad configuration
+ * @sd_state: V4L2 subdev state
  * @sel: pointer to v4l2 subdev selection structure
  *
  * Return -EINVAL or zero on success
@@ -1460,8 +1502,35 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
 		return -EINVAL;
 
 	vfe->res = &res->vfe;
-
 	vfe->res->hw_ops->subdev_init(dev, vfe);
+
+	/* Power domain */
+
+	if (res->vfe.pd_name) {
+		vfe->genpd = dev_pm_domain_attach_by_name(camss->dev,
+							  res->vfe.pd_name);
+		if (IS_ERR(vfe->genpd)) {
+			ret = PTR_ERR(vfe->genpd);
+			return ret;
+		}
+	}
+
+	if (!vfe->genpd && res->vfe.has_pd) {
+		/*
+		 * Legacy magic index.
+		 * Requires
+		 * power-domain = <VFE_X>,
+		 *                <VFE_Y>,
+		 *                <TITAN_TOP>
+		 * id must correspondng to the index of the VFE which must
+		 * come before the TOP GDSC. VFE Lite has no individually
+		 * collapasible domain which is why id < vfe_num is a valid
+		 * check.
+		 */
+		vfe->genpd = dev_pm_domain_attach_by_id(camss->dev, id);
+		if (IS_ERR(vfe->genpd))
+			return PTR_ERR(vfe->genpd);
+	}
 
 	/* Memory */
 
@@ -1480,11 +1549,13 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
 	vfe->irq = ret;
 	snprintf(vfe->irq_name, sizeof(vfe->irq_name), "%s_%s%d",
 		 dev_name(dev), MSM_VFE_NAME, id);
-	ret = devm_request_irq(dev, vfe->irq, vfe->res->hw_ops->isr,
-			       IRQF_TRIGGER_RISING, vfe->irq_name, vfe);
-	if (ret < 0) {
-		dev_err(dev, "request_irq failed: %d\n", ret);
-		return ret;
+	if (vfe->res->hw_ops->isr) {
+		ret = devm_request_irq(dev, vfe->irq, vfe->res->hw_ops->isr,
+				       IRQF_TRIGGER_RISING, vfe->irq_name, vfe);
+		if (ret < 0) {
+			dev_err(dev, "request_irq failed: %d\n", ret);
+			return ret;
+		}
 	}
 
 	/* Clocks */
@@ -1564,6 +1635,19 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
 }
 
 /*
+ * msm_vfe_genpd_cleanup - Cleanup VFE genpd linkages
+ * @vfe: VFE device
+ */
+void msm_vfe_genpd_cleanup(struct vfe_device *vfe)
+{
+	if (vfe->genpd_link)
+		device_link_del(vfe->genpd_link);
+
+	if (vfe->genpd)
+		dev_pm_domain_detach(vfe->genpd, true);
+}
+
+/*
  * vfe_link_setup - Setup VFE connections
  * @entity: Pointer to media entity structure
  * @local: Pointer to local pad
@@ -1614,6 +1698,26 @@ static const struct media_entity_operations vfe_media_ops = {
 	.link_setup = vfe_link_setup,
 	.link_validate = v4l2_subdev_link_validate,
 };
+
+static int vfe_bpl_align(struct vfe_device *vfe)
+{
+	int ret = 8;
+
+	switch (vfe->camss->res->version) {
+	case CAMSS_7280:
+	case CAMSS_8250:
+	case CAMSS_8280XP:
+	case CAMSS_845:
+	case CAMSS_8775P:
+	case CAMSS_8300:
+		ret = 16;
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
 
 /*
  * msm_vfe_register_entities - Register subdev node for VFE module
@@ -1681,12 +1785,7 @@ int msm_vfe_register_entities(struct vfe_device *vfe,
 		}
 
 		video_out->ops = &vfe->video_ops;
-		if (vfe->camss->res->version == CAMSS_845 ||
-		    vfe->camss->res->version == CAMSS_8250 ||
-		    vfe->camss->res->version == CAMSS_7280)
-			video_out->bpl_alignment = 16;
-		else
-			video_out->bpl_alignment = 8;
+		video_out->bpl_alignment = vfe_bpl_align(vfe);
 		video_out->line_based = 0;
 		if (i == VFE_LINE_PIX) {
 			video_out->bpl_alignment = 16;
@@ -1760,4 +1859,9 @@ void msm_vfe_unregister_entities(struct vfe_device *vfe)
 		v4l2_device_unregister_subdev(sd);
 		media_entity_cleanup(&sd->entity);
 	}
+}
+
+bool vfe_is_lite(struct vfe_device *vfe)
+{
+	return vfe->camss->res->vfe_res[vfe->id].vfe.is_lite;
 }

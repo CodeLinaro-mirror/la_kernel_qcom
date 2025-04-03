@@ -145,6 +145,8 @@ enum ath11k_hw_rev {
 	ATH11K_HW_WCN6855_HW21,
 	ATH11K_HW_WCN6750_HW10,
 	ATH11K_HW_IPQ5018_HW10,
+	ATH11K_HW_QCA2066_HW21,
+	ATH11K_HW_QCA6698AQ_HW21,
 };
 
 enum ath11k_firmware_mode {
@@ -329,6 +331,7 @@ struct ath11k_vif {
 
 	u16 tx_seq_no;
 	struct wmi_wmm_params_all_arg wmm_params;
+	struct wmi_wmm_params_all_arg muedca_params;
 	struct list_head list;
 	union {
 		struct {

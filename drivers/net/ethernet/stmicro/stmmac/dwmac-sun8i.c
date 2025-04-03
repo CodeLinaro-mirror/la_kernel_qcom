@@ -298,7 +298,7 @@ static int sun8i_dwmac_dma_reset(void __iomem *ioaddr)
 /* sun8i_dwmac_dma_init() - initialize the EMAC
  * Called from stmmac via stmmac_dma_ops->init
  */
-static void sun8i_dwmac_dma_init(void __iomem *ioaddr,
+static void sun8i_dwmac_dma_init(struct stmmac_priv *priv, void __iomem *ioaddr,
 				 struct stmmac_dma_cfg *dma_cfg, int atds)
 {
 	writel(EMAC_RX_INT | EMAC_TX_INT, ioaddr + EMAC_INT_EN);
@@ -343,7 +343,8 @@ static void sun8i_dwmac_dump_regs(struct stmmac_priv *priv,
  * Called from stmmac_ops->dump_regs
  * Used for ethtool
  */
-static void sun8i_dwmac_dump_mac_regs(struct mac_device_info *hw,
+static void sun8i_dwmac_dump_mac_regs(struct stmmac_priv *priv,
+				      struct mac_device_info *hw,
 				      u32 *reg_space)
 {
 	int i;

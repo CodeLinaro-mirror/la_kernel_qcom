@@ -5,6 +5,16 @@
 
 #include "qcs8300-dma-heaps.dtsi"
 / {
+	firmware {
+		qtee_shmbridge {
+			compatible = "qcom,tee-shared-memory-bridge";
+		};
+
+		qcom_smcinvoke {
+			compatible = "qcom,smcinvoke";
+		};
+	};
+
 	reserved-memory {
 		audio_cma_mem: qcom,audio-ml {
 			compatible = "shared-dma-pool";
@@ -19,6 +29,22 @@
 			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
 			reusable;
 			size = <0x0 0x3000000>;
+		};
+
+		qseecom_mem: qcom,qseecom {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x1400000>; /* 20M */
+		};
+
+		qseecom_ta_mem: qcom,qseecom-ta {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x1000000>; /* 16M */
 		};
 	};
 
@@ -111,15 +137,9 @@
 			qcom,dump-size = <0x20000>;
 		};
 
-		etf-reg {
-			qcom,dump-id = <0x101>;
-			qcom,dump-size = <0x1000>;
-		};
-
-
 		etf-swao {
 			qcom,dump-id = <0xf1>;
-			qcom,dump-size = <0x8400>;
+			qcom,dump-size = <0x10000>;
 		};
 
 		etfswao-reg {
@@ -336,11 +356,6 @@
 			qcom,dump-id = <0xec>;
 			qcom,dump-size = <0x2000000>;
 		};
-
-		tmc-etf {
-			qcom,dump-id = <0xf0>;
-			qcom,dump-size = <0x10000>;
-		};
 	};
 };
 
@@ -445,6 +460,29 @@
 		qcom,timestamp-support;
 		qcom,msr-support;
 		qcom,blk-size = <1>;
+	};
+
+	qcom,mem-buf {
+		compatible = "qcom,mem-buf";
+		qcom,mem-buf-capabilities = "supplier";
+		qcom,vmid = <3>;
+	};
+
+	qcom,mem-buf-msgq {
+		compatible = "qcom,mem-buf-msgq";
+	};
+
+	qcom,secure-buffer {
+		compatible = "qcom,secure-buffer";
+		qcom,vmid-cp-camera-preview-ro;
+	};
+
+	qcom_tzlog: tz-log@146d8720 {
+		compatible = "qcom,tz-log";
+		reg = <0x0 0x146d8720 0x0 0x3000>;
+		qcom,hyplog-enabled;
+		hyplog-address-offset = <0x410>;
+		hyplog-size-offset = <0x414>;
 	};
 };
 

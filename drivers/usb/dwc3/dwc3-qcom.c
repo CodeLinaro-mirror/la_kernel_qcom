@@ -72,6 +72,10 @@ struct dwc3_qcom {
 	int			num_clocks;
 	struct reset_control	*resets;
 
+	/* VBUS regulator for host mode */
+	struct regulator	*vbus_reg;
+	bool			is_vbus_enabled;
+
 	int			hs_phy_irq;
 	int			dp_hs_phy_irq;
 	int			dm_hs_phy_irq;
@@ -448,19 +452,29 @@ static void dwc3_qcom_enable_interrupts(struct dwc3_qcom *qcom)
 	dwc3_qcom_enable_wakeup_irq(qcom->ss_phy_irq, 0);
 }
 
+static void dwc3_qcom_vbus_regulator_enable(struct dwc3_qcom *qcom, bool on)
+{
+	if (!qcom->vbus_reg)
+		return;
+
+	if (!qcom->is_vbus_enabled && on) {
+		regulator_enable(qcom->vbus_reg);
+		qcom->is_vbus_enabled = true;
+	} else if (qcom->is_vbus_enabled && !on) {
+		regulator_disable(qcom->vbus_reg);
+		qcom->is_vbus_enabled = false;
+	}
+}
+
 static void dwc3_qcom_select_utmi_clk(struct dwc3_qcom *qcom)
 {
 	/* Configure dwc3 to use UTMI clock as PIPE clock not present */
 	dwc3_qcom_setbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
 			  PIPE_UTMI_CLK_DIS);
-
 	usleep_range(100, 1000);
-
 	dwc3_qcom_setbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
 			  PIPE_UTMI_CLK_SEL | PIPE3_PHYSTATUS_SW);
-
 	usleep_range(100, 1000);
-
 	dwc3_qcom_clrbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
 			  PIPE_UTMI_CLK_DIS);
 }
@@ -782,6 +796,7 @@ static int dwc3_qcom_handle_cable_disconnect(void *data)
 		dwc3_qcom_vbus_override_enable(qcom, false);
 		pm_runtime_put_autosuspend(qcom->dev);
 	} else if (qcom->current_role == USB_ROLE_HOST) {
+		dwc3_qcom_vbus_regulator_enable(qcom, false);
 		usb_unregister_notify(&qcom->xhci_nb);
 	}
 
@@ -811,6 +826,7 @@ static void dwc3_qcom_handle_set_mode(void *data, u32 desired_dr_role)
 		qcom->xhci_nb.notifier_call = dwc3_xhci_event_notifier;
 		usb_register_notify(&qcom->xhci_nb);
 		qcom->current_role = USB_ROLE_HOST;
+		dwc3_qcom_vbus_regulator_enable(qcom, true);
 	}
 
 	pm_runtime_mark_last_busy(qcom->dev);
@@ -972,6 +988,24 @@ static int dwc3_qcom_acpi_merge_urs_resources(struct platform_device *pdev)
 	return ret;
 }
 
+static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
+{
+	/*
+	 * The vbus_reg pointer could have multiple values
+	 * NULL: regulator_get() hasn't been called, or was previously deferred
+	 * IS_ERR: regulator could not be obtained, so skip using it
+	 * Valid pointer otherwise
+	 */
+	qcom->vbus_reg = devm_regulator_get_optional(qcom->dev,
+						"vbus_dwc3");
+	if (IS_ERR(qcom->vbus_reg)) {
+		dev_err(qcom->dev, "Unable to get vbus regulator err: %ld\n",
+							PTR_ERR(qcom->vbus_reg));
+		qcom->vbus_reg = NULL;
+		return;
+	}
+}
+
 static int dwc3_qcom_probe(struct platform_device *pdev)
 {
 	struct device_node	*np = pdev->dev.of_node;
@@ -1127,6 +1161,13 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 			goto interconnect_exit;
 	}
 
+	dwc3_qcom_vbus_regulator_get(qcom);
+
+	if (qcom->mode == USB_DR_MODE_HOST) {
+		dwc3_qcom_vbus_regulator_enable(qcom, true);
+		qcom->is_vbus_enabled = true;
+	}
+
 	wakeup_source = of_property_read_bool(dev->of_node, "wakeup-source");
 	device_init_wakeup(&pdev->dev, wakeup_source);
 
@@ -1194,6 +1235,39 @@ static void dwc3_qcom_remove(struct platform_device *pdev)
 		pm_runtime_allow(dev);
 		pm_runtime_disable(dev);
 	}
+}
+
+static void dwc3_qcom_shutdown(struct platform_device *pdev)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct device *dev = &pdev->dev;
+	struct dwc3_qcom *qcom;
+	bool legacy_binding;
+	int i;
+
+	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
+	qcom = get_dwc3_qcom(dev);
+
+	if (legacy_binding)
+		return;
+
+	pm_runtime_get_sync(qcom->dev);
+	dwc3_core_exit_mode(&qcom->dwc);
+	dwc3_free_event_buffers(&qcom->dwc);
+
+	for (i = qcom->num_clocks - 1; i >= 0; i--) {
+		clk_disable_unprepare(qcom->clks[i]);
+		clk_put(qcom->clks[i]);
+	}
+	qcom->num_clocks = 0;
+
+	dwc3_qcom_interconnect_exit(qcom);
+	reset_control_assert(qcom->resets);
+
+	pm_runtime_allow(qcom->dev);
+	pm_runtime_disable(qcom->dev);
+	pm_runtime_dont_use_autosuspend(qcom->dev);
+	pm_runtime_put_noidle(qcom->dev);
 }
 
 static int __maybe_unused dwc3_qcom_pm_suspend(struct device *dev)
@@ -1342,6 +1416,7 @@ MODULE_DEVICE_TABLE(acpi, dwc3_qcom_acpi_match);
 static struct platform_driver dwc3_qcom_driver = {
 	.probe		= dwc3_qcom_probe,
 	.remove_new	= dwc3_qcom_remove,
+	.shutdown	= dwc3_qcom_shutdown,
 	.driver		= {
 		.name	= "dwc3-qcom",
 		.pm	= &dwc3_qcom_dev_pm_ops,
