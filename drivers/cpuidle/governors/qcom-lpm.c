@@ -3,9 +3,10 @@
  * Copyright (C) 2006-2007 Adam Belay <abelay@novell.com>
  * Copyright (C) 2009 Intel Corporation
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <asm/arch_timer.h>
 #include <linux/cpu.h>
 #include <linux/cpuidle.h>
 #include <linux/cpu_pm.h>
@@ -509,20 +510,21 @@ static void ipi_entry(void *ignore, const char *unused)
  * get_cpus_qos() - Returns the aggrigated PM QoS request.
  * @mask: cpumask of the cpus
  */
-s64 get_cpus_qos(const struct cpumask *mask)
+u64 get_cpus_qos(const struct cpumask *mask)
 {
 	int cpu;
-	s64 n, latency = PM_QOS_CPU_LATENCY_DEFAULT_VALUE * NSEC_PER_USEC;
+	u64 n, latency = PM_QOS_CPU_LATENCY_DEFAULT_VALUE;
 
 	for_each_cpu(cpu, mask) {
 		if (!check_cpu_isactive(cpu))
 			continue;
 		n = cpuidle_governor_latency_req(cpu);
+		do_div(n, NSEC_PER_USEC);
 		if (n < latency)
 			latency = n;
 	}
 
-	return latency;
+	return latency * NSEC_PER_USEC;
 }
 
 /**
@@ -578,7 +580,7 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		      bool *stop_tick)
 {
 	struct lpm_cpu *cpu_gov = this_cpu_ptr(&lpm_cpu_data);
-	s64 latency_req = get_cpus_qos(cpumask_of(dev->cpu));
+	u64 latency_req = get_cpus_qos(cpumask_of(dev->cpu));
 	ktime_t delta_tick;
 	u64 reason = 0;
 	uint64_t duration_ns, htime = 0;

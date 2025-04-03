@@ -4,6 +4,7 @@
  * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
+#include <asm/arch_timer.h>
 #include <linux/cdev.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -305,16 +306,13 @@ static u64 qcom_stats_fill_ddr_stats(void __iomem *reg, struct sleep_stats *data
 	reg += DDR_STATS_ENTRY_ADDR;
 
 	for (i = 0; i < *entry_count; i++) {
-		data[i].count = readl_relaxed(reg + DDR_STATS_COUNT_ADDR);
 		if ((i >= 0x4) && (ddr_stats_is_freq_overtime(&data[i]))) {
 			pr_err("ddr_stats: Freq update failed\n");
 			return 0;
 		}
-
-		data[i].stat_type = readl_relaxed(reg + DDR_STATS_NAME_ADDR);
+		memcpy_fromio(&data[i], reg, sizeof(*data));
 		data[i].last_entered_at = 0xDEADDEAD;
 		data[i].last_exited_at = 0xDEADDEAD;
-		data[i].accumulated = readq_relaxed(reg + DDR_STATS_DURATION_ADDR);
 
 		accumulated_duration += data[i].accumulated;
 		reg += sizeof(struct sleep_stats) - 2 * sizeof(u64);
@@ -837,8 +835,11 @@ static void print_ddr_stats(struct seq_file *s, int *count,
 	u32 cp_idx = 0;
 	u32 name, duration = 0;
 
-	if (accumulated_duration)
-		duration = (data->accumulated * 100) / accumulated_duration;
+	if (accumulated_duration) {
+		u64 _accumulated = data->accumulated * 100;
+
+		duration = do_div(_accumulated, accumulated_duration);
+	}
 
 	name = (data->stat_type >> 8) & 0xFF;
 	if (name == 0x0) {
