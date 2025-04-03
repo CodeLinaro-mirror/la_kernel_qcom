@@ -1151,8 +1151,6 @@ struct dwc3_glue_data {
  * @sys_wakeup: set if the device may do system wakeup.
  * @wakeup_configured: set if the device is configured for remote wakeup.
  * @suspended: set to track suspend event due to U3/L2.
- * @allow_role_switch_userspace_control: Expose sysfs entries to allow
- *					userspace to control role switch.
  * @susphy_state: state of DWC3_GUSB2PHYCFG_SUSPHY + DWC3_GUSB3PIPECTL_SUSPHY
  *          before PM suspend.
  * @imod_interval: set the interrupt moderation interval in 250ns
@@ -1382,7 +1380,6 @@ struct dwc3 {
 	unsigned		sys_wakeup:1;
 	unsigned		wakeup_configured:1;
 	unsigned		suspended:1;
-	unsigned		allow_role_switch_userspace_control:1;
 
 	unsigned		susphy_state:1;
 
