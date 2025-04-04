@@ -153,6 +153,9 @@
 #define USB_HSPHY_1P2_HPM_LOAD		5905	/* uA */
 #define USB_HSPHY_VDD_HPM_LOAD		7757	/* uA */
 
+/* Maximum power domains */
+#define MIN_PD				2
+
 struct msm_eusb2_phy {
 	struct usb_phy		phy;
 	void __iomem		*base;
@@ -194,17 +197,23 @@ struct msm_eusb2_phy {
 	struct usb_repeater	*ur;
 
 	u8			eud_det_val;
+
 	bool			fw_managed_pwr;
+	int			pd_count;
 	struct device		**pd_devs;
-	int pd_count;
 };
 
-static void msm_eusbphy_modeled_domain_detach(struct msm_eusb2_phy *phy)
+static void msm_eusb2_phy_modeled_domain_detach(struct msm_eusb2_phy *phy)
 {
 	int i;
 
-	if (phy->pd_count <= 1)
+	if (!phy->fw_managed_pwr)
 		return;
+
+	if (phy->pd_count < MIN_PD) {
+		dev_err(phy->phy.dev, "%s: PD count invalid\n", __func__);
+		return;
+	}
 
 	for (i = phy->pd_count - 1; i >= 0; i--) {
 		if (!IS_ERR_OR_NULL(phy->pd_devs[i]))
@@ -212,67 +221,69 @@ static void msm_eusbphy_modeled_domain_detach(struct msm_eusb2_phy *phy)
 	}
 }
 
-static int msm_eusbphy_modeled_domain_attach(struct msm_eusb2_phy *phy)
+static int msm_eusb2_phy_modeled_domain_attach(struct msm_eusb2_phy *phy)
 {
-        struct device *dev = phy->phy.dev;
+	struct device *dev = phy->phy.dev;
 	int i;
 
 	phy->pd_count = of_count_phandle_with_args(
 		dev->of_node, "power-domains", NULL);
-	if (phy->pd_count <= 1)
-		return -1;
+	if (phy->pd_count < MIN_PD)
+		return -EINVAL;
 
 	phy->pd_devs = devm_kcalloc(dev, phy->pd_count,
-					  sizeof(*phy->pd_devs),
-					  GFP_KERNEL);
+				  sizeof(*phy->pd_devs),
+				  GFP_KERNEL);
 
 	if (!phy->pd_devs)
 		return -ENOMEM;
 
 	for (i = 0; i < phy->pd_count; i++) {
 		phy->pd_devs[i] = dev_pm_domain_attach_by_id(dev, i);
-		if (IS_ERR(phy->pd_devs[i])) {
-			msm_eusbphy_modeled_domain_detach(phy);
-			return PTR_ERR(phy->pd_devs[i]);
-		}
+		if (IS_ERR(phy->pd_devs[i]))
+			goto pd_err;
 	}
 	return 0;
+
+pd_err:
+	msm_eusb2_phy_modeled_domain_detach(phy);
+	return PTR_ERR(phy->pd_devs[i]);
 }
 
 /* d3_to_d0 transition by turning on all the suppliers */
-static int msm_eusbphy_modeled_d3_to_d0(struct msm_eusb2_phy *phy)
+static int msm_eusb2_phy_modeled_d3_to_d0(struct msm_eusb2_phy *phy)
 {
-       int ret = 0;
+	int ret;
 
-       if (!phy->fw_managed_pwr)
-               return 0;
+	if (!phy->fw_managed_pwr)
+		return 0;
 
-       ret = pm_runtime_resume_and_get(phy->pd_devs[0]);
-       if (ret)
-               return ret;
+	ret = pm_runtime_resume_and_get(phy->pd_devs[0]);
+	if (ret)
+		return ret;
 
-       ret = pm_runtime_resume_and_get(phy->pd_devs[1]);
+	ret = pm_runtime_resume_and_get(phy->pd_devs[1]);
 
-       return ret;
+	return ret;
 }
 
 /* d0_to_d3 transition by turning off all the suppliers */
-static void msm_eusbphy_modeled_d0_to_d3(struct msm_eusb2_phy *phy)
+static void msm_eusb2_phy_modeled_d0_to_d3(struct msm_eusb2_phy *phy)
 {
-       if (!phy->fw_managed_pwr)
-               return;
+	if (!phy->fw_managed_pwr)
+		return;
 
-       pm_runtime_put_sync(phy->pd_devs[0]);
-       pm_runtime_put_sync(phy->pd_devs[1]);
+	pm_runtime_put_sync(phy->pd_devs[0]);
+	pm_runtime_put_sync(phy->pd_devs[1]);
 }
 
 /* d0_to_d1 transition by turning off all the suppliers */
-static void msm_eusbphy_modeled_d0_to_d1(struct msm_eusb2_phy *phy)
+static void msm_eusb2_phy_modeled_d0_to_d1(struct msm_eusb2_phy *phy)
 {
-       if (!phy->fw_managed_pwr)
-               return;
+	if (!phy->fw_managed_pwr)
+		return;
 
-       pm_runtime_put_sync(phy->pd_devs[0]);
+	pm_runtime_put_sync(phy->pd_devs[0]);
 }
 
 static inline bool is_eud_debug_mode_active(struct msm_eusb2_phy *phy)
@@ -286,8 +297,8 @@ static inline bool is_eud_debug_mode_active(struct msm_eusb2_phy *phy)
 
 static void msm_eusb2_phy_clocks(struct msm_eusb2_phy *phy, bool on)
 {
-       if (phy->fw_managed_pwr)
-               return;
+	if (phy->fw_managed_pwr)
+		return;
 
 	dev_dbg(phy->phy.dev, "clocks_enabled:%d on:%d\n",
 			phy->clocks_enabled, on);
@@ -327,8 +338,8 @@ static int msm_eusb2_phy_power(struct msm_eusb2_phy *phy, bool on)
 {
 	int ret = 0;
 
-       if (phy->fw_managed_pwr)
-               return ret;
+	if (phy->fw_managed_pwr)
+		return 0;
 
 	dev_dbg(phy->phy.dev, "turn %s regulators. power_enabled:%d\n",
 			on ? "on" : "off", phy->power_enabled);
@@ -750,6 +761,9 @@ static int msm_eusb2_repeater_reset_and_init(struct msm_eusb2_phy *phy)
 	if (phy->fw_managed_pwr)
 		return ret;
 
+	if (phy->fw_managed_pwr)
+		return 0;
+
 	if (phy->ur)
 		phy->ur->flags = phy->phy.flags;
 
@@ -780,14 +794,14 @@ static int msm_eusb2_phy_init(struct usb_phy *uphy)
 			qcom_scm_io_writel(phy->eud_reg, 0x0);
 			phy->re_enable_eud = true;
 		} else {
-			msm_eusbphy_modeled_d3_to_d0(phy);
+			msm_eusb2_phy_modeled_d3_to_d0(phy);
 			msm_eusb2_phy_power(phy, true);
 			msm_eusb2_phy_clocks(phy, true);
 			return msm_eusb2_repeater_reset_and_init(phy);
 		}
 	}
 
-	msm_eusbphy_modeled_d3_to_d0(phy);
+	msm_eusb2_phy_modeled_d3_to_d0(phy);
 
 	ret = msm_eusb2_phy_power(phy, true);
 	if (ret)
@@ -891,7 +905,7 @@ static int msm_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 		if (phy->cable_connected ||
 			(phy->phy.flags & PHY_HOST_MODE)) {
 			msm_eusb2_phy_clocks(phy, false);
-			msm_eusbphy_modeled_d0_to_d1(phy);
+			msm_eusb2_phy_modeled_d0_to_d1(phy);
 			goto suspend_exit;
 		}
 
@@ -908,14 +922,14 @@ static int msm_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 
 		msm_eusb2_phy_clocks(phy, false);
 		msm_eusb2_phy_power(phy, false);
-		msm_eusbphy_modeled_d0_to_d3(phy);
+		msm_eusb2_phy_modeled_d0_to_d3(phy);
 
 		/* Hold repeater into reset after powering down PHY */
 		usb_repeater_reset(phy->ur, false);
 		usb_repeater_powerdown(phy->ur);
 	} else {
 		/* Bus resume and cable connect handling */
-		msm_eusbphy_modeled_d3_to_d0(phy);
+		msm_eusb2_phy_modeled_d3_to_d0(phy);
 		msm_eusb2_phy_power(phy, true);
 		msm_eusb2_phy_clocks(phy, true);
 	}
@@ -1040,7 +1054,9 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 		goto err_ret;
 	}
 
-	if (!(of_device_is_compatible(np, "qcom,usb-snps-eusb2-fw-managed"))) {
+	phy->phy.dev = dev;
+
+	if (!(of_device_is_compatible(dev->of_node, "qcom,usb-snps-eusb2-fw-managed"))) {
 		ur = devm_usb_get_repeater_by_phandle(dev, "usb-repeater", 0);
 		if (IS_ERR(ur)) {
 			ret = PTR_ERR(ur);
@@ -1087,15 +1103,13 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 		device_property_read_u8(dev, "qcom,eud-det-val", &phy->eud_det_val);
 	}
 
-	phy->phy.dev = dev;
-
-	if (of_device_is_compatible(np, "qcom,usb-snps-eusb2-fw-managed")) {
-		ret =  msm_eusbphy_modeled_domain_attach(phy);
+	if (of_device_is_compatible(dev->of_node, "qcom,usb-snps-eusb2-fw-managed")) {
+		phy->fw_managed_pwr = true;
+		ret =  msm_eusb2_phy_modeled_domain_attach(phy);
 		if (ret) {
 			dev_err(dev, "Failed to attach modeled domains. Bail out\n");
-			return ret;
+			goto err_ret;
 		}
-		phy->fw_managed_pwr = true;
 	} else {
 
 		phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
@@ -1139,7 +1153,7 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 			ret = PTR_ERR(phy->vdda12);
 			goto err_ret;
 		}
-	};
+	}
 
 	phy->param_override_seq_cnt = of_property_count_elems_of_size(
 					dev->of_node, "qcom,param-override-seq",
@@ -1190,7 +1204,7 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 	 * keep LDOs, clocks and repeater on here.
 	 */
 	if (is_eud_debug_mode_active(phy)) {
-		msm_eusbphy_modeled_d3_to_d0(phy);
+		msm_eusb2_phy_modeled_d3_to_d0(phy);
 		msm_eusb2_phy_power(phy, true);
 		msm_eusb2_phy_clocks(phy, true);
 		msm_eusb2_repeater_reset_and_init(phy);
@@ -1198,8 +1212,11 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 
 	/* Placed at the end to ensure the probe is complete */
 	ret = usb_add_phy_dev(&phy->phy);
-
+	if (ret < 0)
+		goto err_ret;
+	return 0;
 err_ret:
+	msm_eusb2_phy_modeled_domain_detach(phy);
 	return ret;
 }
 
@@ -1216,14 +1233,15 @@ static int msm_eusb2_phy_remove(struct platform_device *pdev)
 
 	debugfs_remove_recursive(phy->root);
 	usb_remove_phy(&phy->phy);
-       if (!phy->fw_managed_pwr) {
+
+	if (!phy->fw_managed_pwr) {
 		clk_disable_unprepare(phy->ref_clk);
 		clk_disable_unprepare(phy->ref_clk_src);
 		msm_eusb2_phy_clocks(phy, false);
 		msm_eusb2_phy_power(phy, false);
 	} else {
-		msm_eusbphy_modeled_d0_to_d3(phy);
-		msm_eusbphy_modeled_domain_detach(phy);
+		msm_eusb2_phy_modeled_d0_to_d3(phy);
+		msm_eusb2_phy_modeled_domain_detach(phy);
 	}
 	return 0;
 }

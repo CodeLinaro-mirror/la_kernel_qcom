@@ -22,8 +22,8 @@
 #define REG_SIZE 0x1000
 #define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, wake_off, bit)	\
 	{					        \
-		.name ="gpio" #id, 	\
-		.pins =	gpio##id##_pins, 		\
+		.name = "gpio" #id,	\
+		.pins =	gpio##id##_pins,		\
 		.npins = (unsigned int)ARRAY_SIZE(gpio##id##_pins),	\
 		.ctl_reg = REG_BASE + REG_SIZE * id,			\
 		.io_reg = REG_BASE + 0x4 + REG_SIZE * id,		\
@@ -66,7 +66,7 @@
 
 #define SDC_QDSD_PINGROUP(pg_name, ctl, pull, drv)	\
 	{					        \
-		.grp = PINCTRL_PINGROUP(#pg_name, 	\
+		.grp = PINCTRL_PINGROUP(#pg_name,	\
 			pg_name##_pins,			\
 			ARRAY_SIZE(pg_name##_pins)),	\
 		.ctl_reg = ctl,				\
@@ -91,8 +91,8 @@
 
 #define UFS_RESET(pg_name, offset)				\
 	{					        \
-		.name = #pg_name, 	\
-		.pins =	pg_name##_pins, 		\
+		.name = #pg_name,	\
+		.pins =	pg_name##_pins,		\
 		.npins = ARRAY_SIZE(pg_name##_pins),	\
 		.ctl_reg = offset,			\
 		.io_reg = offset + 0x4,			\
@@ -2922,6 +2922,7 @@ static int sa8797p_pinctrl_probe(struct platform_device *pdev)
 {
 	const struct msm_pinctrl_soc_data *pinctrl_data;
 	struct device *dev = &pdev->dev;
+
 	pinctrl_data = of_device_get_match_data(dev);
 	if (!pinctrl_data)
 		return -EINVAL;
