@@ -384,7 +384,11 @@ struct mhi_controller_config {
  * @wake_put: CB function to de-assert device wake (optional)
  * @wake_toggle: CB function to assert and de-assert device wake (optional)
  * @runtime_get: CB function to controller runtime resume (required)
+ * @runtime_get_sync: CB function to controller sychronous runtime resume
+ *                    (optional)
  * @runtime_put: CB function to decrement pm usage (required)
+ * @runtime_put_autosuspend: CB function to decrement pm usage and autosuspend
+ *                           (optional)
  * @runtime_last_busy: CB function for controller to mark last busy (optional)
  * @map_single: CB function to create TRE buffer
  * @unmap_single: CB function to destroy TRE buffer
@@ -480,7 +484,9 @@ struct mhi_controller {
 	void (*wake_put)(struct mhi_controller *mhi_cntrl, bool override);
 	void (*wake_toggle)(struct mhi_controller *mhi_cntrl);
 	int (*runtime_get)(struct mhi_controller *mhi_cntrl);
+	int (*runtime_get_sync)(struct mhi_controller *mhi_cntrl);
 	void (*runtime_put)(struct mhi_controller *mhi_cntrl);
+	int (*runtime_put_autosuspend)(struct mhi_controller *mhi_cntrl);
 	void (*runtime_last_busy)(struct mhi_controller *mhi_cntrl);
 	int (*map_single)(struct mhi_controller *mhi_cntrl,
 			  struct mhi_buf_info *buf);
