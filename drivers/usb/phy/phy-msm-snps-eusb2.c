@@ -756,10 +756,7 @@ static void msm_eusb2_ref_clk_init(struct usb_phy *uphy)
 
 static int msm_eusb2_repeater_reset_and_init(struct msm_eusb2_phy *phy)
 {
-	int ret = 0;
-
-	if (phy->fw_managed_pwr)
-		return ret;
+	int ret;
 
 	if (phy->fw_managed_pwr)
 		return 0;
@@ -1038,10 +1035,8 @@ static void msm_eusb2_phy_create_debugfs(struct msm_eusb2_phy *phy)
 					&apb_reg_rw_fops);
 }
 
-
 static int msm_eusb2_phy_probe(struct platform_device *pdev)
 {
-	struct device_node *np = pdev->dev.of_node;
 	struct msm_eusb2_phy *phy;
 	struct device *dev = &pdev->dev;
 	struct resource *res;

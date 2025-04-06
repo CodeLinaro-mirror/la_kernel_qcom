@@ -3141,10 +3141,7 @@ static void dwc3_resume_work(struct work_struct *w);
  */
 static int dwc3_msm_config_gdsc(struct dwc3_msm *mdwc, int on)
 {
-	int ret = 0;
-
-	if (mdwc->priv_data && mdwc->priv_data->modelled_resources)
-		return ret;
+	int ret;
 
 	if (mdwc->fw_managed_pwr)
 		return 0;
@@ -4475,7 +4472,7 @@ static int __dwc3_msm_resume(struct dwc3_msm *mdwc)
 
 static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 {
-	int ret = 0;
+	int ret;
 	struct dwc3 *dwc = NULL;
 	u32 reg = 0;
 
@@ -4882,10 +4879,7 @@ static void dwc3_otg_sm_work(struct work_struct *w);
 
 static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 {
-	int ret = -ENODEV;
-
-	if (mdwc->priv_data && mdwc->priv_data->modelled_resources)
-		return 0;
+	int ret;
 
 	if (mdwc->fw_managed_pwr)
 		return 0;
@@ -7995,10 +7989,6 @@ static const struct dev_pm_ops dwc3_msm_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_msm_pm_suspend, dwc3_msm_pm_resume)
 	SET_RUNTIME_PM_OPS(dwc3_msm_runtime_suspend, dwc3_msm_runtime_resume,
 				dwc3_msm_runtime_idle)
-};
-
-static const struct dwc3_msm_priv_data sa8775p_modelled_dwc3_msm_data = {
-	.modelled_resources     = true,
 };
 
 static const struct of_device_id of_dwc3_matach[] = {
