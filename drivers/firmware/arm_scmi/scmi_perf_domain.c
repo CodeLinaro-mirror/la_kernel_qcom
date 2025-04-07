@@ -37,7 +37,7 @@ scmi_pd_set_perf_state(struct generic_pm_domain *genpd, unsigned int state)
 
 	ret = pd->perf_ops->level_set(pd->ph, pd->domain_id, state, false);
 	if (ret)
-		dev_warn(&genpd->dev, "Failed with %d when trying to set %d perf level",
+		dev_warn(&genpd->dev, "Failed with %d when trying to set %d perf level\n",
 			 ret, state);
 
 	return ret;
@@ -145,7 +145,7 @@ static int scmi_perf_domain_probe(struct scmi_device *sdev)
 		goto err;
 
 	dev_set_drvdata(dev, scmi_pd_data);
-	dev_info(dev, "Initialized %d performance domains", num_domains);
+	dev_info(dev, "Initialized %d performance domains\n", num_domains);
 	return 0;
 err:
 	for (i--; i >= 0; i--)

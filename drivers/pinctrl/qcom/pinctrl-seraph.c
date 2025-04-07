@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -2145,21 +2145,22 @@ static struct pinctrl_qup seraph_qup_regs[] = {
 };
 
 static const struct msm_gpio_wakeirq_map seraph_pdc_map[] = {
-	{ 0, 70 }, { 1, 147 }, { 2, 154 }, { 3, 94 }, { 4, 101 },
-	{ 6, 159 }, { 7, 124 }, { 11, 75 }, { 12, 151 }, { 13, 80 },
-	{ 16, 152 }, { 17, 153 }, { 18, 142 }, { 19, 88 }, { 20, 89 },
-	{ 22, 71 }, { 23, 90 }, { 24, 144 }, { 27, 91 }, { 28, 92 },
-	{ 30, 95 }, { 31, 96 }, { 32, 97 }, { 33, 155 }, { 34, 156 },
-	{ 37, 157 }, { 38, 81 }, { 39, 100 }, { 40, 82 }, { 41, 158 },
-	{ 43, 102 }, { 44, 85 }, { 45, 103 }, { 47, 72 }, { 48, 146 },
-	{ 51, 107 }, { 54, 108 }, { 55, 109 }, { 56, 110 }, { 57, 111 },
-	{ 59, 113 }, { 60, 114 }, { 61, 115 }, { 63, 117 }, { 64, 118 },
-	{ 66, 120 }, { 67, 121 }, { 68, 122 }, { 69, 123 }, { 70, 87 },
-	{ 72, 105 }, { 74, 106 }, { 75, 125 }, { 76, 126 }, { 77, 162 },
-	{ 79, 128 }, { 81, 130 }, { 82, 40 }, { 84, 131 }, { 86, 164 },
-	{ 88, 165 }, { 91, 132 }, { 92, 133 }, { 95, 136 }, { 96, 149 },
-	{ 98, 139 }, { 100, 148 }, { 102, 116 }, { 103, 73 }, { 104, 129 },
-	{ 107, 145 }, { 112, 76 }, { 118, 135 }, { 119, 150 }, { 120, 77 },
+	{ 0, 70 }, { 1, 147 }, { 2, 154 }, { 3, 94 }, { 4, 101 }, { 5, 86 },
+	{ 6, 159 }, { 7, 124 }, { 11, 75 }, { 12, 151 }, { 13, 80 }, { 15, 84 },
+	{ 16, 152 }, { 17, 153 }, { 18, 142 }, { 19, 88 }, { 20, 89 }, { 21, 143 },
+	{ 22, 71 }, { 23, 90 }, { 24, 144 }, { 27, 91 }, { 28, 92 }, { 29, 93 },
+	{ 30, 95 }, { 31, 96 }, { 32, 97 }, { 33, 155 }, { 34, 156 }, { 35, 98 },
+	{ 37, 157 }, { 38, 81 }, { 39, 100 }, { 40, 82 }, { 41, 158 }, { 42, 83 },
+	{ 43, 102 }, { 44, 85 }, { 45, 103 }, { 47, 72 }, { 48, 146 }, { 50, 161 },
+	{ 51, 107 }, { 54, 108 }, { 55, 109 }, { 56, 110 }, { 57, 111 }, { 58, 112 },
+	{ 59, 113 }, { 60, 114 }, { 61, 115 }, { 63, 117 }, { 64, 118 }, { 65, 119 },
+	{ 66, 120 }, { 67, 121 }, { 68, 122 }, { 69, 123 }, { 70, 87 }, { 71, 104 },
+	{ 72, 105 }, { 74, 106 }, { 75, 125 }, { 76, 126 }, { 77, 162 }, { 78, 163 },
+	{ 79, 128 }, { 81, 130 }, { 82, 127 }, { 84, 131 }, { 86, 164 }, { 87, 134 },
+	{ 88, 165 }, { 91, 132 }, { 92, 133 }, { 95, 136 }, { 96, 149 }, { 97, 99 },
+	{ 98, 139 }, { 100, 148 }, { 102, 116 }, { 103, 73 }, { 104, 129 }, { 106, 74 },
+	{ 107, 145 }, { 112, 76 }, { 118, 135 }, { 119, 150 }, { 120, 77 }, { 125, 78 },
+	{ 129, 79 }, { 131, 140 },
 };
 
 static const struct msm_pinctrl_soc_data seraph_pinctrl = {
@@ -2177,8 +2178,20 @@ static const struct msm_pinctrl_soc_data seraph_pinctrl = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data seraph_vm_pinctrl = {
+	.pins = seraph_pins,
+	.npins = ARRAY_SIZE(seraph_pins),
+	.functions = seraph_functions,
+	.nfunctions = ARRAY_SIZE(seraph_functions),
+	.groups = seraph_groups,
+	.ngroups = ARRAY_SIZE(seraph_groups),
+	.ngpios = 132,
+	.egpio_func = 11,
+};
+
 static const struct of_device_id seraph_pinctrl_of_match[] = {
 	{ .compatible = "qcom,seraph-pinctrl", .data = &seraph_pinctrl},
+	{ .compatible = "qcom,seraph-vm-pinctrl", .data = &seraph_vm_pinctrl},
 	{},
 };
 
@@ -2218,3 +2231,4 @@ module_exit(seraph_pinctrl_exit);
 MODULE_DESCRIPTION("QTI seraph pinctrl driver");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(of, seraph_pinctrl_of_match);
+MODULE_SOFTDEP("pre: qcom_tlmm_vm_irqchip");
