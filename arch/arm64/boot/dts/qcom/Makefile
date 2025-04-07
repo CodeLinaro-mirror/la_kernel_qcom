@@ -134,7 +134,9 @@ dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2-hsp.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2-vision-mezz.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2-vision-mezz-hsp.dtb
-qcs6490-addons-rb3gen2-dtbs:= qcs6490-rb3gen2.dtb qcs6490-addons-rb3gen2.dtbo
+qcs6490-addons-rb3gen2-dtbs:= qcs6490-rb3gen2.dtb \
+				qcs6490-addons-rb3gen2.dtbo \
+				qcm6490-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2.dtb
 qcs6490-addons-rb3gen2-hsp-dtbs:= qcs6490-addons-rb3gen2.dtb qcs6490-addons-rb3gen2-hsp.dtbo
 dtb-$(CONFIG_ARCH_QCOM) += qcs6490-addons-rb3gen2-hsp.dtb
