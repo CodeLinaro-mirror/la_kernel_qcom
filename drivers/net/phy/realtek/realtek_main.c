@@ -1574,8 +1574,6 @@ static struct phy_driver realtek_drvs[] = {
 		.get_features   = rtl822x_c45_get_features,
 		.config_aneg    = rtl822x_c45_config_aneg,
 		.read_status    = rtl822xb_c45_read_status,
-		.suspend        = genphy_c45_pma_suspend,
-		.resume         = rtlgen_c45_resume,
 	}, {
 		.match_phy_device = rtl8251b_c45_match_phy_device,
 		.name           = "RTL8251B 5Gbps PHY",
