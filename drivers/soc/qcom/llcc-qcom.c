@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -770,6 +770,7 @@ static const struct qcom_llcc_config sdxpinn_cfg = {
 	.size       = ARRAY_SIZE(sdxpinn_data),
 	.need_llcc_cfg  = true,
 	.reg_offset = llcc_v2_1_reg_offset,
+	.edac_reg_offset = &llcc_v2_1_edac_reg_offset,
 };
 
 static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
