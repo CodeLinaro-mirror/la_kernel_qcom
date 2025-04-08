@@ -893,6 +893,11 @@ static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 
 	/*For valid IPv6 address*/
 
+	if (!idev) {
+		ETHQOSERR("Failed to assign IPv6 address\n");
+		return -EFAULT;
+	}
+
 	if (!net || !net->genl_sock || !net->genl_sock->sk_socket) {
 		ETHQOSERR("Sock is null, unable to assign ipv6 address\n");
 		return -EFAULT;
@@ -4519,6 +4524,11 @@ static ssize_t nw_loopback_handling_config_sysfs(struct device *dev,
 	struct net_device *netdev;
 	struct stmmac_priv *priv;
 
+	if (!in_buf) {
+		pr_err("in_buf is NULL\n");
+		return -EINVAL;
+	}
+
 	parent = kobj_to_dev(dev->kobj.parent);
 
 	netdev = to_net_dev(parent);
@@ -5948,6 +5958,11 @@ static ssize_t ethqos_mac_recovery_enable(struct file *file,
 	int i;
 	struct qcom_ethqos *ethqos = pethqos[0];
 
+	if (!in_buf) {
+		ETHQOSERR("Failed to allocate memory for in_buf\n");
+		return -EFAULT;
+	}
+
 	if (sizeof(in_buf) < count) {
 		ETHQOSERR("emac string is too long - count=%zu\n", count);
 		return -EFAULT;
@@ -7000,10 +7015,12 @@ static int qcom_ethqos_bring_up_phy_if(struct device *dev)
 
 	ret = stmmac_resume(&ethqos->pdev->dev);
 
-	if (phydev->interface == PHY_INTERFACE_MODE_USXGMII)
-		speed = SPEED_10000;
-	else if (phydev->interface == PHY_INTERFACE_MODE_SGMII)
-		speed = SPEED_1000;
+	if (!priv->plat->mac2mac_en) {
+		if (phydev->interface == PHY_INTERFACE_MODE_USXGMII)
+			speed = SPEED_10000;
+		else if (phydev->interface == PHY_INTERFACE_MODE_SGMII)
+			speed = SPEED_1000;
+	}
 
 	if (!net->rtnl) {
 		ETHQOSINFO("Netlink-kernel : No Socket->rtnl created\n");
