@@ -1159,6 +1159,33 @@ static int dwmac4_config_l4_filter(struct mac_device_info *hw, u32 filter_no,
 	return 0;
 }
 
+static void dwmac4_flush_tx_mtl(struct mac_device_info *hw,
+				u32 queue)
+{
+	unsigned long retry_count = 1000;
+	void __iomem *ioaddr = hw->pcsr;
+	u32 count = 0;
+	u32 ftq = 0;
+
+	/*Flush Tx Queue */
+	ftq = readl(ioaddr + MTL_CHAN_TX_OP_MODE(queue));
+	ftq |= 1;
+	writel(ftq, ioaddr + MTL_CHAN_TX_OP_MODE(queue));
+
+	/*Poll Until Poll Condition */
+	while (1) {
+		if (count > retry_count) {
+			pr_err("unable to flush tx queue %d\n", queue);
+			break;
+		}
+		count++;
+		usleep_range(1000, 1500);
+		ftq = readl(ioaddr + MTL_CHAN_TX_OP_MODE(queue));
+		if (((ftq) & (0x1)) == 0)
+			break;
+	}
+}
+
 const struct stmmac_ops dwmac4_ops = {
 	.core_init = dwmac4_core_init,
 	.set_mac = stmmac_set_mac,
@@ -1199,6 +1226,7 @@ const struct stmmac_ops dwmac4_ops = {
 	.add_hw_vlan_rx_fltr = dwmac4_add_hw_vlan_rx_fltr,
 	.del_hw_vlan_rx_fltr = dwmac4_del_hw_vlan_rx_fltr,
 	.restore_hw_vlan_rx_fltr = dwmac4_restore_hw_vlan_rx_fltr,
+	.flush_tx_mtl = dwmac4_flush_tx_mtl,
 };
 
 const struct stmmac_ops dwmac410_ops = {
@@ -1247,6 +1275,7 @@ const struct stmmac_ops dwmac410_ops = {
 	.add_hw_vlan_rx_fltr = dwmac4_add_hw_vlan_rx_fltr,
 	.del_hw_vlan_rx_fltr = dwmac4_del_hw_vlan_rx_fltr,
 	.restore_hw_vlan_rx_fltr = dwmac4_restore_hw_vlan_rx_fltr,
+	.flush_tx_mtl = dwmac4_flush_tx_mtl,
 };
 
 const struct stmmac_ops dwmac510_ops = {
@@ -1299,6 +1328,7 @@ const struct stmmac_ops dwmac510_ops = {
 	.add_hw_vlan_rx_fltr = dwmac4_add_hw_vlan_rx_fltr,
 	.del_hw_vlan_rx_fltr = dwmac4_del_hw_vlan_rx_fltr,
 	.restore_hw_vlan_rx_fltr = dwmac4_restore_hw_vlan_rx_fltr,
+	.flush_tx_mtl = dwmac4_flush_tx_mtl,
 };
 
 static u32 dwmac4_get_num_vlan(void __iomem *ioaddr)
