@@ -11,6 +11,7 @@ def define_sa510m():
         "drivers/char/hw_random/rng-core.ko",
         "drivers/mtd/mtd_blkdevs.ko",
         "drivers/mtd/mtdblock.ko",
+        "drivers/mtd/ubi/gluebi.ko",
     ]
 
     for variant in le_32_variants:
