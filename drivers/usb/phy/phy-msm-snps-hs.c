@@ -211,6 +211,8 @@ static int msm_hsphy_modeled_d3_to_d0(struct msm_hsphy *hsphy)
 	if (ret)
 		return ret;
 
+	msleep(30);
+
 	ret = pm_runtime_resume_and_get(hsphy->pd_devs[0]);
 
 	return ret;
@@ -223,6 +225,7 @@ static void msm_hsphy_modeled_d0_to_d3(struct msm_hsphy *hsphy)
 		return;
 
 	pm_runtime_put_sync(hsphy->pd_devs[0]);
+	usleep_range(15000, 16000);
 	pm_runtime_put_sync(hsphy->pd_devs[1]);
 }
 
