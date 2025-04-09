@@ -22,6 +22,8 @@ struct dw_xpcs_qcom {
 	struct phylink_pcs pcs;
 	void __iomem *addr;
 	int pcs_intr;
+	int pcs_fusa_intr;
+	int pcs_fusa_error_count;
 	bool intr_en;
 	int phy_interface;
 };
@@ -30,4 +32,7 @@ struct phylink_pcs *qcom_xpcs_create(struct device_node *np,
 				      phy_interface_t interface);
 void qcom_xpcs_link_up(struct phylink_pcs *pcs, unsigned int mode,
 		  phy_interface_t interface, int speed, int duplex);
+
+void qcom_xpcs_get_err_stats(struct phylink_pcs *pcs, unsigned long *ptr);
+
 #endif /* __LINUX_PCS_XPCS_QCOM_H */
