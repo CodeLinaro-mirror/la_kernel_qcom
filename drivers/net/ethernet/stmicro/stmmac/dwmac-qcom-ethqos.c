@@ -167,6 +167,9 @@
 
 #define DWMAC4_PCS_BASE			0x000000e0
 #define RGMII_CONFIG_10M_CLK_DVD	GENMASK(18, 10)
+#define GMAC_INT_EN			0x000000b4
+#define GMAC_INT_PCS_LINK		BIT(1)
+#define GMAC_INT_PCS_ANE		BIT(2)
 
 static int phytype = -1;
 static int boardtype = -1;
@@ -1088,11 +1091,15 @@ static int ethqos_rgmii_macro_init_v3(struct qcom_ethqos *ethqos)
 int ethqos_configure_sgmii_v3_1(struct qcom_ethqos *ethqos)
 {
 	u32 value = 0;
+	u32 intr_mask;
 	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
 
 	value = readl(priv->ioaddr + MAC_CTRL_REG);
 	switch (ethqos->speed) {
 	case SPEED_2500:
+		intr_mask = readl(priv->ioaddr + GMAC_INT_EN);
+		intr_mask &= ~(GMAC_INT_PCS_LINK | GMAC_INT_PCS_ANE);
+		writel(intr_mask, priv->ioaddr + GMAC_INT_EN);
 		value &= ~GMAC_CONFIG_PS;
 		writel(value, priv->ioaddr + MAC_CTRL_REG);
 		rgmii_updatel(ethqos, RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
@@ -1108,7 +1115,7 @@ int ethqos_configure_sgmii_v3_1(struct qcom_ethqos *ethqos)
 			      RGMII_CONFIG2_RGMII_CLK_SEL_CFG, RGMII_IO_MACRO_CONFIG2);
 		value = readl(priv->ioaddr + DWMAC4_PCS_BASE);
 		/* Customer required to disable auto negotiate. */
-		if (priv->plat->disable_pcs_ane)
+		if (priv->plat->disable_pcs_ane == 1)
 			value &= ~GMAC_AN_CTRL_ANE;
 		else
 			value |= GMAC_AN_CTRL_RAN | GMAC_AN_CTRL_ANE;
