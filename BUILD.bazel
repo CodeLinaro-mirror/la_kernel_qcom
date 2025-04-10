@@ -889,6 +889,19 @@ ddk_headers(
 ddk_headers(
     name = "all_headers_allowlist_aarch64",
     hdrs = [
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_common.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_compat.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_desc.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_dump.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_fw.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_fwd.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_fwdnl.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_hw.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_log.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_macsec.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_regs.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_ring_desc.h",
+        "drivers/net/ethernet/aquantia/atlantic-fwd/atl_stats.h",
         "drivers/net/ethernet/stmicro/stmmac/common.h",
         "drivers/net/ethernet/stmicro/stmmac/descs.h",
         "drivers/net/ethernet/stmicro/stmmac/dwmac-qcom-ethqos.h",
@@ -911,6 +924,7 @@ ddk_headers(
     linux_includes = [
         "arch/arm64/include",
         "arch/arm64/include/uapi",
+        "drivers/net/ethernet/aquantia/atlantic-fwd",
         "drivers/net/ethernet/stmicro/stmmac",
         "drivers/thermal",
         "include",
