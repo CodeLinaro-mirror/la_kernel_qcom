@@ -11,6 +11,7 @@ mem_buf.ko
 mem_buf_dev.ko
 smem.ko
 debug_symbol.ko
+qcom-reboot-reason.ko
 qcom_wdt_core.ko
 minidump.ko
 qcom_soc_wdt.ko
