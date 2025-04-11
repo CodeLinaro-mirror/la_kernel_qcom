@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2015, 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -1329,6 +1329,10 @@ static void clk_pll_restore_context(struct clk_hw *hw)
 		clk_rivian_evo_pll_configure(pll, pll->clkr.regmap,
 					pll->config);
 		break;
+	case CLK_ALPHA_PLL_TYPE_RIVIAN_EKO_T:
+		clk_rivian_eko_t_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
 	case CLK_ALPHA_PLL_TYPE_LUCID_5LPE:
 		clk_lucid_5lpe_pll_configure(pll, pll->clkr.regmap,
 					pll->config);
@@ -2311,7 +2315,7 @@ static int __alpha_pll_trion_set_rate(struct clk_hw *hw, unsigned long rate,
 	if (ret < 0)
 		return ret;
 
-	regmap_write(pll->clkr.regmap, PLL_L_VAL(pll), l);
+	regmap_update_bits(pll->clkr.regmap, PLL_L_VAL(pll), LUCID_EVO_PLL_L_VAL_MASK,  l);
 	regmap_write(pll->clkr.regmap, PLL_ALPHA_VAL(pll), a);
 
 	if (pll->flags & BYPASS_LATCH) {
