@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2021, 2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
-
 #include <linux/module.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
@@ -110,7 +110,7 @@ struct cx_ipeak_client *cx_ipeak_register(struct device_node *dev_node,
 
 	return client;
 }
-EXPORT_SYMBOL(cx_ipeak_register);
+EXPORT_SYMBOL_GPL(cx_ipeak_register);
 
 static struct cx_ipeak_client *cx_ipeak_register_v1(int client_id)
 {
@@ -194,7 +194,7 @@ int cx_ipeak_victim_register(struct cx_ipeak_client *client,
 
 	return -ENOENT;
 }
-EXPORT_SYMBOL(cx_ipeak_victim_register);
+EXPORT_SYMBOL_GPL(cx_ipeak_victim_register);
 
 /**
  * cx_ipeak_victim_unregister - unregister victim client from
@@ -213,7 +213,7 @@ void cx_ipeak_victim_unregister(struct cx_ipeak_client *client)
 			victim_list[i].client = NULL;
 		}
 }
-EXPORT_SYMBOL(cx_ipeak_victim_unregister);
+EXPORT_SYMBOL_GPL(cx_ipeak_victim_unregister);
 
 /**
  * cx_ipeak_update() - Set/Clear client vote for Cx iPeak limit
@@ -235,7 +235,7 @@ int cx_ipeak_update(struct cx_ipeak_client *client, bool vote)
 
 	return client->dev->core_ops->update(client, vote);
 }
-EXPORT_SYMBOL(cx_ipeak_update);
+EXPORT_SYMBOL_GPL(cx_ipeak_update);
 
 static int cx_ipeak_update_v1(struct cx_ipeak_client *client, bool vote)
 {
@@ -431,7 +431,7 @@ void cx_ipeak_unregister(struct cx_ipeak_client *client)
 {
 	kfree(client);
 }
-EXPORT_SYMBOL(cx_ipeak_unregister);
+EXPORT_SYMBOL_GPL(cx_ipeak_unregister);
 
 struct cx_ipeak_core_ops core_ops_v1 = {
 	.update = cx_ipeak_update_v1,
@@ -542,4 +542,5 @@ static int __init cx_ipeak_init(void)
 
 arch_initcall(cx_ipeak_init);
 
-MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Qualcomm Technologies, Inc. (QTI) Stats driver");
+MODULE_LICENSE("GPL");
