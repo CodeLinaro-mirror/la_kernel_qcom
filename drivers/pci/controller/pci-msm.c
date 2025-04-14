@@ -1280,6 +1280,7 @@ struct msm_pcie_dev_t {
 	bool enumerated;
 	struct work_struct handle_wake_work;
 	struct work_struct handle_sbr_work;
+	struct work_struct disable_resource;
 	struct mutex recovery_lock;
 	spinlock_t irq_lock;
 	struct mutex aspm_lock;
@@ -8351,6 +8352,9 @@ static void msm_pcie_handle_linkdown(struct msm_pcie_dev_t *dev)
 		panic("User has chosen to panic on linkdown\n");
 
 	msm_pcie_notify_client(dev, MSM_PCIE_EVENT_LINKDOWN);
+
+	if (!msm_pcie_keep_resources_on)
+		queue_work(mpcie_wq, &dev->disable_resource);
 }
 
 static irqreturn_t handle_linkdown_irq(int irq, void *data)
@@ -10870,6 +10874,13 @@ static void msm_pcie_drv_enable_pc(struct work_struct *w)
 	msm_pcie_drv_send_rpmsg(pcie_dev, &pcie_dev->drv_info->drv_enable_pc);
 }
 
+static void msm_pcie_disable_resource(struct work_struct *work)
+{
+	struct msm_pcie_dev_t *pcie_dev = container_of(work, struct msm_pcie_dev_t,
+						disable_resource);
+	msm_pcie_disable(pcie_dev);
+}
+
 static void msm_pcie_drv_connect_notify_all(struct work_struct *work)
 {
 	struct pcie_drv_sta *pcie_drv = container_of(work, struct pcie_drv_sta,
@@ -10942,6 +10953,7 @@ static void msm_pcie_lock_init(struct msm_pcie_dev_t *pcie_dev)
 	pcie_dev->l23_rdy_poll_timeout = L23_READY_POLL_TIMEOUT;
 	INIT_WORK(&pcie_dev->drv_disable_pc_work, msm_pcie_drv_disable_pc);
 	INIT_WORK(&pcie_dev->drv_enable_pc_work, msm_pcie_drv_enable_pc);
+	INIT_WORK(&pcie_dev->disable_resource, msm_pcie_disable_resource);
 	INIT_WORK(&pcie_dev->drv_connect_work, msm_pcie_drv_connect_worker);
 	INIT_LIST_HEAD(&pcie_dev->enum_ep_list);
 	INIT_LIST_HEAD(&pcie_dev->susp_ep_list);
