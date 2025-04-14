@@ -80,6 +80,7 @@ def define_neo_le():
         "drivers/mmc/host/sdhci-msm.ko",
         "drivers/mmc/host/sdhci-msm-scaling.ko",
         "drivers/nvmem/nvmem_qcom-spmi-sdam.ko",
+        "drivers/nvmem/nvmem_qfprom.ko",
         "drivers/pci/controller/pci-msm-drv.ko",
         "drivers/perf/qcom_llcc_pmu.ko",
         "drivers/pinctrl/qcom/pinctrl-msm.ko",
@@ -144,6 +145,7 @@ def define_neo_le():
         "drivers/soc/qcom/qcom_va_minidump.ko",
         "drivers/soc/qcom/qcom_wdt_core.ko",
         "drivers/soc/qcom/qmi_helpers.ko",
+        "drivers/soc/qcom/secure_buffer.ko",
         "drivers/soc/qcom/smem.ko",
         "drivers/soc/qcom/smp2p.ko",
         "drivers/soc/qcom/smp2p_sleepstate.ko",
@@ -183,6 +185,7 @@ def define_neo_le():
         "net/qrtr/qrtr.ko",
         "net/qrtr/qrtr-mhi.ko",
         "net/qrtr/qrtr-smd.ko",
+        "net/wireless/cfg80211.ko",
     ]
 
     _neo_debug_in_tree_modules = _neo_in_tree_modules + [
