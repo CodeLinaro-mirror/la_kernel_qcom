@@ -599,12 +599,6 @@ static int emac_mdio_fe_probe(struct virtio_device *vdev)
 	virtqueue_kick(pdev->emac_mdio_fe_rxq);
 
 	EMAC_MDIO_FE_INFO("Kicked Host VirtQ\n");
-	pdev->emac_mdio_fe_state = EMAC_MDIO_FE_DOWN;
-
-	emac_mdio_fe_ctx->tx_msg.type = VIRTIO_EMAC_MDIO_FE_UP;
-	emac_mdio_fe_ctx->tx_msg.len = sizeof(struct fe_to_be_msg);
-	emac_mdio_fe_xmit(emac_mdio_fe_ctx);
-	EMAC_MDIO_FE_INFO("Sent Register Event Cmd\n");
 
 	return 0;
 }
