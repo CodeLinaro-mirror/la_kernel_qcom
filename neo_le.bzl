@@ -1,13 +1,15 @@
 load(":image_opts.bzl", "boot_image_opts")
 load(":msm_kernel_le.bzl", "define_msm_le")
 load(":target_variants.bzl", "le_64_variants")
-
+qcom_secure_system_heap.o
 target_name = "neo-le"
 
 def define_neo_le():
     _neo_in_tree_modules = [
         # keep sorted
         "drivers/base/regmap/qti-regmap-debugfs.ko",
+        "drivers/base/regmap/regmap-spmi.ko",
+        "drivers/bluetooth/btpower.ko",
         "drivers/bus/mhi/devices/mhi_dev_dtr.ko",
         "drivers/bus/mhi/devices/mhi_dev_uci.ko",
         "drivers/bus/mhi/host/mhi.ko",
@@ -61,6 +63,7 @@ def define_neo_le():
         "drivers/interconnect/qcom/icc-bcm-voter.ko",
         "drivers/interconnect/qcom/icc-debug.ko",
         "drivers/interconnect/qcom/icc-rpmh.ko",
+        "drivers/interconnect/qcom/interconnect_qcom.ko",
         "drivers/interconnect/qcom/qnoc-neo.ko",
         "drivers/interconnect/qcom/qnoc-qos.ko",
         "drivers/iommu/arm/arm-smmu/arm_smmu.ko",
@@ -68,6 +71,7 @@ def define_neo_le():
         "drivers/iommu/msm_dma_iommu_mapping.ko",
         "drivers/iommu/qcom_iommu_debug.ko",
         "drivers/iommu/qcom_iommu_util.ko",
+        "drivers/irqchip/msm_show_resume_irq.ko",
         "drivers/irqchip/qcom-pdc.ko",
         "drivers/leds/leds-aw2016.ko",
         "drivers/mailbox/msm_qmp.ko",
@@ -141,14 +145,15 @@ def define_neo_le():
         "drivers/soc/qcom/qcom_ramdump.ko",
         "drivers/soc/qcom/qcom_rpmh.ko",
         "drivers/soc/qcom/qcom_soc_wdt.ko",
+        "drivers/soc/qcom/qcom_stats.ko",
         "drivers/soc/qcom/qcom_va_minidump.ko",
         "drivers/soc/qcom/qcom_wdt_core.ko",
         "drivers/soc/qcom/qmi_helpers.ko",
-        "drivers/soc/qcom/secure_buffer.ko",
+        "drivers/soc/qcom/rq_stats.ko",
+        "drivers/soc/qcom/secure_buffer.c",
         "drivers/soc/qcom/smem.ko",
         "drivers/soc/qcom/smp2p.ko",
         "drivers/soc/qcom/smp2p_sleepstate.ko",
-        "drivers/soc/qcom/soc_sleep_stats.ko",
         "drivers/soc/qcom/socinfo.ko",
         "drivers/soc/qcom/sps/sps_drv.ko",
         "drivers/soc/qcom/sys_pm_vx.ko",
@@ -165,6 +170,7 @@ def define_neo_le():
         "drivers/thermal/qcom/qti_qmi_cdev.ko",
         "drivers/thermal/qcom/qti_userspace_cdev.ko",
         "drivers/thermal/qcom/thermal_pause.ko",
+        "drivers/thermal/qcom/qcom_tsens.ko",
         "drivers/tty/serial/msm_geni_serial.ko",
         "drivers/usb/dwc3/dwc3-msm.ko",
         "drivers/usb/gadget/function/usb_f_diag.ko",
