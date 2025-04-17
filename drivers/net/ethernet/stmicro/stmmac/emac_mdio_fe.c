@@ -36,7 +36,7 @@
 /*Virtio ID of EMAC*/
 #define VIRTIO_DT_QCOM_BASE         (49152)
 #define VIRTIO_DT_EMAC_MDIO         (VIRTIO_DT_QCOM_BASE + 12)
-#define WAIT_PHY_REPLY_MAX_TIMEOUT  (100)
+#define WAIT_PHY_REPLY_MAX_TIMEOUT  (3000)
 /* ========================================================================== */
 /*                         TYPE DECLARATIONS                                  */
 /* ========================================================================== */
