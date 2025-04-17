@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -403,6 +403,19 @@ static int pdc_setup_pin_mapping(struct device_node *np)
 
 #define QCOM_PDC_SIZE 0x10000
 
+static int qcom_pdc_early_init(void)
+{
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
+	pdc_ipc_log = ipc_log_context_create(PDC_IPC_LOG_SZ, "pdc", 0);
+#endif
+
+	return 0;
+}
+
+#ifndef MODULE
+module_init(qcom_pdc_early_init);
+#endif
+
 static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 {
 	struct irq_domain *parent_domain, *pdc_domain;
@@ -474,9 +487,8 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 	}
 
 	irq_domain_update_bus_token(pdc_domain, DOMAIN_BUS_WAKEUP);
-
-#if IS_ENABLED(CONFIG_IPC_LOGGING)
-	pdc_ipc_log = ipc_log_context_create(PDC_IPC_LOG_SZ, "pdc", 0);
+#ifdef MODULE
+		qcom_pdc_early_init();
 #endif
 	return 0;
 
@@ -487,8 +499,12 @@ fail:
 	return ret;
 }
 
+#ifdef MODULE
 IRQCHIP_PLATFORM_DRIVER_BEGIN(qcom_pdc)
 IRQCHIP_MATCH("qcom,pdc", qcom_pdc_init)
 IRQCHIP_PLATFORM_DRIVER_END(qcom_pdc)
+#else
+IRQCHIP_DECLARE(qcom_pdc, "qcom,pdc", qcom_pdc_init);
+#endif
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Power Domain Controller");
 MODULE_LICENSE("GPL v2");
