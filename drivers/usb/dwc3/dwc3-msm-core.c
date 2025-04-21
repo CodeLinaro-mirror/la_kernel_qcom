@@ -4896,6 +4896,25 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 	} else {
 		if (mdwc->vbus_active == event)
 			return NOTIFY_DONE;
+		else if (atomic_read(&mdwc->pm_suspended)) {
+			/*
+			 * If APPS is suspending, and we receive a cable connection change
+			 * notification before the APPS suspend routine completes, wakeup
+			 * the system inorder to trigger pm_resume.
+			 */
+			dev_info(mdwc->dev, "PM suspended, Abort APPS suspend\n");
+			pm_wakeup_dev_event(mdwc->dev, 0, true);
+		} else {
+			/*
+			 * When APPS is suspending, and we receive a cable connection change
+			 * notification before dwc3-msm pm_suspend gets called, then keep the
+			 * system awake inorder to process the event.
+			 */
+			dev_dbg(mdwc->dev, "Keep APPS awake till the vbus event is processed\n");
+			pm_stay_awake(mdwc->dev);
+			pm_runtime_mark_last_busy(mdwc->dev);
+		}
+
 		mdwc->vbus_active = event;
 	}
 
@@ -6358,7 +6377,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	struct device	*dev = &pdev->dev;
 	struct dwc3_msm *mdwc;
 	struct resource *res;
-	int ret = 0, i;
+	int ret, i;
 	u32 val;
 
 	mdwc = devm_kzalloc(&pdev->dev, sizeof(*mdwc), GFP_KERNEL);
@@ -6568,7 +6587,8 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-	if (dwc3_msm_check_extcon_prop(pdev))
+	ret = dwc3_msm_check_extcon_prop(pdev);
+	if (ret < 0)
 		goto put_dwc3;
 
 
@@ -7629,6 +7649,11 @@ static void dwc3_core_complete(struct device *dev)
 	 * to cable status, or XHCI status to wake up the DWC3 core.
 	 */
 	dbg_event(0xFF, "Core PM complete", dev->power.direct_complete);
+
+	if (!mdwc->in_host_mode) {
+		dbg_event(0xFF, "Queue ResWrk", 0);
+		queue_work(mdwc->dwc3_wq, &mdwc->resume_work);
+	}
 }
 #endif
 

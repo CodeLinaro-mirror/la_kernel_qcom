@@ -34,6 +34,94 @@
 #include <linux/iio/triggered_buffer.h>
 
 #include "inv_mpu_iio.h"
+#ifdef CONFIG_ENABLE_IAM_ACC_GYRO_BUFFERING
+static void store_acc_boot_sample(struct iio_dev *indio_dev, u64 t,
+						s32 x, s32 y, s32 z)
+{
+	struct inv_mpu_state *st;
+
+	st = iio_priv(indio_dev);
+	if (!st->acc_buffer_inv_samples)
+		return;
+
+	mutex_lock(&st->acc_sensor_buff);
+	st->timestamp = t;
+	if (ktime_to_timespec64(st->timestamp).tv_sec
+			<  st->max_buffer_time) {
+		if (st->acc_bufsample_cnt < INV_ACC_MAXSAMPLE) {
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->xyz[0] = x;
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->xyz[1] = y;
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->xyz[2] = z;
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->tsec =
+				ktime_to_timespec64(st->timestamp).tv_sec;
+			st->inv_acc_samplist[st->acc_bufsample_cnt]->tnsec =
+				ktime_to_timespec64(st->timestamp).tv_nsec;
+			st->acc_bufsample_cnt++;
+		}
+	} else {
+		dev_info(st->dev, "End of ACC buffering %d\n",
+					st->acc_bufsample_cnt);
+		st->acc_buffer_inv_samples = false;
+		/**Disable the ACCEL if not enabled at end of buffer**/
+		if (st->accel_enable != 1) {
+			st->sensor_l[SENSOR_L_ACCEL].on = false;
+			st->trigger_state = RATE_TRIGGER;
+			inv_check_sensor_on(st);
+			set_inv_enable(indio_dev);
+		}
+	}
+	mutex_unlock(&st->acc_sensor_buff);
+}
+
+static void store_gyro_boot_sample(struct iio_dev *indio_dev, u64 t,
+						s32 x, s32 y, s32 z)
+{
+	struct inv_mpu_state *st;
+
+	st = iio_priv(indio_dev);
+	if (!st->gyro_buffer_inv_samples)
+		return;
+	mutex_lock(&st->gyro_sensor_buff);
+	st->timestamp = t;
+	if (ktime_to_timespec64(st->timestamp).tv_sec
+			<  st->max_buffer_time) {
+		if (st->gyro_bufsample_cnt < INV_GYRO_MAXSAMPLE) {
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]
+				->xyz[0] = x;
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]
+				->xyz[1] = y;
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]
+				->xyz[2] = z;
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]->tsec =
+				ktime_to_timespec64(st->timestamp).tv_sec;
+			st->inv_gyro_samplist[st->gyro_bufsample_cnt]->tnsec =
+				ktime_to_timespec64(st->timestamp).tv_nsec;
+			st->gyro_bufsample_cnt++;
+		}
+	} else {
+		dev_info(st->dev, "End of GYRO buffering %d\n",
+					st->gyro_bufsample_cnt);
+		st->gyro_buffer_inv_samples = false;
+		/**Disable the GYRO if not enabled at end of buffer**/
+		if (st->gyro_enable != 1) {
+			st->sensor_l[SENSOR_L_GYRO].on = false;
+			st->trigger_state = RATE_TRIGGER;
+			inv_check_sensor_on(st);
+			set_inv_enable(indio_dev);
+		}
+	}
+	mutex_unlock(&st->gyro_sensor_buff);
+}
+#else
+static void store_acc_boot_sample(struct iio_dev *indio_dev, u64 t,
+						s32 x, s32 y, s32 z)
+{
+}
+static void store_gyro_boot_sample(struct iio_dev *indio_dev, u64 t,
+						s32 x, s32 y, s32 z)
+{
+}
+#endif
 
 static irqreturn_t inv_mpu_hard_it_handler(int irq, void *private)
 {
@@ -300,6 +388,7 @@ int inv_push_16bytes_buffer(struct iio_dev *indio_dev, u16 sensor,
 					st->sensor_l[j].div,
 					t, q[0], q[1], q[2]);
 				inv_push_16bytes_final(indio_dev, j, q, t, accur);
+				store_acc_boot_sample(indio_dev, t, q[0], q[1], q[2]);
 			}
 		}
 	}
@@ -391,7 +480,7 @@ int inv_push_gyro_data(struct iio_dev *indio_dev, s32 *raw, s32 *calib, u64 t)
 		inv_s32_gyro_push(indio_dev, gyro_data[i], raw, t);
 	for (i = 0; i < 2; i++)
 		inv_s32_gyro_push(indio_dev, calib_data[i], calib, t);
-
+	store_gyro_boot_sample(indio_dev, t, raw[0], raw[1], raw[2]);
 	return 0;
 }
 int inv_push_8bytes_buffer(struct iio_dev *indio_dev, u16 sensor, u64 t, s16 *d)
@@ -567,7 +656,6 @@ static enum hrtimer_restart inv_batch_timer_handler(struct hrtimer *timer)
 {
 	struct inv_mpu_state *st =
 		container_of(timer, struct inv_mpu_state, hr_batch_timer);
-
 	if (st->chip_config.gyro_enable || st->chip_config.accel_enable) {
 		hrtimer_forward_now(&st->hr_batch_timer,
 			ns_to_ktime(st->batch_timeout));

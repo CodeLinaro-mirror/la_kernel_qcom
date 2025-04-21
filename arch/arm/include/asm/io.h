@@ -271,6 +271,7 @@ extern void _memset_io(volatile void __iomem *, int, size_t);
  * IO port primitives for more information.
  */
 #ifndef readl
+#ifndef CONFIG_TRACE_MMIO_ACCESS
 #define readb_relaxed(c) ({ u8  __r = __raw_readb(c); __r; })
 #define readw_relaxed(c) ({ u16 __r = le16_to_cpu((__force __le16) \
 					__raw_readw(c)); __r; })
@@ -296,6 +297,7 @@ extern void _memset_io(volatile void __iomem *, int, size_t);
 #define writesb(p,d,l)		__raw_writesb(p,d,l)
 #define writesw(p,d,l)		__raw_writesw(p,d,l)
 #define writesl(p,d,l)		__raw_writesl(p,d,l)
+#endif
 
 #ifndef __ARMBE__
 static inline void memset_io(volatile void __iomem *dst, unsigned c,

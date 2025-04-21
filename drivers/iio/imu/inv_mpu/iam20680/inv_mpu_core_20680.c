@@ -418,6 +418,12 @@ static ssize_t inv_sensor_on_store(struct device *dev,
 	pr_debug("sensor [%s] requested  %s, input [%d]\n",
 			sensor_l_info[ind], (on == 1) ? "On" : "Off", data);
 
+#ifdef CONFIG_ENABLE_ASM_ACC_GYRO_BUFFERING
+	if (ind == SENSOR_L_ACCEL)
+		st->accel_enable = on;
+	if (ind == SENSOR_L_GYRO)
+		st->gyro_enable = on;
+#endif
 	if (on == st->sensor_l[ind].on) {
 		pr_debug("sensor [%s] is already %s, input [%d]\n",
 			sensor_l_info[ind], (on == 1) ? "On" : "Off", data);
@@ -500,7 +506,7 @@ static int _basic_attr_store(struct device *dev,
 			p1[0] = ((power_on_data >> 16) & 0xff);
 			p1[1] = ((power_on_data >> 24) & 0xff);
 
-			if (st->bus_type == BUS_SPI) {
+			if (st->bus_type == BUS_IIO_SPI) {
 				struct spi_transfer power_on;
 				struct spi_message msg;
 
@@ -515,7 +521,7 @@ static int _basic_attr_store(struct device *dev,
 				spi_message_add_tail(&power_on, &msg);
 				spi_sync(to_spi_device(st->dev), &msg);
 
-			} else if (st->bus_type == BUS_I2C) {
+			} else if (st->bus_type == BUS_IIO_I2C) {
 				struct i2c_msg msgs[2];
 
 				p0[0] &= 0x7f;
@@ -1018,6 +1024,173 @@ static const struct iio_event_spec inv_mpu_wom_events[] = {
 	},
 };
 
+#ifdef CONFIG_ENABLE_IAM_ACC_GYRO_BUFFERING
+static int inv_gyro_read_bootsampl(struct inv_mpu_state *st,
+		unsigned long enable_read)
+{
+	int i = 0;
+
+	st->gyro_buffer_inv_samples = false;
+	if (enable_read) {
+		for (i = 0; i < st->gyro_bufsample_cnt; i++) {
+			dev_dbg(st->dev, "gyro_cnt=%d,x=%d,y=%d,z=%d,tsec=%d,nsec=%lld\n",
+					i, st->inv_gyro_samplist[i]->xyz[0],
+					st->inv_gyro_samplist[i]->xyz[1],
+					st->inv_gyro_samplist[i]->xyz[2],
+					st->inv_gyro_samplist[i]->tsec,
+					st->inv_gyro_samplist[i]->tnsec);
+			input_report_abs(st->gyrobuf_dev, ABS_X,
+					st->inv_gyro_samplist[i]->xyz[0]);
+			input_report_abs(st->gyrobuf_dev, ABS_Y,
+					st->inv_gyro_samplist[i]->xyz[1]);
+			input_report_abs(st->gyrobuf_dev, ABS_Z,
+					st->inv_gyro_samplist[i]->xyz[2]);
+			input_report_abs(st->gyrobuf_dev, ABS_RX,
+					st->inv_gyro_samplist[i]->tsec);
+			input_report_abs(st->gyrobuf_dev, ABS_RY,
+					st->inv_gyro_samplist[i]->tnsec);
+			input_sync(st->gyrobuf_dev);
+		}
+	} else {
+		/* clean up */
+		if (st->gyro_bufsample_cnt != 0) {
+			for (i = 0; i < INV_GYRO_MAXSAMPLE; i++)
+				kmem_cache_free(st->inv_gyro_cachepool,
+						st->inv_gyro_samplist[i]);
+			kmem_cache_destroy(st->inv_gyro_cachepool);
+			st->gyro_bufsample_cnt = 0;
+		}
+
+	}
+	/* SYN_CONFIG indicates end of data */
+	input_event(st->gyrobuf_dev, EV_SYN, SYN_CONFIG, 0xFFFFFFFF);
+	input_sync(st->gyrobuf_dev);
+	dev_dbg(st->dev, "End of gyro samples bufsample_cnt=%d\n",
+			st->gyro_bufsample_cnt);
+	return 0;
+}
+
+static int inv_acc_read_bootsampl(struct inv_mpu_state *st,
+		unsigned long enable_read)
+{
+	int i;
+
+	st->acc_buffer_inv_samples = false;
+	if (enable_read) {
+		for (i = 0; i < st->acc_bufsample_cnt; i++) {
+			dev_dbg(st->dev, "acc_cnt=%d,x=%d,y=%d,z=%d,tsec=%d,nsec=%lld\n",
+					i, st->inv_acc_samplist[i]->xyz[0],
+					st->inv_acc_samplist[i]->xyz[1],
+					st->inv_acc_samplist[i]->xyz[2],
+					st->inv_acc_samplist[i]->tsec,
+					st->inv_acc_samplist[i]->tnsec);
+			input_report_abs(st->accbuf_dev, ABS_X,
+					st->inv_acc_samplist[i]->xyz[0]);
+			input_report_abs(st->accbuf_dev, ABS_Y,
+					st->inv_acc_samplist[i]->xyz[1]);
+			input_report_abs(st->accbuf_dev, ABS_Z,
+					st->inv_acc_samplist[i]->xyz[2]);
+			input_report_abs(st->accbuf_dev, ABS_RX,
+					st->inv_acc_samplist[i]->tsec);
+			input_report_abs(st->accbuf_dev, ABS_RY,
+					st->inv_acc_samplist[i]->tnsec);
+			input_sync(st->accbuf_dev);
+		}
+	} else {
+		/* clean up */
+		if (st->acc_bufsample_cnt != 0) {
+			for (i = 0; i < INV_ACC_MAXSAMPLE; i++)
+				kmem_cache_free(st->inv_acc_cachepool,
+						st->inv_acc_samplist[i]);
+			kmem_cache_destroy(st->inv_acc_cachepool);
+			st->acc_bufsample_cnt = 0;
+		}
+
+	}
+	/* SYN_CONFIG indicates end of data */
+	input_event(st->accbuf_dev, EV_SYN, SYN_CONFIG, 0xFFFFFFFF);
+	input_sync(st->accbuf_dev);
+	dev_dbg(st->dev, "End of acc samples bufsample_cnt=%d\n",
+			st->acc_bufsample_cnt);
+	return 0;
+}
+
+static ssize_t read_gyro_boot_sample_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct inv_mpu_state *st = iio_priv(indio_dev);
+
+	return scnprintf(buf, MAX_WR_SZ, "%d\n",
+			st->read_gyro_boot_sample);
+}
+
+static ssize_t read_gyro_boot_sample_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	int err;
+	unsigned long enable;
+
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct inv_mpu_state *st = iio_priv(indio_dev);
+
+	err = kstrtoul(buf, 10, &enable);
+	if (err)
+		return err;
+	if (enable > 1) {
+		dev_err(st->dev,
+				"Invalid value of input, input=%ld\n", enable);
+		return -EINVAL;
+	}
+	mutex_lock(&st->gyro_sensor_buff);
+	err = inv_gyro_read_bootsampl(st, enable);
+	mutex_unlock(&st->gyro_sensor_buff);
+	if (err)
+		return err;
+	st->read_gyro_boot_sample = enable;
+	return count;
+
+}
+
+static ssize_t read_acc_boot_sample_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct inv_mpu_state *st = iio_priv(indio_dev);
+
+	return scnprintf(buf, MAX_WR_SZ, "%d\n",
+			st->read_acc_boot_sample);
+}
+static ssize_t read_acc_boot_sample_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	int err;
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct inv_mpu_state *st = iio_priv(indio_dev);
+
+	unsigned long enable;
+
+	err = kstrtoul(buf, 10, &enable);
+	if (err)
+		return err;
+	if (enable > 1) {
+		dev_err(st->dev,
+				"Invalid value of input, input=%ld\n", enable);
+		return -EINVAL;
+	}
+	mutex_lock(&st->acc_sensor_buff);
+	err = inv_acc_read_bootsampl(st, enable);
+	mutex_unlock(&st->acc_sensor_buff);
+	if (err)
+		return err;
+	st->read_acc_boot_sample = enable;
+	return count;
+}
+#endif
 static const struct iio_chan_spec inv_mpu_channels[] = {
 	{
 		.type = IIO_ACCEL,
@@ -1041,6 +1214,12 @@ static const struct iio_chan_spec inv_mpu_channels[] = {
 static DEVICE_ATTR_RO(debug_reg_dump);
 static DEVICE_ATTR_RO(out_temperature);
 static DEVICE_ATTR_RO(misc_self_test);
+#ifdef CONFIG_ENABLE_IAM_ACC_GYRO_BUFFERING
+static IIO_DEVICE_ATTR(read_acc_boot_sample, 0644,
+	read_acc_boot_sample_show, read_acc_boot_sample_store, SENSOR_L_ACCEL);
+static IIO_DEVICE_ATTR(read_gyro_boot_sample, 0644,
+	read_gyro_boot_sample_show, read_gyro_boot_sample_store, SENSOR_L_GYRO);
+#endif
 
 static IIO_DEVICE_ATTR(info_anglvel_matrix, 0444, inv_attr_show, NULL,
 			ATTR_GYRO_MATRIX);
@@ -1179,6 +1358,10 @@ static const struct attribute *inv_raw_attributes[] = {
 	&dev_attr_misc_self_test.attr,
 #ifndef SUPPORT_ONLY_BASIC_FEATURES
 	&iio_dev_attr_in_power_on.dev_attr.attr,
+#endif
+#ifdef CONFIG_ENABLE_IAM_ACC_GYRO_BUFFERING
+	&iio_dev_attr_read_acc_boot_sample.dev_attr.attr,
+	&iio_dev_attr_read_gyro_boot_sample.dev_attr.attr,
 #endif
 	&iio_dev_attr_in_accel_enable.dev_attr.attr,
 	&iio_dev_attr_in_accel_wake_enable.dev_attr.attr,

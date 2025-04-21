@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QCOM_LPM_H__
@@ -123,6 +123,6 @@ int create_cluster_sysfs_nodes(struct lpm_cluster *cluster_gov);
 void register_cluster_governor_ops(struct cluster_governor *ops);
 void remove_global_sysfs_nodes(void);
 void remove_cluster_sysfs_nodes(struct lpm_cluster *cluster_gov);
-s64 get_cpus_qos(const struct cpumask *mask);
+u64 get_cpus_qos(const struct cpumask *mask);
 
 #endif /* __QCOM_LPM_H__ */

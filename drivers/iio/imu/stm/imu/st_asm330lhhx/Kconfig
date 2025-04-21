@@ -45,3 +45,12 @@ config IIO_ST_ASM330LHHX_STORE_SAMPLE_FIFO_SUSPEND
 	  When enabled the IIO_ST_ASM330LHHX_ENABLE_SYSTEM_WAKEUP is possible
 	  to store accel samples in internal HW FIFO. After resume all stored
 	  data will be pushed to user space.
+
+config ENABLE_ASM_ACC_GYRO_BUFFERING
+	bool "Enable accel & gyro  boot time sensor sample buffering"
+	depends on IIO_ST_ASM330LHHX
+	help
+	 Say Y here if you want to buffer boot time sensor
+	 samples for ASM330 accelerometer and gyroscope.
+	 Buffered samples can be retrieved at any time via
+	 input sybsystem.

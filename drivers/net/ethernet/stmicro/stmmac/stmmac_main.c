@@ -6597,7 +6597,7 @@ static void stmmac_set_rx_mode(struct net_device *dev)
 			if (!memcmp(dst_eapol_mac_addr, ha->addr, ETH_ALEN))
 				mka_mcbcq_used = 1;
 		}
-		pr_info("Setting MCBCQ to queue %d\n", mka_mcbcq_used);
+		pr_debug("Setting MCBCQ to queue %d\n", mka_mcbcq_used);
 		stmmac_rx_queue_routing(priv, priv->hw, PACKET_MCBCQ, mka_mcbcq_used);
 	}
 	stmmac_set_filter(priv, priv->hw, dev);
@@ -8345,6 +8345,7 @@ int stmmac_dvr_probe(struct device *device,
 	ndev->vlan_features |= ndev->hw_features;
 	/* Both mac100 and gmac support receive VLAN tag detection */
 	ndev->features |= NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_STAG_RX;
+	ndev->hw_features |= NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_STAG_RX;
 	priv->dma_cap.vlhash = 0;
 	priv->dma_cap.vlins = 0;
 	if (priv->dma_cap.vlhash) {

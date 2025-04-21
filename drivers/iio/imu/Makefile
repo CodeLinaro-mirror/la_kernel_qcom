@@ -28,3 +28,5 @@ obj-$(CONFIG_KMX61) += kmx61.o
 
 obj-y += st_lsm6dsx/
 obj-y += st_lsm9ds0/
+obj-y += inv_mpu/
+obj-y += stm/imu/st_asm330lhhx/

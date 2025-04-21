@@ -18,6 +18,9 @@ def define_openssl_dist(target, msm_target, variant):
         cp $(locations {include}) include/
         cp $(locations {lib64}) lib64/
 
+        rm -f lib64/libcrypto.so && ln -s libcrypto.so.3 lib64/libcrypto.so
+        rm -f lib64/libssl.so && ln -s libssl.so.3 lib64/libssl.so
+
         chmod 755 bin/* lib64/*
         chmod 644 include/*
         mv bin include lib64 openssl

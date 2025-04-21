@@ -1016,6 +1016,9 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 
 			ops = macsec_get_ops(macsec, NULL);
 
+			if (hdr->h_proto == htons(ETH_P_PAE))
+				continue;
+
 			if (ops->rx_uses_md_dst && !is_macsec_md_dst)
 				continue;
 
@@ -1035,6 +1038,7 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 				skb->dev = ndev;
 				skb->pkt_type = PACKET_HOST;
 				eth_skb_pkt_type(skb, ndev);
+				count_rx(ndev, skb->len);
 				ret = RX_HANDLER_ANOTHER;
 				goto out;
 			}
@@ -1053,6 +1057,7 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 				/* exact match, divert skb to this port */
 				skb->dev = ndev;
 				skb->pkt_type = PACKET_HOST;
+				count_rx(ndev, skb->len);
 				ret = RX_HANDLER_ANOTHER;
 				goto out;
 			} else if (is_multicast_ether_addr_64bits(
@@ -1064,11 +1069,12 @@ static enum rx_handler_result handle_not_macsec(struct sk_buff *skb)
 
 				nskb->dev = ndev;
 				eth_skb_pkt_type(nskb, ndev);
-
+				count_rx(ndev, nskb->len);
 				__netif_rx(nskb);
 			} else if (ndev->flags & IFF_PROMISC) {
 				skb->dev = ndev;
 				skb->pkt_type = PACKET_HOST;
+				count_rx(ndev, skb->len);
 				ret = RX_HANDLER_ANOTHER;
 				goto out;
 			}
@@ -3420,7 +3426,9 @@ static netdev_tx_t macsec_start_xmit(struct sk_buff *skb,
 		dst_hold(&md_dst->dst);
 		skb_dst_set(skb, &md_dst->dst);
 		skb->dev = macsec->real_dev;
-		return dev_queue_xmit(skb);
+		ret = dev_queue_xmit(skb);
+		count_tx(dev, ret, skb->len);
+		return ret;
 	}
 
 	/* 10.5 */
@@ -3458,7 +3466,14 @@ static netdev_tx_t macsec_start_xmit(struct sk_buff *skb,
 	return ret;
 }
 
-#define MACSEC_FEATURES \
+#define HW_MACSEC_FEATURES \
+	(NETIF_F_SG | NETIF_F_HIGHDMA | NETIF_F_FRAGLIST | \
+	 NETIF_F_GSO | NETIF_F_TSO | \
+	 NETIF_F_TSO6 | NETIF_F_GRO | NETIF_F_RXCSUM | \
+	 NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | \
+	 NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_STAG_RX)
+
+#define SW_MACSEC_FEATURES \
 	(NETIF_F_SG | NETIF_F_HIGHDMA | NETIF_F_FRAGLIST)
 
 static int macsec_dev_init(struct net_device *dev)
@@ -3477,8 +3492,11 @@ static int macsec_dev_init(struct net_device *dev)
 		return err;
 	}
 
-	dev->features = real_dev->features & MACSEC_FEATURES;
+	dev->features = real_dev->features & HW_MACSEC_FEATURES;
 	dev->features |= NETIF_F_LLTX | NETIF_F_GSO_SOFTWARE;
+
+	dev->hw_features = real_dev->hw_features & HW_MACSEC_FEATURES;
+	dev->vlan_features = real_dev->vlan_features & HW_MACSEC_FEATURES;
 
 	dev->needed_headroom = real_dev->needed_headroom +
 			       MACSEC_NEEDED_HEADROOM;
@@ -3510,8 +3528,13 @@ static netdev_features_t macsec_fix_features(struct net_device *dev,
 	struct macsec_dev *macsec = macsec_priv(dev);
 	struct net_device *real_dev = macsec->real_dev;
 
-	features &= (real_dev->features & MACSEC_FEATURES) |
+	if (macsec_is_offloaded(macsec)) {
+		features &= (real_dev->features & HW_MACSEC_FEATURES) |
+			    NETIF_F_GSO_SOFTWARE | NETIF_F_SOFT_FEATURES;
+	} else {
+		features &= (real_dev->features & SW_MACSEC_FEATURES) |
 		    NETIF_F_GSO_SOFTWARE | NETIF_F_SOFT_FEATURES;
+	}
 	features |= NETIF_F_LLTX;
 
 	return features;

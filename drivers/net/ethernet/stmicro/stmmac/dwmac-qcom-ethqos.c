@@ -412,6 +412,13 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 	struct qcom_ethqos *ethqos = (struct qcom_ethqos *)priv->plat->bsp_priv;
 	s8 eprio;
 	int i = 0, tc_prio = 0;
+
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+	if (ethqos->ipa_enabled)
+		return ALL_OTHER_TRAFFIC_TX_CHANNEL;
+	else
+		return ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
+#endif
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
 

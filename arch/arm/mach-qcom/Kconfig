@@ -60,6 +60,8 @@ config ARCH_SA510M
 	select PM_DEVFREQ
 	select COMMON_CLK
 	select COMMON_CLK_QCOM
+	select QCOM_GDSC
+	select GENERIC_CLOCKEVENTS_BROADCAST
 	help
 		This enables support for the Qualcomm Technologies, Inc. SA510M Chipset.
 		Say 'Y' for SA510M chipset. If you do not wish to build a kernel that
