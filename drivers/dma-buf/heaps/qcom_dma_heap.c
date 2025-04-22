@@ -137,9 +137,20 @@ static int qcom_dma_heaps_restore(struct device *dev)
 	return ret;
 }
 
+static int qcom_dma_heaps_thaw(struct device *dev)
+{
+	int ret;
+
+	ret = qcom_secure_system_heap_restore();
+	if (ret)
+		pr_err("Failed to restore secure system heap: %d\n", ret);
+
+	return ret;
+}
+
 static const struct dev_pm_ops qcom_dma_heaps_pm_ops = {
 	.freeze_late = qcom_dma_heaps_freeze,
-	.thaw_early  = qcom_dma_heaps_restore,
+	.thaw_early  = qcom_dma_heaps_thaw,
 	.restore_early = qcom_dma_heaps_restore,
 };
 
