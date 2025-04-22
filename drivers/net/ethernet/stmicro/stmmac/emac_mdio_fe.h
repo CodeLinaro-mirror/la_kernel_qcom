@@ -9,16 +9,46 @@
 
 #if IS_ENABLED(CONFIG_EMAC_MDIO_FE)
 
+/**
+ * Returns >=0 on success or < 0 on error.
+ * -ETIME means waiting for Backend reply failure.
+ * -EIO means mdio hw status is not up.
+ */
 int virtio_mdio_read(int addr, int regnum);
 
+/**
+ * Returns >=0 on success or < 0 on error.
+ * -ETIME means waiting for Backend reply failure.
+ * -EIO means mdio hw status is not up.
+ */
 int virtio_mdio_write(int addr, int regnum, u16 val);
 
+/**
+ * Returns >=0 on success or < 0 on error.
+ * -ETIME means waiting for Backend reply failure.
+ * -EIO means mdio hw status is not up.
+ */
 int virtio_mdio_read_c45(int addr, int devnum, int regnum);
 
+/**
+ * Returns >=0 on success or < 0 on error.
+ * -ETIME means waiting for Backend reply failure.
+ * -EIO means mdio hw status is not up.
+ */
 int virtio_mdio_write_c45(int addr, int devnum, int regnum, u16 val);
 
+/**
+ * Returns >=0 on success or < 0 on error.
+ * -ETIME means waiting for Backend reply failure.
+ * -EIO means mdio hw status is not up.
+ */
 int virtio_mdio_read_c45_indirect(int addr, int regnum);
 
+/**
+ * Returns >=0 on success or < 0 on error.
+ * -ETIME means waiting for Backend reply failure.
+ * -EIO means mdio hw status is not up.
+ */
 int virtio_mdio_write_c45_indirect(int addr, int regnum, u16 val);
 
 #else
