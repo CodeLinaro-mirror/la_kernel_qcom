@@ -454,11 +454,11 @@ int stmmac_get_phy_addr(struct stmmac_priv *priv, struct mii_bus *new_bus,
 	if (priv->plat->phy_type != -1) {
 		if (priv->plat->phy_type == PHY_1G) {
 			err = of_property_read_u32(np, "emac-1g-phy-addr", &phyaddr);
-			new_bus->read = &virtio_mdio_read;
-			new_bus->write = &virtio_mdio_write;
+			// new_bus->read = &virtio_mdio_read;
+			// new_bus->write = &virtio_mdio_write;
 		} else {
-			new_bus->read = &virtio_mdio_read_c45_indirect;
-			new_bus->write = &virtio_mdio_write_c45_indirect;
+			// new_bus->read = &virtio_mdio_read_c45_indirect;
+			// new_bus->write = &virtio_mdio_write_c45_indirect;
 			new_bus->probe_capabilities = MDIOBUS_C22_C45;
 			if (priv->plat->phy_type == PHY_25G &&
 			    priv->plat->board_type == STAR_BOARD) {
@@ -475,8 +475,8 @@ int stmmac_get_phy_addr(struct stmmac_priv *priv, struct mii_bus *new_bus,
 			new_bus->phy_mask = mdio_bus_data->phy_mask;
 			return -1;
 		}
-		new_bus->read = &virtio_mdio_read;
-		new_bus->write = &virtio_mdio_write;
+		// new_bus->read = &virtio_mdio_read;
+		// new_bus->write = &virtio_mdio_write;
 		/* Do MDIO reset before the bus->read call */
 		err = new_bus->reset(new_bus);
 		if (err) {
@@ -487,8 +487,8 @@ int stmmac_get_phy_addr(struct stmmac_priv *priv, struct mii_bus *new_bus,
 		err = new_bus->read(new_bus, phyaddr, MII_BMSR);
 		if (err == -EBUSY || !err || err == 0xffff) {
 			/* 2.5 G PHY case */
-			new_bus->read = &virtio_mdio_read_c45_indirect;
-			new_bus->write = &virtio_mdio_write_c45_indirect;
+			// new_bus->read = &virtio_mdio_read_c45_indirect;
+			// new_bus->write = &virtio_mdio_write_c45_indirect;
 			new_bus->probe_capabilities = MDIOBUS_C22_C45;
 
 			err = of_property_read_u32(np,

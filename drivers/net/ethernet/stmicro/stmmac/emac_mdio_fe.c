@@ -20,7 +20,6 @@
 #include <soc/qcom/boot_stats.h>
 #include <linux/virtio_config.h>
 #include <linux/semaphore.h>
-#include "stmmac.h"
 /* ========================================================================== */
 /*                         MACRO DEFINITIONS                                  */
 /* ========================================================================== */
@@ -349,19 +348,12 @@ static int emac_mdio_fe_init_vqs(struct emac_mdio_dev *pdev)
 	return 0;
 }
 
-int virtio_mdio_read(struct mii_bus *bus, int addr, int regnum)
+int virtio_mdio_read(int addr, int regnum)
 {
 	struct phy_remote_access_t *phy_request = NULL;
-	struct net_device *ndev = bus->priv;
-	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret = 0;
 
-	if (atomic_read(&priv->plat->phy_clks_suspended))
-		return -EBUSY;
-
-	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
 	memset(phy_request, 0, sizeof(*phy_request));
 	phy_request->mdio_type = MDIO_CLAUSE_22;
@@ -377,25 +369,17 @@ int virtio_mdio_read(struct mii_bus *bus, int addr, int regnum)
 	ret = emac_mdio_fe_xmit_and_wait(emac_mdio_fe_ctx);
 
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	mutex_unlock(&priv->lock);
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_read);
 
-int virtio_mdio_write(struct mii_bus *bus, int addr, int regnum, u16 val)
+int virtio_mdio_write(int addr, int regnum, u16 val)
 {
 	struct phy_remote_access_t *phy_request = NULL;
-	struct net_device *ndev = bus->priv;
-	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret = 0;
 
-	if (atomic_read(&priv->plat->phy_clks_suspended))
-		return -EBUSY;
-
-	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
 	memset(phy_request, 0, sizeof(*phy_request));
 	phy_request->mdio_type = MDIO_CLAUSE_22;
@@ -412,23 +396,17 @@ int virtio_mdio_write(struct mii_bus *bus, int addr, int regnum, u16 val)
 	ret = emac_mdio_fe_xmit_and_wait(emac_mdio_fe_ctx);
 
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	mutex_unlock(&priv->lock);
+
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_write);
 
-int virtio_mdio_read_c45(struct mii_bus *bus, int addr, int devnum, int regnum)
+int virtio_mdio_read_c45(int addr, int devnum, int regnum)
 {
 	struct phy_remote_access_t *phy_request = NULL;
-	struct net_device *ndev = bus->priv;
-	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret = 0;
 
-	if (atomic_read(&priv->plat->phy_clks_suspended))
-		return -EBUSY;
-
-	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
@@ -447,23 +425,16 @@ int virtio_mdio_read_c45(struct mii_bus *bus, int addr, int devnum, int regnum)
 	ret = emac_mdio_fe_xmit_and_wait(emac_mdio_fe_ctx);
 
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	mutex_unlock(&priv->lock);
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_read_c45);
 
-int virtio_mdio_write_c45(struct mii_bus *bus, int addr, int devnum, int regnum, u16 val)
+int virtio_mdio_write_c45(int addr, int devnum, int regnum, u16 val)
 {
 	struct phy_remote_access_t *phy_request = NULL;
-	struct net_device *ndev = bus->priv;
-	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret = 0;
 
-	if (atomic_read(&priv->plat->phy_clks_suspended))
-		return -EBUSY;
-
-	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
@@ -483,23 +454,16 @@ int virtio_mdio_write_c45(struct mii_bus *bus, int addr, int devnum, int regnum,
 	ret = emac_mdio_fe_xmit_and_wait(emac_mdio_fe_ctx);
 
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	mutex_unlock(&priv->lock);
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_write_c45);
 
-int virtio_mdio_read_c45_indirect(struct mii_bus *bus, int addr, int regnum)
+int virtio_mdio_read_c45_indirect(int addr, int regnum)
 {
 	struct phy_remote_access_t *phy_request = NULL;
-	struct net_device *ndev = bus->priv;
-	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret = 0;
 
-	if (atomic_read(&priv->plat->phy_clks_suspended))
-		return -EBUSY;
-
-	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
@@ -518,23 +482,16 @@ int virtio_mdio_read_c45_indirect(struct mii_bus *bus, int addr, int regnum)
 	ret = emac_mdio_fe_xmit_and_wait(emac_mdio_fe_ctx);
 
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	mutex_unlock(&priv->lock);
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(virtio_mdio_read_c45_indirect);
 
-int virtio_mdio_write_c45_indirect(struct mii_bus *bus, int addr, int regnum, u16 val)
+int virtio_mdio_write_c45_indirect(int addr, int regnum, u16 val)
 {
 	struct phy_remote_access_t *phy_request = NULL;
-	struct net_device *ndev = bus->priv;
-	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret = 0;
 
-	if (atomic_read(&priv->plat->phy_clks_suspended))
-		return -EBUSY;
-
-	mutex_lock(&priv->lock);
 	mutex_lock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
 
 	phy_request = &emac_mdio_fe_ctx->tx_msg.request_data;
@@ -554,7 +511,6 @@ int virtio_mdio_write_c45_indirect(struct mii_bus *bus, int addr, int regnum, u1
 	ret = emac_mdio_fe_xmit_and_wait(emac_mdio_fe_ctx);
 
 	mutex_unlock(&emac_mdio_fe_pdev->emac_mdio_fe_lock);
-	mutex_unlock(&priv->lock);
 
 	return ret;
 }
