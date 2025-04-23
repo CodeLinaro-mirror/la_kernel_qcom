@@ -652,7 +652,7 @@ static ssize_t smi230_acc_show_sensor_temperature(struct device *dev,
 	if (err != SMI230_OK)
 		return err;
 
-	return scnprintf(buf, PAGE_SIZE, "temperature: %d\n", sensor_temp);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", sensor_temp);
 }
 
 static ssize_t smi230_acc_store_fifo_reset(struct device *dev,
