@@ -50,6 +50,9 @@
 #include "smi230_defs.h"
 #include <linux/delay.h>
 #include <linux/device.h>
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
 
 #define DRIVER_VERSION	 "0.8.4"
 #define MODULE_NAME	 "SMI230"

@@ -2698,6 +2698,10 @@ int smi230_acc_probe(struct device *dev, struct smi230_dev *smi230_dev)
 	int err = 0;
 	struct smi230_client_data *client_data = NULL;
 
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - Sensor SMI230 Accel probe start");
+#endif
+
 	if (dev == NULL || smi230_dev == NULL)
 		return -EINVAL;
 
@@ -2746,6 +2750,10 @@ int smi230_acc_probe(struct device *dev, struct smi230_dev *smi230_dev)
 		return err;
 
 	PINFO("Sensor %s was probed successfully", SENSOR_ACC_NAME);
+
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - Sensor SMI230 Accel probe end");
+#endif
 
 	return 0;
 exit_cleanup_sysfs:
