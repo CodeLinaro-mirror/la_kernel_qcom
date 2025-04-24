@@ -146,6 +146,8 @@ def define_qcs610():
         "drivers/soc/qcom/minidump.ko",
         "drivers/soc/qcom/pdr_interface.ko",
         "drivers/soc/qcom/power_state.ko",
+        "drivers/soc/qcom/pmic_glink.ko",
+        "drivers/soc/qcom/pmic_glink_altmode.ko",
         "drivers/soc/qcom/qcom_aoss.ko",
         "drivers/soc/qcom/qcom_ice.ko",
         "drivers/soc/qcom/qcom_ramdump.ko",
