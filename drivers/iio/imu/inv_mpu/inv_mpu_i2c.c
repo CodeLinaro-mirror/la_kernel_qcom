@@ -37,6 +37,10 @@
 #include "inv_mpu_iio.h"
 #include "inv_mpu_dts.h"
 
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
+
 #define CONFIG_DYNAMIC_DEBUG_I2C 0
 
 /**
@@ -594,6 +598,10 @@ static int inv_mpu_probe(struct i2c_client *client)
 	if (result)
 		goto out_free;
 
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - Sensor IAM20680 probe start");
+#endif
+
 	result = inv_mpu_configure_ring(indio_dev);
 	if (result) {
 		pr_err("configure ring buffer fail\n");
@@ -638,6 +646,10 @@ static int inv_mpu_probe(struct i2c_client *client)
 
 	if (result != 1)
 		return -EIO;
+
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - Sensor IAM20680 probe end");
+#endif
 
 	return 0;
 
