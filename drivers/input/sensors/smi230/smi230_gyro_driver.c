@@ -1041,6 +1041,10 @@ int smi230_gyro_probe(struct device *dev, struct smi230_dev *smi230_dev)
 #endif
 	struct smi230_int_cfg int_config;
 
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - Sensor SMI230 Gyro probe start");
+#endif
+
 	if (dev == NULL || smi230_dev == NULL)
 		return -EINVAL;
 
@@ -1213,6 +1217,10 @@ int smi230_gyro_probe(struct device *dev, struct smi230_dev *smi230_dev)
 	if (err != 1)
 		return err;
 	PINFO("Sensor %s was probed successfully", SENSOR_GYRO_NAME);
+
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - Sensor SMI230 Gyro probe end");
+#endif
 
 	return 0;
 #ifndef CONFIG_SMI230_DATA_SYNC
