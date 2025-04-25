@@ -64,7 +64,7 @@ int mhi_rddm_download_status(struct mhi_controller *mhi_cntrl)
 {
 	u32 rx_status;
 	enum mhi_ee_type ee;
-	const u32 delayus = 5000;
+	const u32 delayus = 1000;
 	void __iomem *base = mhi_cntrl->bhie;
 	u32 retry = (mhi_cntrl->timeout_ms * 1000) / delayus;
 	struct device *dev = &mhi_cntrl->mhi_dev->dev;
@@ -82,7 +82,18 @@ int mhi_rddm_download_status(struct mhi_controller *mhi_cntrl)
 			return 0;
 		}
 
-		usleep_range(delayus, delayus + 100);
+		/*
+		 * On 32-bit architectures, udelay should not exceed 2 milliseconds.
+		 * To ensure a total delay of 5 milliseconds, use five 1ms busy-wait loops.
+		 */
+		if (BITS_PER_LONG == 32) {
+			/* Likely 32-bit ARM */
+			for (int delay_iter = 0; delay_iter < 5; delay_iter++)
+				udelay(delayus);
+		} else {
+			/* 64-bit ARM or other 64-bit arch */
+			udelay(delayus * 5);
+		}
 	}
 
 	ee = mhi_get_exec_env(mhi_cntrl);
