@@ -191,17 +191,20 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-aim300-aiot.dtb
 qcs9075-addons-iq-9075-evk-dtbs	:= qcs9075-iq-9075-evk.dtb \
 				qcs9075-addons-iq-9075-evk.dtbo \
 				sa8775p-addons-video.dtbo \
-				qcs9100-addons-graphics.dtbo
+				qcs9100-addons-graphics.dtbo \
+				qcs9075-addons-rb8-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-addons-iq-9075-evk.dtb
 qcs9075-addons-ride-dtbs:= qcs9075-ride.dtb \
 				sa8775p-addons-ride.dtbo \
 				sa8775p-addons-video.dtbo \
-				qcs9100-addons-graphics.dtbo
+				qcs9100-addons-graphics.dtbo \
+				sa8775p-addons-ride-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-addons-ride.dtb
 qcs9075-addons-ride-r3-dtbs:= qcs9075-ride-r3.dtb \
 				sa8775p-addons-ride.dtbo \
 				sa8775p-addons-video.dtbo \
-				qcs9100-addons-graphics.dtbo
+				qcs9100-addons-graphics.dtbo \
+				sa8775p-addons-ride-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-addons-ride-r3.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-iq-9075-evk.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-ride.dtb
@@ -209,12 +212,14 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-ride-r3.dtb
 qcs9100-addons-ride-dtbs:= qcs9100-ride.dtb \
 				sa8775p-addons-ride.dtbo \
 				sa8775p-addons-video.dtbo \
-				qcs9100-addons-graphics.dtbo
+				qcs9100-addons-graphics.dtbo \
+				sa8775p-addons-ride-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-addons-ride.dtb
 qcs9100-addons-ride-r3-dtbs:= qcs9100-ride-r3.dtb \
 				sa8775p-addons-ride.dtbo \
 				sa8775p-addons-video.dtbo \
-				qcs9100-addons-graphics.dtbo
+				qcs9100-addons-graphics.dtbo \
+				sa8775p-addons-ride-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-addons-ride-r3.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-ride-r3.dtb
@@ -233,12 +238,14 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sa8540p-ride.dtb
 sa8775p-addons-ride-dtbs:= sa8775p-ride.dtb \
 				sa8775p-addons-ride.dtbo \
 				sa8775p-addons-video.dtbo \
-				qcs9100-addons-graphics.dtbo
+				qcs9100-addons-graphics.dtbo \
+				sa8775p-addons-ride-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8775p-addons-ride.dtb
 sa8775p-addons-ride-r3-dtbs:= sa8775p-ride-r3.dtb \
 				sa8775p-addons-ride.dtbo \
 				sa8775p-addons-video.dtbo \
-				qcs9100-addons-graphics.dtbo
+				qcs9100-addons-graphics.dtbo \
+				sa8775p-addons-ride-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8775p-addons-ride-r3.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8775p-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8775p-ride-r3.dtb
