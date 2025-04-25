@@ -184,7 +184,8 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-rb3gen2-vision-mezzanine.dtb
 qcs8300-addons-ride-dtbs:= qcs8300-ride.dtb \
 				qcs8300-addons-ride.dtbo \
 				qcs8300-addons-video.dtbo \
-				qcs8300-addons-graphics.dtbo
+				qcs8300-addons-graphics.dtbo \
+				qcs8300-addons-ride-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-addons-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-aim300-aiot.dtb
