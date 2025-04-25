@@ -117,12 +117,14 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-fairphone-fp5.dtb
 qcm6490-addons-idp-dtbs	:= qcm6490-idp.dtb \
 				qcm6490-addons-idp.dtbo \
 				qcm6490-addons-video.dtbo \
-				qcm6490-addons-graphics.dtbo
+				qcm6490-addons-graphics.dtbo \
+				qcm6490-addons-idp-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-addons-idp.dtb
 qcm6490-addons-idp-amoled-dtbs := qcm6490-idp.dtb \
 					qcm6490-addons-idp.dtbo \
 					qcm6490-addons-video.dtbo \
-					qcm6490-addons-graphics.dtbo
+					qcm6490-addons-graphics.dtbo \
+					qcm6490-addons-idp-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-addons-idp-amoled.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-idp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-shift-otter.dtb
@@ -147,7 +149,8 @@ dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2-vision-mezz-hsp.dtb
 qcs6490-addons-rb3gen2-dtbs:= qcs6490-rb3gen2.dtb \
 				qcs6490-addons-rb3gen2.dtbo \
 				qcm6490-addons-video.dtbo \
-				qcm6490-addons-graphics.dtbo
+				qcm6490-addons-graphics.dtbo \
+				qcs6490-addons-rb3gen2-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2.dtb
 qcs6490-addons-rb3gen2-hsp-dtbs:= qcs6490-addons-rb3gen2.dtb qcs6490-addons-rb3gen2-hsp.dtbo
 dtb-$(CONFIG_ARCH_QCOM) += qcs6490-addons-rb3gen2-hsp.dtb
@@ -158,12 +161,14 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2-ptz-mezz.dtb
 qcs6490-addons-rb3gen2-video-mezz-dtbs:= qcs6490-addons-rb3gen2.dtb \
 					qcs6490-addons-rb3gen2-video-mezz.dtbo \
 					qcm6490-addons-video.dtbo \
-					qcm6490-addons-graphics.dtbo
+					qcm6490-addons-graphics.dtbo \
+					qcs6490-addons-rb3gen2-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2-video-mezz.dtb
 qcs6490-addons-rb3gen2-vision-mezz-dtbs:= qcs6490-addons-rb3gen2.dtb \
 					qcs6490-addons-rb3gen2-vision-mezz.dtbo \
 					qcm6490-addons-video.dtbo \
-					qcm6490-addons-graphics.dtbo
+					qcm6490-addons-graphics.dtbo \
+					qcs6490-addons-rb3gen2-camera.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2-vision-mezz.dtb
 qcs6490-addons-rb3gen2-vision-mezz-hsp-dtbs:= qcs6490-addons-rb3gen2-vision-mezz.dtb qcs6490-addons-rb3gen2-hsp.dtbo
 dtb-$(CONFIG_ARCH_QCOM) += qcs6490-addons-rb3gen2-vision-mezz-hsp.dtb
@@ -175,7 +180,6 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs615-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-rb3gen2.dtb
 
 qcs6490-rb3gen2-vision-mezzanine-dtbs := qcs6490-rb3gen2.dtb qcs6490-rb3gen2-vision-mezzanine.dtbo
-
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-rb3gen2-vision-mezzanine.dtb
 qcs8300-addons-ride-dtbs:= qcs8300-ride.dtb \
 				qcs8300-addons-ride.dtbo \
