@@ -3698,18 +3698,18 @@ static void stmmac_mac_config_rx_queues_routing(struct stmmac_priv *priv)
 	u32 rx_queues_count = priv->plat->rx_queues_to_use;
 	u32 queue;
 	u8 packet;
+	u32 pkt_type;
 
 	for (queue = 0; queue < rx_queues_count; queue++) {
 		/* no specific packet type routing specified for the queue */
 		if (priv->plat->rx_queues_cfg[queue].pkt_route == 0x0)
 			continue;
 
-		packet = priv->plat->rx_queues_cfg[queue].pkt_route;
-		stmmac_rx_queue_routing(priv, priv->hw, packet, queue);
-
-		/* Configure Multicast and broadcast additionally if enabled */
-		if (priv->plat->rx_queues_cfg[queue].mbcast_route)
-			stmmac_rx_queue_routing(priv, priv->hw, PACKET_MCBCQ, queue);
+		for (pkt_type = PACKET_AVCPQ; pkt_type < PACKET_MAX; pkt_type++) {
+			packet = (priv->plat->rx_queues_cfg[queue].pkt_route) & (1 << pkt_type);
+			if (packet)
+				stmmac_rx_queue_routing(priv, priv->hw, pkt_type, queue);
+		}
 	}
 }
 
