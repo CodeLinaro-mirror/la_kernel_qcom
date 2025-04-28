@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+&iris {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	video_resv_region: video_resv_region {
+		iommu-addresses = <&non_secure_cb 0x0 0x0 0x0 0x25800000>,
+				  <&non_secure_cb 0x0 0xe0000000 0x0 0x20000000>,
+				  <&non_secure_pixel_cb 0x0 0x0 0x0 0x00100000>,
+				  <&non_secure_pixel_cb 0x0 0xe0000000 0x0 0x20000000>;
+	};
+
+	non_secure_cb: non_secure_cb {
+		compatible = "qcom,vidc,cb-ns";
+		iommus = <&apps_smmu 0x0880 0x0400>;
+		memory-region = <&video_resv_region>;
+	};
+
+	non_secure_pixel_cb: non_secure_pixel_cb {
+		compatible = "qcom,vidc,cb-ns-pxl";
+		iommus = <&apps_smmu 0x0887 0x0400>;
+		memory-region = <&video_resv_region>;
+	};
+};
