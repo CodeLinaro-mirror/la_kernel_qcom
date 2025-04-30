@@ -15,7 +15,7 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
-#include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/qcom_scm.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
@@ -147,6 +147,8 @@ struct eusb_phy_tbl {
 static const struct eusb_phy_tbl m31_eusb_phy_tbl[] = {
 	EUSB_PHY_INIT_CFG(USB_PHY_CFG0, BIT(1), 1),
 	EUSB_PHY_INIT_CFG(USB_PHY_UTMI_CTRL5, BIT(1), 1),
+	EUSB_PHY_INIT_CFG(USB_PHY_HS_PHY_CTRL_COMMON0, BIT(0), 1),
+	EUSB_PHY_INIT_CFG(USB_PHY_CFG1, BIT(0), 0),
 	EUSB_PHY_INIT_CFG(USB_PHY_FSEL_SEL, BIT(0), 1),
 };
 
