@@ -3852,7 +3852,7 @@ static int arm_smmu_pm_prepare(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused arm_smmu_pm_restore_early(struct device *dev)
+static int __maybe_unused arm_smmu_pm_resume_complete(struct device *dev)
 {
 	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
 	struct arm_smmu_domain *smmu_domain;
@@ -3892,6 +3892,24 @@ static int __maybe_unused arm_smmu_pm_restore_early(struct device *dev)
 	return 0;
 }
 
+static int __maybe_unused arm_smmu_pm_restore_early(struct device *dev)
+{
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
+	int ret;
+
+	/*
+	 * since arm_smmu_pm_resume_common would increment power count as
+	 * part of arm_smmu_pm_resume in case if it's not already runtime suspended,
+	 * so decrement it back in arm_smmu_power_off to restore power status as before.
+	 */
+
+	ret = arm_smmu_pm_resume_complete(dev);
+	if (!ret && !pm_runtime_suspended(dev))
+		arm_smmu_power_off(smmu, smmu->pwr);
+
+	return ret;
+}
+
 static int __maybe_unused arm_smmu_pm_freeze_late(struct device *dev)
 {
 	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
@@ -3915,11 +3933,6 @@ static int __maybe_unused arm_smmu_pm_freeze_late(struct device *dev)
 			}
 		}
 	}
-	ret = arm_smmu_runtime_suspend(dev);
-	if (ret) {
-		dev_err(dev, "Failed to suspend\n");
-		return ret;
-	}
 	arm_smmu_power_off(smmu, smmu->pwr);
 	return 0;
 }
@@ -3929,8 +3942,15 @@ static int __maybe_unused arm_smmu_pm_suspend(struct device *dev)
 	int ret = 0;
 	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM)
-		return arm_smmu_pm_freeze_late(dev);
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		ret = arm_smmu_pm_freeze_late(dev);
+		if (!ret) {
+			ret = arm_smmu_runtime_suspend(dev);
+			if (ret)
+				dev_err(dev, "Failed to suspend\n");
+		}
+		return ret;
+	}
 
 	if (pm_runtime_suspended(dev))
 		goto clk_unprepare;
@@ -3947,7 +3967,7 @@ clk_unprepare:
 static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
 {
 	if (pm_suspend_target_state == PM_SUSPEND_MEM)
-		return arm_smmu_pm_restore_early(dev);
+		return arm_smmu_pm_resume_complete(dev);
 	else
 		return arm_smmu_pm_resume_common(dev);
 }
