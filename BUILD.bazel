@@ -27,7 +27,9 @@ load(
     "merged_kernel_uapi_headers",
 )
 load(":abi.bzl", "cc_binary_with_abi")
+load(":consolidate.bzl", "define_consolidate")
 load(":modules.bzl", "get_gki_modules_list", "get_kunit_modules_list")
+load(":msm_platforms.bzl", "define_msm_platforms")
 
 package(
     default_visibility = [
@@ -536,11 +538,7 @@ copy_to_dist_dir(
     log = "info",
 )
 
-load(":consolidate.bzl", "define_consolidate")
-
 define_consolidate()
-
-load(":msm_platforms.bzl", "define_msm_platforms")
 
 define_msm_platforms()
 
@@ -902,6 +900,9 @@ ddk_headers(
         "drivers/thermal/thermal_core.h",
         "drivers/thermal/thermal_netlink.h",
         "include/linux/firmware/qcom/qcom_scm.h",
+        "net/8021q/vlan.h",
+        "net/wireless/core.h",
+        "net/wireless/reg.h",
         ":all_headers_allowlist_aarch64_globs",
         ":all_headers_allowlist_common_globs",
     ],
@@ -916,6 +917,8 @@ ddk_headers(
         "include",
         "include/linux/firmware/qcom",
         "include/uapi",
+        "net/wireless",
+        "net/8021q",
     ],
     visibility = ["//visibility:private"],
 )
