@@ -4797,6 +4797,9 @@ void walt_rotation_checkpoint(u64 window_start, int nr_giant)
 	static u64 high_perf_state_hyst_start_ts;
 	bool prev = plenty_giant_tasks;
 
+	if (walt_quiet_state)
+		return;
+
 	if (!hmp_capable())
 		return;
 

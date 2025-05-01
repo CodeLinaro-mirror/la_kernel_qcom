@@ -702,6 +702,9 @@ void walt_lb_tick(struct rq *rq)
 	struct walt_rq *prev_wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 
+	if (walt_quiet_state)
+		return;
+
 	raw_spin_lock(&rq->__lock);
 	if (available_idle_cpu(prev_cpu) && is_reserved(prev_cpu) && !rq->active_balance)
 		clear_reserved(prev_cpu);
@@ -893,6 +896,8 @@ static void walt_newidle_balance(struct rq *this_rq,
 	if (unlikely(walt_disabled))
 		return;
 
+	if (walt_quiet_state)
+		return;
 	/*
 	 * newly idle load balance is completely handled here, so
 	 * set done to skip the load balance by the caller.
@@ -1031,6 +1036,9 @@ void walt_smp_newidle_balance(void *ignored)
 	int pulled_task;
 	int done = 0;
 
+	if (walt_quiet_state)
+		return;
+
 	rq_lock(rq, &rf);
 	update_rq_clock(rq);
 	walt_newidle_balance(rq, &rf, &pulled_task, &done, true);
@@ -1062,6 +1070,10 @@ static void walt_find_busiest_queue(void *unused, int dst_cpu,
 
 	if (unlikely(walt_disabled))
 		return;
+
+	if (walt_quiet_state)
+		return;
+
 	*done = 1;
 	*busiest = NULL;
 
@@ -1110,6 +1122,10 @@ static void walt_nohz_balancer_kick(void *unused, struct rq *rq,
 {
 	if (unlikely(walt_disabled))
 		return;
+
+	if (walt_quiet_state)
+		return;
+
 	*done = 1;
 
 	/*
@@ -1129,6 +1145,10 @@ static void walt_can_migrate_task(void *unused, struct task_struct *p,
 
 	if (unlikely(walt_disabled))
 		return;
+
+	if (walt_quiet_state)
+		return;
+
 	to_lower = check_for_higher_capacity(task_cpu(p), dst_cpu);
 	to_higher = check_for_higher_capacity(dst_cpu, task_cpu(p));
 
@@ -1152,6 +1172,9 @@ static void walt_sched_newidle_balance(void *unused, struct rq *this_rq,
 	if (unlikely(walt_disabled))
 		return;
 
+	if (walt_quiet_state)
+		return;
+
 	if (this_rq->ttwu_pending)
 		done = 0;
 	else
@@ -1168,6 +1191,9 @@ void sched_walt_oscillate(unsigned int busy_cpu)
 	struct walt_task_struct *wts;
 	unsigned long flags;
 	int no_oscillate_reason = 0;
+
+	if (walt_quiet_state)
+		return;
 
 	if (!should_oscillate(busy_cpu, &no_oscillate_reason))
 		goto out_fail;
@@ -1258,6 +1284,10 @@ static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
 	 * scheduler core skips in further cpu selections.
 	 */
 	*ilb = -1;
+
+	if (walt_quiet_state)
+		return;
+
 	for (i = 0; i < num_sched_clusters - 1; i++) {
 		for_each_cpu_and(cpu, nohz_idle_cpus_mask, &cpu_array[0][i]) {
 			if (cpu == smp_processor_id())
