@@ -251,6 +251,7 @@ static int qrtr_parse_header(struct qrtr_cb *cb, size_t *hdrlen, unsigned int *s
 
 void qrtr_print_wakeup_reason(const void *data)
 {
+	char client_info[64] = {0,};
 	struct qrtr_cb cb;
 	struct qrtr_sock *ipc;
 	unsigned int size;
@@ -269,12 +270,19 @@ void qrtr_print_wakeup_reason(const void *data)
 
 	ipc = qrtr_port_lookup(cb.dst_port);
 
-	pr_info("%s: src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x] service[0x%x] rx_client[pid:%d, comm:%s]\n",
+	if (cb.dst_node == qrtr_local_nid)
+		snprintf(client_info, sizeof(client_info), "rx_client[pid:%d, comm:%s]",
+			 ipc ? ipc->pid : -1, ipc ? ipc->comm : "NULL");
+
+	pr_info("%s: src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x] service[0x%x] %s\n",
 		__func__,
 		cb.src_node, cb.src_port,
 		cb.dst_node, cb.dst_port,
 		(unsigned int)preview, (unsigned int)(preview >> 32),
-		service_id, ipc ? ipc->pid : -1, ipc ? ipc->comm : "NULL");
+		service_id,
+		(cb.dst_node == qrtr_local_nid) ?
+		client_info : "destination is GVM");
+
 	if (ipc)
 		qrtr_port_put(ipc);
 }
