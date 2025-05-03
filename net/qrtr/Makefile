@@ -14,3 +14,5 @@ obj-$(CONFIG_QRTR_GUNYAH) += qrtr-gunyah.o
 qrtr-gunyah-y	:= gunyah.o
 obj-$(CONFIG_QRTR_GENPOOL) += qrtr-genpool.o
 qrtr-genpool-y	:= genpool.o
+obj-$(CONFIG_QRTR_WAKEUP_INFO) += qrtr-wakeup-info.o
+qrtr-wakeup-info-y	:= qrtr_wakeup_info.o
