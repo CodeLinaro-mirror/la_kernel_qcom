@@ -708,6 +708,9 @@ static inline void waltgov_run_callback(struct rq *rq, unsigned int flags)
 {
 	struct waltgov_callback *cb;
 
+	if (walt_quiet_state)
+		return;
+
 	cb = rcu_dereference_sched(*per_cpu_ptr(&waltgov_cb_data, cpu_of(rq)));
 	if (cb)
 		cb->func(cb, walt_sched_clock(), flags);
