@@ -1182,6 +1182,9 @@ walt_select_task_rq_fair(void *unused, struct task_struct *p, int prev_cpu,
 	if (unlikely(walt_disabled))
 		return;
 
+	if (walt_quiet_state)
+		return;
+
 	sync = (wake_flags & WF_SYNC) && !(current->flags & PF_EXITING);
 	sibling_count_hint = p->wake_q_count;
 	p->wake_q_count = 0;
@@ -1197,6 +1200,9 @@ static void binder_set_priority_hook(void *data,
 			(struct walt_task_struct *)android_task_vendor_data(current);
 
 	if (unlikely(walt_disabled))
+		return;
+
+	if (walt_quiet_state)
 		return;
 
 	if (bndrtrans && bndrtrans->need_reply && current_wts->boost == TASK_BOOST_STRICT_MAX) {
@@ -1233,6 +1239,9 @@ static void binder_restore_priority_hook(void *data,
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(task);
 
 	if (unlikely(walt_disabled))
+		return;
+
+	if (walt_quiet_state)
 		return;
 
 	if (bndrtrans && wts->boost == TASK_BOOST_STRICT_MAX)
@@ -1492,6 +1501,9 @@ static void walt_cfs_check_preempt_wakeup_fair(void *unused, struct rq *rq, stru
 	if (unlikely(walt_disabled))
 		return;
 
+	if (walt_quiet_state)
+		return;
+
 	p_is_mvp = !list_empty(&wts_p->mvp_list) && wts_p->mvp_list.next;
 	curr_is_mvp = !list_empty(&wts_c->mvp_list) && wts_c->mvp_list.next;
 
@@ -1551,6 +1563,9 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 	struct task_struct *mvp;
 
 	if (unlikely(walt_disabled))
+		return;
+
+	if (walt_quiet_state)
 		return;
 
 	if ((*p) && (*p) != prev && ((*p)->on_cpu == 1 || (*p)->on_rq == 0 ||

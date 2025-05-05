@@ -258,6 +258,9 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 	if (unlikely(walt_disabled))
 		return;
 
+	if (walt_quiet_state)
+		return;
+
 	/* For anything but wake ups, just return the task_cpu */
 	if (sd_flag != SD_BALANCE_WAKE && sd_flag != SD_BALANCE_FORK) {
 		fastpath = NON_WAKEUP;
@@ -376,6 +379,9 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *sched_ctx,
 	struct cpumask lowest_mask_reduced = { CPU_BITS_NONE };
 
 	if (unlikely(walt_disabled))
+		return;
+
+	if (walt_quiet_state)
 		return;
 
 	wts = (struct walt_task_struct *)android_task_vendor_data(sched_ctx);
