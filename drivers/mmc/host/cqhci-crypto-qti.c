@@ -10,8 +10,10 @@
 #include "cqhci-crypto-qti.h"
 #include <linux/blk-crypto-profile.h>
 #include <soc/qcom/ice.h>
+#if IS_ENABLED(CONFIG_QTI_HW_KEY_MANAGER_V1)
 #include <linux/crypto-qti-common.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#endif /* CONFIG_QTI_HW_KEY_MANAGER_V1 */
 
 #define RAW_SECRET_SIZE 32
 #define MINIMUM_DUN_SIZE 512
@@ -82,7 +84,7 @@ static int cqhci_crypto_qti_keyslot_program(struct blk_crypto_profile *profile,
 #else
 	err = qcom_ice_program_key_hwkm(cq_host->ice, QCOM_ICE_CRYPTO_ALG_AES_XTS, ice_key_size,
 					key, data_unit_mask, slot);
-#endif //CONFIG_QTI_HW_KEY_MANAGER_V1
+#endif /* CONFIG_QTI_HW_KEY_MANAGER_V1 */
 	if (err)
 		pr_err("%s: failed with error %d\n", __func__, err);
 
@@ -100,7 +102,7 @@ static int cqhci_crypto_qti_keyslot_evict(struct blk_crypto_profile *profile,
 	err = crypto_qti_keyslot_evict(host->ice->base, slot, SDCC_CE);
 #else
 	err = qcom_ice_evict_key(host->ice, slot);
-#endif //CONFIG_QTI_HW_KEY_MANAGER_V1
+#endif /* CONFIG_QTI_HW_KEY_MANAGER_V1 */
 	if (err)
 		pr_err("%s: failed with error %d\n", __func__, err);
 
@@ -120,7 +122,7 @@ static int cqhci_crypto_qti_derive_raw_secret(struct blk_crypto_profile *profile
 	struct cqhci_host *host = cqhci_host_from_crypto(profile);
 	err = qcom_ice_derive_sw_secret(host->ice, wrapped_key, wrapped_key_size,
 					  sw_secret);
-#endif //CONFIG_QTI_HW_KEY_MANAGER_V1
+#endif /* CONFIG_QTI_HW_KEY_MANAGER_V1 */
 	if (err)
 		pr_err("%s: failed with error %d\n", __func__, err);
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __HWKM_SERIALIZE_H_
@@ -113,13 +113,13 @@ struct hwkm_wrapping_bsve {
 } __packed;
 
 struct hwkm_operation_info {
-	unsigned op:4;		// [0-3]
+	unsigned op:4;		// [0:3]
 	unsigned irq_en:1;	// [4]
-	unsigned slot1_desc:8;	// [5,12]
-	unsigned slot2_desc:8;	// [13,20]
+	unsigned slot1_desc:8;	// [5:12]
+	unsigned slot2_desc:8;	// [13:20]
 	unsigned op_flag:1;	// [21]
-	unsigned context_len:5;	// [22-26]
-	unsigned len:5;		// [27-31]
+	unsigned context_len:5;	// [22:26]
+	unsigned len:5;		// [27:31]
 } __packed;
 
 #endif /* __HWKM_SERIALIZE_H_ */

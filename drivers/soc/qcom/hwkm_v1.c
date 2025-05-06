@@ -2,7 +2,7 @@
 /*
  * QTI hardware key manager driver.
  *
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/types.h>
@@ -35,10 +35,10 @@
 
 #define ASYNC_CMD_HANDLING false
 
-// Maximum number of times to poll
+/* Maximum number of times to poll */
 #define MAX_RETRIES 20000
 
-int retries;
+static int retries;
 #define WAIT_UNTIL(cond)			\
 for (retries = 0; !(cond) && (retries < MAX_RETRIES); retries++)
 
@@ -98,21 +98,23 @@ bool qti_hwkm_init_required(const struct ice_mmio_data *mmio_data)
 	val = qti_hwkm_readl(mmio_data,
 			QTI_HWKM_ICE_RG_TZ_KM_CTL, ICEMEM_SLAVE);
 	val = (val >> ICE_LEGACY_MODE_EN_OTP) & 0x1;
+
 	return (val == 1);
 }
 EXPORT_SYMBOL_GPL(qti_hwkm_init_required);
 
-static inline unsigned int qti_hwkm_get_reg_data(struct ice_mmio_data *mmio_data,
+static unsigned int qti_hwkm_get_reg_data(struct ice_mmio_data *mmio_data,
 						 u32 reg, u32 offset, u32 mask,
 						 enum hwkm_destination dest)
 {
 	u32 val = 0;
 
 	val = qti_hwkm_readl(mmio_data, reg, dest);
+
 	return ((val & mask) >> offset);
 }
 
-static inline bool qti_hwkm_testb(struct ice_mmio_data *mmio_data, u32 reg, u8 nr,
+static bool qti_hwkm_testb(struct ice_mmio_data *mmio_data, u32 reg, u8 nr,
 				  enum hwkm_destination dest)
 {
 	u32 val = qti_hwkm_readl(mmio_data, reg, dest);
@@ -120,11 +122,19 @@ static inline bool qti_hwkm_testb(struct ice_mmio_data *mmio_data, u32 reg, u8 n
 	val = (val >> nr) & 0x1;
 	if (val == 0)
 		return false;
+
 	return true;
 }
 
-/**
- * @brief Send a command packet to the HWKM Master instance as described
+/*
+ * qti_hwkm_master_transaction() - Send a command packet to the HWKM Master instance.
+ *
+ * @mmio_data: Structure holding ICE address registers.
+ * @cmd_packet: Pointer to Master transaction command.
+ * @cmd_words: Master transaction command size.
+ * @rsp_packet: Pointer to Master transaction response.
+ * @rsp_words: Master transaction response size.
+ *
  *        in section 3.2.5.1 of Key Manager HPG
  *        - Clear CMD FIFO
  *        - Clear Error Status Register
@@ -140,9 +150,10 @@ static inline bool qti_hwkm_testb(struct ice_mmio_data *mmio_data, u32 reg, u8 n
  *        - Verify CMD_DONE == 1
  *        - Clear CMD_DONE
  *
- * @return HWKM_SUCCESS if successful. HWKW Error Code otherwise.
+ * Context: Any context.
+ *
+ * Return: Return 0 if success, -1 on failure.
  */
-
 static int qti_hwkm_master_transaction(struct ice_mmio_data *mmio_data,
 				       const uint32_t *cmd_packet,
 				       size_t cmd_words,
@@ -154,7 +165,7 @@ static int qti_hwkm_master_transaction(struct ice_mmio_data *mmio_data,
 	u32 val = 0;
 	uint32_t rsp_discard;
 
-	// Clear CMD FIFO
+	/* Clear CMD FIFO */
 	qti_hwkm_setb(mmio_data_ref, QTI_HWKM_MASTER_RG_BANK2_BANKN_CTL,
 			CMD_FIFO_CLEAR_BIT, KM_MASTER);
 	/* Write memory barrier */
@@ -164,7 +175,7 @@ static int qti_hwkm_master_transaction(struct ice_mmio_data *mmio_data,
 	/* Write memory barrier */
 	wmb();
 
-	// Clear previous CMD errors, write 1 to err bits
+	/* Clear previous CMD errors, write 1 to err bits */
 	val = qti_hwkm_readl(mmio_data_ref, QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR,
 			KM_MASTER);
 	qti_hwkm_writel(mmio_data_ref, val,
@@ -173,7 +184,7 @@ static int qti_hwkm_master_transaction(struct ice_mmio_data *mmio_data,
 	/* Write memory barrier */
 	wmb();
 
-	// Enable command
+	/* Enable command */
 	qti_hwkm_setb(mmio_data_ref, QTI_HWKM_MASTER_RG_BANK2_BANKN_CTL, CMD_ENABLE_BIT,
 			KM_MASTER);
 	/* Write memory barrier */
@@ -196,7 +207,7 @@ static int qti_hwkm_master_transaction(struct ice_mmio_data *mmio_data,
 			rsp_discard = qti_hwkm_readl(mmio_data_ref,
 				QTI_HWKM_MASTER_RG_BANK2_RSP_0, KM_MASTER);
 		}
-		// Clear RSP_FIFO_NOT_EMPTY status bit
+		/* Clear RSP_FIFO_NOT_EMPTY status bit */
 		qti_hwkm_setb(mmio_data_ref, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS,
 			RSP_FIFO_NOT_EMPTY, KM_MASTER);
 		/* Write memory barrier */
@@ -246,7 +257,7 @@ static int qti_hwkm_master_transaction(struct ice_mmio_data *mmio_data,
 		return err;
 	}
 
-	// Clear CMD_DONE status bit
+	/* Clear CMD_DONE status bit */
 	qti_hwkm_setb(mmio_data_ref, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS,
 			CMD_DONE_BIT, KM_MASTER);
 	/* Write memory barrier */
@@ -255,8 +266,16 @@ static int qti_hwkm_master_transaction(struct ice_mmio_data *mmio_data,
 	return err;
 }
 
-/**
- * @brief Send a command packet to the HWKM ICE slave instance as described in
+/*
+ * qti_hwkm_ice_transaction(): Process ICE Slave transactions.
+ *
+ * @mmio_data: Structure holding ICE address registers.
+ * @cmd_packet: Pointer to Master transaction command.
+ * @cmd_words: Master transaction command size.
+ * @rsp_packet: Pointer to Master transaction response.
+ * @rsp_words: Master transaction response size.
+ *
+ * Send a command packet to the HWKM ICE slave instance as described in
  *        section 3.2.5.1 of Key Manager HPG
  *        - Clear CMD FIFO
  *        - Clear Error Status Register
@@ -272,9 +291,10 @@ static int qti_hwkm_master_transaction(struct ice_mmio_data *mmio_data,
  *        - Verify CMD_DONE == 1
  *        - Clear CMD_DONE
  *
- * @return HWKM_SUCCESS if successful. HWKW Error Code otherwise.
+ * Context: Any context.
+ *
+ * Return: Return 0 if success, -1 on failure.
  */
-
 static int qti_hwkm_ice_transaction(struct ice_mmio_data *mmio_data,
 				    const uint32_t *cmd_packet,
 				    size_t cmd_words,
@@ -286,7 +306,7 @@ static int qti_hwkm_ice_transaction(struct ice_mmio_data *mmio_data,
 	u32 val = 0;
 	uint32_t rsp_discard;
 
-	// Clear CMD FIFO
+	/* Clear CMD FIFO */
 	qti_hwkm_setb(mmio_data, QTI_HWKM_ICE_RG_BANK0_BANKN_CTL,
 			CMD_FIFO_CLEAR_BIT, ICEMEM_SLAVE);
 	/* Write memory barrier */
@@ -296,7 +316,7 @@ static int qti_hwkm_ice_transaction(struct ice_mmio_data *mmio_data,
 	/* Write memory barrier */
 	wmb();
 
-	// Clear previous CMD errors, write 1 to err bits
+	/* Clear previous CMD errors, write 1 to err bits */
 	val = qti_hwkm_readl(mmio_data, QTI_HWKM_ICE_RG_BANK0_BANKN_ESR,
 			ICEMEM_SLAVE);
 	qti_hwkm_writel(mmio_data, val,
@@ -306,7 +326,7 @@ static int qti_hwkm_ice_transaction(struct ice_mmio_data *mmio_data,
 	/* Write memory barrier */
 	wmb();
 
-	// Enable command
+	/* Enable command */
 	qti_hwkm_setb(mmio_data, QTI_HWKM_ICE_RG_BANK0_BANKN_CTL, CMD_ENABLE_BIT,
 			ICEMEM_SLAVE);
 	/* Write memory barrier */
@@ -330,7 +350,7 @@ static int qti_hwkm_ice_transaction(struct ice_mmio_data *mmio_data,
 				QTI_HWKM_ICE_RG_BANK0_RSP_0, ICEMEM_SLAVE);
 		}
 		pr_err("%s: while exit\n", __func__);
-		// Clear RSP_FIFO_NOT_EMPTY status bit
+		/* Clear RSP_FIFO_NOT_EMPTY status bit */
 		qti_hwkm_setb(mmio_data, QTI_HWKM_ICE_RG_BANK0_BANKN_IRQ_STATUS,
 			RSP_FIFO_NOT_EMPTY, ICEMEM_SLAVE);
 		/* Write memory barrier */
@@ -380,7 +400,7 @@ static int qti_hwkm_ice_transaction(struct ice_mmio_data *mmio_data,
 		return err;
 	}
 
-	// Clear CMD_DONE status bit
+	/* Clear CMD_DONE status bit */
 	qti_hwkm_setb(mmio_data, QTI_HWKM_ICE_RG_BANK0_BANKN_IRQ_STATUS,
 			CMD_DONE_BIT, ICEMEM_SLAVE);
 	/* Write memory barrier */
@@ -390,18 +410,20 @@ static int qti_hwkm_ice_transaction(struct ice_mmio_data *mmio_data,
 }
 
 /*
- * @brief Send a command packet to the selected KM instance and read
+ * qti_hwkm_run_transaction() - Send a command packet to the selected KM instance and read
  *        the response
  *
+ * @mmio_data             [in]  Structure holding ICE address registers.
  * @param dest            [in]  Destination KM instance
  * @param cmd_packet      [in]  pointer to start of command packet
  * @param cmd_words       [in]  words in the command packet
  * @param rsp_packet      [out] pointer to start of response packet
  * @param rsp_words       [in]  words in the response buffer
  *
- * @return HWKM_SUCCESS if successful. HWKW Error Code otherwise.
+ * Context: Any context.
+ *
+ * Return: Return 0 if success, -1 on failure. -2 for Default.
  */
-
 static int qti_hwkm_run_transaction(struct ice_mmio_data *mmio_data,
 					enum hwkm_destination dest,
 				    const uint32_t *cmd_packet,
@@ -438,7 +460,7 @@ static int qti_hwkm_run_transaction(struct ice_mmio_data *mmio_data,
 static void serialize_policy(struct hwkm_serialized_policy *out,
 			     const struct hwkm_key_policy *policy)
 {
-	memset(out, 0, sizeof(struct hwkm_serialized_policy));
+	memset(out, 0, sizeof(*out));
 	out->wrap_with_tpkey = policy->wrap_with_tpk_allowed;
 	out->hw_destination = policy->hw_destination;
 	out->security_level = policy->security_lvl;
@@ -458,7 +480,7 @@ static void serialize_policy(struct hwkm_serialized_policy *out,
 static void serialize_kdf_bsve(struct hwkm_kdf_bsve *out,
 			       const struct hwkm_bsve *bsve, u8 mks)
 {
-	memset(out, 0, sizeof(struct hwkm_kdf_bsve));
+	memset(out, 0, sizeof(*out));
 	out->mks = mks;
 	out->key_policy_version_en = bsve->km_key_policy_ver_en;
 	out->apps_secure_en = bsve->km_apps_secure_en;
@@ -474,7 +496,7 @@ static void serialize_kdf_bsve(struct hwkm_kdf_bsve *out,
 static void deserialize_policy(struct hwkm_key_policy *out,
 			       const struct hwkm_serialized_policy *policy)
 {
-	memset(out, 0, sizeof(struct hwkm_key_policy));
+	memset(out, 0, sizeof(*out));
 	out->wrap_with_tpk_allowed = policy->wrap_with_tpkey;
 	out->hw_destination = policy->hw_destination;
 	out->security_lvl = policy->security_level;
@@ -526,6 +548,12 @@ static void reorder_ctx(u8 *ctx, size_t ctxlen)
 }
 
 /*
+ * qti_handle_key_unwrap_import() - Process Unwrap Import commad.
+ *
+ * @mmio_data:  Structure holding ICE address registers.
+ * @cmd_in:     Pointer to input commnad packet.
+ * @rsp_in:     Pointer to output response packet.
+ *
  * Command packet format (word indices):
  * CMD[0]    = Operation info (OP, IRQ_EN, DKS, LEN)
  * CMD[1:17] = Wrapped Key Blob
@@ -534,8 +562,11 @@ static void reorder_ctx(u8 *ctx, size_t ctxlen)
  * Response packet format (word indices):
  * RSP[0]    = Operation info (OP, IRQ_EN, LEN)
  * RSP[1]    = Error status
+ *
+ * Context: Any context.
+ *
+ * Return:  Return 0 if success, -EINVAL on failure.
  */
-
 static int qti_handle_key_unwrap_import(struct ice_mmio_data *mmio_data,
 					const struct hwkm_cmd *cmd_in,
 					struct hwkm_rsp *rsp_in)
@@ -594,6 +625,12 @@ static int qti_handle_key_unwrap_import(struct ice_mmio_data *mmio_data,
 }
 
 /*
+ * qti_handle_keyslot_clear() - Clear ICE slave keyslot.
+ *
+ * @mmio_data:  Structure holding ICE address registers.
+ * @cmd_in:     Pointer to input commnad packet.
+ * @rsp_in:     Pointer to output response packet.
+ *
  * Command packet format (word indices):
  * CMD[0] = Operation info (OP, IRQ_EN, DKS, DK, LEN)
  * CMD[1] = CRC (disabled)
@@ -601,8 +638,11 @@ static int qti_handle_key_unwrap_import(struct ice_mmio_data *mmio_data,
  * Response packet format (word indices):
  * RSP[0] = Operation info (OP, IRQ_EN, LEN)
  * RSP[1] = Error status
+ *
+ * Context:  Any context.
+ *
+ * Return:   Return: Return 0 if success, -EINVAL on failure.
  */
-
 static int qti_handle_keyslot_clear(struct ice_mmio_data *mmio_data, const struct hwkm_cmd *cmd_in,
 				    struct hwkm_rsp *rsp_in)
 {
@@ -636,6 +676,12 @@ static int qti_handle_keyslot_clear(struct ice_mmio_data *mmio_data, const struc
 }
 
 /*
+ * qti_handle_system_kdf(): Process key derivation function.
+ *
+ * @mmio_data:  Structure holding ICE address registers.
+ * @cmd_in:     Pointer to input commnad packet.
+ * @rsp_in:     Pointer to output response packet.
+ *
  * NOTE: The command packet can vary in length. If BE = 0, the last 2 indices
  * for the BSVE are skipped. Similarly, if Software Context Length (SCL) < 16,
  * only SCL words are written to the packet. The CRC word is after the last
@@ -654,8 +700,11 @@ static int qti_handle_keyslot_clear(struct ice_mmio_data *mmio_data, const struc
  * Response packet format (word indices):
  * RSP[0]    = Operation info (OP, IRQ_EN, LEN)
  * RSP[1]    = Error status
+ *
+ * Context:     Any context.
+ *
+ * Return:      Return 0 if success, -EINVAL on failure.
  */
-
 static int qti_handle_system_kdf(struct ice_mmio_data *mmio_data, const struct hwkm_cmd *cmd_in,
 				 struct hwkm_rsp *rsp_in)
 {
@@ -697,7 +746,7 @@ static int qti_handle_system_kdf(struct ice_mmio_data *mmio_data, const struct h
 		serialize_kdf_bsve(&bsve, &cmd_in->kdf.bsve, cmd_in->kdf.mks);
 		WRITE_TO_KDF_PACKET(cmd_ptr, &bsve, MAX_BSVE_LENGTH);
 	} else {
-		// Skip 4 bytes to align to start of context.
+		/* Skip 4 bytes to align to start of context. */
 		cmd_ptr += 4 * (sizeof(u8));
 	}
 
@@ -728,6 +777,12 @@ static int qti_handle_system_kdf(struct ice_mmio_data *mmio_data, const struct h
 }
 
 /*
+ * qti_handle_set_tpkey() - Send TP Key to ICE slave.
+ *
+ * @mmio_data:  Structure holding ICE address registers.
+ * @cmd_in:     Pointer to input commnad packet.
+ * @rsp_in:     Pointer to output response packet.
+ *
  * Command packet format (word indices):
  * CMD[0] = Operation info (OP, IRQ_EN, SKS, LEN)
  * CMD[1] = CRC (disabled)
@@ -735,8 +790,11 @@ static int qti_handle_system_kdf(struct ice_mmio_data *mmio_data, const struct h
  * Response packet format (word indices):
  * RSP[0] = Operation info (OP, IRQ_EN, LEN)
  * RSP[1] = Error status
+ *
+ * Context: Any context.
+ *
+ * Return: Return 0 if success, -EINVAL on failure.
  */
-
 static int qti_handle_set_tpkey(struct ice_mmio_data *mmio_data, const struct hwkm_cmd *cmd_in,
 				struct hwkm_rsp *rsp_in)
 {
@@ -771,7 +829,13 @@ static int qti_handle_set_tpkey(struct ice_mmio_data *mmio_data, const struct hw
 	return status;
 }
 
-/**
+/*
+ * qti_handle_keyslot_rdwr() - Process read-write command.
+ *
+ * @mmio_data:  Structure holding ICE address registers.
+ * @cmd_in:     Pointer to input commnad packet.
+ * @rsp_in:     Pointer to output response packet.
+ *
  * 254 * NOTE: To anyone maintaining or porting this code wondering why the key
  * is reversed in the command packet: the plaintext key value is expected by
  * the HW in reverse byte order.
@@ -800,8 +864,12 @@ static int qti_handle_set_tpkey(struct ice_mmio_data *mmio_data, const struct hw
  * RSP[1]    = Error status
  * RSP[2:3]  = Policy (0 if we == 1)
  * RSP[4:11] = Read key value (0 if we == 1)
- **/
-
+ *
+ * Context: Any context.
+ *
+ * Return: Return: Return 0 if success, -EINVAL on failure.
+ *
+ */
 static int qti_handle_keyslot_rdwr(struct ice_mmio_data *mmio_data, const struct hwkm_cmd *cmd_in,
 				   struct hwkm_rsp *rsp_in)
 {
@@ -826,8 +894,9 @@ static int qti_handle_keyslot_rdwr(struct ice_mmio_data *mmio_data, const struct
 				KEY_POLICY_LENGTH);
 		memcpy(cmd + COMMAND_KEY_VALUE_IDX, cmd_in->rdwr.key,
 				cmd_in->rdwr.sz);
-		// Need to reverse the key because the HW expects it in reverse
-		// byte order
+		/* Need to reverse the key because the HW expects it in reverse
+		 * byte order.
+		 */
 		reverse_bytes((u8 *) (cmd + COMMAND_KEY_VALUE_IDX),
 				HWKM_MAX_KEY_SIZE);
 	}
@@ -852,14 +921,15 @@ static int qti_handle_keyslot_rdwr(struct ice_mmio_data *mmio_data, const struct
 						KEY_POLICY_LENGTH);
 		memcpy(rsp_in->rdwr.key,
 			rsp + RESPONSE_KEY_VALUE_IDX, RESPONSE_KEY_LENGTH);
-		// Need to reverse the key because the HW returns it in
-		// reverse byte order
+		/* Need to reverse the key because the HW expects it in reverse
+		 * byte order.
+		 */
 		reverse_bytes(rsp_in->rdwr.key, HWKM_MAX_KEY_SIZE);
 		rsp_in->rdwr.sz = RESPONSE_KEY_LENGTH;
 		deserialize_policy(&rsp_in->rdwr.policy, &policy);
 	}
 
-	// Clear cmd and rsp buffers, since they may contain plaintext keys
+	/* Clear cmd and rsp buffers, since they may contain plaintext keys */
 	memset(cmd, 0, sizeof(cmd));
 	memset(rsp, 0, sizeof(rsp));
 
@@ -901,9 +971,10 @@ static int qti_hwkm_parse_clock_info(struct platform_device *pdev,
 		ret = -ENOMEM;
 		goto out;
 	}
-	ret = of_property_read_u32_array(np, "qcom,op-freq-hz", clkfreq, len);
 
 	INIT_LIST_HEAD(&hwkm_dev->clk_list_head);
+
+	ret = of_property_read_u32_array(np, "qcom,op-freq-hz", clkfreq, len);
 
 	for (i = 0; i < cnt; i++) {
 		ret = of_property_read_string_index(np,
@@ -1075,7 +1146,7 @@ int qti_hwkm_handle_cmd(struct hwkm_cmd *cmd, struct hwkm_rsp *rsp)
 		return qti_handle_system_kdf(mmio_data_ref, cmd, rsp);
 	case NIST_KEYGEN:
 	case KEY_WRAP_EXPORT:
-	case QFPROM_KEY_RDWR: // cmd for HW initialization cmd only
+	case QFPROM_KEY_RDWR: /* cmd for HW initialization cmd only */
 	default:
 		return -EINVAL;
 	}
@@ -1137,7 +1208,7 @@ static int qti_hwkm_ice_init_sequence(struct ice_mmio_data *mmio_data)
 {
 	int ret = 0;
 
-	//Put ICE in standard mode
+	/* Put ICE in standard mode */
 	qti_hwkm_writel(mmio_data, 0x7, QTI_HWKM_ICE_RG_TZ_KM_CTL, ICEMEM_SLAVE);
 	/* Write memory barrier */
 	wmb();
@@ -1148,18 +1219,18 @@ static int qti_hwkm_ice_init_sequence(struct ice_mmio_data *mmio_data)
 		return ret;
 	}
 
-	// Disable CRC checks
+	/* Disable CRC checks */
 	qti_hwkm_clearb(mmio_data, QTI_HWKM_ICE_RG_TZ_KM_CTL,
 				CRC_CHECK_EN, ICEMEM_SLAVE);
 	/* Write memory barrier */
 	wmb();
 
-	// Configure key slots to be accessed by HLOS
+	/* Configure key slots to be accessed by HLOS */
 	qti_hwkm_configure_slot_access(mmio_data);
 	/* Write memory barrier */
 	wmb();
 
-	// Clear RSP_FIFO_FULL bit
+	/* Clear RSP_FIFO_FULL bit */
 	qti_hwkm_setb(mmio_data,
 			QTI_HWKM_ICE_RG_BANK0_BANKN_IRQ_STATUS,
 			RSP_FIFO_FULL, ICEMEM_SLAVE);
@@ -1252,6 +1323,7 @@ int qti_hwkm_init(const struct ice_mmio_data *mmio_data)
 	wmb();
 
 	pr_debug("%s %d: HWKM init ends\n", __func__, __LINE__);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(qti_hwkm_init);
@@ -1303,6 +1375,7 @@ static int qti_hwkm_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, hwkm_dev);
 
 	pr_err("%s %d:HWKM probe ends\n", __func__, __LINE__);
+
 	return ret;
 
 err_hwkm_dev:
@@ -1311,10 +1384,10 @@ err_hwkm_dev:
 	return ret;
 }
 
-
 static int qti_hwkm_remove(struct platform_device *pdev)
 {
 	kfree(mmio_data_ref);
+
 	return 0;
 }
 

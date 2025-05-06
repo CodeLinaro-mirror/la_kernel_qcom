@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __HWKM_H_
@@ -42,8 +42,6 @@ enum hwkm_op {
 	 * to receive a TPKEY.
 	 */
 	SET_TPKEY,
-
-
 	HWKM_MAX_OP,
 	HWKM_UNDEF_OP = 0xFF
 };
@@ -154,11 +152,11 @@ enum hwkm_master_key_slots {
 	MODEM_SKDK_L2 = 8,
 	TZ_UKDK_L2 = 9,
 
-	/** Slots reserved for TPKEY */
+	/* Slots reserved for TPKEY */
 	TPKEY_EVEN_SLOT = 10,
 	TPKEY_KEY_ODD_SLOT = 11,
 
-	/** First key slot available for general purpose use cases */
+	/* First key slot available for general purpose use cases */
 	MASTER_GENERIC_SLOTS_START,
 
 	UNDEF_SLOT = 0xFF
@@ -288,7 +286,7 @@ int qti_hwkm_init(const struct ice_mmio_data *mmio_data);
 bool qti_hwkm_init_required(const struct ice_mmio_data *mmio_data);
 bool qti_hwkm_is_ice_tpkey_set(const struct ice_mmio_data *mmio_data);
 #else
-static inline int qti_hwkm_add_req(struct hwkm_cmd *cmd,
+static inline int qti_hwkm_handle_cmd(struct hwkm_cmd *cmd,
 				   struct hwkm_rsp *rsp)
 {
 	return -EOPNOTSUPP;

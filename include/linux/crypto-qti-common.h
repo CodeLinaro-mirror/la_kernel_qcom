@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CRYPTO_QTI_COMMON_H
@@ -33,7 +33,7 @@ int crypto_qti_keyslot_program(void __iomem *base,
 			       unsigned int slot, u8 data_unit_mask,
 			       int capid, int storage_type);
 int crypto_qti_keyslot_evict(void __iomem *base,
-						unsigned int slot, int storage_type);
+			     unsigned int slot, int storage_type);
 int crypto_qti_derive_raw_secret(const u8 *wrapped_key,
 				 unsigned int wrapped_key_size, u8 *secret,
 				 unsigned int secret_size);

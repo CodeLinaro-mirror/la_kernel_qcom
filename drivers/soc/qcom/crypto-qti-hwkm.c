@@ -2,7 +2,7 @@
 /*
  * Crypto HWKM library for storage encryption.
  *
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -55,8 +55,8 @@ static int crypto_qti_hwkm_evict_slot_v1(unsigned int slot, bool double_key)
 }
 
 static int crypto_qti_program_key_v1(const struct ice_mmio_data *mmio_data,
-			   const struct blk_crypto_key *key, unsigned int slot,
-			   unsigned int data_unit_mask, int capid)
+				     const struct blk_crypto_key *key, unsigned int slot,
+				     unsigned int data_unit_mask, int capid)
 {
 	int err_program = 0;
 	int err_clear = 0;
@@ -88,7 +88,7 @@ static int crypto_qti_program_key_v1(const struct ice_mmio_data *mmio_data,
 		return err_program;
 	}
 
-	//Failsafe, clear GP_KEYSLOT incase it is not empty for any reason
+	/* Failsafe, clear GP_KEYSLOT incase it is not empty for any reason */
 	err_clear = crypto_qti_hwkm_evict_slot_v1(GP_KEYSLOT, false);
 	if (err_clear && (err_clear != SLOT_EMPTY_ERROR)) {
 		pr_err("%s: Error clearing ICE slot %d, err %d\n",
@@ -119,7 +119,7 @@ static int crypto_qti_program_key_v1(const struct ice_mmio_data *mmio_data,
 		return -EINVAL;
 	}
 
-	//Failsafe, clear ICE keyslot incase it is not empty for any reason
+	/* Failsafe, clear ICE keyslot incase it is not empty for any reason */
 	err_clear = crypto_qti_hwkm_evict_slot_v1(KEYMANAGER_ICE_MAP_SLOT(slot),
 						true);
 	if (err_clear && (err_clear != SLOT_EMPTY_ERROR)) {
@@ -227,6 +227,7 @@ int crypto_qti_invalidate_key(const struct ice_mmio_data *mmio_data,
 		return -EINVAL;
 	}
 	qti_hwkm_clocks(false);
+
 	return err;
 }
 EXPORT_SYMBOL_GPL(crypto_qti_invalidate_key);
@@ -272,7 +273,7 @@ static int crypto_qti_derive_raw_secret_platform_v1(
 		return err_program;
 	}
 
-	//Failsafe, clear GP_KEYSLOT incase it is not empty for any reason
+	/* Failsafe, clear GP_KEYSLOT incase it is not empty for any reason */
 	err_clear = crypto_qti_hwkm_evict_slot_v1(GP_KEYSLOT, false);
 	if (err_clear && (err_clear != SLOT_EMPTY_ERROR)) {
 		pr_err("%s: Error clearing GP slot %d, err %d\n",
@@ -297,7 +298,7 @@ static int crypto_qti_derive_raw_secret_platform_v1(
 		return -EINVAL;
 	}
 
-	//Failsafe, clear RAW_SECRET_KEYSLOT incase it is not empty
+	/* Failsafe, clear RAW_SECRET_KEYSLOT incase it is not empty */
 	err_clear = crypto_qti_hwkm_evict_slot_v1(RAW_SECRET_KEYSLOT, false);
 	if (err_clear && (err_clear != SLOT_EMPTY_ERROR)) {
 		pr_err("%s: Error clearing raw secret slot %d, err %d\n",
@@ -323,7 +324,7 @@ static int crypto_qti_derive_raw_secret_platform_v1(
 		err_program = -EINVAL;
 	}
 
-	//Read the KDF key for raw secret
+	/* Read the KDF key for raw secret */
 	cmd_read.op = KEY_SLOT_RDWR;
 	cmd_read.rdwr.slot = RAW_SECRET_KEYSLOT;
 	cmd_read.rdwr.is_write = false;
@@ -342,6 +343,7 @@ static int crypto_qti_derive_raw_secret_platform_v1(
 		pr_err("%s: raw secret slot clear %d\n", __func__, err_clear);
 
 	qti_hwkm_clocks(false);
+
 	return err_program;
 }
 
@@ -356,4 +358,4 @@ int crypto_qti_derive_raw_secret_platform(
 EXPORT_SYMBOL_GPL(crypto_qti_derive_raw_secret_platform);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Crypto HWKM library for storage encryption");
+MODULE_DESCRIPTION("QTI Crypto HWKM library for storage encryption");

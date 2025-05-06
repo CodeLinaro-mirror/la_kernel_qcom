@@ -2,15 +2,14 @@
 /*
  * Common crypto library for storage encryption.
  *
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
-
-#include <linux/crypto-qti-common.h>
 #include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/crypto-qti-common.h>
 #include "crypto-qti-ice-regs.h"
 #include "crypto-qti-platform.h"
-#include <linux/kernel.h>
 
 #define QCOM_ICE_HWKM_REG_OFFSET	0x8000
 
@@ -22,6 +21,7 @@ static int get_mmio_data(struct ice_mmio_data *data, void __iomem *base)
 	}
 	data->ice_base_mmio = base;
 	data->ice_hwkm_mmio = base + QCOM_ICE_HWKM_REG_OFFSET;
+
 	return 0;
 }
 
@@ -42,10 +42,8 @@ int crypto_qti_keyslot_program(void __iomem *base,
 	if (err) {
 		pr_err("%s: program key failed with error %d\n", __func__, err);
 		err = crypto_qti_invalidate_key(&mmio_data, slot, storage_type);
-		if (err) {
+		if (err)
 			pr_err("%s: invalidate key failed with error %d\n", __func__, err);
-			return err;
-		}
 	}
 
 	return err;
@@ -53,7 +51,7 @@ int crypto_qti_keyslot_program(void __iomem *base,
 EXPORT_SYMBOL_GPL(crypto_qti_keyslot_program);
 
 int crypto_qti_keyslot_evict(void __iomem *base,
-						unsigned int slot, int storage_type)
+			     unsigned int slot, int storage_type)
 {
 	int err = 0;
 	struct ice_mmio_data mmio_data;
@@ -63,10 +61,8 @@ int crypto_qti_keyslot_evict(void __iomem *base,
 		return err;
 
 	err = crypto_qti_invalidate_key(&mmio_data, slot, storage_type);
-	if (err) {
-		pr_err("%s: invalidate key failed with error %d\n",
-			__func__, err);
-	}
+	if (err)
+		pr_err("%s: invalidate key failed with error %d\n", __func__, err);
 
 	return err;
 }
@@ -101,4 +97,4 @@ int crypto_qti_derive_raw_secret(const u8 *wrapped_key,
 EXPORT_SYMBOL_GPL(crypto_qti_derive_raw_secret);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Common crypto library for storage encryption");
+MODULE_DESCRIPTION("QTI Common crypto library for storage encryption");

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/atomic.h>
@@ -181,7 +181,8 @@
 
 #define HAP_CFG_AUTORES_CFG_REG			0x63
 #define AUTORES_EN_BIT				BIT(7)
-#define AUTORES_EN_DLY_MASK			GENMASK(5, 2)
+#define AUTORES_EN_DLY_MASK(chip)		((chip->hw_type < HAP530_HV) ? \
+							GENMASK(5, 2) : GENMASK(6, 2))
 #define AUTORES_EN_DLY(cycles)			((cycles) * 2)
 #define AUTORES_EN_DLY_6_CYCLES			AUTORES_EN_DLY(6)
 #define AUTORES_EN_DLY_7_CYCLES			AUTORES_EN_DLY(7)
@@ -1456,7 +1457,7 @@ static int haptics_check_hpwr_status(struct haptics_chip *chip)
 			 * Haptics VNDRV LDO has already been disabled when HPWR_DISABLED
 			 * status is set, delay 500us here to discharge the VNDRV voltage.
 			 */
-			if (val == HPWR_DISABLED) {
+			if ((val == HPWR_DISABLED) || (val == HPWR_READY)) {
 				usleep_range(500, 501);
 				break;
 			}
@@ -5552,7 +5553,7 @@ static int haptics_detect_lra_frequency(struct haptics_chip *chip)
 
 	rc = haptics_masked_write(chip, chip->cfg_addr_base,
 			HAP_CFG_AUTORES_CFG_REG, AUTORES_EN_BIT |
-			AUTORES_EN_DLY_MASK | AUTORES_ERR_WINDOW_MASK,
+			AUTORES_EN_DLY_MASK(chip) | AUTORES_ERR_WINDOW_MASK,
 			val);
 	if (rc < 0)
 		return rc;

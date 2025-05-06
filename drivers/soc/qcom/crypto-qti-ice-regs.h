@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CRYPTO_INLINE_CRYPTO_ENGINE_REGS_H_
@@ -35,18 +35,14 @@
 #define ICE_REGS_PARAMETERS_4			0x0020
 #define ICE_REGS_PARAMETERS_5			0x0024
 
-
 /* QTI ICE v3.X only */
 #define ICE_GENERAL_ERR_STTS			0x0040
 #define ICE_INVALID_CCFG_ERR_STTS		0x0030
 #define ICE_GENERAL_ERR_MASK			0x0044
 
-
 /* QTI ICE v2.X only */
 #define ICE_REGS_NON_SEC_IRQ_STTS		0x0040
 #define ICE_REGS_NON_SEC_IRQ_MASK		0x0044
-
-
 #define ICE_REGS_NON_SEC_IRQ_CLR		0x0048
 #define ICE_REGS_STREAM1_ERROR_SYNDROME1	0x0050
 #define ICE_REGS_STREAM1_ERROR_SYNDROME2	0x0054

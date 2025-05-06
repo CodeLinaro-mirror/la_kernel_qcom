@@ -1194,11 +1194,17 @@ static void tmc_etr_sync_sysfs_buf(struct tmc_drvdata *drvdata)
 	}
 }
 
-static void __tmc_etr_disable_hw(struct tmc_drvdata *drvdata)
+static int __tmc_etr_disable_hw(struct tmc_drvdata *drvdata)
 {
 	CS_UNLOCK(drvdata->base);
 
 	tmc_flush_and_stop(drvdata);
+	if (tmc_wait_for_tmcready(drvdata)) {
+		dev_err(&drvdata->csdev->dev,
+			"Failed to disable: TMC is not ready\n");
+		CS_LOCK(drvdata->base);
+		return -EBUSY;
+	}
 	tmc_disable_stop_on_flush(drvdata);
 	/*
 	 * When operating in sysFS mode the content of the buffer needs to be
@@ -1210,7 +1216,7 @@ static void __tmc_etr_disable_hw(struct tmc_drvdata *drvdata)
 	tmc_disable_hw(drvdata);
 
 	CS_LOCK(drvdata->base);
-
+	return 0;
 }
 
 void tmc_etr_disable_hw(struct tmc_drvdata *drvdata)
@@ -1964,8 +1970,11 @@ int tmc_read_prepare_etr(struct tmc_drvdata *drvdata)
 	}
 
 	/* Disable the TMC if we are trying to read from a running session. */
-	if (drvdata->mode == CS_MODE_SYSFS)
-		__tmc_etr_disable_hw(drvdata);
+	if (drvdata->mode == CS_MODE_SYSFS) {
+		ret = __tmc_etr_disable_hw(drvdata);
+		if (ret)
+			goto out;
+	}
 
 	drvdata->reading = true;
 out:
