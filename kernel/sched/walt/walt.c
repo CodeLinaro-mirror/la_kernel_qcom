@@ -1503,6 +1503,9 @@ static inline void bucket_increase(u8 *buckets, u16 *bucket_bitmask, int idx)
 {
 	int i, step;
 
+	if (walt_quiet_state)
+		return;
+
 	for (i = 0; i < NUM_BUSY_BUCKETS; i++) {
 		if (idx != i) {
 			if (buckets[i] > DEC_STEP)
@@ -1569,6 +1572,9 @@ static u32 get_pred_busy(struct task_struct *p,
 	u16 next_mask = bucket_bitmask >> start;
 	u16 *hist_util = wts->sum_history_util;
 	int i;
+
+	if (walt_quiet_state)
+		return 0;
 
 	/* skip prediction for new tasks due to lack of history */
 	if (unlikely(is_new_task(p)))
