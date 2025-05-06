@@ -12,6 +12,7 @@ def define_sa510m():
         "crypto/cbc.ko",
         "crypto/crypto_null.ko",
         "crypto/essiv.ko",
+        "drivers/block/loop.ko",
         "drivers/char/hw_random/arm_smccc_trng.ko",
         "drivers/md/dm-crypt.ko",
         "drivers/mtd/mtd_blkdevs.ko",
