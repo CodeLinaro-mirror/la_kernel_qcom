@@ -13,6 +13,7 @@ smem.ko
 debug_symbol.ko
 qcom-reboot-reason.ko
 qcom_wdt_core.ko
+qcom-dload-mode.ko
 minidump.ko
 qcom_soc_wdt.ko
 memory_dump_v2.ko
