@@ -257,12 +257,13 @@ struct plat_stmmacenet_data {
 	u32 rx_queues_to_use;
 	u32 tx_queues_to_use;
 	bool has_hdma;
+	bool insert_ts_pktid;
 	u8 rx_sched_algorithm;
 	u8 tx_sched_algorithm;
 	struct stmmac_rxq_cfg rx_queues_cfg[MTL_MAX_RX_QUEUES];
 	struct stmmac_txq_cfg tx_queues_cfg[MTL_MAX_TX_QUEUES];
 	void (*fix_mac_speed)(void *priv, unsigned int speed);
-	void (*serdes_loopback_v3_1)(struct plat_stmmacenet_data *plat, bool on);
+	void (*serdes_loopback)(struct plat_stmmacenet_data *plat, bool on);
 	int (*serdes_powerup)(struct net_device *ndev, void *priv);
 	void (*serdes_powerdown)(struct net_device *ndev, void *priv);
 	void (*speed_mode_2500)(struct net_device *ndev, void *priv);
@@ -295,6 +296,7 @@ struct plat_stmmacenet_data {
 	bool en_tx_lpi_clockgating;
 	bool rx_clk_runs_in_lpi;
 	int has_xgmac;
+	struct phylink_pcs *qcom_pcs;
 	unsigned int (*get_plat_tx_coal_frames)
 		(struct sk_buff *skb);
 	u16 (*tx_select_queue)
@@ -326,6 +328,7 @@ struct plat_stmmacenet_data {
 	void (*request_phy_wol)(void *plat);
 	int (*init_pps)(void *priv);
 	bool pcs_v3;
+	bool pcs_v4;
 	void (*phy_irq_enable)(void *priv);
 	void (*phy_irq_disable)(void *priv);
 	bool early_eth;
