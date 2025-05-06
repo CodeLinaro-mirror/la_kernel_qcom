@@ -1474,7 +1474,8 @@ static void migrate_busy_time_addition(struct task_struct *p, int new_cpu, u64 w
 	if (wts->enqueue_after_migration == 2) {
 		src_wrq->notif_pending = true;
 		dest_wrq->notif_pending = true;
-		walt_irq_work_queue(&walt_migration_irq_work);
+		if (!walt_quiet_state)
+			walt_irq_work_queue(&walt_migration_irq_work);
 	}
 
 	if (is_ed_enabled() && is_ed_task(p, wallclock))
@@ -2724,6 +2725,10 @@ static inline int run_walt_irq_work_rollover(u64 old_window_start, struct rq *rq
 
 	result = atomic64_cmpxchg(&walt_irq_work_lastq_ws, old_window_start,
 				   wrq->window_start);
+
+	if (walt_quiet_state)
+		return 0;
+
 	if (result == old_window_start) {
 		walt_irq_work_queue(&walt_cpufreq_irq_work);
 		trace_walt_window_rollover(wrq->window_start);
