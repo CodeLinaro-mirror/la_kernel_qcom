@@ -1,7 +1,7 @@
 load(":image_opts.bzl", "boot_image_opts")
 load(":msm_kernel_le.bzl", "define_msm_le")
 load(":target_variants.bzl", "le_64_variants")
-qcom_secure_system_heap.o
+
 target_name = "neo-le"
 
 def define_neo_le():
