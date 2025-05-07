@@ -131,11 +131,19 @@ static int sdam_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	rc = regmap_write(sdam->regmap, sdam->base + SDAM_SIZE, 0x4);
+	if (rc < 0) {
+		dev_err(&pdev->dev, "Failed to write SDAM_SIZE rc=%d\n", rc);
+		return -EINVAL;
+	}
+
 	rc = regmap_read(sdam->regmap, sdam->base + SDAM_SIZE, &val);
 	if (rc < 0) {
 		dev_err(&pdev->dev, "Failed to read SDAM_SIZE rc=%d\n", rc);
 		return -EINVAL;
 	}
+	pr_err("SDAM probe Regmap size written : %u\n", val);
+
 	sdam->size = val * 32;
 
 	sdam->sdam_config.dev = &pdev->dev;
