@@ -9,4 +9,5 @@
 
 EXPORT_TRACEPOINT_SYMBOL(memory_miss_last_sample);
 EXPORT_TRACEPOINT_SYMBOL(llcc_occupancy_last_sample);
+EXPORT_TRACEPOINT_SYMBOL(memory_lat_last_sample);
 MODULE_LICENSE("GPL");

@@ -210,3 +210,13 @@ def register_modules(registry):
             "drivers/soc/qcom/dcvs/trace-bus-prof",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/mem_lat_prof",
+        out = "mem_lat_prof.ko",
+        config = "CONFIG_QCOM_BUS_LAT",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/mem_lat_prof.c",
+        ],
+    )

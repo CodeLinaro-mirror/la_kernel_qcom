@@ -263,6 +263,9 @@ int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
 #define QCOM_SCM_SVC_LLCC_OCCUPANCY		0x06
 #define QCOM_SCM_GET_LLCC_OCCUPANCY_STATS_ID	0x13
 
+#define QCOM_SCM_GET_MEM_LAT_STATS_ID		0x15
+#define QCOM_SCM_SVC_MEM_LAT			0x06
+
 /* common error codes */
 #define QCOM_SCM_V2_EBUSY	-12
 #define QCOM_SCM_ENOMEM		-5
