@@ -143,6 +143,8 @@ def define_qcs610():
         "drivers/soc/qcom/debug_symbol.ko",
         "drivers/soc/qcom/eud.ko",
         "drivers/soc/qcom/llcc-qcom.ko",
+        "drivers/soc/qcom/qcom_logbuf_boot_log.ko",
+        "drivers/soc/qcom/qcom_logbuf_vendor_hooks.ko",
         "drivers/soc/qcom/mdt_loader.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
