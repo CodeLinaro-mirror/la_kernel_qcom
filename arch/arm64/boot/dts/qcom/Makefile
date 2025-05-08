@@ -110,9 +110,13 @@ dtb-$(CONFIG_ARCH_QCOM)	+= msm8998-sony-xperia-yoshino-maple.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8998-sony-xperia-yoshino-poplar.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8998-xiaomi-sagit.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-fairphone-fp5.dtb
-qcm6490-addons-idp-dtbs	:= qcm6490-idp.dtb qcm6490-addons-idp.dtbo
+qcm6490-addons-idp-dtbs	:= qcm6490-idp.dtb \
+				qcm6490-addons-idp.dtbo \
+				qcm6490-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-addons-idp.dtb
-qcm6490-addons-idp-amoled-dtbs := qcm6490-idp.dtb qcm6490-addons-idp.dtbo
+qcm6490-addons-idp-amoled-dtbs := qcm6490-idp.dtb \
+					qcm6490-addons-idp.dtbo \
+					qcm6490-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-addons-idp-amoled.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-idp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-shift-otter.dtb
@@ -134,7 +138,9 @@ dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2-hsp.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2-vision-mezz.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp3-addons-rb3gen2-vision-mezz-hsp.dtb
-qcs6490-addons-rb3gen2-dtbs:= qcs6490-rb3gen2.dtb qcs6490-addons-rb3gen2.dtbo
+qcs6490-addons-rb3gen2-dtbs:= qcs6490-rb3gen2.dtb \
+				qcs6490-addons-rb3gen2.dtbo \
+				qcm6490-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2.dtb
 qcs6490-addons-rb3gen2-hsp-dtbs:= qcs6490-addons-rb3gen2.dtb qcs6490-addons-rb3gen2-hsp.dtbo
 dtb-$(CONFIG_ARCH_QCOM) += qcs6490-addons-rb3gen2-hsp.dtb
@@ -142,9 +148,13 @@ qcs6490-addons-rb3gen2-ia-mezz-dtbs:= qcs6490-addons-rb3gen2.dtb qcs6490-addons-
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2-ia-mezz.dtb
 qcs6490-addons-rb3gen2-ptz-mezz-dtbs:= qcs6490-addons-rb3gen2.dtb qcs6490-addons-rb3gen2-ptz-mezz.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2-ptz-mezz.dtb
-qcs6490-addons-rb3gen2-video-mezz-dtbs:= qcs6490-addons-rb3gen2.dtb qcs6490-addons-rb3gen2-video-mezz.dtbo
+qcs6490-addons-rb3gen2-video-mezz-dtbs:= qcs6490-addons-rb3gen2.dtb \
+					qcs6490-addons-rb3gen2-video-mezz.dtbo \
+					qcm6490-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2-video-mezz.dtb
-qcs6490-addons-rb3gen2-vision-mezz-dtbs:= qcs6490-addons-rb3gen2.dtb qcs6490-addons-rb3gen2-vision-mezz.dtbo
+qcs6490-addons-rb3gen2-vision-mezz-dtbs:= qcs6490-addons-rb3gen2.dtb \
+					qcs6490-addons-rb3gen2-vision-mezz.dtbo \
+					qcm6490-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-addons-rb3gen2-vision-mezz.dtb
 qcs6490-addons-rb3gen2-vision-mezz-hsp-dtbs:= qcs6490-addons-rb3gen2-vision-mezz.dtb qcs6490-addons-rb3gen2-hsp.dtbo
 dtb-$(CONFIG_ARCH_QCOM) += qcs6490-addons-rb3gen2-vision-mezz-hsp.dtb

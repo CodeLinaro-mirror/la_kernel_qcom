@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+&venus {
+	compatible = "qcom,qcm6490-iris-vpu";
+	interconnect-names = "iris-cnoc", "iris-ddr";
+	status = "okay";
+
+	non-secure-cb {
+		compatible = "qcom,vidc,cb-ns";
+		iommus = <&apps_smmu 0x2180 0x20>;
+	};
+};
+
