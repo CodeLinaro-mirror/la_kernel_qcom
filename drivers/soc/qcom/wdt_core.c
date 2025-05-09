@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <asm/hardirq.h>
@@ -370,10 +370,14 @@ static __ref int qcom_wdt_kthread(void *arg)
 {
 	struct msm_watchdog_data *wdog_dd = arg;
 	unsigned long delay_time = 0;
-	struct sched_param param = {.sched_priority = MAX_RT_PRIO - 1};
 	int ret, cpu;
+	struct sched_attr attr = {
+		.sched_policy   = SCHED_FIFO,
+		.sched_priority = MAX_RT_PRIO - 1,
+		.sched_nice     = PRIO_TO_NICE(current->static_prio),
+	};
 
-	sched_setscheduler(current, SCHED_FIFO, &param);
+	sched_setattr_nocheck(current, &attr);
 	while (!kthread_should_stop()) {
 		do {
 			ret = wait_event_interruptible(wdog_dd->pet_complete,
