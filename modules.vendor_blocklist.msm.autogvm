@@ -66,3 +66,15 @@ blocklist qca_cld3_qcn7605
 blocklist qca_cld3_qca6390
 blocklist qca_cld3_qca6490
 blocklist qca_cld3_kiwi_v2
+blocklist mac80211
+blocklist cfg80211
+blocklist btpower
+blocklist usb_f_qdss
+blocklist msm_sharedmem
+blocklist qseecom_dlkm
+blocklist smcinvoke_dlkm
+blocklist cdc_acm
+blocklist sdhci_msm
+blocklist dwc3_msm
+blocklist pcie_qcom
+blocklist msm_vm_poweroff
