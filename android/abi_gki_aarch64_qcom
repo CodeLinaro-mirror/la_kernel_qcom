@@ -2523,6 +2523,7 @@
   power_supply_get_property
   power_supply_put
   power_supply_register
+  power_supply_register_no_ws
   power_supply_reg_notifier
   power_supply_set_property
   power_supply_unregister
@@ -3157,6 +3158,7 @@
   sock_common_recvmsg
   sock_common_setsockopt
   __sock_create
+  sock_create
   sock_create_kern
   sock_diag_register
   sock_diag_save_cookie
@@ -3504,6 +3506,7 @@
   __traceiter_android_vh_show_resume_epoch_val
   __traceiter_android_vh_show_suspend_epoch_val
   __traceiter_android_vh_skip_swap_map_write
+  __traceiter_android_vh_thermal_pm_notify_suspend
   __traceiter_android_vh_timer_calc_index
   __traceiter_android_vh_try_fixup_sea
   __traceiter_android_vh_ufs_check_int_errors
@@ -3656,6 +3659,7 @@
   __tracepoint_android_vh_show_resume_epoch_val
   __tracepoint_android_vh_show_suspend_epoch_val
   __tracepoint_android_vh_skip_swap_map_write
+  __tracepoint_android_vh_thermal_pm_notify_suspend
   __tracepoint_android_vh_timer_calc_index
   __tracepoint_android_vh_try_fixup_sea
   __tracepoint_android_vh_ufs_check_int_errors
