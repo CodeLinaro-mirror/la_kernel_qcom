@@ -935,8 +935,33 @@ EXPORT_SYMBOL_GPL(__netdev_alloc_skb_no_skb_reset);
 struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 				 gfp_t gfp_mask)
 {
-	struct napi_alloc_cache *nc;
 	struct sk_buff *skb;
+
+#ifdef CONFIG_SKB_RECYCLER
+	bool reset_skb = true;
+
+	skb = skb_recycler_alloc(napi->dev, len, reset_skb);
+	if (likely(skb)) {
+		skb_recycler_clear_flags(skb);
+#ifdef CONFIG_DEBUG_KMEMLEAK
+		kmemleak_update_trace(skb);
+		kmemleak_restore(skb, 1);
+		kmemleak_update_trace(skb->head);
+		kmemleak_restore(skb->head, 1);
+#endif
+		return skb;
+	}
+
+	if (likely(len < SKB_RECYCLE_SIZE))
+		len = SKB_RECYCLE_SIZE;
+
+	skb = __alloc_skb(len + NET_SKB_PAD, gfp_mask,
+			  SKB_ALLOC_RX, NUMA_NO_NODE);
+	if (!skb)
+		goto skb_fail;
+	goto skb_success;
+#else
+	struct napi_alloc_cache *nc;
 	bool pfmemalloc;
 	void *data;
 
@@ -997,6 +1022,7 @@ struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 	if (pfmemalloc)
 		skb->pfmemalloc = 1;
 	skb->head_frag = 1;
+#endif
 
 skb_success:
 	skb_reserve(skb, NET_SKB_PAD + NET_IP_ALIGN);
