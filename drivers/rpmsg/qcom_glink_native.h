@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2016-2017, Linaro Ltd
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QCOM_GLINK_NATIVE_H__
@@ -37,5 +38,6 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 					   bool intentless);
 void qcom_glink_native_remove(struct qcom_glink *glink);
 void qcom_glink_native_rx(struct qcom_glink *glink);
+int qcom_glink_native_start(struct qcom_glink *glink);
 
 #endif
