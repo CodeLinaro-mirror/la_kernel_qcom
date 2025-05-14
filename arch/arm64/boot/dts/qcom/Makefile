@@ -172,22 +172,34 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-rb3gen2.dtb
 qcs6490-rb3gen2-vision-mezzanine-dtbs := qcs6490-rb3gen2.dtb qcs6490-rb3gen2-vision-mezzanine.dtbo
 
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-rb3gen2-vision-mezzanine.dtb
-qcs8300-addons-ride-dtbs:= qcs8300-ride.dtb qcs8300-addons-ride.dtbo
+qcs8300-addons-ride-dtbs:= qcs8300-ride.dtb \
+				qcs8300-addons-ride.dtbo \
+				qcs8300-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-addons-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-aim300-aiot.dtb
-qcs9075-addons-rb8-dtbs	:= qcs9075-rb8.dtb qcs9075-addons-rb8.dtbo
+qcs9075-addons-rb8-dtbs	:= qcs9075-rb8.dtb \
+				qcs9075-addons-rb8.dtbo \
+				sa8775p-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-addons-rb8.dtb
-qcs9075-addons-ride-dtbs:= qcs9075-ride.dtb sa8775p-addons-ride.dtbo
+qcs9075-addons-ride-dtbs:= qcs9075-ride.dtb \
+				sa8775p-addons-ride.dtbo \
+				sa8775p-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-addons-ride.dtb
-qcs9075-addons-ride-r3-dtbs:= qcs9075-ride-r3.dtb sa8775p-addons-ride.dtbo
+qcs9075-addons-ride-r3-dtbs:= qcs9075-ride-r3.dtb \
+				sa8775p-addons-ride.dtbo \
+				sa8775p-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-addons-ride-r3.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-rb8.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-ride-r3.dtb
-qcs9100-addons-ride-dtbs:= qcs9100-ride.dtb sa8775p-addons-ride.dtbo
+qcs9100-addons-ride-dtbs:= qcs9100-ride.dtb \
+				sa8775p-addons-ride.dtbo \
+				sa8775p-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-addons-ride.dtb
-qcs9100-addons-ride-r3-dtbs:= qcs9100-ride-r3.dtb sa8775p-addons-ride.dtbo
+qcs9100-addons-ride-r3-dtbs:= qcs9100-ride-r3.dtb \
+				sa8775p-addons-ride.dtbo \
+				sa8775p-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-addons-ride-r3.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-ride-r3.dtb
@@ -203,9 +215,13 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qru1000-idp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8155p-adp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8295p-adp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8540p-ride.dtb
-sa8775p-addons-ride-dtbs:= sa8775p-ride.dtb sa8775p-addons-ride.dtbo
+sa8775p-addons-ride-dtbs:= sa8775p-ride.dtb \
+				sa8775p-addons-ride.dtbo \
+				sa8775p-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8775p-addons-ride.dtb
-sa8775p-addons-ride-r3-dtbs:= sa8775p-ride-r3.dtb sa8775p-addons-ride.dtbo
+sa8775p-addons-ride-r3-dtbs:= sa8775p-ride-r3.dtb \
+				sa8775p-addons-ride.dtbo \
+				sa8775p-addons-video.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8775p-addons-ride-r3.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8775p-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sa8775p-ride-r3.dtb
