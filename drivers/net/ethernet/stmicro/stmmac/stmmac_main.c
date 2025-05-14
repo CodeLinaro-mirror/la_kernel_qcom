@@ -52,6 +52,7 @@
 #include "dwxgmac2.h"
 #include "hwif.h"
 #include <linux/micrel_phy.h>
+#include <linux/marvell_phy.h>
 #include "dwmac-qcom-ethqos.h"
 
 /* As long as the interface is active, we keep the timestamping counter enabled
@@ -8697,8 +8698,12 @@ int stmmac_resume(struct device *dev)
 	} else {
 		pinctrl_pm_select_default_state(priv->device);
 		/* reset the phy so that it's ready */
-		if (priv->mii && !priv->plat->pm_lite)
-			stmmac_mdio_reset(priv->mii);
+		if (priv->mii && !priv->plat->pm_lite) {
+			if ((priv->phydev && priv->phydev->drv &&
+			     (priv->phydev->phy_id & priv->phydev->drv->phy_id_mask) !=
+			     MARVELL_PHY_ID_88E1510))
+				stmmac_mdio_reset(priv->mii);
+		}
 	}
 
 	if (priv->plat->serdes_powerup && priv->speed != SPEED_UNKNOWN) {
