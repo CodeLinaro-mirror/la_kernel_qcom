@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
@@ -34,6 +34,9 @@ static struct poweroff_reason reasons[] = {
 	{ "dm-verity device corrupted",	0x04 },
 	{ "dm-verity enforcing",	0x05 },
 	{ "keys clear",			0x06 },
+#ifdef CONFIG_FIRMWARE_FAIL_SAFE
+	{ "firmware auth failed",       0x0E },
+#endif
 	{}
 };
 

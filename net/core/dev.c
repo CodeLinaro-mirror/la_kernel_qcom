@@ -5963,16 +5963,6 @@ another_round:
 			goto out;
 	}
 
-	if (likely(!fast_tc_filter)) {
-		fast_recv = rcu_dereference(athrs_fast_nat_recv);
-		if (fast_recv) {
-			if (fast_recv(skb)) {
-				ret = NET_RX_SUCCESS;
-				goto out;
-			}
-		}
-	}
-
 	if (skb_skip_tc_classify(skb))
 		goto skip_classify;
 
