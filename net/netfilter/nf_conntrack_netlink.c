@@ -845,7 +845,7 @@ ctnetlink_conntrack_event(unsigned int events, const struct nf_ct_event *item)
 		if (events & (1 << IPCT_SYNPROXY) &&
 		    ctnetlink_dump_ct_synproxy(skb, ct) < 0)
 			goto nla_put_failure;
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 		if (events & (1 << IPCT_COUNTER) &&
 		    ctnetlink_dump_acct(skb, ct, 0) < 0)
 			goto nla_put_failure;
