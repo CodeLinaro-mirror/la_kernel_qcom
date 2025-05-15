@@ -4283,6 +4283,9 @@ static void walt_update_irqload(struct rq *rq)
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	u64 last_irq_window = READ_ONCE(wrq->last_irq_window);
 
+	if (walt_quiet_state)
+		return;
+
 	if (wrq->window_start > last_irq_window)
 		nr_windows = div64_u64(wrq->window_start - last_irq_window,
 				       sched_ravg_window);
