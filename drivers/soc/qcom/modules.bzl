@@ -858,6 +858,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/soc/qcom/qcom_cpucp.c",
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
             "kernel/sched/walt/sched-walt",
         ],
     )
