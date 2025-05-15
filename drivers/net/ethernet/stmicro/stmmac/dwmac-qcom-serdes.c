@@ -559,7 +559,8 @@ static int qcom_ethqos_serdes_sgmii_1Gb(struct qcom_ethqos *ethqos)
 	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_PCS_TX_SMALL_AMP_POST_EMP_LVL);
 	writel_relaxed(0x83, ethqos->sgmii_base + QSERDES_PCS_TX_MID_TERM_CTRL1);
 	writel_relaxed(0x08, ethqos->sgmii_base + QSERDES_PCS_TX_MID_TERM_CTRL2);
-	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_RX0_SIGDET_CAL_CTRL1);
+	writel_relaxed(0x10, ethqos->sgmii_base + QSERDES_RX0_SIGDET_CAL_CTRL1);
+	writel_relaxed(0x77, ethqos->sgmii_base + QSERDES_PCS_RX_SIGDET_CTRL2);
 	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_RX0_SIGDET_CAL_CTRL2_AND_CDR_LOCK_EDGE);
 	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_PCS_SGMII_MISC_CTRL7);
 	writel_relaxed(0x0C, ethqos->sgmii_base + QSERDES_PCS_SGMII_MISC_CTRL8);
@@ -694,7 +695,7 @@ static int qcom_ethqos_serdes_sgmii_2p5Gb(struct qcom_ethqos *ethqos)
 	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_TX0_RES_CODE_LANE_OFFSET_RX);
 	writel_relaxed(0xF5, ethqos->sgmii_base + QSERDES_TX0_LANE_MODE_1);
 	writel_relaxed(0x02, ethqos->sgmii_base + QSERDES_TX0_LANE_MODE_2);
-	writel_relaxed(0x3F, ethqos->sgmii_base + QSERDES_TX0_LANE_MODE_3);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_TX0_LANE_MODE_3);
 	writel_relaxed(0x3F, ethqos->sgmii_base + QSERDES_TX_LANE_MODE_4);
 	writel_relaxed(0x5F, ethqos->sgmii_base + QSERDES_TX_LANE_MODE_5);
 	writel_relaxed(0x12, ethqos->sgmii_base + QSERDES_TX0_RCV_DETECT_LVL_2);

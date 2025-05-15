@@ -50,17 +50,30 @@
 #include "smi230_defs.h"
 #include <linux/delay.h>
 #include <linux/device.h>
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
 
-#define DRIVER_VERSION	 "0.8.4"
+#define DRIVER_VERSION	 "1.0.0"
 #define MODULE_NAME	 "SMI230"
 #define SENSOR_ACC_NAME	 "SMI230ACC"
 #define SENSOR_GYRO_NAME "SMI230GYRO"
 
 int smi230_acc_remove(struct device *dev);
 int smi230_acc_probe(struct device *dev, struct smi230_dev *smi230_dev);
+int smi230_acc_shutdown(struct device *dev);
+int smi230_acc_suspend(struct device *dev);
+int smi230_acc_resume(struct device *dev);
+int smi230_acc_freeze(struct device *dev);
+int smi230_acc_restore(struct device *dev);
 
 int smi230_gyro_remove(struct device *dev);
 int smi230_gyro_probe(struct device *dev, struct smi230_dev *smi230_dev);
+int smi230_gyro_shutdown(struct device *dev);
+int smi230_gyro_suspend(struct device *dev);
+int smi230_gyro_resume(struct device *dev);
+int smi230_gyro_freeze(struct device *dev);
+int smi230_gyro_restore(struct device *dev);
 
 static inline void smi230_delay(uint32_t msec)
 {

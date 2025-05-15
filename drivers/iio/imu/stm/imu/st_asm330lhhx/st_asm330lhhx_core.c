@@ -31,6 +31,10 @@
 
 #include <linux/platform_data/st_sensors_pdata.h>
 
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
+
 #include "st_asm330lhhx.h"
 
 static struct st_asm330lhhx_selftest_table {
@@ -2855,6 +2859,10 @@ int st_asm330lhhx_probe(struct device *dev, int irq, int hw_id,
 	if (err < 0)
 		return err;
 
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - Sensor ASM330 probe start");
+#endif
+
 	st_asm330lhhx_get_properties(hw);
 
 	err = st_asm330lhhx_get_odr_calibration(hw);
@@ -2942,6 +2950,10 @@ int st_asm330lhhx_probe(struct device *dev, int irq, int hw_id,
 			   device_property_read_bool(dev, "wakeup-source"));
 
 	dev_info(dev, "Device probed\n");
+
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	update_marker("M - Sensor ASM330 probe end");
+#endif
 
 	return 0;
 }

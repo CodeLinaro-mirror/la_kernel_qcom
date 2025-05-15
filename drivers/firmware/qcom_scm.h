@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2010-2015,2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __QCOM_SCM_INT_H
 #define __QCOM_SCM_INT_H
@@ -80,7 +80,7 @@ struct qcom_scm;
 extern struct completion *qcom_scm_lookup_wq(struct qcom_scm *scm, u32 wq_ctx);
 extern void scm_waitq_flag_handler(struct completion *wq, u32 flags);
 extern int scm_get_wq_ctx(u32 *wq_ctx, u32 *flags, u32 *more_pending);
-extern bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed);
+extern bool qcom_scm_multi_call_allow(bool multicall_allowed);
 
 #define SCM_SMC_FNID(s, c)	((((s) & 0xFF) << 8) | ((c) & 0xFF))
 extern int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,

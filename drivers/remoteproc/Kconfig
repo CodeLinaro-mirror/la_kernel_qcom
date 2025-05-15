@@ -444,6 +444,16 @@ config QCOM_RPROC_SLATE
 	  It's safe to say N here if you're not intereseted in utilizing
 	  a aon processor slate.
 
+config FIRMWARE_FAIL_SAFE
+	bool "Support for reboot if there is firmware image corrupted/invalid"
+	help
+	  This setting enables the system to reboot with a specific reason (firmware
+	  authentication failed) if the firmware image is either corrupted or invalid.
+	  This can occur due to authentication failures or issues detected at the
+	  kernel level during firmware loading.
+
+	  If not sure, say N.
+
 endif # REMOTEPROC
 
 endmenu
