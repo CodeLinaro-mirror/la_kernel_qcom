@@ -14,7 +14,7 @@
  *	- Context fault reporting
  *	- Extended Stream ID (16 bit)
  *
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "arm-smmu: " fmt
@@ -1471,6 +1471,11 @@ static int arm_smmu_init_domain_context(struct iommu_domain *domain,
 		if (ret)
 			goto out_clear_smmu;
 	}
+
+#if IS_ENABLED(CONFIG_QCOM_QAD)
+	if (!of_device_is_compatible(smmu->dev->of_node, "qcom,adreno-smmu"))
+		pgtbl_cfg->quirks |= IO_PGTABLE_QUIRK_QCOM_TCR_IRGN_NC;
+#endif
 
 	if (smmu_domain->pgtbl_quirks)
 		pgtbl_cfg->quirks |= smmu_domain->pgtbl_quirks;

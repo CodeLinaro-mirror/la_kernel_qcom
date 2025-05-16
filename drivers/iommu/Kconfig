@@ -676,4 +676,13 @@ config QCOM_IOMMU_DEBUG
 	  can be done through the debugfs nodes which this option
 	  makes available.
 
+config QCOM_QAD
+	bool "QAD errata"
+	depends on QCOM_IOMMU_UTIL
+        help
+	  This option is used to modify the TCR register
+	  to apply the QAD errata for all context banks.
+
+	  Say N here if unsure.
+
 endif # IOMMU_SUPPORT
