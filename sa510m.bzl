@@ -8,7 +8,6 @@ def define_sa510m():
     _sa510m_le_in_tree_modules = [
         # keep sorted
         "drivers/char/hw_random/arm_smccc_trng.ko",
-        "drivers/char/hw_random/rng-core.ko",
         "drivers/mtd/mtd_blkdevs.ko",
         "drivers/mtd/mtdblock.ko",
         "drivers/mtd/ubi/gluebi.ko",
