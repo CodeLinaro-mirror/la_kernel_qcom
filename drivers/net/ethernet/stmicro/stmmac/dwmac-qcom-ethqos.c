@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19, Linaro Limited
-// Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -167,10 +167,14 @@
 
 #define DWMAC4_PCS_BASE			0x000000e0
 #define RGMII_CONFIG_10M_CLK_DVD	GENMASK(18, 10)
+#define GMAC_INT_EN			0x000000b4
+#define GMAC_INT_PCS_LINK		BIT(1)
+#define GMAC_INT_PCS_ANE		BIT(2)
 
 static int phytype = -1;
 static int boardtype = -1;
 void *ipc_emac_log_ctxt;
+static int disable_pcs_ane = -1;
 
 struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 static int qcom_ethqos_hib_restore(struct device *dev);
@@ -198,6 +202,10 @@ MODULE_PARM_DESC(eipv6, "ipv6 value from ethernet partition");
 static char *ermac;
 module_param(ermac, charp, 0660);
 MODULE_PARM_DESC(ermac, "mac address from ethernet partition");
+
+static char *pcs_ane;
+module_param(pcs_ane, charp, 0660);
+MODULE_PARM_DESC(pcs_ane, "pcs_ane value for disable pcs auto negotiation");
 #endif
 
 inline void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos)
@@ -313,11 +321,22 @@ fail:
 	return 1;
 }
 
+static int set_pcs_ane(char *pcs_ane)
+{
+	if (!strcmp(pcs_ane, "disable"))
+		disable_pcs_ane = 1;
+	else
+		disable_pcs_ane = 0;
+	return 0;
+}
+
 #ifndef MODULE
 
 __setup("dwmac_qcom_eth.board=", set_board_type);
 
 __setup("dwmac_qcom_eth.enet=", set_phy_type);
+
+__setup("pcs_ane=", set_pcs_ane);
 
 static int __init set_early_ethernet_ipv4_static(char *ipv4_addr_in)
 {
@@ -379,8 +398,11 @@ static int qcom_ethqos_add_ipaddr(struct ip_params *ip_info,
 		} else {
 			ETHQOSINFO("Assigned IPv4 address: %s\r\n",
 				   ip_info->ipv4_addr_str);
-
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+	bootmarker_place_marker("M - Etherent Assigned IPv4 address");
+#else
 	ETHQOSINFO("M - Etherent Assigned IPv4 address\n");
+#endif
 		}
 	return res;
 }
@@ -426,8 +448,11 @@ static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 	} else {
 		ETHQOSDBG("Assigned IPv6 address: %s\r\n",
 			  ip_info->ipv6_addr_str);
-
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+		bootmarker_place_marker("M - Ethernet Assigned IPv6 address");
+#else
 		ETHQOSINFO("M - Ethernet Assigned IPv6 address\n");
+#endif
 	}
 	return ret;
 }
@@ -456,14 +481,12 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 {
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	unsigned int eth_type, priority;
-	int gso = skb_shinfo(skb)->gso_type;
 
-	if (skb && skb->priority) {
-		if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4))
-			return 0;
-		else
-			return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
-	}
+	if (!skb)
+		return txqueue_select;
+
+	if (skb->priority)
+		return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
 
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
@@ -1068,11 +1091,15 @@ static int ethqos_rgmii_macro_init_v3(struct qcom_ethqos *ethqos)
 int ethqos_configure_sgmii_v3_1(struct qcom_ethqos *ethqos)
 {
 	u32 value = 0;
+	u32 intr_mask;
 	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
 
 	value = readl(priv->ioaddr + MAC_CTRL_REG);
 	switch (ethqos->speed) {
 	case SPEED_2500:
+		intr_mask = readl(priv->ioaddr + GMAC_INT_EN);
+		intr_mask &= ~(GMAC_INT_PCS_LINK | GMAC_INT_PCS_ANE);
+		writel(intr_mask, priv->ioaddr + GMAC_INT_EN);
 		value &= ~GMAC_CONFIG_PS;
 		writel(value, priv->ioaddr + MAC_CTRL_REG);
 		rgmii_updatel(ethqos, RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
@@ -1087,7 +1114,11 @@ int ethqos_configure_sgmii_v3_1(struct qcom_ethqos *ethqos)
 		rgmii_updatel(ethqos, RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
 			      RGMII_CONFIG2_RGMII_CLK_SEL_CFG, RGMII_IO_MACRO_CONFIG2);
 		value = readl(priv->ioaddr + DWMAC4_PCS_BASE);
-		value |= GMAC_AN_CTRL_RAN | GMAC_AN_CTRL_ANE;
+		/* Customer required to disable auto negotiate. */
+		if (priv->plat->disable_pcs_ane == 1)
+			value &= ~GMAC_AN_CTRL_ANE;
+		else
+			value |= GMAC_AN_CTRL_RAN | GMAC_AN_CTRL_ANE;
 		writel(value, priv->ioaddr + DWMAC4_PCS_BASE);
 	break;
 
@@ -2271,8 +2302,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ETHQOSERR("Error creating logging context for emac\n");
 	else
 		ETHQOSDBG("IPC logging has been enabled for emac\n");
-
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+	bootmarker_place_marker("M - Ethernet probe start");
+#else
 	ETHQOSINFO("M - Ethernet probe start\n");
+#endif
 
 #ifdef MODULE
 		if (enet)
@@ -2289,6 +2323,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 		if (ermac)
 			ret = set_early_ethernet_mac(ermac);
+
+		if (pcs_ane)
+			ret = set_pcs_ane(pcs_ane);
 #endif
 
 	stmmac_set_phytype(phytype);
@@ -2313,6 +2350,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "dt configuration failed\n");
 		return PTR_ERR(plat_dat);
 	}
+
+	plat_dat->disable_pcs_ane = disable_pcs_ane;
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
 	if (IS_ERR(ethqos->rgmii_base)) {
@@ -2474,7 +2513,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
 	atomic_set(&priv->plat->phy_clks_suspended, 0);
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+	bootmarker_place_marker("M - Ethernet probe end");
+#else
 	ETHQOSINFO("M - Ethernet probe end\n");
+#endif
 	return ret;
 
 err_clk:
@@ -2508,8 +2551,6 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 
 	ret = stmmac_pltfr_remove(pdev);
 
-	if (ethqos->rgmii_clk)
-		clk_disable_unprepare(ethqos->rgmii_clk);
 	if (priv->plat->has_gmac4 && ethqos->phyaux_clk)
 		clk_disable_unprepare(ethqos->phyaux_clk);
 	if (priv->plat->has_gmac4 && ethqos->sgmiref_clk)
