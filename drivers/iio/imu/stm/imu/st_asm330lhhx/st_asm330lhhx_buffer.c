@@ -67,8 +67,6 @@ inline int st_asm330lhhx_reset_hwts(struct st_asm330lhhx_hw *hw)
 	u8 data = ST_ASM330LHHX_TIMESTAMP_RESET_VALUE;
 	int ret;
 
-	if (hw->asm330_hrtimer)
-		st_asm330lhhx_set_cpu_idle_state(true);
 	ret = st_asm330lhhx_write_locked(hw,
 					 ST_ASM330LHHX_REG_TIMESTAMP2_ADDR,
 					 data);
@@ -758,8 +756,6 @@ static irqreturn_t st_asm330lhhx_handler_thread(int irq, void *private)
 		st_asm330lhhx_mlc_check_status(hw);
 
 	mutex_lock(&hw->fifo_lock);
-	if (hw->asm330_hrtimer)
-		st_asm330lhhx_set_cpu_idle_state(false);
 
 	st_asm330lhhx_read_fifo(hw);
 	clear_bit(ST_ASM330LHHX_HW_FLUSH, &hw->state);
