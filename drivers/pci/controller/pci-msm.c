@@ -6253,7 +6253,7 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 	 * configure LANE_SKEW_OFF BIT-5 and PARF_CFG_BITS_3 BIT-8 to support
 	 * dynamic link width upscaling.
 	 */
-//	msm_pcie_write_mask(dev->parf + PCIE20_PARF_CFG_BITS_3, 0, BIT(8));
+	msm_pcie_write_mask(dev->parf + PCIE20_PARF_CFG_BITS_3, 0, BIT(8));
 	msm_pcie_write_mask(dev->dm_core + PCIE20_LANE_SKEW_OFF, 0, BIT(5));
 
 	/* override the vendor id */
@@ -6600,9 +6600,6 @@ static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 	int i;
 
 	if (!dev->sid_info)
-		return;
-
-	if (dev->rc_idx == 1)
 		return;
 
 	/* clear BDF_TO_SID_BYPASS bit to enable BDF to SID translation */
