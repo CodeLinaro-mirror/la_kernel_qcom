@@ -331,6 +331,9 @@ struct socinfo {
 	__le32 raw_package_type;
 	/* Version 21 */
 	__le32 nsubpart_feat_array_offset;
+	/* Version 23 */
+	__le32 part_instances_offset;
+	__le32 num_part_instances;
 } *socinfo;
 
 #ifdef CONFIG_DEBUG_FS
@@ -604,6 +607,7 @@ static const struct soc_id soc_id[] = {
 	{ 645, "QCM_PINEAPPLE" },
 	{ 646, "QCS_PINEAPPLE" },
 	{ 702, "QCS8625_PINEAPPLE" },
+	{ 712, "VOLCANOP" },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];
@@ -1207,6 +1211,7 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 	int i = 0;
 
 	switch (socinfo_format) {
+	case SOCINFO_VERSION(0, 23):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
 	case SOCINFO_VERSION(0, 19):
@@ -1460,6 +1465,7 @@ static void socinfo_debugfs_init(struct qcom_socinfo *qcom_socinfo,
 			   &qcom_socinfo->info.fmt);
 
 	switch (qcom_socinfo->info.fmt) {
+	case SOCINFO_VERSION(0, 23):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
 		qcom_socinfo->info.raw_package_type = __le32_to_cpu(info->raw_package_type);
