@@ -369,6 +369,20 @@ int qcom_scm_kgsl_init_regs(u32 gpu_req)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
 
+int qcom_scm_multi_kgsl_init_regs(u32 gpu_req, u32 cmd)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_GPU,
+		.cmd = cmd,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = gpu_req,
+		.arginfo = QCOM_SCM_ARGS(1),
+	};
+
+	return qcom_scm_call(__scm->dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_multi_kgsl_init_regs);
+
 int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
 		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
 		u64 *response_type, unsigned int *data)
@@ -681,7 +695,7 @@ int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t s
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_UTIL,
 		.cmd = QCOM_SCM_UTIL_DUMP_TABLE_ASSIGN,
-		.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_RW, QCOM_SCM_VAL),
+		.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_VAL, QCOM_SCM_VAL),
 		.owner = ARM_SMCCC_OWNER_SIP,
 		.args[0] = is_assign,
 		.args[1] = addr,
@@ -691,3 +705,21 @@ int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t s
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_assign_dump_table_region);
+
+int qcom_scm_load_ccu_qup_fw(u32 qup_type)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_TZ_CCU_QUP,
+		.cmd = QCOM_SCM_LOAD_CCU_QUP_FW,
+		.arginfo = QCOM_SCM_ARGS(1),
+		.args[0] = qup_type,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	struct qcom_scm_res res;
+	int ret;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+
+	return ret ? : res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_load_ccu_qup_fw);
