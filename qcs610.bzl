@@ -246,6 +246,7 @@ def define_qcs610():
 	"net/wireless/cfg80211.ko",
         "sound/soc/soc-topology-test.ko",
         "sound/soc/soc-utils-test.ko",
+	"drivers/misc/qseecom_proxy.ko",
     ]
 
     _qcs610_debug_in_tree_modules = _qcs610_in_tree_modules + [
