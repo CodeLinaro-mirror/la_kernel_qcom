@@ -133,7 +133,6 @@ def define_seraph():
         "drivers/soc/qcom/hwkm.ko",
         "drivers/soc/qcom/llcc-qcom.ko",
         "drivers/soc/qcom/mdt_loader.ko",
-        "drivers/soc/qcom/llcc-qcom.ko",
         "drivers/soc/qcom/mem-hooks.ko",
         "drivers/soc/qcom/mem-offline.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
