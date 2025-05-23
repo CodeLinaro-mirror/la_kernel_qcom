@@ -31,6 +31,9 @@ void qcom_ethqos_serdes_soft_reset(struct qcom_ethqos *ethqos)
 	int retry = 500;
 	unsigned int val;
 
+	if (ethqos->emac_ver == EMAC_HW_v3_1_0)
+		return;
+
 	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_PCS_SW_RESET);
 	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_PCS_SW_RESET);
 	usleep_range(3000, 5000);
