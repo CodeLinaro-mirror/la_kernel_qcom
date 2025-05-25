@@ -25,6 +25,11 @@
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mx, VDD_NUM, 1, vdd_corner);
 
+static struct clk_vdd_class *gpu_cc_sm6150_regulators[] = {
+	&vdd_cx,
+	&vdd_mx,
+};
+
 enum {
 	P_BI_TCXO,
 	P_GPLL0_OUT_MAIN,
@@ -488,8 +493,14 @@ static const struct regmap_config gpu_cc_sm6150_regmap_config = {
 	.fast_io = true,
 };
 
+/*
+ * Keep clocks always enabled:
+ * gpu_cc_ahb_clk
+ * Recommended WAKEUP/SLEEP settings for the gpu_cc_cx_gmu_clk
+ * for GFX3D clock and divide the input clock by div by 2.
+ */
 static struct critical_clk_offset critical_clk_list[] = {
-	{ .offset = 0x1078, .mask = 0x1 },
+	{ .offset = 0x1078, .mask = BIT(0) },
 	{ .offset = 0x1098, .mask = 0xff0 },
 	{ .offset = 0x1028, .mask = 0x00015011 },
 	{ .offset = 0x1024, .mask = 0x00800000 },
@@ -501,6 +512,8 @@ static struct qcom_cc_desc gpu_cc_sm6150_desc = {
 	.num_clks = ARRAY_SIZE(gpu_cc_sm6150_clocks),
 	.clk_hws = gpu_cc_sm6150_hws,
 	.num_clk_hws = ARRAY_SIZE(gpu_cc_sm6150_hws),
+	.clk_regulators = gpu_cc_sm6150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(gpu_cc_sm6150_regulators),
 	.critical_clk_en = critical_clk_list,
 	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
@@ -512,27 +525,7 @@ static const struct of_device_id gpu_cc_sm6150_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_sm6150_match_table);
 
-static void configure_crc(struct regmap *regmap)
-{
-	unsigned int value, mask;
-
-	/* Recommended WAKEUP/SLEEP settings for the gpu_cc_cx_gmu_clk */
-	mask = 0xf << 8;
-	mask |= 0xf << 4;
-	value = 0xf << 8 | 0xf << 4;
-	regmap_update_bits(regmap, gpu_cc_cx_gmu_clk.clkr.enable_reg,
-							mask, value);
-
-	/*
-	 * After POR, Clock Ramp Controller(CRC) will be in bypass mode.
-	 * Software needs to do the following operation to enable the CRC
-	 * for GFX3D clock and divide the input clock by div by 2.
-	 */
-	regmap_update_bits(regmap, 0x1028, 0x00015011, 0x00015011);
-	regmap_update_bits(regmap, 0x1024, 0x00800000, 0x00800000);
-}
-
-static void gpucc_sm6150_fixup_sa6155(struct platform_device *pdev)
+static void gpucc_sm6150_fixup_sa6155(struct regmap *regmap)
 {
 	vdd_cx.num_levels = VDD_NUM_SA6155;
 	vdd_cx.cur_level = VDD_NUM_SA6155;
@@ -540,40 +533,31 @@ static void gpucc_sm6150_fixup_sa6155(struct platform_device *pdev)
 	vdd_mx.cur_level = VDD_NUM_SA6155;
 	gpu_cc_gx_gfx3d_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L1] = 0;
 	gpu_cc_gx_gfx3d_clk_src.freq_tbl = ftbl_sa6155_gpu_cc_gx_gfx3d_clk_src;
-
 	gpu_cc_pll0.clkr.hw.init = &gpu_cc_pll0_sa6155;
 	gpu_cc_pll0.flags = SUPPORTS_SLEW;
 	gpu_cc_pll1.clkr.hw.init = &gpu_cc_pll1_sa6155;
 	gpu_cc_pll1.flags = SUPPORTS_SLEW;
 }
 
+static int gpucc_sm6150_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,sa6155-gpucc"))
+		gpucc_sm6150_fixup_sa6155(regmap);
+
+	return 0;
+}
+
 static int gpu_cc_sm6150_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
-	int ret, is_sa6155;
-
-	/* Get CX voltage regulator for CX and GMU clocks. */
-	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
-	if (IS_ERR(vdd_cx.regulator[0])) {
-		if (!(PTR_ERR(vdd_cx.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev,
-				"Unable to get vdd_cx regulator\n");
-		return PTR_ERR(vdd_cx.regulator[0]);
-	}
-
-	/* Get MX voltage regulator for GPU PLL graphic clock. */
-	vdd_mx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mx");
-	if (IS_ERR(vdd_mx.regulator[0])) {
-		if (!(PTR_ERR(vdd_mx.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev,
-				"Unable to get vdd_mx regulator\n");
-		return PTR_ERR(vdd_mx.regulator[0]);
-	}
-
-	is_sa6155 = of_device_is_compatible(pdev->dev.of_node,
-						"qcom,sa6155-gpucc");
-	if (is_sa6155)
-		gpucc_sm6150_fixup_sa6155(pdev);
+	int ret;
 
 	regmap = qcom_cc_map(pdev, &gpu_cc_sm6150_desc);
 	if (IS_ERR(regmap)) {
@@ -584,23 +568,24 @@ static int gpu_cc_sm6150_probe(struct platform_device *pdev)
 	clk_alpha_pll_configure(&gpu_cc_pll0, regmap, gpu_cc_pll0.config);
 	clk_alpha_pll_configure(&gpu_cc_pll1, regmap, gpu_cc_pll1.config);
 
-	/*
-	 * Keep clocks always enabled:
-	 *	gpu_cc_ahb_clk
-	 */
-	regmap_update_bits(regmap, 0x1078, BIT(0), BIT(0));
+	ret = gpucc_sm6150_fixup(pdev, regmap);
+	if (ret)
+		return ret;
+
+	ret = register_qcom_clks_pm(pdev, false, &gpu_cc_sm6150_desc);
+	if (ret) {
+		dev_err(&pdev->dev, "GPU CC failed to register for pm ops\n");
+		return ret;
+	}
+
+	/* Enabling always ON clocks */
+	clk_restore_critical_clocks(&pdev->dev);
 
 	ret = qcom_cc_really_probe(pdev, &gpu_cc_sm6150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GPU CC clocks\n");
 		return ret;
 	}
-
-	ret = register_qcom_clks_pm(pdev, false, &gpu_cc_sm6150_desc);
-	if (ret)
-		dev_err(&pdev->dev, "GPU CC failed to register for pm ops\n");
-
-	configure_crc(regmap);
 
 	dev_info(&pdev->dev, "Registered GPU CC clocks\n");
 

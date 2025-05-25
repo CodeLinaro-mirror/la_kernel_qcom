@@ -25,6 +25,10 @@
 
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 
+static struct clk_vdd_class *disp_cc_sm6150_regulators[] = {
+	&vdd_cx,
+};
+
 enum {
 	P_BI_TCXO,
 	P_DISP_CC_PLL0_OUT_MAIN,
@@ -811,8 +815,7 @@ static struct clk_regmap *disp_cc_sm6150_clocks[] = {
 	[DISP_CC_MDSS_DP_CRYPTO_CLK_SRC] = &disp_cc_mdss_dp_crypto_clk_src.clkr,
 	[DISP_CC_MDSS_DP_LINK_CLK] = &disp_cc_mdss_dp_link_clk.clkr,
 	[DISP_CC_MDSS_DP_LINK_CLK_SRC] = &disp_cc_mdss_dp_link_clk_src.clkr,
-	[DISP_CC_MDSS_DP_LINK_DIV_CLK_SRC] =
-		&disp_cc_mdss_dp_link_div_clk_src.clkr,
+	[DISP_CC_MDSS_DP_LINK_DIV_CLK_SRC] = &disp_cc_mdss_dp_link_div_clk_src.clkr,
 	[DISP_CC_MDSS_DP_LINK_INTF_CLK] = &disp_cc_mdss_dp_link_intf_clk.clkr,
 	[DISP_CC_MDSS_DP_PIXEL1_CLK] = &disp_cc_mdss_dp_pixel1_clk.clkr,
 	[DISP_CC_MDSS_DP_PIXEL1_CLK_SRC] = &disp_cc_mdss_dp_pixel1_clk_src.clkr,
@@ -843,6 +846,10 @@ static const struct regmap_config disp_cc_sm6150_regmap_config = {
 	.fast_io = true,
 };
 
+/*
+ * Keep clocks always enabled:
+ * disp_cc_xo_clk
+ */
 static struct critical_clk_offset critical_clk_list[] = {
 	{ .offset = 0x6054, .mask = BIT(0) },
 };
@@ -851,6 +858,8 @@ static struct qcom_cc_desc disp_cc_sm6150_desc = {
 	.config = &disp_cc_sm6150_regmap_config,
 	.clks = disp_cc_sm6150_clocks,
 	.num_clks = ARRAY_SIZE(disp_cc_sm6150_clocks),
+	.clk_regulators = disp_cc_sm6150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(disp_cc_sm6150_regulators),
 	.critical_clk_en = critical_clk_list,
 	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
@@ -862,7 +871,7 @@ static const struct of_device_id disp_cc_sm6150_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, disp_cc_sm6150_match_table);
 
-static void dispcc_sm6150_fixup_sa6155(struct platform_device *pdev)
+static void dispcc_sm6150_fixup_sa6155(struct regmap *regmap)
 {
 	vdd_cx.num_levels = VDD_NUM_SA6155;
 	vdd_cx.cur_level = VDD_NUM_SA6155;
@@ -870,22 +879,25 @@ static void dispcc_sm6150_fixup_sa6155(struct platform_device *pdev)
 	disp_cc_pll0.flags = SUPPORTS_SLEW;
 }
 
+static int dispcc_sm6150_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,sa6155-dispcc"))
+		dispcc_sm6150_fixup_sa6155(regmap);
+
+	return 0;
+}
+
 static int disp_cc_sm6150_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
-	int ret, is_sa6155;
-
-	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
-	if (IS_ERR(vdd_cx.regulator[0])) {
-		if (!(PTR_ERR(vdd_cx.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev, "Unable to get vdd_cx regulator\n");
-		return PTR_ERR(vdd_cx.regulator[0]);
-	}
-
-	is_sa6155 = of_device_is_compatible(pdev->dev.of_node,
-						"qcom,sa6155-dispcc");
-	if (is_sa6155)
-		dispcc_sm6150_fixup_sa6155(pdev);
+	int ret;
 
 	regmap = qcom_cc_map(pdev, &disp_cc_sm6150_desc);
 	if (IS_ERR(regmap)) {
@@ -895,21 +907,24 @@ static int disp_cc_sm6150_probe(struct platform_device *pdev)
 
 	clk_alpha_pll_configure(&disp_cc_pll0, regmap, disp_cc_pll0.config);
 
-	/*
-	 * Keep clocks always enabled:
-	 *	disp_cc_xo_clk
-	 */
-	regmap_update_bits(regmap, 0x6054, BIT(0), BIT(0));
+	ret = dispcc_sm6150_fixup(pdev, regmap);
+	if (ret)
+		return ret;
+
+	ret = register_qcom_clks_pm(pdev, false, &disp_cc_sm6150_desc);
+	if (ret) {
+		dev_err(&pdev->dev, "DISP CC failed to register for pm ops\n");
+		return ret;
+	}
+
+	/* Enabling always ON clocks */
+	clk_restore_critical_clocks(&pdev->dev);
 
 	ret = qcom_cc_really_probe(pdev, &disp_cc_sm6150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register DISP CC clocks\n");
 		return ret;
 	}
-
-	ret = register_qcom_clks_pm(pdev, false, &disp_cc_sm6150_desc);
-	if (ret)
-		dev_err(&pdev->dev, "DISP CC failed to register for pm ops\n");
 
 	dev_info(&pdev->dev, "Registered DISP CC clocks\n");
 

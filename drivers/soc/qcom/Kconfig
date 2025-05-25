@@ -211,6 +211,15 @@ config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
 
+config MSM_POWER_STATE
+	tristate "Power State driver support for Deep Sleep and Hibernate"
+	help
+	  This option enables Power State Driver which is the kernel component
+	  for supporting deep sleep and hibernate. Create a power_state device
+	  node for user space communication. User space client can open device
+	  node for communication required for handling deep sleep and hibernate
+	  modes.
+
 config QCOM_OCMEM
 	tristate "Qualcomm On Chip Memory (OCMEM) driver"
 	depends on ARCH_QCOM
@@ -1227,4 +1236,14 @@ config QCOM_PMIC_ECID
 	  This driver reads the chipset ECID details from the respective address and
 	  exposes the details via sysfs interface.
 	  This helps in identification of PMIC part information.
+
+config QTI_HW_KEY_MANAGER_V1
+	tristate "Enable QTI Hardware Key Manager v1 for storage encryption"
+	default n
+	help
+	 Say 'Y' to enable the hardware key manager v1 driver used to operate
+	 and access key manager hardware block. This is used to interface with
+	 HWKM hardware to perform key operations from the kernel which will
+	 be used for storage encryption.
+
 endmenu

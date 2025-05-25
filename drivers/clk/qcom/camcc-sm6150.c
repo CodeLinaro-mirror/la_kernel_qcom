@@ -24,6 +24,11 @@
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mx, VDD_NUM, 1, vdd_corner);
 
+static struct clk_vdd_class *cam_cc_sm6150_regulators[] = {
+	&vdd_cx,
+	&vdd_mx,
+};
+
 enum {
 	P_BI_TCXO,
 	P_CAM_CC_PLL0_OUT_AUX,
@@ -1704,6 +1709,8 @@ static const struct qcom_cc_desc cam_cc_sm6150_desc = {
 	.config = &cam_cc_sm6150_regmap_config,
 	.clks = cam_cc_sm6150_clocks,
 	.num_clks = ARRAY_SIZE(cam_cc_sm6150_clocks),
+	.clk_regulators = cam_cc_sm6150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(cam_cc_sm6150_regulators),
 };
 
 static const struct of_device_id cam_cc_sm6150_match_table[] = {
@@ -1713,7 +1720,7 @@ static const struct of_device_id cam_cc_sm6150_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, cam_cc_sm6150_match_table);
 
-static void camcc_sm6150_fixup_sa6155(struct platform_device *pdev)
+static void camcc_sm6150_fixup_sa6155(struct regmap *regmap)
 {
 	vdd_cx.num_levels = VDD_NUM_SA6155;
 	vdd_mx.num_levels = VDD_NUM_SA6155;
@@ -1721,29 +1728,26 @@ static void camcc_sm6150_fixup_sa6155(struct platform_device *pdev)
 	vdd_mx.cur_level = VDD_NUM_SA6155;
 }
 
+static int camcc_sm6150_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,sa6155-camcc"))
+		camcc_sm6150_fixup_sa6155(regmap);
+
+	return 0;
+
+}
+
 static int cam_cc_sm6150_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
-	int ret, is_sa6155;
-
-	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
-	if (IS_ERR(vdd_cx.regulator[0])) {
-		if (!(PTR_ERR(vdd_cx.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev, "Unable to get vdd_cx regulator\n");
-		return PTR_ERR(vdd_cx.regulator[0]);
-	}
-
-	vdd_mx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mx");
-	if (IS_ERR(vdd_mx.regulator[0])) {
-		if (!(PTR_ERR(vdd_mx.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev, "Unable to get vdd_mx regulator\n");
-		return PTR_ERR(vdd_mx.regulator[0]);
-	}
-
-	is_sa6155 = of_device_is_compatible(pdev->dev.of_node,
-						"qcom,sa6155-camcc");
-	if (is_sa6155)
-		camcc_sm6150_fixup_sa6155(pdev);
+	int ret;
 
 	regmap = qcom_cc_map(pdev, &cam_cc_sm6150_desc);
 	if (IS_ERR(regmap)) {
@@ -1755,6 +1759,10 @@ static int cam_cc_sm6150_probe(struct platform_device *pdev)
 	clk_alpha_pll_configure(&cam_cc_pll1, regmap, cam_cc_pll1.config);
 	clk_alpha_pll_configure(&cam_cc_pll2, regmap, cam_cc_pll2.config);
 	clk_alpha_pll_configure(&cam_cc_pll3, regmap, cam_cc_pll3.config);
+
+	ret = camcc_sm6150_fixup(pdev, regmap);
+	if (ret)
+		return ret;
 
 	ret = qcom_cc_really_probe(pdev, &cam_cc_sm6150_desc, regmap);
 	if (ret) {

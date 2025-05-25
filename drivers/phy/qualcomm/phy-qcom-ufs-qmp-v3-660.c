@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2018,2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023,2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "phy-qcom-ufs-qmp-v3-660.h"
@@ -192,7 +192,7 @@ static void ufs_qcom_phy_qmp_v3_660_dbg_register_dump(
 					"PHY TX0 Registers ");
 }
 
-static struct phy_ops ufs_qcom_phy_qmp_v3_660_phy_ops = {
+static const struct phy_ops ufs_qcom_phy_qmp_v3_660_phy_ops = {
 	.init		= ufs_qcom_phy_qmp_v3_660_init,
 	.exit		= ufs_qcom_phy_qmp_v3_660_exit,
 	.power_on	= ufs_qcom_phy_power_on,
@@ -219,7 +219,6 @@ static int ufs_qcom_phy_qmp_v3_660_probe(struct platform_device *pdev)
 	struct ufs_qcom_phy_qmp_v3_660 *phy;
 	int err = 0;
 
-	pr_err("***[monish] Start %s : %d\n",__func__,__LINE__);
 	phy = devm_kzalloc(dev, sizeof(*phy), GFP_KERNEL);
 	if (!phy) {
 		err = -ENOMEM;
@@ -239,11 +238,10 @@ static int ufs_qcom_phy_qmp_v3_660_probe(struct platform_device *pdev)
 
 	phy_set_drvdata(generic_phy, phy);
 
-	strlcpy(phy->common_cfg.name, UFS_PHY_NAME,
+	strscpy(phy->common_cfg.name, UFS_PHY_NAME,
 		sizeof(phy->common_cfg.name));
 
 out:
-	pr_err("***[monish] End err=%d %s : %d\n",err,__func__,__LINE__);
 	return err;
 }
 
@@ -264,4 +262,4 @@ static struct platform_driver ufs_qcom_phy_qmp_v3_660_driver = {
 module_platform_driver(ufs_qcom_phy_qmp_v3_660_driver);
 
 MODULE_DESCRIPTION("Universal Flash Storage (UFS) QCOM PHY QMP v3 660");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");

@@ -23,12 +23,15 @@
 #include "reset.h"
 #include "vdd-level-sm6150.h"
 
-#define GCC_CAMERA_MISC		0x0b084
-#define GCC_VIDEO_MISC		0x9b000
-
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_cx_ao, VDD_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mx, VDD_NUM, 1, vdd_corner);
+
+static struct clk_vdd_class *gcc_sm6150_regulators[] = {
+	&vdd_cx,
+	&vdd_cx_ao,
+	&vdd_mx,
+};
 
 enum {
 	P_BI_TCXO,
@@ -3189,8 +3192,7 @@ static struct clk_hw *gcc_sm6150_hws[] = {
 
 static struct clk_regmap *gcc_sm6150_clocks[] = {
 	[GCC_AGGRE_UFS_PHY_AXI_CLK] = &gcc_aggre_ufs_phy_axi_clk.clkr,
-	[GCC_AGGRE_UFS_PHY_AXI_HW_CTL_CLK] =
-		&gcc_aggre_ufs_phy_axi_hw_ctl_clk.clkr,
+	[GCC_AGGRE_UFS_PHY_AXI_HW_CTL_CLK] = &gcc_aggre_ufs_phy_axi_hw_ctl_clk.clkr,
 	[GCC_AGGRE_USB2_SEC_AXI_CLK] = &gcc_aggre_usb2_sec_axi_clk.clkr,
 	[GCC_AGGRE_USB3_PRIM_AXI_CLK] = &gcc_aggre_usb3_prim_axi_clk.clkr,
 	[GCC_AHB2PHY_EAST_CLK] = &gcc_ahb2phy_east_clk.clkr,
@@ -3305,23 +3307,19 @@ static struct clk_regmap *gcc_sm6150_clocks[] = {
 	[GCC_UFS_PHY_AXI_HW_CTL_CLK] = &gcc_ufs_phy_axi_hw_ctl_clk.clkr,
 	[GCC_UFS_PHY_ICE_CORE_CLK] = &gcc_ufs_phy_ice_core_clk.clkr,
 	[GCC_UFS_PHY_ICE_CORE_CLK_SRC] = &gcc_ufs_phy_ice_core_clk_src.clkr,
-	[GCC_UFS_PHY_ICE_CORE_HW_CTL_CLK] =
-		&gcc_ufs_phy_ice_core_hw_ctl_clk.clkr,
+	[GCC_UFS_PHY_ICE_CORE_HW_CTL_CLK] = &gcc_ufs_phy_ice_core_hw_ctl_clk.clkr,
 	[GCC_UFS_PHY_PHY_AUX_CLK] = &gcc_ufs_phy_phy_aux_clk.clkr,
 	[GCC_UFS_PHY_PHY_AUX_CLK_SRC] = &gcc_ufs_phy_phy_aux_clk_src.clkr,
 	[GCC_UFS_PHY_PHY_AUX_HW_CTL_CLK] = &gcc_ufs_phy_phy_aux_hw_ctl_clk.clkr,
 	[GCC_UFS_PHY_RX_SYMBOL_0_CLK] = &gcc_ufs_phy_rx_symbol_0_clk.clkr,
 	[GCC_UFS_PHY_TX_SYMBOL_0_CLK] = &gcc_ufs_phy_tx_symbol_0_clk.clkr,
 	[GCC_UFS_PHY_UNIPRO_CORE_CLK] = &gcc_ufs_phy_unipro_core_clk.clkr,
-	[GCC_UFS_PHY_UNIPRO_CORE_CLK_SRC] =
-		&gcc_ufs_phy_unipro_core_clk_src.clkr,
-	[GCC_UFS_PHY_UNIPRO_CORE_HW_CTL_CLK] =
-		&gcc_ufs_phy_unipro_core_hw_ctl_clk.clkr,
+	[GCC_UFS_PHY_UNIPRO_CORE_CLK_SRC] = &gcc_ufs_phy_unipro_core_clk_src.clkr,
+	[GCC_UFS_PHY_UNIPRO_CORE_HW_CTL_CLK] = &gcc_ufs_phy_unipro_core_hw_ctl_clk.clkr,
 	[GCC_USB20_SEC_MASTER_CLK] = &gcc_usb20_sec_master_clk.clkr,
 	[GCC_USB20_SEC_MASTER_CLK_SRC] = &gcc_usb20_sec_master_clk_src.clkr,
 	[GCC_USB20_SEC_MOCK_UTMI_CLK] = &gcc_usb20_sec_mock_utmi_clk.clkr,
-	[GCC_USB20_SEC_MOCK_UTMI_CLK_SRC] =
-		&gcc_usb20_sec_mock_utmi_clk_src.clkr,
+	[GCC_USB20_SEC_MOCK_UTMI_CLK_SRC] = &gcc_usb20_sec_mock_utmi_clk_src.clkr,
 	[GCC_USB20_SEC_SLEEP_CLK] = &gcc_usb20_sec_sleep_clk.clkr,
 	[GCC_USB2_PRIM_CLKREF_CLK] = &gcc_usb2_prim_clkref_clk.clkr,
 	[GCC_USB2_SEC_CLKREF_CLK] = &gcc_usb2_sec_clkref_clk.clkr,
@@ -3332,8 +3330,7 @@ static struct clk_regmap *gcc_sm6150_clocks[] = {
 	[GCC_USB30_PRIM_MASTER_CLK] = &gcc_usb30_prim_master_clk.clkr,
 	[GCC_USB30_PRIM_MASTER_CLK_SRC] = &gcc_usb30_prim_master_clk_src.clkr,
 	[GCC_USB30_PRIM_MOCK_UTMI_CLK] = &gcc_usb30_prim_mock_utmi_clk.clkr,
-	[GCC_USB30_PRIM_MOCK_UTMI_CLK_SRC] =
-		&gcc_usb30_prim_mock_utmi_clk_src.clkr,
+	[GCC_USB30_PRIM_MOCK_UTMI_CLK_SRC] = &gcc_usb30_prim_mock_utmi_clk_src.clkr,
 	[GCC_USB30_PRIM_SLEEP_CLK] = &gcc_usb30_prim_sleep_clk.clkr,
 	[GCC_USB3_PRIM_CLKREF_CLK] = &gcc_usb3_prim_clkref_clk.clkr,
 	[GCC_USB3_PRIM_PHY_AUX_CLK] = &gcc_usb3_prim_phy_aux_clk.clkr,
@@ -3396,6 +3393,13 @@ static const struct regmap_config gcc_sm6150_regmap_config = {
 	.fast_io = true,
 };
 
+/*
+ * Keep clocks always enabled:
+ * gcc_camera_misc, gcc_video_misc,
+ * gcc_camera_ahb_clk, gcc_camera_xo_clk,
+ * gcc_cpuss_gnoc_clk, gcc_disp_ahb_clk, gcc_disp_xo_clk,
+ * gcc_gpu_cfg_ahb_clk, gcc_video_ahb_clk, gcc_video_xo_clk
+ */
 static struct critical_clk_offset critical_clk_list[] = {
 	{ .offset = 0x0b084, .mask = BIT(0) },
 	{ .offset = 0x9b000, .mask = BIT(0) },
@@ -3417,6 +3421,8 @@ static struct qcom_cc_desc gcc_sm6150_desc = {
 	.num_clk_hws = ARRAY_SIZE(gcc_sm6150_hws),
 	.resets = gcc_sm6150_resets,
 	.num_resets = ARRAY_SIZE(gcc_sm6150_resets),
+	.clk_regulators = gcc_sm6150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(gcc_sm6150_regulators),
 	.critical_clk_en = critical_clk_list,
 	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
@@ -3428,7 +3434,7 @@ static const struct of_device_id gcc_sm6150_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, gcc_sm6150_match_table);
 
-static void gcc_sm6150_fixup_sa6155(struct platform_device *pdev)
+static void gcc_sm6150_fixup_sa6155(struct regmap *regmap)
 {
 	vdd_cx.num_levels = VDD_NUM_SA6155;
 	vdd_cx.cur_level = VDD_NUM_SA6155;
@@ -3438,39 +3444,25 @@ static void gcc_sm6150_fixup_sa6155(struct platform_device *pdev)
 	vdd_mx.cur_level = VDD_NUM_SA6155;
 }
 
+static int gcc_sm6150_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,sa6155-gcc"))
+		gcc_sm6150_fixup_sa6155(regmap);
+
+	return 0;
+}
+
 static int gcc_sm6150_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
-	int ret, is_sa6155;
-
-	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
-	if (IS_ERR(vdd_cx.regulator[0])) {
-		if (!(PTR_ERR(vdd_cx.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev,
-				"Unable to get vdd_cx regulator\n");
-		return PTR_ERR(vdd_cx.regulator[0]);
-	}
-
-	vdd_cx_ao.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx_ao");
-	if (IS_ERR(vdd_cx_ao.regulator[0])) {
-		if (!(PTR_ERR(vdd_cx_ao.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev,
-				"Unable to get vdd_cx_ao regulator\n");
-		return PTR_ERR(vdd_cx_ao.regulator[0]);
-	}
-
-	vdd_mx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mx");
-	if (IS_ERR(vdd_mx.regulator[0])) {
-		if (!(PTR_ERR(vdd_mx.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev,
-				"Unable to get vdd_cx_ao regulator\n");
-		return PTR_ERR(vdd_mx.regulator[0]);
-	}
-
-	is_sa6155 = of_device_is_compatible(pdev->dev.of_node,
-						"qcom,sa6155-gcc");
-	if (is_sa6155)
-		gcc_sm6150_fixup_sa6155(pdev);
+	int ret;
 
 	regmap = qcom_cc_map(pdev, &gcc_sm6150_desc);
 	if (IS_ERR(regmap)) {
@@ -3478,47 +3470,31 @@ static int gcc_sm6150_probe(struct platform_device *pdev)
 		return PTR_ERR(regmap);
 	}
 
-	/*
-	 * Disable the GPLL0 active input to MM blocks and GPU
-	 * via MISC registers.
-	 */
-	regmap_update_bits(regmap, 0x0b084, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x9b000, BIT(0), BIT(0));
-
-	/*
-	 * Keep clocks always enabled:
-	 *	gcc_camera_ahb_clk
-	 *	gcc_camera_xo_clk
-	 *	gcc_cpuss_gnoc_clk
-	 *	gcc_disp_ahb_clk
-	 *	gcc_disp_xo_clk
-	 *	gcc_gpu_cfg_ahb_clk
-	 *	gcc_video_ahb_clk
-	 *	gcc_video_xo_clk
-	 */
-	regmap_update_bits(regmap, 0x0b008, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x0b044, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x48004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x0b00c, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x0b048, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x71004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x0b004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x0b040, BIT(0), BIT(0));
+	ret = gcc_sm6150_fixup(pdev, regmap);
+	if (ret)
+		return ret;
 
 	ret = qcom_cc_register_rcg_dfs(regmap, gcc_dfs_clocks,
 				       ARRAY_SIZE(gcc_dfs_clocks));
-	if (ret)
+	if (ret) {
+		dev_err(&pdev->dev, "GCC failed to register dfs clocks\n");
 		return ret;
+	}
+
+	ret = register_qcom_clks_pm(pdev, false, &gcc_sm6150_desc);
+	if (ret) {
+		dev_err(&pdev->dev, "GCC failed to register for pm ops\n");
+		return ret;
+	}
+
+	/* Enabling always ON clocks */
+	clk_restore_critical_clocks(&pdev->dev);
 
 	ret = qcom_cc_really_probe(pdev, &gcc_sm6150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GCC clocks\n");
 		return ret;
 	}
-
-	ret = register_qcom_clks_pm(pdev, false, &gcc_sm6150_desc);
-	if (ret)
-		dev_err(&pdev->dev, "GCC failed to register for pm ops\n");
 
 	dev_info(&pdev->dev, "Registered GCC clocks\n");
 

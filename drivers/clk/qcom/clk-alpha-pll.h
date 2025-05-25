@@ -114,6 +114,7 @@ struct clk_alpha_pll {
 #define DISABLE_TO_OFF		BIT(5)
 #define SUPPORTS_SLEW           BIT(4)
 #define ENABLE_IN_PREPARE	BIT(6)
+#define SUPPORTS_SLEW		BIT(7)
 	u8 flags;
 
 	struct clk_regmap clkr;

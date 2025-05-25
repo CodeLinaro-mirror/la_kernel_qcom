@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -110,12 +110,14 @@ void __q2spi_dump_ipc(struct q2spi_geni *q2spi, char *prefix,
 void q2spi_dump_ipc_always(struct q2spi_geni *q2spi, char *prefix, char *str, int size)
 {
 	int offset = 0, total_bytes = size;
+	unsigned long flags;
 
 	if (!str) {
 		Q2SPI_DEBUG(q2spi, "%s: Err str is NULL\n", __func__);
 		return;
 	}
 
+	spin_lock_irqsave(&q2spi->data_dump_lock, flags);
 	if (q2spi->max_data_dump_size > 0 && size > q2spi->max_data_dump_size)
 		size = q2spi->max_data_dump_size;
 
@@ -126,6 +128,7 @@ void q2spi_dump_ipc_always(struct q2spi_geni *q2spi, char *prefix, char *str, in
 		size -= Q2SPI_DATA_DUMP_SIZE;
 	}
 	__q2spi_dump_ipc(q2spi, prefix, (char *)str + offset, total_bytes, offset, size);
+	spin_unlock_irqrestore(&q2spi->data_dump_lock, flags);
 }
 
 /**
@@ -215,14 +218,18 @@ static ssize_t max_dump_size_store(struct device *dev, struct device_attribute *
 				   const char *buf, size_t size)
 {
 	struct q2spi_geni *q2spi = get_q2spi(dev);
+	unsigned long flags;
 
+	spin_lock_irqsave(&q2spi->data_dump_lock, flags);
 	if (kstrtoint(buf, 0, &q2spi->max_data_dump_size)) {
 		dev_err(dev, "%s Invalid input\n", __func__);
+		spin_unlock_irqrestore(&q2spi->data_dump_lock, flags);
 		return -EINVAL;
 	}
 
 	if (q2spi->max_data_dump_size <= 0)
 		q2spi->max_data_dump_size = Q2SPI_DATA_DUMP_SIZE;
+	spin_unlock_irqrestore(&q2spi->data_dump_lock, flags);
 	return size;
 }
 
@@ -4467,6 +4474,7 @@ static int q2spi_geni_probe(struct platform_device *pdev)
 	mutex_init(&q2spi->queue_lock);
 	mutex_init(&q2spi->send_msgs_lock);
 	spin_lock_init(&q2spi->cr_queue_lock);
+	spin_lock_init(&q2spi->data_dump_lock);
 	q2spi->port_release = true;
 	q2spi->q2spi_sleep_cmd_enable = false;
 

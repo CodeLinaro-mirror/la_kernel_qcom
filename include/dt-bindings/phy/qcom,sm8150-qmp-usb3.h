@@ -1,6 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2023, 2025, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef _DT_BINDINGS_PHY_QCOM_SM8150_QMP_USB_H
