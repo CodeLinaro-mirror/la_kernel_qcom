@@ -178,3 +178,15 @@ config DRM_MSM_HDMI_HDCP
 	default y
 	help
 	  Choose this option to enable HDCP state machine
+
+config DRM_QPIC_DISPLAY
+	bool "Enable QPIC display driver in MSM DRM"
+	depends on DRM
+	select DRM_GEM_DMA_HELPER
+	select DRM_KMS_HELPER
+	default n
+	help
+	  Enable support for the Qualcomm QPIC display controller within the MSM DRM
+	  (Direct Rendering Manager) framework. This driver provides support for
+	  QPIC-based display panels using the DRM infrastructure, buffer management.
+	  Choose this option if QPIC display is used on the platform.
