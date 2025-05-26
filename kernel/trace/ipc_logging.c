@@ -832,6 +832,9 @@ void *ipc_log_context_create(int max_num_pages,
 	unsigned long flags;
 	int enable_minidump;
 
+	if (!ipc_logging_enabled())
+		return NULL;
+
 	/* check if ipc ctxt already exists */
 	read_lock_irq(&context_list_lock_lha1);
 	list_for_each_entry(tmp, &ipc_log_context_list, list)
