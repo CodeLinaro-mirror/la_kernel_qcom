@@ -873,25 +873,6 @@ static const struct clk_rpmh_desc clk_rpmh_pineapple = {
 	.num_clks = ARRAY_SIZE(pineapple_rpmh_clocks),
 };
 
-static struct clk_hw *sm6150_rpmh_clocks[] = {
-	[RPMH_CXO_CLK]          = &clk_rpmh_bi_tcxo_div2.hw,
-	[RPMH_CXO_CLK_A]        = &clk_rpmh_bi_tcxo_div2_ao.hw,
-	[RPMH_LN_BB_CLK2]       = &clk_rpmh_ln_bb_clk2_a2.hw,
-	[RPMH_LN_BB_CLK2_A]     = &clk_rpmh_ln_bb_clk2_a2_ao.hw,
-	[RPMH_LN_BB_CLK3]       = &clk_rpmh_ln_bb_clk3_a2.hw,
-	[RPMH_LN_BB_CLK3_A]     = &clk_rpmh_ln_bb_clk3_a2_ao.hw,
-	[RPMH_RF_CLK1]          = &clk_rpmh_rf_clk1_a.hw,
-	[RPMH_RF_CLK1_A]        = &clk_rpmh_rf_clk1_a_ao.hw,
-	[RPMH_RF_CLK2]          = &clk_rpmh_rf_clk2_a.hw,
-	[RPMH_RF_CLK2_A]        = &clk_rpmh_rf_clk2_a_ao.hw,
-	[RPMH_IPA_CLK]          = &clk_rpmh_ipa.hw,
-};
-
-static const struct clk_rpmh_desc clk_rpmh_sm6150 = {
-	.clks = sm6150_rpmh_clocks,
-	.num_clks = ARRAY_SIZE(sm6150_rpmh_clocks),
-};
-
 static struct clk_hw *parrot_rpmh_clocks[] = {
 	[RPMH_CXO_CLK]		= &clk_rpmh_bi_tcxo_div4.hw,
 	[RPMH_CXO_CLK_A]	= &clk_rpmh_bi_tcxo_div4_ao.hw,
