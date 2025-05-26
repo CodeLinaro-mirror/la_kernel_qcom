@@ -942,7 +942,9 @@ static void ipa_work_state_wait_for_ipa(struct gsi_data_port *d_port, struct dev
 	struct f_gsi *gsi = d_port_to_gsi(d_port);
 	u8 event = read_event(d_port);
 
-	if (event == EVT_IPA_READY) {
+	if (event == EVT_SET_ALT) {
+		usb_composite_setup_continue(gsi->d_port.cdev);
+	} else if (event == EVT_IPA_READY) {
 		if (peek_event(d_port) == EVT_SUSPEND) {
 			log_event_dbg("%s: ST_WAIT_IPARDY_EVT_SUSPEND",
 				 __func__);
