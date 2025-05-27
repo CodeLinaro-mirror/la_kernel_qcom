@@ -1811,11 +1811,9 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 								unsigned long event, void *dummy)
 {
 	struct msm_pinctrl *pctrl = msm_pinctrl_data;
-//	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
+	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
 
 	if (event == PM_HIBERNATION_PREPARE) {
-		pctrl->hibernation = false; // Temporary disable EIC
-#if 0 //Temporary disable EIC
 		pctrl->gpio_regs = kcalloc(soc->ngroups,
 			sizeof(*pctrl->gpio_regs), GFP_KERNEL);
 		if (pctrl->gpio_regs == NULL)
@@ -1829,7 +1827,6 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 			}
 		}
 		pctrl->hibernation = true;
-#endif
 	} else if (event == PM_POST_HIBERNATION) {
 		kfree(pctrl->gpio_regs);
 		kfree(pctrl->msm_tile_regs);

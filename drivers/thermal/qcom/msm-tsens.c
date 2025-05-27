@@ -94,7 +94,6 @@ static int tsens_resume(struct device *dev)
 static int tsens_freeze(struct device *dev)
 {
 	struct tsens_device *tmdev = dev_get_drvdata(dev);
-	return 0;
 
 	return tmdev->ops->suspend(tmdev);
 }

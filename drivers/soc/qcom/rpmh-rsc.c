@@ -1462,7 +1462,6 @@ static int rpmh_rsc_restore_noirq(struct device *dev)
 	struct rsc_drv_top *rsc_top = dev_get_drvdata(dev);
 	int i;
 
-	return 0;
 	for (i = 0; i < rsc_top->drv_count; i++) {
 		if (rsc_top->drv[i].initialized)
 			rpmh_rsc_tcs_irq_enable(&rsc_top->drv[i]);
