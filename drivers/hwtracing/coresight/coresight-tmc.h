@@ -390,4 +390,17 @@ void tmc_etr_remove_catu_ops(void);
 struct etr_buf *tmc_etr_get_buffer(struct coresight_device *csdev,
 				   enum cs_mode mode, void *data);
 
+#if IS_ENABLED(CONFIG_CORESIGHT_TMC_PCIE)
+int tmc_pcie_enable(struct tmc_pcie_data *pcie_data);
+void tmc_pcie_disable(struct tmc_pcie_data *pcie_data);
+int tmc_pcie_init(struct amba_device *adev, struct tmc_drvdata *drvdata);
+#else
+static inline int tmc_pcie_enable(struct tmc_pcie_data *pcie_data)
+{return 0; }
+static inline void tmc_pcie_disable(struct tmc_pcie_data *pcie_data)
+{ }
+static inline int tmc_pcie_init(struct amba_device *adev, struct tmc_drvdata *drvdata)
+{return 0; }
+#endif
+
 #endif
