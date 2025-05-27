@@ -160,7 +160,6 @@ struct qcom_adsp {
 	const struct firmware *dtb_firmware;
 	bool subsys_recovery_disabled;
 
-	bool hyp_assign_mem;
 	bool ssr_hyp_assign_mem;
 	phys_addr_t *hyp_assign_phy;
 	size_t *hyp_assign_mem_size;
@@ -692,46 +691,6 @@ out:
 }
 EXPORT_SYMBOL_GPL(qcom_rproc_set_dtb_firmware);
 
-static int setup_global_sync_mem(struct qcom_adsp *adsp)
-{
-	struct qcom_scm_vmperm newvm[2];
-	struct device_node *node;
-	struct resource res;
-	phys_addr_t mem_phys;
-	u64 curr_perm;
-	u64 mem_size;
-	int ret;
-
-	curr_perm = BIT(QCOM_SCM_VMID_HLOS);
-	newvm[0].vmid = QCOM_SCM_VMID_HLOS;
-	newvm[0].perm = QCOM_SCM_PERM_RW;
-	newvm[1].vmid = QCOM_SCM_VMID_CDSP;
-	newvm[1].perm = QCOM_SCM_PERM_RW;
-
-	node = of_parse_phandle(adsp->dev->of_node, "global-sync-mem-reg", 0);
-	if (!node) {
-		dev_err(adsp->dev, "global sync mem region is missing\n");
-		return -EINVAL;
-	}
-
-	ret = of_address_to_resource(node, 0, &res);
-	if (ret) {
-		dev_err(adsp->dev, "address to resource failed for global sync mem\n");
-		return ret;
-	}
-
-	mem_phys = res.start;
-	mem_size = resource_size(&res);
-	ret = qcom_scm_assign_mem(mem_phys, mem_size, &curr_perm, newvm, ARRAY_SIZE(newvm));
-	if (ret) {
-		dev_err(adsp->dev, "hyp assign for global sync mem failed\n");
-		return ret;
-	}
-
-	global_sync_mem_setup = true;
-	return 0;
-}
-
 static int adsp_start(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = (struct qcom_adsp *)rproc->priv;
@@ -744,14 +703,6 @@ static int adsp_start(struct rproc *rproc)
 		adsp->current_users = 0;
 
 	qcom_q6v5_prepare(&adsp->q6v5);
-
-	if (adsp->hyp_assign_mem && adsp->pas_id == 18) {
-		ret = setup_global_sync_mem(adsp);
-		if (ret) {
-			dev_err(adsp->dev, "failed to setup global sync mem\n");
-			return -EINVAL;
-		}
-	}
 
 	if (is_mss_ssr_hyp_assign_en(adsp)) {
 		ret = mpss_dsm_hyp_assign_control(adsp, true);
@@ -1688,6 +1639,46 @@ out:
 	return ret;
 }
 
+static int setup_global_sync_mem(struct platform_device *pdev)
+{
+	struct qcom_scm_vmperm newvm[2];
+	struct device_node *node;
+	struct resource res;
+	phys_addr_t mem_phys;
+	u64 curr_perm;
+	u64 mem_size;
+	int ret;
+
+	curr_perm = BIT(QCOM_SCM_VMID_HLOS);
+	newvm[0].vmid = QCOM_SCM_VMID_HLOS;
+	newvm[0].perm = QCOM_SCM_PERM_RW;
+	newvm[1].vmid = QCOM_SCM_VMID_CDSP;
+	newvm[1].perm = QCOM_SCM_PERM_RW;
+
+	node = of_parse_phandle(pdev->dev.of_node, "global-sync-mem-reg", 0);
+	if (!node) {
+		dev_err(&pdev->dev, "global sync mem region is missing\n");
+		return -EINVAL;
+	}
+
+	ret = of_address_to_resource(node, 0, &res);
+	if (ret) {
+		dev_err(&pdev->dev, "address to resource failed for global sync mem\n");
+		return ret;
+	}
+
+	mem_phys = res.start;
+	mem_size = resource_size(&res);
+	ret = qcom_scm_assign_mem(mem_phys, mem_size, &curr_perm, newvm, ARRAY_SIZE(newvm));
+	if (ret) {
+		dev_err(&pdev->dev, "hyp assign for global sync mem failed\n");
+		return ret;
+	}
+
+	global_sync_mem_setup = true;
+	return 0;
+}
+
 static void android_vh_rproc_recovery_set(void *data, struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = (struct qcom_adsp *)rproc->priv;
@@ -1744,6 +1735,14 @@ static int adsp_probe(struct platform_device *pdev)
 	if (ret < 0 && ret != -EINVAL)
 		return ret;
 
+	if (desc->hyp_assign_mem && !global_sync_mem_setup &&
+			!strcmp(fw_name, "cdsp.mdt")) {
+		ret = setup_global_sync_mem(pdev);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to setup global sync mem\n");
+			return -EINVAL;
+		}
+	}
 
 	if (desc->minidump_id)
 		ops = &adsp_minidump_ops;
@@ -1768,7 +1767,6 @@ static int adsp_probe(struct platform_device *pdev)
 	adsp->minidump_id = desc->minidump_id;
 	adsp->pas_id = desc->pas_id;
 	adsp->dtb_pas_id = desc->dtb_pas_id;
-	adsp->hyp_assign_mem = desc->hyp_assign_mem;
 	ret = qcom_rproc_alloc_dtb_firmware(adsp, desc->dtb_firmware_name);
 	if (ret)
 		goto free_rproc;
