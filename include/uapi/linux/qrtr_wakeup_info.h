@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef _LINUX_QRTR_WAKEUP_INFO_H
 #define _LINUX_QRTR_WAKEUP_INFO_H
+
+#include <linux/types.h>
 
 #define TASK_COMM_LEN 16
 #define INFO_VERSION_1 1
