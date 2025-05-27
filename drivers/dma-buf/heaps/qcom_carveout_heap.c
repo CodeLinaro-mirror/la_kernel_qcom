@@ -415,7 +415,6 @@ int qcom_secure_carveout_heap_restore(void)
 	struct secure_carveout_heap *sc_heap;
 	int ret;
 
-	return 0;
 	list_for_each_entry(sc_heap, &secure_carveout_heaps, list) {
 		ret = hyp_assign_from_flags(sc_heap->carveout_heap.base,
 				sc_heap->carveout_heap.size,
