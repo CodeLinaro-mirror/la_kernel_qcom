@@ -784,6 +784,7 @@ static void msm_geni_enable_disable_se_clk(struct uart_port *uport, bool enable)
 	}
 }
 
+#ifdef CONFIG_SMP
 /*
  * The below API is required to check if uport->lock (spinlock)
  * is taken by the serial layer or not. If the lock is not taken
@@ -804,6 +805,21 @@ static bool msm_geni_serial_spinlocked(struct uart_port *uport)
 
 	return !locked;
 }
+#else
+/*
+ * msm_geni_serial_spinlocked - Always return true on uniprocessor systems
+ * @uport: Pointer to the UART port structure
+ *
+ * On uniprocessor systems, concurrency is not present, so we assume the lock
+ * is always held and polling is required.
+ *
+ * Return: true
+ */
+static bool msm_geni_serial_spinlocked(struct uart_port *uport)
+{
+	return true;
+}
+#endif
 
 /*
  * We are enabling the interrupts once the polling operations
