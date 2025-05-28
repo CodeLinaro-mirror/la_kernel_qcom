@@ -2,7 +2,7 @@
 
 // Copyright (c) 2018-19, Linaro Limited
 // Copyright (c) 2021, The Linux Foundation. All rights reserved.
-// Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -3110,6 +3110,8 @@ void qcom_ethqos_request_phy_wol(void *plat_n)
 
 		if (priv->plat->separate_wol_pin)
 			enable_irq_wake(ethqos->wol_intr);
+		else if (phy_interrupt_is_valid(priv->phydev))
+			enable_irq_wake(priv->phydev->irq);
 		else
 			enable_irq_wake(ethqos->phy_intr);
 		device_set_wakeup_enable(&ethqos->pdev->dev, 1);
@@ -5949,6 +5951,8 @@ static int ethqos_enable_wol(struct net_device *ndev, struct ethtool_wolinfo *wo
 			if (!priv->dev->wol_enabled) {
 				if (priv->plat->separate_wol_pin)
 					ret = enable_irq_wake(ethqos->wol_intr);
+				else if (priv->phydev && phy_interrupt_is_valid(priv->phydev))
+					ret = enable_irq_wake(priv->phydev->irq);
 				else
 					ret = enable_irq_wake(ethqos->phy_intr);
 			}
@@ -5959,6 +5963,8 @@ static int ethqos_enable_wol(struct net_device *ndev, struct ethtool_wolinfo *wo
 			if (priv->dev->wol_enabled) {
 				if (priv->plat->separate_wol_pin)
 					ret = disable_irq_wake(ethqos->wol_intr);
+				else if (priv->phydev && phy_interrupt_is_valid(priv->phydev))
+					ret = disable_irq_wake(priv->phydev->irq);
 				else
 					ret = disable_irq_wake(ethqos->phy_intr);
 			}
