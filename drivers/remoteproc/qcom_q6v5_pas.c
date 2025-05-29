@@ -1088,7 +1088,7 @@ static int rproc_panic_handler(struct notifier_block *this,
 {
 	struct qcom_adsp *adsp = container_of(this, struct qcom_adsp, panic_blk);
 	int ret;
-
+	return 0;
 	if (!adsp)
 		return NOTIFY_DONE;
 	/* wake up SOCCP during panic to run error handlers on SOCCP */
