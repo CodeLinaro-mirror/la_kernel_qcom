@@ -1366,13 +1366,13 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ret = ethqos_init_regulators(ethqos);
 	if (ret)
-		goto err;
+		return ret;
 
 	ret = ethqos_init_gpio(ethqos);
 	if (ret)
-		goto err;
+		return ret;
 
-	plat_dat = devm_stmmac_probe_config_dt(pdev, stmmac_res.mac);
+	plat_dat = stmmac_probe_config_dt(pdev, stmmac_res.mac);
 	if (IS_ERR(plat_dat)) {
 		return dev_err_probe(dev, PTR_ERR(plat_dat),
 				     "dt configuration failed\n");
@@ -1401,9 +1401,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
-	if (IS_ERR(ethqos->rgmii_base))
-		return dev_err_probe(dev, PTR_ERR(ethqos->rgmii_base),
-				     "Failed to map rgmii resource\n");
+	if (IS_ERR(ethqos->rgmii_base)) {
+		ret = PTR_ERR(ethqos->rgmii_base);
+		goto err_mem;
+	}
 
 	ethqos->mac_base = stmmac_res.addr;
 
@@ -1434,17 +1435,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	ethqos->link_clk = devm_clk_get(dev, "rgmii");
-	if (IS_ERR(ethqos->link_clk))
-		return dev_err_probe(dev, PTR_ERR(ethqos->link_clk),
-				     "Failed to get link_clk\n");
+	if (IS_ERR(ethqos->link_clk)) {
+		ret = PTR_ERR(ethqos->link_clk);
+		goto err_mem;
+	}
 
 	ret = ethqos_clks_config(ethqos, true);
 	if (ret)
-		goto err;
-
-	ret = devm_add_action_or_reset(dev, ethqos_clks_disable, ethqos);
-	if (ret)
-		goto err;
+		goto err_mem;
 
 	ethqos->serdes_phy = devm_phy_optional_get(dev, "serdes");
 	if (IS_ERR(ethqos->serdes_phy))
@@ -1524,18 +1522,28 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ETHQOSDBG("gdsc-off-on-suspend = %d\n",
 		  ethqos->gdsc_off_on_suspend);
 
+	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
+	if (ret)
+		goto err_clk;
+
 	if (!ethqos_phy_intr_config(ethqos)) {
-		ret = ethqos_phy_intr_enable(ethqos);
-		if (ret)
+		if(ethqos_phy_intr_enable(ethqos))
 			ETHQOSERR("ethqos_phy_intr_enable failed\n");
 	} else {
 		ETHQOSERR("Phy interrupt configuration failed\n");
 	}
 
-	return devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	return 0;
 
-err:
+err_clk:
 	rgmii_dump(ethqos);
+	ethqos_clks_disable(ethqos);
+
+err_mem:
+	stmmac_remove_config_dt(pdev, plat_dat);
+	if (ethqos)
+		ethqos_disable_regulators(ethqos);
+
 	return ret;
 }
 
@@ -1544,11 +1552,22 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 	struct qcom_ethqos *ethqos;
 	struct stmmac_priv *priv;
 
+	if (of_device_is_compatible(pdev->dev.of_node, "qcom,emac-smmu-embedded")) {
+		of_platform_depopulate(&pdev->dev);
+		return 0;
+	}
+
 	ethqos = get_stmmac_bsp_priv(&pdev->dev);
 	if (!ethqos)
 		return -ENODEV;
 
 	priv = qcom_ethqos_get_priv(ethqos);
+
+	stmmac_pltfr_remove(pdev);
+
+	if (ethqos->link_clk)
+		clk_disable_unprepare(ethqos->link_clk);
+
 	if (priv->plat->phy_intr_en_extn_stm)
 		free_irq(ethqos->phy_intr, ethqos);
 
@@ -1556,8 +1575,12 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 		cancel_work_sync(&ethqos->emac_phy_work);
 
 	emac_emb_smmu_exit();
+	ethqos_free_gpios(ethqos);
 	ethqos_disable_regulators(ethqos);
-	ethqos_clks_config(ethqos, false);
+	ethqos_clks_disable(ethqos);
+
+	platform_set_drvdata(pdev, NULL);
+	of_platform_depopulate(&pdev->dev);
 
 	return 0;
 }
