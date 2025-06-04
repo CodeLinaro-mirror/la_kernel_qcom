@@ -357,3 +357,23 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-seraph",
+        out = "pinctrl-seraph.ko",
+        config = "CONFIG_PINCTRL_SERAPH",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-seraph.c",
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
