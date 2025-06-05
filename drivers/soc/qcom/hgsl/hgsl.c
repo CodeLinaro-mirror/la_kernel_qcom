@@ -161,11 +161,6 @@ struct ctx_queue_header {
 	uint32_t unused1;
 };
 
-static inline bool _timestamp_retired(struct hgsl_context *ctxt,
-				unsigned int timestamp);
-
-static inline void set_context_retired_ts(struct hgsl_context *ctxt,
-				unsigned int ts);
 static void _signal_contexts(struct qcom_hgsl *hgsl, u32 dev_hnd);
 
 static int db_get_busy_state(void *dbq_base);
@@ -174,10 +169,6 @@ static void db_set_busy_state(void *dbq_base, int in_busy);
 static int dbcq_get_free_indirect_ib_buffer(struct hgsl_priv  *priv,
 				struct hgsl_context *ctxt,
 				uint32_t ts, uint32_t timeout_in_ms);
-
-static struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
-				uint32_t dev_hnd, uint32_t context_id);
-static void hgsl_put_context(struct hgsl_context *ctxt);
 
 static bool dbq_check_ibdesc_state(struct qcom_hgsl *hgsl, struct hgsl_context *ctxt,
 		uint32_t request_type);
@@ -372,13 +363,6 @@ struct db_ignore_retpacket {
 	int in_use;
 	struct db_msg_id db_msg_id;
 } __packed;
-
-
-struct hgsl_active_wait {
-	struct list_head head;
-	struct hgsl_context *ctxt;
-	unsigned int timestamp;
-};
 
 #ifdef CONFIG_TRACE_GPU_MEM
 static inline void hgsl_trace_gpu_mem_total(struct hgsl_priv *priv, int64_t delta)
@@ -1350,30 +1334,6 @@ static void hgsl_reset_dbq(struct doorbell_queue *dbq)
 	dbq->state = DB_STATE_Q_UNINIT;
 }
 
-static inline uint32_t get_context_retired_ts(struct hgsl_context *ctxt)
-{
-	unsigned int ts = ctxt->shadow_ts->eop;
-
-	/* ensure read is done before comparison */
-	dma_rmb();
-	return ts;
-}
-
-static inline void set_context_retired_ts(struct hgsl_context *ctxt,
-				unsigned int ts)
-{
-	ctxt->shadow_ts->eop = ts;
-
-	/* ensure update is done before return */
-	dma_wmb();
-}
-
-static inline bool _timestamp_retired(struct hgsl_context *ctxt,
-				unsigned int timestamp)
-{
-	return hgsl_ts32_ge(get_context_retired_ts(ctxt), timestamp);
-}
-
 static inline void _destroy_context(struct kref *kref);
 static void _signal_contexts(struct qcom_hgsl *hgsl,
 	u32 dev_hnd)
@@ -1579,7 +1539,7 @@ static inline void _destroy_context(struct kref *kref)
 	ctxt->destroyed = true;
 }
 
-static struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
+struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
 	uint32_t dev_hnd, uint32_t context_id)
 {
 	struct hgsl_context *ctxt = NULL;
@@ -1642,7 +1602,7 @@ static struct hgsl_context *hgsl_remove_context(struct hgsl_priv *priv,
 	return ctxt;
 }
 
-static void hgsl_put_context(struct hgsl_context *ctxt)
+void hgsl_put_context(struct hgsl_context *ctxt)
 {
 	if (ctxt)
 		kref_put(&ctxt->kref, _destroy_context);
@@ -1954,6 +1914,7 @@ static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 	ctxt->dbq = &hgsl->dbq[dbq_idx];
 	ctxt->tcsr_idx = ctxt->dbq->tcsr_idx;
 	ctxt->db_signal = db_signal;
+	ctxt->dbq_info = dbq_info;
 	hgsl_dbq_set_state_info(ctxt->dbq->vbase,
 				HGSL_DBQ_METADATA_CONTEXT_INFO,
 				ctxt->context_id,
@@ -3735,6 +3696,65 @@ static int hgsl_ioctl_timeline_wait(
 	return hgsl_isync_wait_multiple(priv, param);
 }
 
+static int hgsl_ioctl_gslprofiler_per_proc_gpu_busy(struct file *filep, void *data)
+{
+	struct hgsl_priv *priv = filep->private_data;
+	struct hgsl_ioctl_gslprofiler_per_proc_gpu_busy_params *param = data;
+	struct gsl_profiler_get_per_proc_gpu_busy_percentage_t *busy = NULL;
+	int ret = 0;
+
+	busy = hgsl_malloc(sizeof(struct gsl_profiler_get_per_proc_gpu_busy_percentage_t));
+	if (busy == NULL) {
+		LOGE("failed to allocate memory");
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = hgsl_hyp_gslprofiler_per_proc_gpu_busy(&priv->hyp_priv, param, busy);
+	if (ret == 0) {
+		if (copy_to_user(USRPTR(param->busy), busy,
+				sizeof(struct gsl_profiler_get_per_proc_gpu_busy_percentage_t))) {
+			LOGE("failed to copy busy to user");
+			ret = -EFAULT;
+			goto out;
+		}
+	}
+
+out:
+	hgsl_free(busy);
+	return ret;
+}
+
+static int hgsl_ioctl_gslprofiler_per_proc_gpu_pmem(struct file *filep, void *data)
+{
+	struct hgsl_priv *priv = filep->private_data;
+	struct hgsl_ioctl_gslprofiler_per_proc_gpu_pmem_params *param = data;
+	struct gsl_profiler_get_per_proc_gpu_pmem_usage_t *pmem = NULL;
+	int ret = 0;
+
+	pmem = hgsl_malloc(sizeof(struct gsl_profiler_get_per_proc_gpu_pmem_usage_t));
+	if (pmem == NULL) {
+		LOGE("failed to allocate memory");
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = hgsl_hyp_gslprofiler_per_proc_gpu_pmem(&priv->hyp_priv, param, pmem);
+	if (ret == 0) {
+		if (copy_to_user(USRPTR(param->pmem), pmem,
+				sizeof(struct gsl_profiler_get_per_proc_gpu_pmem_usage_t))) {
+			LOGE("failed to copy pmem to user");
+			ret = -EFAULT;
+			goto out;
+		}
+	}
+
+out:
+	hgsl_free(pmem);
+	return ret;
+}
+
+
 static const struct hgsl_ioctl hgsl_ioctl_func_table[] = {
 	HGSL_IOCTL_FUNC(HGSL_IOCTL_ISSUE_IB,
 			hgsl_ioctl_issueib),
@@ -3802,6 +3822,10 @@ static const struct hgsl_ioctl hgsl_ioctl_func_table[] = {
 			hgsl_ioctl_timeline_query),
 	HGSL_IOCTL_FUNC(HGSL_IOCTL_TIMELINE_WAIT,
 			hgsl_ioctl_timeline_wait),
+	HGSL_IOCTL_FUNC(HGSL_IOCTL_GSLPROFILER_PER_PROC_GPU_BUSY,
+			hgsl_ioctl_gslprofiler_per_proc_gpu_busy),
+	HGSL_IOCTL_FUNC(HGSL_IOCTL_GSLPROFILER_PER_PROC_GPU_PMEM,
+			hgsl_ioctl_gslprofiler_per_proc_gpu_pmem),
 };
 
 static long hgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
