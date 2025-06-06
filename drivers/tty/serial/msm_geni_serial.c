@@ -5598,6 +5598,32 @@ static int msm_geni_serial_get_clk(struct platform_device *pdev,
 	return ret;
 }
 
+/**
+ * geni_se_handle_common_resources: Load common resources.
+ * @pdev: structure to platform driver.
+ * @se_rsc: structure to geni_se.
+ *
+ * This function will read the clock vote values from
+ * the DTSI file and configure and initialize the resources
+ * accordingly. If the resources are not explicitly mentioned
+ * in the DTSI, they will be initialized with default values.
+ *
+ * return: 0 on success else error code on failure.
+ */
+static int geni_se_handle_common_resources(struct platform_device *pdev, struct geni_se *se_rsc)
+{
+	int ret;
+
+	ret = geni_se_get_common_resources(pdev, se_rsc);
+	if (ret) {
+		/* Error in loading vote values from DTS, try loading default vote values */
+		ret = geni_se_common_resources_init(se_rsc, UART_CORE2X_VOTE,
+						    APPS_PROC_TO_QUP_VOTE,
+						    DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH);
+	}
+	return ret;
+}
+
 static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 					struct msm_geni_serial_port *dev_port)
 {
@@ -5626,9 +5652,7 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	}
 
 	if (!is_console)
-		ret = geni_se_common_resources_init(&dev_port->se, UART_CORE2X_VOTE,
-						    APPS_PROC_TO_QUP_VOTE,
-						    (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+		ret = geni_se_handle_common_resources(pdev, &dev_port->se);
 	else
 		ret = geni_se_common_resources_init(&dev_port->se, GENI_DEFAULT_BW,
 						    GENI_DEFAULT_BW, GENI_DEFAULT_BW);
