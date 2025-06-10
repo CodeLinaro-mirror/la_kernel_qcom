@@ -882,10 +882,9 @@ static int gsi_ep_enable(struct f_gsi *gsi)
 	return 0;
 }
 
-static void ipa_work_state_init(struct gsi_data_port *d_port, struct device *gad_dev)
+static void ipa_work_state_init(struct gsi_data_port *d_port, struct device *gad_dev, u8 event)
 {
 	struct f_gsi *gsi = d_port_to_gsi(d_port);
-	u8 event = read_event(d_port);
 	int ret;
 
 	if (event == EVT_SET_ALT) {
@@ -937,10 +936,10 @@ static void ipa_work_state_init(struct gsi_data_port *d_port, struct device *gad
 	}
 }
 
-static void ipa_work_state_wait_for_ipa(struct gsi_data_port *d_port, struct device *gad_dev)
+static void ipa_work_state_wait_for_ipa(struct gsi_data_port *d_port, struct device *gad_dev,
+					u8 event)
 {
 	struct f_gsi *gsi = d_port_to_gsi(d_port);
-	u8 event = read_event(d_port);
 
 	if (event == EVT_SET_ALT) {
 		usb_composite_setup_continue(gsi->d_port.cdev);
@@ -989,10 +988,9 @@ static void ipa_work_state_wait_for_ipa(struct gsi_data_port *d_port, struct dev
 	}
 }
 
-static void ipa_work_state_connected(struct gsi_data_port *d_port, struct device *gad_dev)
+static void ipa_work_state_connected(struct gsi_data_port *d_port, struct device *gad_dev, u8 event)
 {
 	struct f_gsi *gsi = d_port_to_gsi(d_port);
-	u8 event = read_event(d_port);
 	bool block_db;
 
 	if (event == EVT_DISCONNECTED || event == EVT_HOST_NRDY) {
@@ -1089,13 +1087,13 @@ static void ipa_work_handler(struct work_struct *w)
 	case STATE_UNINITIALIZED:
 		break;
 	case STATE_INITIALIZED:
-		ipa_work_state_init(d_port, gad_dev);
+		ipa_work_state_init(d_port, gad_dev, event);
 		break;
 	case STATE_WAIT_FOR_IPA_RDY:
-		ipa_work_state_wait_for_ipa(d_port, gad_dev);
+		ipa_work_state_wait_for_ipa(d_port, gad_dev, event);
 		break;
 	case STATE_CONNECTED:
-		ipa_work_state_connected(d_port, gad_dev);
+		ipa_work_state_connected(d_port, gad_dev, event);
 		break;
 	case STATE_HOST_NRDY:
 		if (event == EVT_DISCONNECTED) {
