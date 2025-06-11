@@ -1049,8 +1049,7 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	const struct msm_pingroup *g;
 	u32 intr_target_mask = GENMASK(2, 0);
 	unsigned long flags;
-	bool was_enabled;
-	u32 val;
+	u32 val, oldval;
 
 	if (msm_gpio_needs_dual_edge_parent_workaround(d, type)) {
 		set_bit(d->hwirq, pctrl->dual_edge_irqs);
@@ -1112,8 +1111,7 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	 * internal circuitry of TLMM, toggling the RAW_STATUS
 	 * could cause the INTR_STATUS to be set for EDGE interrupts.
 	 */
-	val = msm_readl_intr_cfg(pctrl, g);
-	was_enabled = val & BIT(g->intr_raw_status_bit);
+	val = oldval = msm_readl_intr_cfg(pctrl, g);
 	val |= BIT(g->intr_raw_status_bit);
 	if (g->intr_detection_width == 2) {
 		val &= ~(3 << g->intr_detection_bit);
@@ -1166,9 +1164,11 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	/*
 	 * The first time we set RAW_STATUS_EN it could trigger an interrupt.
 	 * Clear the interrupt.  This is safe because we have
-	 * IRQCHIP_SET_TYPE_MASKED.
+	 * IRQCHIP_SET_TYPE_MASKED. When changing the interrupt type, we could
+	 * also still have a non-matching interrupt latched, so clear whenever
+	 * making changes to the interrupt configuration.
 	 */
-	if (!was_enabled)
+	if (val != oldval)
 		msm_ack_intr_status(pctrl, g);
 
 	if (test_bit(d->hwirq, pctrl->dual_edge_irqs))
@@ -1585,7 +1585,8 @@ static __maybe_unused int msm_pinctrl_suspend(struct device *dev)
 {
 	struct msm_pinctrl *pctrl = dev_get_drvdata(dev);
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+	if (pm_suspend_target_state == PM_SUSPEND_MEM
+		|| pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
 		return msm_pinctrl_save_hw_ctx(pctrl);
 
 	return pinctrl_force_sleep(pctrl->pctrl);
@@ -1595,7 +1596,8 @@ static __maybe_unused int msm_pinctrl_resume(struct device *dev)
 {
 	struct msm_pinctrl *pctrl = dev_get_drvdata(dev);
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+	if (pm_suspend_target_state == PM_SUSPEND_MEM
+		|| pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
 		return msm_pinctrl_restore_hw_ctx(pctrl);
 
 	return pinctrl_force_default(pctrl->pctrl);
