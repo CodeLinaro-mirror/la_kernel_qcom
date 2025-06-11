@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Description: CoreSight TMC PCIe driver
  */
@@ -251,8 +251,26 @@ static void tmc_pcie_write_work_fn(struct work_struct *work)
 
 int tmc_register_pcie_channel(struct tmc_pcie_data *pcie_data)
 {
-	return mhi_register_state_cb(tmc_pcie_client_cb, pcie_data,
+	int ret;
+	struct mhi_dev_client_cb_data cb_data;
+
+	ret = mhi_register_state_cb(tmc_pcie_client_cb, pcie_data,
 					pcie_data->pcie_out_chan);
+	if (ret == -EEXIST) {
+		/**
+		 * MHI stack will return -EEXIST if mhi channel is already
+		 * opend by the host and will not invoke reqistered callback.
+		 * But future state change notification will inform through
+		 * registered callback.
+		 */
+		cb_data.user_data = (void *)pcie_data;
+		cb_data.channel = pcie_data->pcie_out_chan;
+		cb_data.ctrl_info = MHI_STATE_CONNECTED;
+		tmc_pcie_client_cb(&cb_data);
+		return 0;
+	}
+
+	return ret;
 }
 
 static int tmc_pcie_sw_init(struct tmc_pcie_data *pcie_data)
@@ -668,7 +686,6 @@ int tmc_pcie_enable(struct tmc_pcie_data *pcie_data)
 		return tmc_pcie_sw_start(pcie_data);
 	else
 		return tmc_pcie_hw_enable(pcie_data);
-
 }
 
 
@@ -708,7 +725,9 @@ int tmc_pcie_init(struct amba_device *adev,
 			ret = tmc_pcie_hw_init(drvdata->pcie_data);
 
 			if (ret)
-				return ret;
+				dev_err(dev, "pcie hw path init fail, ret: %d\n", ret);
+			else
+				pcie_data->pcie_path = TMC_PCIE_HW_PATH;
 		}
 
 		ret = tmc_pcie_sw_init(pcie_data);
@@ -716,7 +735,6 @@ int tmc_pcie_init(struct amba_device *adev,
 		if (ret)
 			return ret;
 
-		pcie_data->pcie_path = TMC_PCIE_HW_PATH;
 		dev_info(dev, "pcie mode init success.\n");
 	}
 
