@@ -220,6 +220,15 @@ struct stmmac_extra_stats {
 	unsigned long mtl_est_hlbf;
 	unsigned long mtl_est_btre;
 	unsigned long mtl_est_btrlm;
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+	/* PTP AVB stats */
+	unsigned long tx_ptp_pkt_cnt;
+	unsigned long tx_avb_class_a_pkt_cnt;
+	unsigned long tx_avb_class_b_pkt_cnt;
+	unsigned long rx_ptp_pkt_cnt;
+	unsigned long rx_avb_class_a_pkt_cnt;
+	unsigned long rx_avb_class_b_pkt_cnt;
+#endif
 	/* per queue statistics */
 	struct stmmac_txq_stats txq_stats[MTL_MAX_TX_QUEUES];
 	struct stmmac_rxq_stats rxq_stats[MTL_MAX_RX_QUEUES];
