@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2018, The Linux Foundation. All rights reserved.
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Inspired by dwc3-qcom.c
  *
@@ -859,10 +860,7 @@ static void dwc3_qcom_shutdown(struct platform_device *pdev)
 	}
 
 	qcom->num_clocks = 0;
-
 	dwc3_qcom_config_gdsc(qcom, false);
-
-	return;
 }
 
 static int __maybe_unused dwc3_qcom_pm_suspend(struct device *dev)
