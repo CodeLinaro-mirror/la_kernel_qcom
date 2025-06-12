@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2019, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #define pr_fmt(fmt)     "qcom-reboot-reason: %s: " fmt, __func__
 
@@ -17,6 +17,10 @@
 #include <linux/nvmem-consumer.h>
 #include <linux/of_device.h>
 #include <linux/of_platform.h>
+
+#ifdef CONFIG_INPUT_QPNP_POWER_ON
+#include <linux/input/qpnp-power-on.h>
+#endif
 
 struct qcom_reboot_reason {
 	struct device *dev;
@@ -71,6 +75,15 @@ static int qcom_reboot_reason_reboot(struct notifier_block *this,
 		return NOTIFY_OK;
 	for (reason = reboot->reasons; reason->cmd; reason++) {
 		if (!strcmp(cmd, reason->cmd)) {
+		     #ifdef CONFIG_INPUT_QPNP_POWER_ON
+			if (!strcmp("bootloader", reason->cmd)) {
+				qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+				qpnp_pon_set_restart_reason(PON_RESTART_REASON_BOOTLOADER);
+			} else if (!strcmp("recovery", reason->cmd)) {
+				qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+				qpnp_pon_set_restart_reason(PON_RESTART_REASON_RECOVERY);
+			}
+			#endif
 			rc = nvmem_cell_write(reboot->nvmem_cell,
 					 &reason->pon_reason,
 					 reason->size);
