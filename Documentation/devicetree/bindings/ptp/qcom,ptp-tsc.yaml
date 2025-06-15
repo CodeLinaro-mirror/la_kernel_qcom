@@ -19,11 +19,12 @@ properties:
     const: "qcom,tsc"
 
   reg:
-    maxItems: 1
+    maxItems: 2
 
   reg-names:
     items:
       - const: tsc
+      - const: timer
 
   clocks:
     items:
@@ -41,6 +42,12 @@ properties:
        in secs and nanoseconds.
      type: boolean
 
+  qcom,tsc-frame-pulse-gen:
+     description:
+       Indicates the TSC supports frame pulse generation which can be used
+       for sensors synchronization.
+     type: boolean
+
 required:
   - compatible
   - reg
@@ -54,8 +61,9 @@ examples:
   - |
     tsc: tsc@1c80000 {
       compatible = "qcom,tsc";
-      reg = <0x01c80000 0x2000>;
-      reg-names = "tsc";
+      reg = <0x01c80000 0x2000>,
+            <0x01c87000 0x1000>;
+      reg-names = "tsc", "timer";
       clocks = <&tscss_ahb_clock>, <&tscss_cntr_clock>;
       clock-names = "cfg_ahb", "cntr";
       qcom,tsc-nsec-update;
