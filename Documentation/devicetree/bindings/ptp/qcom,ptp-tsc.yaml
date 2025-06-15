@@ -36,6 +36,13 @@ properties:
       - const: cfg_ahb
       - const: cntr
 
+  interrupts:
+    maxItems: 1
+
+  interrupt-names:
+    items:
+      - const: tscss_fusa_irq
+
   qcom,tsc-nsec-update:
      description:
        Indicates the TSC counters have values in nanoseconds, rather than
