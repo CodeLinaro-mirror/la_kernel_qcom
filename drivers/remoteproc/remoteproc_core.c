@@ -40,6 +40,10 @@
 #include <linux/platform_device.h>
 #include <trace/hooks/remoteproc.h>
 
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
+
 #include "remoteproc_internal.h"
 
 #define HIGH_BITS_MASK 0xFFFFFFFF00000000ULL
@@ -1912,6 +1916,11 @@ int rproc_boot(struct rproc *rproc)
 {
 	const struct firmware *firmware_p;
 	struct device *dev;
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+	char *rproc_name = NULL;
+	char rproc_start[80] = {'\0'};
+	char rproc_end[80] = {'\0'};
+#endif
 	int ret;
 
 	if (!rproc) {
@@ -1945,6 +1954,16 @@ int rproc_boot(struct rproc *rproc)
 		ret = rproc_attach(rproc);
 	} else {
 		dev_info(dev, "powering up %s\n", rproc->name);
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+		rproc_name = strnchr(rproc->name, strlen(rproc->name), '-');
+
+		if (rproc_name) {
+			snprintf(rproc_start, sizeof(rproc_start),
+				"M - %s image start loading", ++rproc_name);
+			update_marker(rproc_start);
+		}
+#endif
+		pr_info("%s image start loading\n", rproc->name);
 
 		/* load firmware */
 		ret = request_firmware(&firmware_p, rproc->firmware, dev);
@@ -1956,6 +1975,14 @@ int rproc_boot(struct rproc *rproc)
 		ret = rproc_fw_boot(rproc, firmware_p);
 
 		release_firmware(firmware_p);
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+		if (rproc_name) {
+			snprintf(rproc_end, sizeof(rproc_end),
+				"M - %s out of reset", rproc_name);
+			update_marker(rproc_end);
+		}
+#endif
+		pr_info("%s out of reset\n", rproc->name);
 	}
 
 downref_rproc:
