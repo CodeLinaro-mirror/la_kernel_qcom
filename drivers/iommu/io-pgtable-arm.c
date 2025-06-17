@@ -844,11 +844,9 @@ arm_64_lpae_alloc_pgtable_s1(struct io_pgtable_cfg *cfg, void *cookie)
 		tcr->sh = ARM_LPAE_TCR_SH_IS;
 		tcr->irgn = ARM_LPAE_TCR_RGN_WBWA;
 		tcr->orgn = ARM_LPAE_TCR_RGN_WBWA;
-		pr_err("DEBUG func:%s dma-coherent set",__func__);
 		if (cfg->quirks & IO_PGTABLE_QUIRK_ARM_OUTER_WBWA)
 			goto out_free_data;
 	} else {
-		pr_err("DEBUG func:%s dma-coherent unset",__func__);
 		tcr->sh = ARM_LPAE_TCR_SH_OS;
 		tcr->irgn = ARM_LPAE_TCR_RGN_NC;
 		if (!(cfg->quirks & IO_PGTABLE_QUIRK_ARM_OUTER_WBWA))

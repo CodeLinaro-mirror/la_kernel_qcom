@@ -612,14 +612,12 @@ av8l_fast_alloc_pgtable(struct io_pgtable_cfg *cfg, void *cookie)
 
 	/* TCR */
 	if (cfg->coherent_walk) {
-		pr_err("DEBUG func:%s dma-coherent set",__func__);
 		tcr->sh = AV8L_FAST_TCR_SH_IS;
 		tcr->irgn = AV8L_FAST_TCR_RGN_WBWA;
 		tcr->orgn = AV8L_FAST_TCR_RGN_WBWA;
 		if (WARN_ON(cfg->quirks & IO_PGTABLE_QUIRK_ARM_OUTER_WBWA))
 			goto out_free_data;
 	} else {
-		pr_err("DEBUG func:%s dma-coherent unset",__func__);
 		tcr->sh = AV8L_FAST_TCR_SH_OS;
 		tcr->irgn = AV8L_FAST_TCR_RGN_NC;
 		if (!(cfg->quirks & IO_PGTABLE_QUIRK_ARM_OUTER_WBWA))

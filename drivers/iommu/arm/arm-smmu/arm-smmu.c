@@ -155,7 +155,7 @@ static void parse_driver_options(struct arm_smmu_device *smmu)
 static bool is_iommu_pt_coherent(struct arm_smmu_domain *smmu_domain)
 {
 	if (smmu_domain->force_coherent_walk)
-		return false;
+		return true;
 	else if (smmu_domain->smmu && smmu_domain->smmu->dev)
 		return dev_is_dma_coherent(smmu_domain->smmu->dev);
 	return false;
@@ -1972,7 +1972,7 @@ static int arm_smmu_setup_default_domain(struct device *dev,
 	if (ret)
 		str = "disabled";
 	if (!strcmp(str, "coherent"))
-		smmu_domain->force_coherent_walk = false;
+		smmu_domain->force_coherent_walk = true;
 	else if (!strcmp(str, "LLC"))
 		smmu_domain->pgtbl_quirks = IO_PGTABLE_QUIRK_ARM_OUTER_WBWA;
 	else if (!strcmp(str, "LLC_NWA"))
