@@ -395,6 +395,8 @@
 
 #endif /* CONFIG_IPC_LOGGING */
 
+#define IS_PCIE_SUSPENDED(dev) ((dev)->suspending || (dev)->user_suspend)
+
 enum msm_pcie_res {
 	MSM_PCIE_RES_PARF,
 	MSM_PCIE_RES_PHY,
@@ -1557,7 +1559,7 @@ int msm_pcie_reg_dump(struct pci_dev *pci_dev, u8 *buff, u32 len)
 		return -ENODEV;
 	}
 
-	if (pcie_dev->suspending) {
+	if (IS_PCIE_SUSPENDED(pcie_dev)) {
 		pr_err("PCIe: the device is in suspend state\n");
 		return -ENODEV;
 	}
@@ -2550,7 +2552,7 @@ static void msm_pcie_sel_gen_speed_debug_testcase(struct msm_pcie_dev_t *dev,
 		return;
 	}
 	dev->target_link_speed = testcase;
-	if (dev->enumerated && !dev->suspending && !dev->user_suspend)
+	if (dev->enumerated && !IS_PCIE_SUSPENDED(dev))
 		msm_pcie_set_gen_speed(dev);
 	PCIE_DBG_FS(dev, "\n\nPCIe: RC:%d: set target speed to Gen Speed:%d\n",
 			dev->rc_idx, dev->target_link_speed);
@@ -7167,7 +7169,7 @@ static void msm_handle_error_source(struct pci_dev *dev,
 	struct msm_pcie_dev_t *rdev = info->rdev;
 	u32 status, sev;
 
-	if (!rdev->aer_dump && !rdev->suspending &&
+	if (!rdev->aer_dump && !IS_PCIE_SUSPENDED(rdev) &&
 		rdev->link_status == MSM_PCIE_LINK_ENABLED) {
 		/* Print the dumps only once */
 		rdev->aer_dump = true;
@@ -7415,7 +7417,7 @@ static irqreturn_t handle_wake_irq(int irq, void *data)
 		__pm_stay_awake(dev->ws);
 		__pm_relax(dev->ws);
 
-		if (dev->drv_supported && !dev->suspending &&
+		if (dev->drv_supported && !IS_PCIE_SUSPENDED(dev) &&
 		    dev->link_status == MSM_PCIE_LINK_ENABLED) {
 			pcie_phy_dump(dev);
 			pcie_parf_dump(dev);
@@ -7489,7 +7491,7 @@ static void msm_pcie_handle_linkdown(struct msm_pcie_dev_t *dev)
 
 	dev->link_status = MSM_PCIE_LINK_DOWN;
 
-	if (!dev->suspending && !dev->fmd_enable) {
+	if (!IS_PCIE_SUSPENDED(dev) && !dev->fmd_enable) {
 		/* PCIe registers dump on link down */
 		PCIE_DUMP(dev,
 			"PCIe:Linkdown IRQ for RC%d Dumping PCIe registers\n",
@@ -7558,7 +7560,7 @@ static irqreturn_t handle_global_irq(int irq, void *data)
 
 	spin_lock_irqsave(&dev->irq_lock, irqsave_flags);
 
-	if (dev->suspending) {
+	if (IS_PCIE_SUSPENDED(dev)) {
 		PCIE_DBG2(dev,
 			"PCIe: RC%d is currently suspending.\n",
 			dev->rc_idx);
@@ -10593,7 +10595,7 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 			 "User of RC%d requests to keep the link always alive.\n",
 			 pcie_dev->rc_idx);
 		spin_lock_irqsave(&pcie_dev->cfg_lock, pcie_dev->irqsave_flags);
-		if (pcie_dev->suspending) {
+		if (IS_PCIE_SUSPENDED(pcie_dev)) {
 			PCIE_ERR(pcie_dev,
 				 "PCIe: RC%d Link has been suspended before request\n",
 				 pcie_dev->rc_idx);
