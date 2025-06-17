@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Description: CoreSight TMC PCIe driver
  */
@@ -85,10 +85,5 @@ struct tmc_pcie_data {
 	struct tmc_pcie_buf	*pcie_desc_buf;
 	struct tmc_pcie_buf	*pcie_data_buf;
 };
-
-int tmc_pcie_init(struct amba_device *adev,
-			struct tmc_drvdata *drvdata);
-int tmc_pcie_enable(struct tmc_pcie_data *pcie_data);
-void tmc_pcie_disable(struct tmc_pcie_data *pcie_data);
 
 #endif

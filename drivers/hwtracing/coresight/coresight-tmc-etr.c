@@ -1871,9 +1871,10 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 		spin_lock_irqsave(&drvdata->spinlock, flags);
 
 		tmc_etr_disable_hw(drvdata);
-	} else {
+	} else if (drvdata->out_mode == TMC_ETR_OUT_MODE_PCIE &&
+		   drvdata->pcie_data->pcie_path == TMC_PCIE_HW_PATH) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		tmc_usb_disable(drvdata->usb_data);
+		tmc_pcie_disable(drvdata->pcie_data);
 		spin_lock_irqsave(&drvdata->spinlock, flags);
 	}
 	/* Presave mode to ensure if it's need to stop byte_cntr. */
