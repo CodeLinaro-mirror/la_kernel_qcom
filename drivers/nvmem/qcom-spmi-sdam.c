@@ -34,14 +34,11 @@ static const u8 sdam_ro_map[] = {
 static bool sdam_is_valid(struct sdam_chip *sdam, unsigned int offset,
 				size_t len)
 {
-	//unsigned int sdam_mem_end = SDAM_MEM_START + sdam->size - 1;
+	unsigned int sdam_mem_end = SDAM_MEM_START + sdam->size - 1;
 
 	if (!len)
 		return false;
 
-	return true;
-
-#if 0
 	if (offset >= SDAM_MEM_START && offset <= sdam_mem_end
 				&& (offset + len - 1) <= sdam_mem_end)
 		return true;
@@ -50,7 +47,6 @@ static bool sdam_is_valid(struct sdam_chip *sdam, unsigned int offset,
 		return true;
 
 	return false;
-#endif
 }
 
 static bool sdam_is_ro(unsigned int offset, size_t len)
