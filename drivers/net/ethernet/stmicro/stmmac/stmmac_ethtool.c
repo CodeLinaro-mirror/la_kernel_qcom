@@ -179,6 +179,15 @@ static const struct stmmac_stats stmmac_gstrings_stats[] = {
 	STMMAC_STAT(mtl_est_hlbf),
 	STMMAC_STAT(mtl_est_btre),
 	STMMAC_STAT(mtl_est_btrlm),
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+	/* PTP AVB */
+	STMMAC_STAT(tx_ptp_pkt_cnt),
+	STMMAC_STAT(tx_avb_class_a_pkt_cnt),
+	STMMAC_STAT(tx_avb_class_b_pkt_cnt),
+	STMMAC_STAT(rx_ptp_pkt_cnt),
+	STMMAC_STAT(rx_avb_class_a_pkt_cnt),
+	STMMAC_STAT(rx_avb_class_b_pkt_cnt),
+#endif
 };
 #define STMMAC_STATS_LEN ARRAY_SIZE(stmmac_gstrings_stats)
 

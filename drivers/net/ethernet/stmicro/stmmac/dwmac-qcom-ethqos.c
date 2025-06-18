@@ -7671,6 +7671,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	plat_dat->phy_irq_enable = ethqos_phy_irq_enable;
 	plat_dat->phy_irq_disable = ethqos_phy_irq_disable;
 	plat_dat->get_eth_type = dwmac_qcom_get_eth_type;
+	plat_dat->get_vlan_ucp = dwmac_qcom_get_vlan_ucp;
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
 	plat_dat->set_skb_prio = dwmac_qcom_set_skb_prio;
 	plat_dat->is_skprio_routing = is_skprio_routing_set;
