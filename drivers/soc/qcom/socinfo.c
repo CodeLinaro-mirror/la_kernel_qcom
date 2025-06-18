@@ -331,6 +331,9 @@ struct socinfo {
 	__le32 raw_package_type;
 	/* Version 21 */
 	__le32 nsubpart_feat_array_offset;
+	/* Version 23 */
+	__le32 part_instances_offset;
+	__le32 num_part_instances;
 } *socinfo;
 
 #ifdef CONFIG_DEBUG_FS
@@ -1208,6 +1211,7 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 	int i = 0;
 
 	switch (socinfo_format) {
+	case SOCINFO_VERSION(0, 23):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
 	case SOCINFO_VERSION(0, 19):
@@ -1461,6 +1465,7 @@ static void socinfo_debugfs_init(struct qcom_socinfo *qcom_socinfo,
 			   &qcom_socinfo->info.fmt);
 
 	switch (qcom_socinfo->info.fmt) {
+	case SOCINFO_VERSION(0, 23):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):
 		qcom_socinfo->info.raw_package_type = __le32_to_cpu(info->raw_package_type);
@@ -1657,10 +1662,16 @@ static int qcom_socinfo_probe(struct platform_device *pdev)
 	qs->attr.revision = devm_kasprintf(&pdev->dev, GFP_KERNEL, "%u.%u",
 					   SOCINFO_MAJOR(le32_to_cpu(info->ver)),
 					   SOCINFO_MINOR(le32_to_cpu(info->ver)));
-	if (offsetof(struct socinfo, serial_num) <= item_size)
+	if (!qs->attr.soc_id || !qs->attr.revision)
+		return -ENOMEM;
+
+	if (offsetof(struct socinfo, serial_num) <= item_size) {
 		qs->attr.serial_number = devm_kasprintf(&pdev->dev, GFP_KERNEL,
 							"%u",
 							le32_to_cpu(info->serial_num));
+		if (!qs->attr.serial_number)
+			return -ENOMEM;
+	}
 
 	if (socinfo_format >= SOCINFO_VERSION(0, 16)) {
 		socinfo_enumerate_partinfo_details();

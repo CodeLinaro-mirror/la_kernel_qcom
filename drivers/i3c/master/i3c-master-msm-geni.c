@@ -336,6 +336,7 @@ struct geni_i3c_dev {
 	struct geni_i3c_ver_info ver_info;
 	struct msm_geni_i3c_rsc i3c_rsc;
 	struct device *wrapper_dev;
+	bool is_egpio_present;
 };
 
 struct geni_i3c_i2c_dev_data {
@@ -796,20 +797,31 @@ static void i3c_setup_go_tre(struct geni_i3c_dev *gi3c, struct geni_i3c_xfer_par
 {
 	struct msm_gpi_tre *go_t = &gi3c->gsi.tx.tre.go_t;
 	struct gsi_tre_queue *tx_tre_q = &gi3c->gsi.tx.tre_queue;
-	bool use_7e = (xfer->m_param & USE_7E) ? 1 : 0;
-	bool nack_ibi = (xfer->m_param & IBI_NACK_TBL_CTRL) ? 1 : 0;
-	bool cont_mode = (xfer->m_param & CONTINUOUS_MODE_DAA) ? 1 : 0;
-	bool bypass_addrspace = (xfer->m_param & BYPASS_ADDR_PHASE) ? 1 : 0;
+	u8 use_7e = (xfer->m_param & USE_7E) ? 1 : 0;
+	u8 nack_ibi = (xfer->m_param & IBI_NACK_TBL_CTRL) ? 1 : 0;
+	u8 cont_mode = (xfer->m_param & CONTINUOUS_MODE_DAA) ? 1 : 0;
+	u8 bypass_addrspace = (xfer->m_param & BYPASS_ADDR_PHASE) ? 1 : 0;
 	u8 addr =  (xfer->m_param >> SLV_ADDR_SHFT) & I3C_ADDR_MASK;
 	u8 ccc = (xfer->m_param & CCC_HDR_CMD_MSK) >> CCC_HDR_CMD_SHFT;
 	u32 cur_len;
+	u8 stretch;
+
+	/*
+	 * Currently implemented as SWA.
+	 * Fix is present from qup-core version 4.0.0 onwards[major = 4, minor = 0].
+	 * So below SWA is not applicable from qup-core version 4.0.0 onwards.
+	 */
+	if (gi3c->ver_info.hw_major_ver < 4)
+		stretch = 1;
+	else
+		stretch = (xfer->m_param & STOP_STRETCH) ? 1 : 0;
 
 	if (multi_tre_tx_xfer)
 		cur_len = tx_tre_q->len[idx % GSI_MAX_NUM_TRE_MSGS];
 	else
 		cur_len = gi3c->cur_len;
 
-	go_t->dword[0] = MSM_GPI_I3C_GO_TRE_DWORD0((1 << 2 | bypass_addrspace << 7), ccc,
+	go_t->dword[0] = MSM_GPI_I3C_GO_TRE_DWORD0((stretch << 2 | bypass_addrspace << 7), ccc,
 						   addr, xfer->m_cmd);
 	go_t->dword[1] = MSM_GPI_I3C_GO_TRE_DWORD1(use_7e << 0 | nack_ibi << 1 | cont_mode << 2);
 	if (gi3c->cur_rnw == READ_TRANSACTION) {
@@ -2157,6 +2169,14 @@ static int geni_i3c_gsi_stop_on_bus(struct geni_i3c_dev *gi3c)
 	int tre_cnt = 0, ret = 0, time_remaining = 0;
 	bool tx_chan = true;
 
+	/*
+	 * Currently implemented as SWA.
+	 * Fix is present from qup-core version 4.0.0 onwards[major = 4, minor = 0].
+	 * So below SWA is not applicable from qup-core version 4.0.0 onwards.
+	 */
+	if (gi3c->ver_info.hw_major_ver >= 4)
+		return 0;
+
 	gi3c->err = 0;
 	gi3c->gsi_err = false;
 	gi3c->gsi.tx.tre.flags = 0;
@@ -2424,19 +2444,12 @@ err_cleanup:
 	 *use mutex protected internal put/get sync API. Hence forcefully
 	 *disabling clocks and decrementing usage count.
 	 */
-	disable_irq(gi3c->irq);
-	ret = geni_se_resources_off(&gi3c->se);
-	if (ret)
+	ret = pm_runtime_put_sync(gi3c->se.dev);
+	if (ret < 0) {
 		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
-			"%s: geni_se_resources_off failed%d\n", __func__, ret);
-	ret = geni_icc_disable(&gi3c->se);
-	if (ret)
-		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
-			"%s: geni_icc_disable failed%d\n", __func__, ret);
-	pm_runtime_disable(gi3c->se.dev);
-	pm_runtime_put_noidle(gi3c->se.dev);
-	pm_runtime_set_suspended(gi3c->se.dev);
-	pm_runtime_enable(gi3c->se.dev);
+			"%s: error turning SE resources:%d\n", __func__, ret);
+		return ret;
+	}
 
 	return ret;
 }
@@ -2617,7 +2630,7 @@ static int geni_i3c_master_request_ibi(struct i3c_dev_desc *dev,
 		reinit_completion(&gi3c->ibi.done);
 
 		cmd = ((dev->info.dyn_addr & I3C_SLAVE_MASK)
-			<< I3C_SLAVE_ADDR_SHIFT) | I3C_SLAVE_RW | STALL;
+			<< I3C_SLAVE_ADDR_SHIFT) | I3C_SLAVE_RW;
 		cmd |= ((payload_len << NUM_OF_MDB_SHIFT) & IBI_NUM_OF_MDB_MSK);
 		geni_write_reg(cmd, gi3c->ibi.ibi_base, IBI_CMD(0));
 
@@ -2774,9 +2787,9 @@ static void geni_i3c_enable_ibi_ctrl(struct geni_i3c_dev *gi3c, bool enable)
 	} else {
 		 /* Disable IBI controller */
 
-		/* check if any IBI is enabled, if not then disable IBI ctrl */
+		/* check if any IBI is enabled, if so disable IBI ctrl */
 		val = geni_read_reg(gi3c->ibi.ibi_base, IBI_GPII_IBI_EN);
-		if (!val) {
+		if (val) {
 			gi3c->ibi.err = 0;
 			reinit_completion(&gi3c->ibi.done);
 
@@ -3017,6 +3030,8 @@ static int i3c_geni_rsrcs_init(struct geni_i3c_dev *gi3c,
 	int ret;
 	struct resource *res;
 	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
+	struct device_node *pinctrl_np, *config_np;
 
 	/* base register address */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -3104,6 +3119,22 @@ static int i3c_geni_rsrcs_init(struct geni_i3c_dev *gi3c,
 		ret = PTR_ERR(gi3c->i3c_gpio_disable);
 		return ret;
 	}
+
+	pinctrl_np = of_parse_phandle(np, "pinctrl-0", 0);
+	if (!pinctrl_np) {
+		dev_err(dev, "Failed to get pinctrl node\n");
+		return -ENODEV;
+	}
+
+	config_np = of_get_child_by_name(pinctrl_np, "config");
+	if (!config_np) {
+		dev_err(dev, "Failed to find config subnode\n");
+		return -EINVAL;
+	}
+
+	gi3c->is_egpio_present =  of_property_read_bool(config_np, "qcom,apps");
+	I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
+		    "egpio: %d\n", gi3c->is_egpio_present);
 
 	return 0;
 }
@@ -3478,15 +3509,6 @@ static int geni_i3c_probe(struct platform_device *pdev)
 			    tx_depth, gi3c->se_mode);
 	}
 
-	ret = geni_se_resources_off(&gi3c->se);
-	if (ret)
-		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
-			"%s: geni_se_resources_off failed%d\n", __func__, ret);
-	ret = geni_icc_disable(&gi3c->se);
-	if (ret)
-		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
-			"%s: geni_icc_disable failed%d\n", __func__, ret);
-
 	pm_runtime_set_suspended(gi3c->se.dev);
 	pm_runtime_set_autosuspend_delay(gi3c->se.dev, I3C_AUTO_SUSPEND_DELAY);
 	pm_runtime_use_autosuspend(gi3c->se.dev);
@@ -3647,6 +3669,9 @@ static int geni_i3c_runtime_suspend(struct device *dev)
 		}
 	}
 
+	if (gi3c->is_egpio_present)
+		geni_i3c_enable_ibi_ctrl(gi3c, false);
+
 	ret = geni_se_resources_off(&gi3c->se);
 	if (ret)
 		I3C_LOG_ERR(gi3c->ipcl, false, gi3c->se.dev,
@@ -3663,7 +3688,7 @@ static int geni_i3c_runtime_suspend(struct device *dev)
 
 static int geni_i3c_runtime_resume(struct device *dev)
 {
-	int ret;
+	int ret = 0;
 	struct geni_i3c_dev *gi3c = dev_get_drvdata(dev);
 
 	ret = geni_icc_enable(&gi3c->se);
@@ -3683,6 +3708,9 @@ static int geni_i3c_runtime_resume(struct device *dev)
 	geni_write_reg(0x7f, gi3c->se.base, GENI_OUTPUT_CTRL);
 	/* Added 10 us delay to settle the write of the register as per HW team recommendation */
 	udelay(10);
+
+	if (gi3c->is_egpio_present)
+		geni_i3c_enable_ibi_ctrl(gi3c, true);
 
 	if (gi3c->se_mode != GENI_GPI_DMA) {
 		enable_irq(gi3c->irq);
