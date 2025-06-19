@@ -4209,8 +4209,9 @@ static int stmmac_release(struct net_device *dev)
 
 	if (device_may_wakeup(priv->device))
 		phylink_speed_down(priv->phylink, false);
+
 	/* Stop and disconnect the PHY */
-	if (priv->phydev->state != PHY_HALTED)
+	if (!priv->phydev || priv->phydev->state != PHY_HALTED)
 		phylink_stop(priv->phylink);
 
 	phylink_disconnect_phy(priv->phylink);
