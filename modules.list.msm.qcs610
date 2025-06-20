@@ -10,10 +10,10 @@ msm_dma_iommu_mapping.ko
 mem_buf.ko
 mem_buf_dev.ko
 smem.ko
-debug_symbol.ko
 qcom-reboot-reason.ko
 qcom_wdt_core.ko
 qcom-dload-mode.ko
+debug_symbol.ko
 minidump.ko
 qcom_soc_wdt.ko
 memory_dump_v2.ko
@@ -47,6 +47,7 @@ ufshcd-crypto-qti.ko
 sdhci-msm.ko
 cqhci.ko
 qcom-pdc.ko
+debug-regulator.ko
 qcom_rpmh.ko
 cmd-db.ko
 qcom_ice.ko
@@ -61,4 +62,3 @@ icc-bcm-voter.ko
 icc-debug.ko
 qnoc-qos.ko
 qnoc-sm6150.ko
-cx_ipeak.ko

@@ -8,6 +8,7 @@
 
   Author: Giuseppe Cavallaro <peppe.cavallaro@st.com>
 *******************************************************************************/
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef __STMMAC_PLATFORM_DATA
 #define __STMMAC_PLATFORM_DATA
@@ -311,8 +312,6 @@ struct plat_stmmacenet_data {
 	int rss_en;
 	int mac_port_sel_speed;
 	int has_xgmac;
-	bool phyad_change;
-	bool is_gpio_phy_reset;
 	u8 vlan_fail_q;
 	unsigned int eee_usecs_rate;
 	struct pci_dev *pdev;
@@ -327,6 +326,8 @@ struct plat_stmmacenet_data {
 	int msi_tx_base_vec;
 	const struct dwmac4_addrs *dwmac4_addrs;
 	unsigned int flags;
+	bool use_phy_wol;
+	bool sph_disable;
 	struct emac_emb_smmu_cb_ctx stmmac_emb_smmu_ctx;
 	bool phy_intr_en_extn_stm;
 	int has_c22_mdio_probe_capability;

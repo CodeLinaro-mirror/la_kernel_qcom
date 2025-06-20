@@ -5,6 +5,7 @@
 
   Author: Giuseppe Cavallaro <peppe.cavallaro@st.com>
 *******************************************************************************/
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef __STMMAC_H__
 #define __STMMAC_H__

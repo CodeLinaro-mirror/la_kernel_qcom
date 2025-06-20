@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef	_DWMAC_QCOM_ETHQOS_H
 #define	_DWMAC_QCOM_ETHQOS_H
@@ -76,9 +76,6 @@ struct qcom_ethqos {
 	struct regulator *reg_rgmii;
 	struct regulator *reg_emac_phy;
 	struct regulator *reg_rgmii_io_pads;
-
-	bool phyad_change;
-	bool is_gpio_phy_reset;
 };
 
 int ethqos_init_regulators(struct qcom_ethqos *ethqos);
