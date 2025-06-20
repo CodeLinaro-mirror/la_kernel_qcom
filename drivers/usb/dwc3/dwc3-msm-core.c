@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -701,7 +701,7 @@ static int dwc3_alloc_trb_pool(struct dwc3_ep *dep)
 
 	dep->trb_pool = dma_alloc_coherent(dwc->sysdev,
 			sizeof(struct dwc3_trb) * DWC3_TRB_NUM,
-			&dep->trb_pool_dma, GFP_ATOMIC);
+			&dep->trb_pool_dma, GFP_KERNEL);
 	if (!dep->trb_pool) {
 		dev_err(dep->dwc->dev, "failed to allocate trb pool for %s\n",
 				dep->name);
@@ -2247,7 +2247,7 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 
 	len = req->buf_len * req->num_bufs;
 	req->buf_base_addr = dma_alloc_coherent(dwc->sysdev, len, &req->dma,
-					GFP_ATOMIC);
+					GFP_KERNEL);
 	if (!req->buf_base_addr)
 		return -ENOMEM;
 
@@ -2261,10 +2261,10 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 	/* Allocate and configure TRBs */
 	dep->trb_pool = dma_alloc_coherent(dwc->sysdev,
 				num_trbs * sizeof(struct dwc3_trb),
-				&dep->trb_pool_dma, GFP_ATOMIC);
+				&dep->trb_pool_dma, GFP_KERNEL);
 
 	if (!dep->trb_pool)
-		return -ENOMEM;
+		goto free_trb_buffer;
 
 	memset(dep->trb_pool, 0, num_trbs * sizeof(struct dwc3_trb));
 
@@ -2332,16 +2332,23 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 					__func__, dep->name);
 
 	return 0;
+
+free_trb_buffer:
+	dma_free_coherent(dwc->sysdev, len, req->buf_base_addr, req->dma);
+	req->buf_base_addr = NULL;
+	sg_free_table(&req->sgt_data_buff);
+	return -ENOMEM;
 }
 
 /**
  * Frees TRBs and buffers for GSI EPs.
  *
- * @dwc3_ep - pointer to dwc3_ep instance.
+ * @usb_ep - pointer to usb_ep instance.
  *
  */
-static void gsi_free_trbs(struct dwc3_ep *dep, struct usb_gsi_request *req)
+static void gsi_free_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 {
+	struct dwc3_ep *dep = to_dwc3_ep(ep);
 	struct dwc3 *dwc = dep->dwc;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
@@ -2504,14 +2511,12 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 {
 	u32 ret = 0;
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
-	struct dwc3_ep temp_dep;
 	struct dwc3 *dwc = dep->dwc;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 	struct usb_gsi_request *request;
 	struct gsi_channel_info *ch_info;
 	bool block_db;
 	unsigned long flags;
-	size_t len;
 
 	dbg_log_string("%s(%d):%s", ep->name, dep->number >> 1,
 			gsi_op_to_string(op));
@@ -2523,28 +2528,14 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 			return -ESHUTDOWN;
 		}
 
-		spin_lock_irqsave(&dwc->lock, flags);
-		memcpy(&temp_dep, dep, sizeof(temp_dep));
+		dwc3_free_trb_pool(dep);
 		request = (struct usb_gsi_request *)op_data;
 		ret = gsi_prepare_trbs(ep, request);
-		spin_unlock_irqrestore(&dwc->lock, flags);
-		if (ret == -ENOMEM) {
-			len = request->buf_len * request->num_bufs;
-			dma_free_coherent(dwc->sysdev, len, request->buf_base_addr, request->dma);
-			request->buf_base_addr = NULL;
-			sg_free_table(&request->sgt_data_buff);
-		}
-		dwc3_free_trb_pool(&temp_dep);
 		break;
 	case GSI_EP_OP_FREE_TRBS:
 		request = (struct usb_gsi_request *)op_data;
-		spin_lock_irqsave(&dwc->lock, flags);
-		memcpy(&temp_dep, dep, sizeof(temp_dep));
-		dep->trb_pool = NULL;
-		dep->trb_pool_dma = 0;
+		gsi_free_trbs(ep, request);
 		dwc3_alloc_trb_pool(dep);
-		spin_unlock_irqrestore(&dwc->lock, flags);
-		gsi_free_trbs(&temp_dep, request);
 		break;
 	case GSI_EP_OP_CONFIG:
 		if (!dwc->pullups_connected) {
