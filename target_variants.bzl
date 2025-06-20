@@ -16,6 +16,7 @@ le_targets = [
     # keep sorted
     "sdxkova",
     "sdxkova.512",
+    "sdxkova.cpe.min",
     "sdxkova.cpe.tarang",
     "sdxkova.cpe.wkk",
 ]
