@@ -46,6 +46,15 @@ config CORESIGHT_LINK_AND_SINK_TMC
 	  To compile this driver as a module, choose M here: the
 	  module will be called coresight-tmc.
 
+config CORESIGHT_TMC_PCIE
+	bool "Control implementation PCIe mode support in TMC driver"
+	depends on CORESIGHT_LINK_AND_SINK_TMC
+	help
+	  This enables PCIe-based trace transport in the TMC Trace Memory Controller driver
+	  (TMC) driver. When enabled, the trace data to be routed to the host system over PCIe
+	  interface, which is useful in systems where trace data needs to be collected
+	  externally or analyzed off-chip. It depends on the TMC being configured.
+
 config CORESIGHT_CATU
 	tristate "Coresight Address Translation Unit (CATU) driver"
 	depends on CORESIGHT_LINK_AND_SINK_TMC

@@ -217,7 +217,7 @@ seqcount_spinlock_t nf_conntrack_generation __read_mostly;
 siphash_key_t nf_conntrack_hash_rnd __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_hash_rnd);
 
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 unsigned int nf_conntrack_pkt_threshold __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_pkt_threshold);
 #endif
@@ -586,7 +586,7 @@ static void destroy_gre_conntrack(struct nf_conn *ct)
 #endif
 }
 
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 void (*delete_sfe_entry)(struct nf_conn *ct) __rcu __read_mostly;
 EXPORT_SYMBOL_GPL(delete_sfe_entry);
 #endif
@@ -599,7 +599,7 @@ void nf_ct_destroy(struct nf_conntrack *nfct)
 	struct list_head *sip_node_list;
 	struct list_head *sip_node_save_list;
 #endif
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 	void (*delete_entry)(struct nf_conn *ct);
 #endif
 
@@ -626,7 +626,7 @@ void nf_ct_destroy(struct nf_conntrack *nfct)
 		}
 #endif
 
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 	if (ct->sfe_entry) {
 		delete_entry = rcu_dereference(delete_sfe_entry);
 		if (delete_entry)
@@ -2130,7 +2130,7 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
 		unsigned long timeout_value);
 #endif
 
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 	struct nf_conn_acct *acct;
 	u64 pkts;
 #endif
@@ -2158,7 +2158,7 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
 #endif
 
 acct:
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 	if (do_acct) {
 		acct = nf_conn_acct_find(ct);
 		if (acct) {

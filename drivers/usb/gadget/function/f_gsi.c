@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -882,6 +882,178 @@ static int gsi_ep_enable(struct f_gsi *gsi)
 	return 0;
 }
 
+static void ipa_work_state_init(struct gsi_data_port *d_port, struct device *gad_dev, u8 event)
+{
+	struct f_gsi *gsi = d_port_to_gsi(d_port);
+	int ret;
+
+	if (event == EVT_SET_ALT) {
+		if (!atomic_read(&gsi->connected)) {
+			log_event_err("USB cable not connected\n");
+			return;
+		}
+
+		usb_gadget_autopm_get(d_port->gadget);
+		log_event_dbg("%s: get = %d", __func__,
+			atomic_read(&gad_dev->power.usage_count));
+
+		/* Configure EPs for GSI */
+		ret = gsi_ep_enable(gsi);
+		if (ret) {
+			log_event_err("%s:ep enable err %d", __func__,
+				ret);
+			usb_composite_setup_continue(gsi->d_port.cdev);
+			usb_gadget_autopm_put_async(d_port->gadget);
+			return;
+		}
+
+		usb_composite_setup_continue(gsi->d_port.cdev);
+
+		/*
+		 * Skip rest for RNDIS and wait for EVT_HOST_READY
+		 * which is invoked when the host sends the
+		 * GEN_CURRENT_PACKET_FILTER message.
+		 */
+		if (gsi->prot_id == IPA_USB_RNDIS) {
+			d_port->sm_state = STATE_HOST_NRDY;
+			usb_gadget_autopm_put_async(d_port->gadget);
+			return;
+		}
+
+		ret = ipa_connect_channels(d_port);
+		if (ret) {
+			log_event_err("%s: ipa_connect_channels failed (%d)\n",
+							__func__, ret);
+			ipa_data_path_disable(d_port);
+			usb_gadget_autopm_put_async(d_port->gadget);
+			d_port->sm_state = STATE_INITIALIZED;
+			return;
+		}
+
+		d_port->sm_state = STATE_WAIT_FOR_IPA_RDY;
+		log_event_dbg("%s: ST_INIT_EVT_SET_ALT",
+				__func__);
+	}
+}
+
+static void ipa_work_state_wait_for_ipa(struct gsi_data_port *d_port, struct device *gad_dev,
+					u8 event)
+{
+	struct f_gsi *gsi = d_port_to_gsi(d_port);
+
+	if (event == EVT_SET_ALT) {
+		usb_composite_setup_continue(gsi->d_port.cdev);
+	} else if (event == EVT_IPA_READY) {
+		if (peek_event(d_port) == EVT_SUSPEND) {
+			log_event_dbg("%s: ST_WAIT_IPARDY_EVT_SUSPEND",
+				 __func__);
+			return;
+		}
+		ipa_data_path_enable(d_port);
+		d_port->sm_state = STATE_CONNECTED;
+		log_event_dbg("%s: ST_WAIT_IPARDY_EVT_IPARDY %d",
+				__func__, __LINE__);
+	} else if (event == EVT_SUSPEND) {
+		if (peek_event(d_port) == EVT_DISCONNECTED) {
+			read_event(d_port);
+			ipa_data_path_disable(d_port);
+			ipa_disconnect_channel(d_port);
+			d_port->sm_state = STATE_INITIALIZED;
+			usb_gadget_autopm_put_async(d_port->gadget);
+			log_event_dbg("%s: ST_WAIT_IPARDY_EVT_SUS_DIS",
+					__func__);
+			log_event_dbg("%s: put_async1 = %d", __func__,
+					atomic_read(
+					&gad_dev->power.usage_count));
+			return;
+		}
+		if (!ipa_suspend_work_handler(d_port)) {
+			usb_gadget_autopm_put_async(d_port->gadget);
+			log_event_dbg("%s: ST_WAIT_IPARDY_EVT_SUS",
+					__func__);
+			log_event_dbg("%s: put_async2 = %d", __func__,
+					atomic_read(
+					&gad_dev->power.usage_count));
+		}
+	} else if (event == EVT_DISCONNECTED) {
+		ipa_data_path_disable(d_port);
+		ipa_disconnect_channel(d_port);
+		d_port->sm_state = STATE_INITIALIZED;
+		usb_gadget_autopm_put_async(d_port->gadget);
+		log_event_dbg("%s: ST_WAIT_IPARDY_EVT_DIS",
+					__func__);
+		log_event_dbg("%s: put_async3 = %d",
+				__func__, atomic_read(
+					&gad_dev->power.usage_count));
+	}
+}
+
+static void ipa_work_state_connected(struct gsi_data_port *d_port, struct device *gad_dev, u8 event)
+{
+	struct f_gsi *gsi = d_port_to_gsi(d_port);
+	bool block_db;
+
+	if (event == EVT_DISCONNECTED || event == EVT_HOST_NRDY) {
+		if (peek_event(d_port) == EVT_HOST_READY) {
+			read_event(d_port);
+			log_event_dbg("%s: NO_OP NRDY_RDY", __func__);
+			return;
+		}
+
+		if (event == EVT_HOST_NRDY) {
+			log_event_dbg("%s: ST_CON_HOST_NRDY\n",
+							__func__);
+			block_db = true;
+			/* stop USB ringing doorbell to GSI(OUT_EP) */
+			usb_gsi_ep_op(d_port->in_ep, (void *)&block_db,
+					GSI_EP_OP_SET_CLR_BLOCK_DBL);
+			gsi_rndis_ipa_reset_trigger(d_port);
+			usb_gsi_ep_op(d_port->in_ep, NULL,
+					GSI_EP_OP_ENDXFER);
+			usb_gsi_ep_op(d_port->out_ep, NULL,
+					GSI_EP_OP_ENDXFER);
+			/*
+			 * don't disable endpoints for RNDIS flow
+			 * control enable
+			 */
+			ipa_disconnect_channel(d_port);
+			d_port->sm_state = STATE_HOST_NRDY;
+			log_event_dbg("%s: ST_CON_EVT_HNRDY", __func__);
+		} else {
+			ipa_data_path_disable(d_port);
+			ipa_disconnect_channel(d_port);
+			d_port->sm_state = STATE_INITIALIZED;
+			log_event_dbg("%s: ST_CON_EVT_DIS", __func__);
+		}
+		usb_gadget_autopm_put_async(d_port->gadget);
+		log_event_dbg("%s: put_async4 = %d",
+				__func__, atomic_read(
+					&gad_dev->power.usage_count));
+	} else if (event == EVT_SUSPEND) {
+		if (peek_event(d_port) == EVT_DISCONNECTED) {
+			read_event(d_port);
+			ipa_data_path_disable(d_port);
+			ipa_disconnect_channel(d_port);
+			d_port->sm_state = STATE_INITIALIZED;
+			usb_gadget_autopm_put_async(d_port->gadget);
+			log_event_dbg("%s: ST_CON_EVT_SUS_DIS",
+					__func__);
+			log_event_dbg("%s: put_async5 = %d",
+					__func__, atomic_read(
+					&gad_dev->power.usage_count));
+			return;
+		}
+		if (!ipa_suspend_work_handler(d_port)) {
+			usb_gadget_autopm_put_async(d_port->gadget);
+			log_event_dbg("%s: ST_CON_EVT_SUS",
+					__func__);
+			log_event_dbg("%s: put_async6 = %d",
+					__func__, atomic_read(
+					&gad_dev->power.usage_count));
+		}
+	}
+}
+
 static void ipa_work_handler(struct work_struct *w)
 {
 	struct gsi_data_port *d_port = container_of(w, struct gsi_data_port,
@@ -892,7 +1064,6 @@ static void ipa_work_handler(struct work_struct *w)
 	struct device *dev;
 	struct device *gad_dev;
 	struct f_gsi *gsi = d_port_to_gsi(d_port);
-	bool block_db;
 
 	event = read_event(d_port);
 
@@ -916,161 +1087,13 @@ static void ipa_work_handler(struct work_struct *w)
 	case STATE_UNINITIALIZED:
 		break;
 	case STATE_INITIALIZED:
-		if (event == EVT_SET_ALT) {
-			if (!atomic_read(&gsi->connected)) {
-				log_event_err("USB cable not connected\n");
-				break;
-			}
-
-			usb_gadget_autopm_get(d_port->gadget);
-			log_event_dbg("%s: get = %d", __func__,
-				atomic_read(&gad_dev->power.usage_count));
-
-			/* Configure EPs for GSI */
-			ret = gsi_ep_enable(gsi);
-			if (ret) {
-				log_event_err("%s:ep enable err %d", __func__,
-					ret);
-				usb_composite_setup_continue(gsi->d_port.cdev);
-				usb_gadget_autopm_put_async(d_port->gadget);
-				break;
-			}
-
-			usb_composite_setup_continue(gsi->d_port.cdev);
-
-			/*
-			 * Skip rest for RNDIS and wait for EVT_HOST_READY
-			 * which is invoked when the host sends the
-			 * GEN_CURRENT_PACKET_FILTER message.
-			 */
-			if (gsi->prot_id == IPA_USB_RNDIS) {
-				d_port->sm_state = STATE_HOST_NRDY;
-				usb_gadget_autopm_put_async(d_port->gadget);
-				break;
-			}
-
-			ret = ipa_connect_channels(d_port);
-			if (ret) {
-				log_event_err("%s: ipa_connect_channels failed\n",
-								__func__);
-				ipa_data_path_disable(d_port);
-				usb_gadget_autopm_put_async(d_port->gadget);
-				d_port->sm_state = STATE_INITIALIZED;
-				break;
-			}
-
-			d_port->sm_state = STATE_WAIT_FOR_IPA_RDY;
-			log_event_dbg("%s: ST_INIT_EVT_SET_ALT",
-					__func__);
-		}
+		ipa_work_state_init(d_port, gad_dev, event);
 		break;
 	case STATE_WAIT_FOR_IPA_RDY:
-		if (event == EVT_IPA_READY) {
-			if (peek_event(d_port) == EVT_SUSPEND) {
-				log_event_dbg("%s: ST_WAIT_IPARDY_EVT_SUSPEND",
-					 __func__);
-				break;
-			}
-			ipa_data_path_enable(d_port);
-			d_port->sm_state = STATE_CONNECTED;
-			log_event_dbg("%s: ST_WAIT_IPARDY_EVT_IPARDY %d",
-					__func__, __LINE__);
-		} else if (event == EVT_SUSPEND) {
-			if (peek_event(d_port) == EVT_DISCONNECTED) {
-				read_event(d_port);
-				ipa_data_path_disable(d_port);
-				ipa_disconnect_channel(d_port);
-				d_port->sm_state = STATE_INITIALIZED;
-				usb_gadget_autopm_put_async(d_port->gadget);
-				log_event_dbg("%s: ST_WAIT_IPARDY_EVT_SUS_DIS",
-						__func__);
-				log_event_dbg("%s: put_async1 = %d", __func__,
-						atomic_read(
-						&gad_dev->power.usage_count));
-				break;
-			}
-			ret = ipa_suspend_work_handler(d_port);
-			if (!ret) {
-				usb_gadget_autopm_put_async(d_port->gadget);
-				log_event_dbg("%s: ST_WAIT_IPARDY_EVT_SUS",
-						__func__);
-				log_event_dbg("%s: put_async2 = %d", __func__,
-						atomic_read(
-						&gad_dev->power.usage_count));
-			}
-		} else if (event == EVT_DISCONNECTED) {
-			ipa_data_path_disable(d_port);
-			ipa_disconnect_channel(d_port);
-			d_port->sm_state = STATE_INITIALIZED;
-			usb_gadget_autopm_put_async(d_port->gadget);
-			log_event_dbg("%s: ST_WAIT_IPARDY_EVT_DIS",
-						__func__);
-			log_event_dbg("%s: put_async3 = %d",
-					__func__, atomic_read(
-						&gad_dev->power.usage_count));
-		}
+		ipa_work_state_wait_for_ipa(d_port, gad_dev, event);
 		break;
 	case STATE_CONNECTED:
-		if (event == EVT_DISCONNECTED || event == EVT_HOST_NRDY) {
-			if (peek_event(d_port) == EVT_HOST_READY) {
-				read_event(d_port);
-				log_event_dbg("%s: NO_OP NRDY_RDY", __func__);
-				break;
-			}
-
-			if (event == EVT_HOST_NRDY) {
-				log_event_dbg("%s: ST_CON_HOST_NRDY\n",
-								__func__);
-				block_db = true;
-				/* stop USB ringing doorbell to GSI(OUT_EP) */
-				usb_gsi_ep_op(d_port->in_ep, (void *)&block_db,
-						GSI_EP_OP_SET_CLR_BLOCK_DBL);
-				gsi_rndis_ipa_reset_trigger(d_port);
-				usb_gsi_ep_op(d_port->in_ep, NULL,
-						GSI_EP_OP_ENDXFER);
-				usb_gsi_ep_op(d_port->out_ep, NULL,
-						GSI_EP_OP_ENDXFER);
-				/*
-				 * don't disable endpoints for RNDIS flow
-				 * control enable
-				 */
-				ipa_disconnect_channel(d_port);
-				d_port->sm_state = STATE_HOST_NRDY;
-				log_event_dbg("%s: ST_CON_EVT_HNRDY", __func__);
-			} else {
-				ipa_data_path_disable(d_port);
-				ipa_disconnect_channel(d_port);
-				d_port->sm_state = STATE_INITIALIZED;
-				log_event_dbg("%s: ST_CON_EVT_DIS", __func__);
-			}
-			usb_gadget_autopm_put_async(d_port->gadget);
-			log_event_dbg("%s: put_async4 = %d",
-					__func__, atomic_read(
-						&gad_dev->power.usage_count));
-		} else if (event == EVT_SUSPEND) {
-			if (peek_event(d_port) == EVT_DISCONNECTED) {
-				read_event(d_port);
-				ipa_data_path_disable(d_port);
-				ipa_disconnect_channel(d_port);
-				d_port->sm_state = STATE_INITIALIZED;
-				usb_gadget_autopm_put_async(d_port->gadget);
-				log_event_dbg("%s: ST_CON_EVT_SUS_DIS",
-						__func__);
-				log_event_dbg("%s: put_async5 = %d",
-						__func__, atomic_read(
-						&gad_dev->power.usage_count));
-				break;
-			}
-			ret = ipa_suspend_work_handler(d_port);
-			if (!ret) {
-				usb_gadget_autopm_put_async(d_port->gadget);
-				log_event_dbg("%s: ST_CON_EVT_SUS",
-						__func__);
-				log_event_dbg("%s: put_async6 = %d",
-						__func__, atomic_read(
-						&gad_dev->power.usage_count));
-			}
-		}
+		ipa_work_state_connected(d_port, gad_dev, event);
 		break;
 	case STATE_HOST_NRDY:
 		if (event == EVT_DISCONNECTED) {

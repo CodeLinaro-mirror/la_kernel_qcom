@@ -380,5 +380,6 @@ struct plat_stmmacenet_data {
 	bool qos_use_skprio;
 	bool qos_supported;
 	bool enable_aux_ts;
+	bool tc_select_queue;
 };
 #endif

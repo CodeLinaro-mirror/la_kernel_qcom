@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Description: CoreSight TMC PCIe driver
  */
@@ -14,6 +14,9 @@
 #include "coresight-common.h"
 #include "coresight-tmc.h"
 
+#define QDSS_IPA_READY_TIMEOUT 5000
+static struct ipa_qdss_ops ipa_qdss_ops;
+static DECLARE_COMPLETION(wait_for_ipa_ready);
 static struct tmc_pcie_data *tmc_pcie_data;
 
 static bool tmc_pcie_support_ipa(struct device *dev)
@@ -251,8 +254,26 @@ static void tmc_pcie_write_work_fn(struct work_struct *work)
 
 int tmc_register_pcie_channel(struct tmc_pcie_data *pcie_data)
 {
-	return mhi_register_state_cb(tmc_pcie_client_cb, pcie_data,
+	int ret;
+	struct mhi_dev_client_cb_data cb_data;
+
+	ret = mhi_register_state_cb(tmc_pcie_client_cb, pcie_data,
 					pcie_data->pcie_out_chan);
+	if (ret == -EEXIST) {
+		/**
+		 * MHI stack will return -EEXIST if mhi channel is already
+		 * opend by the host and will not invoke reqistered callback.
+		 * But future state change notification will inform through
+		 * registered callback.
+		 */
+		cb_data.user_data = (void *)pcie_data;
+		cb_data.channel = pcie_data->pcie_out_chan;
+		cb_data.ctrl_info = MHI_STATE_CONNECTED;
+		tmc_pcie_client_cb(&cb_data);
+		return 0;
+	}
+
+	return ret;
 }
 
 static int tmc_pcie_sw_init(struct tmc_pcie_data *pcie_data)
@@ -520,16 +541,23 @@ static int tmc_pcie_hw_init(struct tmc_pcie_data *pcie_data)
 
 static int tmc_pcie_ipa_conn(struct tmc_pcie_data *pcie_data)
 {
+	int status;
+
 	if (!pcie_data)
 		return -ENOMEM;
 
-	return ipa_qdss_conn_pipes(&pcie_data->ipa_data->ipa_qdss_in,
+	status = wait_for_completion_timeout(&wait_for_ipa_ready,
+				msecs_to_jiffies(QDSS_IPA_READY_TIMEOUT));
+	if (!status)
+		return -ETIMEDOUT;
+
+	return ipa_qdss_ops.ipa_qdss_conn_pipes(&pcie_data->ipa_data->ipa_qdss_in,
 			&pcie_data->ipa_data->ipa_qdss_out);
 }
 
 static int tmc_pcie_ipa_disconn(void)
 {
-	return ipa_qdss_disconn_pipes();
+	return ipa_qdss_ops.ipa_qdss_disconn_pipes();
 }
 
 static int __tmc_pcie_enable_to_bam(struct tmc_pcie_data *pcie_data)
@@ -668,9 +696,8 @@ int tmc_pcie_enable(struct tmc_pcie_data *pcie_data)
 		return tmc_pcie_sw_start(pcie_data);
 	else
 		return tmc_pcie_hw_enable(pcie_data);
-
 }
-
+EXPORT_SYMBOL_GPL(tmc_pcie_enable);
 
 void tmc_pcie_disable(struct tmc_pcie_data *pcie_data)
 {
@@ -682,6 +709,22 @@ void tmc_pcie_disable(struct tmc_pcie_data *pcie_data)
 	} else
 		return tmc_pcie_hw_disable(pcie_data);
 }
+EXPORT_SYMBOL_GPL(tmc_pcie_disable);
+
+void ipa_qdss_ready_callback(void *ops)
+{
+	memcpy(&ipa_qdss_ops, ops, sizeof(struct ipa_qdss_ops));
+	complete_all(&wait_for_ipa_ready);
+}
+EXPORT_SYMBOL_GPL(ipa_qdss_ready_callback);
+
+void ipa_qdss_exit_callback(void)
+{
+	memset(&ipa_qdss_ops, 0x0, sizeof(struct ipa_qdss_ops));
+	reinit_completion(&wait_for_ipa_ready);
+
+}
+EXPORT_SYMBOL_GPL(ipa_qdss_exit_callback);
 
 int tmc_pcie_init(struct amba_device *adev,
 			struct tmc_drvdata *drvdata)
@@ -704,21 +747,22 @@ int tmc_pcie_init(struct amba_device *adev,
 		byte_cntr_data->pcie_data = pcie_data;
 		tmc_pcie_data = pcie_data;
 
+		ret = tmc_pcie_sw_init(pcie_data);
+		if (ret)
+			return ret;
+
 		if (tmc_pcie_support_ipa(dev)) {
 			ret = tmc_pcie_hw_init(drvdata->pcie_data);
 
 			if (ret)
-				return ret;
+				dev_err(dev, "pcie hw path init fail, ret: %d\n", ret);
+			else
+				pcie_data->pcie_path = TMC_PCIE_HW_PATH;
 		}
 
-		ret = tmc_pcie_sw_init(pcie_data);
-
-		if (ret)
-			return ret;
-
-		pcie_data->pcie_path = TMC_PCIE_HW_PATH;
 		dev_info(dev, "pcie mode init success.\n");
 	}
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(tmc_pcie_init);

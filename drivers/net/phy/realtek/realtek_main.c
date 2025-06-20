@@ -788,6 +788,25 @@ static int rtlgen_write_mmd(struct phy_device *phydev, int devnum, u16 regnum,
 	return ret;
 }
 
+static int rtlgen_resume(struct phy_device *phydev)
+{
+	int ret = genphy_resume(phydev);
+
+	/* Internal PHY's from RTL8168h up may not be instantly ready */
+	msleep(20);
+
+	return ret;
+}
+
+static int rtlgen_c45_resume(struct phy_device *phydev)
+{
+	int ret = genphy_c45_pma_resume(phydev);
+
+	msleep(20);
+
+	return ret;
+}
+
 static int rtl822x_read_mmd(struct phy_device *phydev, int devnum, u16 regnum)
 {
 	int ret = rtlgen_read_mmd(phydev, devnum, regnum);
@@ -1019,23 +1038,36 @@ static int rtl822x_ack_interrupt(struct phy_device *phydev)
 	return (err < 0) ? err : 0;
 }
 
+static int rtl822x_enable_intr(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = rtl822x_ack_interrupt(phydev);
+	if (ret)
+		return ret;
+
+	return phy_write_mmd(phydev, MDIO_MMD_VEND2, RTL822x_INER, RTL8221x_ISR_MASK);
+}
+
+static int rtl822x_disable_intr(struct phy_device *phydev)
+{
+	int ret;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, RTL822x_INER, 0);
+	if (ret < 0)
+		return ret;
+
+	return rtl822x_ack_interrupt(phydev);
+}
+
 static int rtl822x_config_intr(struct phy_device *phydev)
 {
-	int ret = 0;
+	int ret;
 
-	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
-		ret = rtl822x_ack_interrupt(phydev);
-		if (ret)
-			return ret;
-
-		ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, RTL822x_INER, RTL8221x_ISR_MASK);
-	} else {
-		ret = phy_write_mmd(phydev, MDIO_MMD_VEND2, RTL822x_INER, 0);
-		if (ret < 0)
-			return ret;
-
-		ret = rtl822x_ack_interrupt(phydev);
-	}
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED)
+		ret = rtl822x_enable_intr(phydev);
+	else
+		ret = rtl822x_disable_intr(phydev);
 
 	return ret;
 }
@@ -1056,6 +1088,38 @@ static irqreturn_t rtl822x_handle_interrupt(struct phy_device *phydev)
 	phy_trigger_machine(phydev);
 
 	return IRQ_HANDLED;
+}
+
+static int rtl822x_c45_suspend(struct phy_device *phydev)
+{
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED && !phydev->wol_enabled) {
+		int ret;
+
+		ret = rtl822x_disable_intr(phydev);
+		if (ret) {
+			dev_err(&phydev->mdio.dev,
+				"error disabling interrupts during phy suspend\n");
+			return ret;
+		}
+	}
+
+	return genphy_c45_pma_suspend(phydev);
+}
+
+static int rtl822x_c45_resume(struct phy_device *phydev)
+{
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED && !phydev->wol_enabled) {
+		int ret;
+
+		ret = rtl822x_enable_intr(phydev);
+		if (ret) {
+			dev_err(&phydev->mdio.dev,
+				"error enabling interrupts during phy resume\n");
+			return ret;
+		}
+	}
+
+	return rtlgen_c45_resume(phydev);
 }
 
 static int rtl822x_c45_get_features(struct phy_device *phydev)
@@ -1236,25 +1300,6 @@ static int rtl_internal_nbaset_match_phy_device(struct phy_device *phydev)
 static int rtl8251b_c45_match_phy_device(struct phy_device *phydev)
 {
 	return rtlgen_is_c45_match(phydev, RTL_8251B, true);
-}
-
-static int rtlgen_resume(struct phy_device *phydev)
-{
-	int ret = genphy_resume(phydev);
-
-	/* Internal PHY's from RTL8168h up may not be instantly ready */
-	msleep(20);
-
-	return ret;
-}
-
-static int rtlgen_c45_resume(struct phy_device *phydev)
-{
-	int ret = genphy_c45_pma_resume(phydev);
-
-	msleep(20);
-
-	return ret;
 }
 
 static int rtl9000a_config_init(struct phy_device *phydev)
@@ -1574,6 +1619,8 @@ static struct phy_driver realtek_drvs[] = {
 		.get_features   = rtl822x_c45_get_features,
 		.config_aneg    = rtl822x_c45_config_aneg,
 		.read_status    = rtl822xb_c45_read_status,
+		.suspend        = rtl822x_c45_suspend,
+		.resume         = rtl822x_c45_resume,
 	}, {
 		.match_phy_device = rtl8251b_c45_match_phy_device,
 		.name           = "RTL8251B 5Gbps PHY",

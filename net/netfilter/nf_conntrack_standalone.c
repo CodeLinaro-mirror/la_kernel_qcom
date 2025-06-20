@@ -611,7 +611,7 @@ enum nf_ct_sysctl_index {
 	NF_SYSCTL_CT_LOG_INVALID,
 	NF_SYSCTL_CT_EXPECT_MAX,
 	NF_SYSCTL_CT_ACCT,
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 	NF_SYSCTL_CT_PKT_THRESHOLD,
 #endif
 #ifdef CONFIG_NF_CONNTRACK_EVENTS
@@ -733,7 +733,7 @@ static struct ctl_table nf_ct_sysctl_table[] = {
 		.extra2 	= SYSCTL_ONE,
 	},
 
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 	[NF_SYSCTL_CT_PKT_THRESHOLD] = {
 		.procname	= "nf_conntrack_pkt_threshold",
 		.data		= &nf_conntrack_pkt_threshold,

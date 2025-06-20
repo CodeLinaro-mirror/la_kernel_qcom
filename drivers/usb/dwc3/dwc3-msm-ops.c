@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -106,21 +106,6 @@ static int entry_dwc3_gadget_run_stop(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static int entry_dwc3_send_gadget_ep_cmd(struct kretprobe_instance *ri,
-				   struct pt_regs *regs)
-{
-	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 0);
-	unsigned int cmd = (unsigned int)dwc3_pt_reg(regs, 1);
-	struct dwc3 *dwc = dep->dwc;
-
-	if (cmd == DWC3_DEPCMD_ENDTRANSFER)
-		dwc3_msm_notify_event(dwc,
-				DWC3_CONTROLLER_NOTIFY_DISABLE_UPDXFER,
-				dep->number);
-
-	return 0;
-}
-
 static int entry___dwc3_gadget_ep_enable(struct kretprobe_instance *ri,
 				   struct pt_regs *regs)
 {
@@ -173,62 +158,6 @@ static int exit_dwc3_gadget_pullup(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static int entry_trace_event_raw_event_dwc3_log_request(struct kretprobe_instance *ri,
-				   struct pt_regs *regs)
-{
-	struct dwc3_request *req = (struct dwc3_request *)dwc3_pt_reg(regs, 1);
-
-	dbg_trace_ep_queue(req);
-
-	return 0;
-}
-
-static int entry_trace_event_raw_event_dwc3_log_gadget_ep_cmd(struct kretprobe_instance *ri,
-				   struct pt_regs *regs)
-{
-	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 1);
-	unsigned int cmd = dwc3_pt_reg(regs, 2);
-	struct dwc3_gadget_ep_cmd_params *param =
-			(struct dwc3_gadget_ep_cmd_params *)dwc3_pt_reg(regs, 3);
-	int cmd_status = dwc3_pt_reg(regs, 4);
-
-	dbg_trace_gadget_ep_cmd(dep, cmd, param, cmd_status);
-
-	return 0;
-}
-
-static int entry_trace_event_raw_event_dwc3_log_trb(struct kretprobe_instance *ri,
-				   struct pt_regs *regs)
-{
-	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 1);
-	struct dwc3_trb *trb = (struct dwc3_trb *)dwc3_pt_reg(regs, 2);
-
-	dbg_trace_trb_prepare(dep, trb);
-
-	return 0;
-}
-
-static int entry_trace_event_raw_event_dwc3_log_event(struct kretprobe_instance *ri,
-				   struct pt_regs *regs)
-{
-	u32 event = dwc3_pt_reg(regs, 1);
-	struct dwc3 *dwc = (struct dwc3 *)dwc3_pt_reg(regs, 2);
-
-	dbg_trace_event(event, dwc);
-
-	return 0;
-}
-
-static int entry_trace_event_raw_event_dwc3_log_ep(struct kretprobe_instance *ri,
-				   struct pt_regs *regs)
-{
-	struct dwc3_ep *dep = (struct dwc3_ep *)dwc3_pt_reg(regs, 1);
-
-	dbg_trace_ep(dep);
-
-	return 0;
-}
-
 static int entry_android_work(struct kretprobe_instance *ri,
 			     struct pt_regs *regs)
 {
@@ -273,17 +202,11 @@ static int exit_android_work(struct kretprobe_instance *ri,
 
 static struct kretprobe dwc3_msm_probes[] = {
 	ENTRY(dwc3_gadget_run_stop),
-	ENTRY(dwc3_send_gadget_ep_cmd),
 	ENTRY(dwc3_gadget_reset_interrupt),
 	ENTRY(__dwc3_gadget_ep_enable),
 	ENTRY_EXIT(dwc3_gadget_pullup),
 	ENTRY_EXIT(android_work),
 	ENTRY_EXIT(usb_ep_set_maxpacket_limit),
-	ENTRY(trace_event_raw_event_dwc3_log_request),
-	ENTRY(trace_event_raw_event_dwc3_log_gadget_ep_cmd),
-	ENTRY(trace_event_raw_event_dwc3_log_trb),
-	ENTRY(trace_event_raw_event_dwc3_log_event),
-	ENTRY(trace_event_raw_event_dwc3_log_ep),
 };
 
 

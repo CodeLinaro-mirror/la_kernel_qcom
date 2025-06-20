@@ -641,6 +641,7 @@ struct dwc3_msm {
 
 	u32			cap_length;
 	bool			sleep_clk_bcr;
+	bool			dis_role_switch;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -700,7 +701,7 @@ static int dwc3_alloc_trb_pool(struct dwc3_ep *dep)
 
 	dep->trb_pool = dma_alloc_coherent(dwc->sysdev,
 			sizeof(struct dwc3_trb) * DWC3_TRB_NUM,
-			&dep->trb_pool_dma, GFP_KERNEL);
+			&dep->trb_pool_dma, GFP_ATOMIC);
 	if (!dep->trb_pool) {
 		dev_err(dep->dwc->dev, "failed to allocate trb pool for %s\n",
 				dep->name);
@@ -2246,7 +2247,7 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 
 	len = req->buf_len * req->num_bufs;
 	req->buf_base_addr = dma_alloc_coherent(dwc->sysdev, len, &req->dma,
-					GFP_KERNEL);
+					GFP_ATOMIC);
 	if (!req->buf_base_addr)
 		return -ENOMEM;
 
@@ -2260,10 +2261,10 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 	/* Allocate and configure TRBs */
 	dep->trb_pool = dma_alloc_coherent(dwc->sysdev,
 				num_trbs * sizeof(struct dwc3_trb),
-				&dep->trb_pool_dma, GFP_KERNEL);
+				&dep->trb_pool_dma, GFP_ATOMIC);
 
 	if (!dep->trb_pool)
-		goto free_trb_buffer;
+		return -ENOMEM;
 
 	memset(dep->trb_pool, 0, num_trbs * sizeof(struct dwc3_trb));
 
@@ -2331,23 +2332,16 @@ static int gsi_prepare_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
 					__func__, dep->name);
 
 	return 0;
-
-free_trb_buffer:
-	dma_free_coherent(dwc->sysdev, len, req->buf_base_addr, req->dma);
-	req->buf_base_addr = NULL;
-	sg_free_table(&req->sgt_data_buff);
-	return -ENOMEM;
 }
 
 /**
  * Frees TRBs and buffers for GSI EPs.
  *
- * @usb_ep - pointer to usb_ep instance.
+ * @dwc3_ep - pointer to dwc3_ep instance.
  *
  */
-static void gsi_free_trbs(struct usb_ep *ep, struct usb_gsi_request *req)
+static void gsi_free_trbs(struct dwc3_ep *dep, struct usb_gsi_request *req)
 {
-	struct dwc3_ep *dep = to_dwc3_ep(ep);
 	struct dwc3 *dwc = dep->dwc;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
@@ -2510,12 +2504,14 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 {
 	u32 ret = 0;
 	struct dwc3_ep *dep = to_dwc3_ep(ep);
+	struct dwc3_ep temp_dep;
 	struct dwc3 *dwc = dep->dwc;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 	struct usb_gsi_request *request;
 	struct gsi_channel_info *ch_info;
 	bool block_db;
 	unsigned long flags;
+	size_t len;
 
 	dbg_log_string("%s(%d):%s", ep->name, dep->number >> 1,
 			gsi_op_to_string(op));
@@ -2527,14 +2523,28 @@ int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op)
 			return -ESHUTDOWN;
 		}
 
-		dwc3_free_trb_pool(dep);
+		spin_lock_irqsave(&dwc->lock, flags);
+		memcpy(&temp_dep, dep, sizeof(temp_dep));
 		request = (struct usb_gsi_request *)op_data;
 		ret = gsi_prepare_trbs(ep, request);
+		spin_unlock_irqrestore(&dwc->lock, flags);
+		if (ret == -ENOMEM) {
+			len = request->buf_len * request->num_bufs;
+			dma_free_coherent(dwc->sysdev, len, request->buf_base_addr, request->dma);
+			request->buf_base_addr = NULL;
+			sg_free_table(&request->sgt_data_buff);
+		}
+		dwc3_free_trb_pool(&temp_dep);
 		break;
 	case GSI_EP_OP_FREE_TRBS:
 		request = (struct usb_gsi_request *)op_data;
-		gsi_free_trbs(ep, request);
+		spin_lock_irqsave(&dwc->lock, flags);
+		memcpy(&temp_dep, dep, sizeof(temp_dep));
+		dep->trb_pool = NULL;
+		dep->trb_pool_dma = 0;
 		dwc3_alloc_trb_pool(dep);
+		spin_unlock_irqrestore(&dwc->lock, flags);
+		gsi_free_trbs(&temp_dep, request);
 		break;
 	case GSI_EP_OP_CONFIG:
 		if (!dwc->pullups_connected) {
@@ -4811,6 +4821,9 @@ static int dwc3_msm_id_notifier(struct notifier_block *nb,
 	if (!edev || !mdwc)
 		return NOTIFY_DONE;
 
+	if (mdwc->dis_role_switch)
+		return NOTIFY_DONE;
+
 	dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dbg_event(0xFF, "extcon idx", enb->idx);
@@ -4846,6 +4859,9 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
+
+	if (mdwc->dis_role_switch)
+		return NOTIFY_DONE;
 
 	dbg_event(0xFF, "extcon idx", enb->idx);
 	dev_dbg(mdwc->dev, "vbus:%ld event received\n", event);
@@ -5067,6 +5083,9 @@ static enum usb_role dwc3_msm_usb_role_switch_get_role(struct usb_role_switch *s
 static int dwc3_msm_set_role(struct dwc3_msm *mdwc, enum usb_role role)
 {
 	enum usb_role cur_role;
+
+	if (mdwc->dis_role_switch)
+		return -EPERM;
 
 	if (!dwc3_msm_role_allowed(mdwc, role))
 		return -EINVAL;
@@ -6569,6 +6588,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	mutex_init(&mdwc->suspend_resume_mutex);
 	mutex_init(&mdwc->role_switch_mutex);
+	mdwc->dis_role_switch = false;
 
 	if (of_property_read_bool(node, "usb-role-switch")) {
 		struct usb_role_switch_desc role_desc = {
@@ -6697,6 +6717,16 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	kfree(mdwc->dwc3_pm_ops);
 
 	return 0;
+}
+
+static void dwc3_msm_shutdown(struct platform_device *pdev)
+{
+	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
+
+	dbg_log_string("Entry\n");
+	dwc3_msm_set_role(mdwc, USB_ROLE_NONE);
+	mdwc->dis_role_switch = true;
+	flush_workqueue(mdwc->sm_usb_wq);
 }
 
 static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
@@ -7713,6 +7743,7 @@ MODULE_DEVICE_TABLE(of, of_dwc3_matach);
 static struct platform_driver dwc3_msm_driver = {
 	.probe		= dwc3_msm_probe,
 	.remove		= dwc3_msm_remove,
+	.shutdown	= dwc3_msm_shutdown,
 	.driver		= {
 		.name	= "msm-dwc3",
 		.pm	= &dwc3_msm_dev_pm_ops,

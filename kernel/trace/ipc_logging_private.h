@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2012-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2012-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef _IPC_LOGGING_PRIVATE_H
 #define _IPC_LOGGING_PRIVATE_H
@@ -129,6 +129,7 @@ struct ipc_log_context {
 	struct completion read_avail;
 	struct kref refcount;
 	bool destroyed;
+	struct proc_dir_entry *proc_dent;
 	struct ipc_log_cdev cdev;
 };
 
@@ -188,6 +189,30 @@ void ipc_log_cdev_remove(struct ipc_log_context *ilctxt);
 static inline void ipc_log_cdev_init(void) {}
 static inline void ipc_log_cdev_create(struct ipc_log_context *ilctxt, const char *mod_name) {}
 static inline void ipc_log_cdev_remove(struct ipc_log_context *ilctxt) {}
+#endif
+
+#if (defined(CONFIG_IPC_LOGGING_PROCFS))
+void check_and_create_procfs(void);
+
+void create_ctx_procfs(struct ipc_log_context *ctxt,
+			const char *mod_name);
+#else
+static inline void check_and_create_procfs(void)
+{
+}
+
+static inline void create_ctx_procfs(struct ipc_log_context *ctxt, const char *mod_name)
+{
+}
+#endif
+
+#if (defined(CONFIG_IPC_LOGGING_BOOTPARAM))
+bool ipc_logging_enabled(void);
+#else
+static inline bool ipc_logging_enabled(void)
+{
+	return true;
+}
 #endif
 
 #endif

@@ -155,7 +155,7 @@ struct nf_conn {
 	unsigned long nattype_entry;
 #endif
 
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 	void *sfe_entry;
 #endif
 
@@ -369,7 +369,7 @@ extern struct hlist_nulls_head *nf_conntrack_hash;
 extern unsigned int nf_conntrack_htable_size;
 extern seqcount_spinlock_t nf_conntrack_generation;
 extern unsigned int nf_conntrack_max;
-#ifdef CONFIG_ENABLE_SFE
+#ifdef CONFIG_PKT_THRESHOLD
 extern unsigned int nf_conntrack_pkt_threshold;
 #endif
 

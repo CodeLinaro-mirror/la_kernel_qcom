@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright(C) 2016 Linaro Limited. All rights reserved.
  * Author: Mathieu Poirier <mathieu.poirier@linaro.org>
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/atomic.h>
@@ -963,7 +962,8 @@ static struct etr_buf *tmc_alloc_etr_buf(struct tmc_drvdata *drvdata,
 	 *
 	 */
 	if (!pages &&
-	    (!has_sg || has_iommu || size < SZ_1M))
+	    (!has_sg || has_iommu || size < SZ_1M ||
+	     drvdata->out_mode == TMC_ETR_OUT_MODE_PCIE))
 		rc = tmc_etr_mode_alloc_buf(ETR_MODE_FLAT, drvdata,
 					    etr_buf, node, pages);
 	if (rc && has_etr_sg)
@@ -1186,6 +1186,9 @@ tmc_etr_setup_sysfs_buf(struct tmc_drvdata *drvdata)
 		drvdata->usb_data->usb_mode == TMC_ETR_USB_SW)
 		return tmc_alloc_etr_buf(drvdata, TMC_ETR_SW_USB_BUF_SIZE,
 				0, cpu_to_node(0), NULL);
+	else if (drvdata->out_mode == TMC_ETR_OUT_MODE_PCIE)
+		return tmc_alloc_etr_buf(drvdata, drvdata->pcie_data->buf_size,
+				0, cpu_to_node(0), NULL);
 	else
 		return tmc_alloc_etr_buf(drvdata, drvdata->size,
 				 0, cpu_to_node(0), NULL);
@@ -1244,6 +1247,42 @@ void tmc_etr_disable_hw(struct tmc_drvdata *drvdata)
 	drvdata->etr_buf = NULL;
 }
 
+static bool is_sysfs_buf_invalid(struct tmc_drvdata *drvdata,
+				 struct etr_buf *sysfs_buf)
+{
+	if (!sysfs_buf)
+		return true;
+
+	switch (drvdata->out_mode) {
+	case TMC_ETR_OUT_MODE_MEM:
+		return sysfs_buf->size != drvdata->size;
+
+	case TMC_ETR_OUT_MODE_USB:
+		return sysfs_buf->size != TMC_ETR_SW_USB_BUF_SIZE;
+
+	case TMC_ETR_OUT_MODE_PCIE:
+		return sysfs_buf->size != drvdata->pcie_data->buf_size;
+	default:
+		break;
+	}
+
+	return false;
+}
+
+static bool is_sysfs_buf_applicable(struct tmc_drvdata *drvdata)
+{
+	if (drvdata->out_mode == TMC_ETR_OUT_MODE_MEM)
+		return true;
+	if (drvdata->out_mode == TMC_ETR_OUT_MODE_USB &&
+	    drvdata->usb_data->usb_mode == TMC_ETR_USB_SW)
+		return true;
+	if (drvdata->out_mode == TMC_ETR_OUT_MODE_PCIE &&
+	    drvdata->pcie_data->pcie_path == TMC_PCIE_SW_PATH)
+		return true;
+
+	return false;
+}
+
 static struct etr_buf *tmc_etr_get_sysfs_buffer(struct coresight_device *csdev)
 {
 	int ret = 0;
@@ -1258,17 +1297,9 @@ static struct etr_buf *tmc_etr_get_sysfs_buffer(struct coresight_device *csdev)
 	 * buffer, provided the size matches. Any allocation has to be done
 	 * with the lock released.
 	 */
-	if ((drvdata->out_mode == TMC_ETR_OUT_MODE_MEM)
-		|| (drvdata->out_mode == TMC_ETR_OUT_MODE_USB &&
-			drvdata->usb_data->usb_mode ==
-			TMC_ETR_USB_SW)) {
+	if (is_sysfs_buf_applicable(drvdata)) {
 		sysfs_buf = READ_ONCE(drvdata->sysfs_buf);
-		if (!sysfs_buf || (drvdata->out_mode == TMC_ETR_OUT_MODE_MEM
-					&& sysfs_buf->size != drvdata->size)
-					|| (drvdata->out_mode == TMC_ETR_OUT_MODE_USB
-					&& drvdata->usb_data->usb_mode == TMC_ETR_USB_SW
-					&&  sysfs_buf->size != TMC_ETR_SW_USB_BUF_SIZE)) {
-
+		if (is_sysfs_buf_invalid(drvdata, sysfs_buf)) {
 			/* Allocate memory with the locks released */
 			free_buf = new_buf = tmc_etr_setup_sysfs_buf(drvdata);
 			if (IS_ERR(new_buf))
@@ -1317,10 +1348,7 @@ static int tmc_enable_etr_sink_sysfs(struct coresight_device *csdev)
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
-	if ((drvdata->out_mode == TMC_ETR_OUT_MODE_MEM) ||
-		(drvdata->out_mode == TMC_ETR_OUT_MODE_USB &&
-			drvdata->usb_data->usb_mode ==
-			TMC_ETR_USB_SW)) {
+	if (is_sysfs_buf_applicable(drvdata)) {
 		ret = tmc_etr_enable_hw(drvdata, sysfs_buf);
 		if (ret)
 			goto unlock_out;
@@ -1337,7 +1365,8 @@ static int tmc_enable_etr_sink_sysfs(struct coresight_device *csdev)
 		tmc_etr_byte_cntr_start(drvdata->byte_cntr);
 	if (drvdata->out_mode == TMC_ETR_OUT_MODE_USB)
 		tmc_usb_enable(drvdata->usb_data);
-
+	if (drvdata->out_mode == TMC_ETR_OUT_MODE_PCIE)
+		tmc_pcie_enable(drvdata->pcie_data);
 	dev_dbg(&csdev->dev, "TMC-ETR enabled\n");
 
 	return 0;
@@ -1833,18 +1862,19 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 	/* Complain if we (somehow) got out of sync */
 	WARN_ON_ONCE(drvdata->mode == CS_MODE_DISABLED);
 
-	if (drvdata->out_mode == TMC_ETR_OUT_MODE_MEM ||
-		(drvdata->out_mode == TMC_ETR_OUT_MODE_USB &&
-			drvdata->usb_data->usb_mode == TMC_ETR_USB_SW)) {
-		if (drvdata->out_mode == TMC_ETR_OUT_MODE_USB) {
-			spin_unlock_irqrestore(&drvdata->spinlock, flags);
-			tmc_usb_disable(drvdata->usb_data);
-			spin_lock_irqsave(&drvdata->spinlock, flags);
-		}
-		tmc_etr_disable_hw(drvdata);
-	} else {
+	if (is_sysfs_buf_applicable(drvdata)) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		tmc_usb_disable(drvdata->usb_data);
+		if (drvdata->out_mode == TMC_ETR_OUT_MODE_USB)
+			tmc_usb_disable(drvdata->usb_data);
+		if (drvdata->out_mode == TMC_ETR_OUT_MODE_PCIE)
+			tmc_pcie_disable(drvdata->pcie_data);
+		spin_lock_irqsave(&drvdata->spinlock, flags);
+
+		tmc_etr_disable_hw(drvdata);
+	} else if (drvdata->out_mode == TMC_ETR_OUT_MODE_PCIE &&
+		   drvdata->pcie_data->pcie_path == TMC_PCIE_HW_PATH) {
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		tmc_pcie_disable(drvdata->pcie_data);
 		spin_lock_irqsave(&drvdata->spinlock, flags);
 	}
 	/* Presave mode to ensure if it's need to stop byte_cntr. */
@@ -1903,6 +1933,8 @@ int tmc_etr_switch_mode(struct tmc_drvdata *drvdata, const char *out_mode)
 			return -EINVAL;
 		}
 		new_mode = TMC_ETR_OUT_MODE_USB;
+	} else if (!strcmp(out_mode, str_tmc_etr_out_mode[TMC_ETR_OUT_MODE_PCIE])) {
+		new_mode = TMC_ETR_OUT_MODE_PCIE;
 	} else {
 		mutex_unlock(&drvdata->mem_lock);
 		return -EINVAL;

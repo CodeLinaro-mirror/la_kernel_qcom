@@ -7,8 +7,14 @@ target_name = "sa510m"
 def define_sa510m():
     _sa510m_le_in_tree_modules = [
         # keep sorted
+        "crypto/authenc.ko",
+        "crypto/authencesn.ko",
+        "crypto/cbc.ko",
+        "crypto/crypto_null.ko",
+        "crypto/essiv.ko",
+        "drivers/block/loop.ko",
         "drivers/char/hw_random/arm_smccc_trng.ko",
-        "drivers/char/hw_random/rng-core.ko",
+        "drivers/md/dm-crypt.ko",
         "drivers/mtd/mtd_blkdevs.ko",
         "drivers/mtd/mtdblock.ko",
         "drivers/mtd/ubi/gluebi.ko",

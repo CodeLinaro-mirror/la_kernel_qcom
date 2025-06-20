@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2012-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <asm/arch_timer.h>
@@ -12,6 +12,7 @@
 #include <linux/errno.h>
 #include <linux/jiffies.h>
 #include <linux/debugfs.h>
+#include <linux/proc_fs.h>
 #include <linux/io.h>
 #include <linux/idr.h>
 #include <linux/string.h>
@@ -831,6 +832,9 @@ void *ipc_log_context_create(int max_num_pages,
 	unsigned long flags;
 	int enable_minidump;
 
+	if (!ipc_logging_enabled())
+		return NULL;
+
 	/* check if ipc ctxt already exists */
 	read_lock_irq(&context_list_lock_lha1);
 	list_for_each_entry(tmp, &ipc_log_context_list, list)
@@ -898,6 +902,7 @@ void *ipc_log_context_create(int max_num_pages,
 	kref_init(&ctxt->refcount);
 	ctxt->destroyed = false;
 	create_ctx_debugfs(ctxt, mod_name);
+	create_ctx_procfs(ctxt, mod_name);
 	ipc_log_cdev_create(ctxt, mod_name);
 	/* set magic last to signal context init is complete */
 	ctxt->magic = IPC_LOG_CONTEXT_MAGIC_NUM;
@@ -953,6 +958,7 @@ int ipc_log_context_destroy(void *ctxt)
 		return 0;
 
 	debugfs_remove_recursive(ilctxt->dent);
+	proc_remove(ilctxt->proc_dent);
 	ipc_log_cdev_remove(ilctxt);
 	spin_lock(&ilctxt->context_lock_lhb1);
 	ilctxt->destroyed = true;
@@ -976,6 +982,7 @@ EXPORT_SYMBOL(ipc_log_context_destroy);
 static int __init ipc_logging_init(void)
 {
 	check_and_create_debugfs();
+	check_and_create_procfs();
 	ipc_log_cdev_init();
 	register_minidump((u64)&ipc_log_context_list, sizeof(struct list_head),
 			  "ipc_log_ctxt_list", minidump_buf_cnt);

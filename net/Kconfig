@@ -597,4 +597,13 @@ config ENABLE_SFE
 	  Changes to support Shortcut Forward Engine.
 	  Add bridge API to access the bridge slave port.
 
+config PKT_THRESHOLD
+	bool "Enable accounting with packet threshold tracking"
+	help
+	  This option enables packet threshold tracking for
+	  enhanced flow accounting and debugging for network
+	  flows.Enabling this option allows the kernel to keep
+	  track number of packets over specific thresholds which
+	  helps in identifying traffic anomalies and optimizing
+	  performance.it is useful for network diagnostics and performance.
 endif   # if NET

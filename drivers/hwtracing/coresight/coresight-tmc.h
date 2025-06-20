@@ -2,7 +2,7 @@
 /*
  * Copyright(C) 2015 Linaro Limited. All rights reserved.
  * Author: Mathieu Poirier <mathieu.poirier@linaro.org>
- * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _CORESIGHT_TMC_H
@@ -16,6 +16,7 @@
 #include "coresight-priv.h"
 #include "coresight-byte-cntr.h"
 #include "coresight-tmc-usb.h"
+#include "coresight-tmc-pcie.h"
 
 #define TMC_RSZ			0x004
 #define TMC_STS			0x00c
@@ -150,12 +151,14 @@ enum tmc_etr_out_mode {
 	TMC_ETR_OUT_MODE_NONE,
 	TMC_ETR_OUT_MODE_MEM,
 	TMC_ETR_OUT_MODE_USB,
+	TMC_ETR_OUT_MODE_PCIE,
 };
 
 static const char * const str_tmc_etr_out_mode[] = {
 	[TMC_ETR_OUT_MODE_NONE]		= "none",
 	[TMC_ETR_OUT_MODE_MEM]		= "mem",
 	[TMC_ETR_OUT_MODE_USB]		= "usb",
+	[TMC_ETR_OUT_MODE_PCIE]		= "pcie",
 };
 
 /**
@@ -212,6 +215,7 @@ struct etr_buf {
  * @atid_offset: atid register offset for CSR.
  * @out_mode:	out mode for ETR.
  * @usb_data:	usb data for ETR.
+ * @pcie_data:	pcie data for ETR.
  * @stop_on_flush: flag of stop_on_flush for ETR.
  * @delayed:	parameter for delayed probe.
  * @dclk:	optional clock to be dynamically enabled when this device is enabled.
@@ -247,6 +251,7 @@ struct tmc_drvdata {
 	u32			atid_offset;
 	enum tmc_etr_out_mode	out_mode;
 	struct tmc_usb_data	*usb_data;
+	struct tmc_pcie_data	*pcie_data;
 	bool			stop_on_flush;
 	struct delay_probe_arg	*delayed;
 	struct clk		*dclk;
@@ -384,5 +389,18 @@ void tmc_etr_set_catu_ops(const struct etr_buf_operations *catu);
 void tmc_etr_remove_catu_ops(void);
 struct etr_buf *tmc_etr_get_buffer(struct coresight_device *csdev,
 				   enum cs_mode mode, void *data);
+
+#if IS_ENABLED(CONFIG_CORESIGHT_TMC_PCIE)
+int tmc_pcie_enable(struct tmc_pcie_data *pcie_data);
+void tmc_pcie_disable(struct tmc_pcie_data *pcie_data);
+int tmc_pcie_init(struct amba_device *adev, struct tmc_drvdata *drvdata);
+#else
+static inline int tmc_pcie_enable(struct tmc_pcie_data *pcie_data)
+{return 0; }
+static inline void tmc_pcie_disable(struct tmc_pcie_data *pcie_data)
+{ }
+static inline int tmc_pcie_init(struct amba_device *adev, struct tmc_drvdata *drvdata)
+{return 0; }
+#endif
 
 #endif

@@ -5,7 +5,6 @@
 
 	Copyright(C) 2007-2011 STMicroelectronics Ltd
 
-
   Author: Giuseppe Cavallaro <peppe.cavallaro@st.com>
 
   Documentation available at:
@@ -13,6 +12,7 @@
   Support available at:
 	https://bugzilla.stlinux.com/
 *******************************************************************************/
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/clk.h>
 #include <linux/kernel.h>
@@ -52,6 +52,7 @@
 #include "dwxgmac2.h"
 #include "hwif.h"
 #include <linux/micrel_phy.h>
+#include <linux/marvell_phy.h>
 #include "dwmac-qcom-ethqos.h"
 
 /* As long as the interface is active, we keep the timestamping counter enabled
@@ -8609,6 +8610,16 @@ int stmmac_suspend(struct device *dev)
 	mutex_unlock(&priv->lock);
 
 	if (!priv->plat->mac2mac_en && !priv->phylink_disconnected) {
+		/* set irq_suspended flag before phylink suspend.
+		 * With this, PHY abstraction layer will delay
+		 * handling interrupts till it is cleared again
+		 * when system is ready to handle interrupts
+		 */
+		if (priv->phydev && phy_interrupt_is_valid(priv->phydev)) {
+			priv->phydev->irq_suspended = 1;
+			synchronize_irq(priv->phydev->irq);
+		}
+
 		rtnl_lock();
 		if (device_may_wakeup(priv->device) && priv->plat->pmt) {
 			phylink_suspend(priv->phylink, true);
@@ -8697,8 +8708,12 @@ int stmmac_resume(struct device *dev)
 	} else {
 		pinctrl_pm_select_default_state(priv->device);
 		/* reset the phy so that it's ready */
-		if (priv->mii && !priv->plat->pm_lite)
-			stmmac_mdio_reset(priv->mii);
+		if (priv->mii && !priv->plat->pm_lite) {
+			if ((priv->phydev && priv->phydev->drv &&
+			     (priv->phydev->phy_id & priv->phydev->drv->phy_id_mask) !=
+			     MARVELL_PHY_ID_88E1510))
+				stmmac_mdio_reset(priv->mii);
+		}
 	}
 
 	if (priv->plat->serdes_powerup && priv->speed != SPEED_UNKNOWN) {
@@ -8721,6 +8736,21 @@ int stmmac_resume(struct device *dev)
 				phylink_speed_up(priv->phylink);
 		}
 		rtnl_unlock();
+
+		if (priv->phydev && phy_interrupt_is_valid(priv->phydev)) {
+			priv->phydev->irq_suspended = 0;
+			synchronize_irq(priv->phydev->irq);
+
+			/* Rerun interrupts which were postponed by interrupt
+			 * handler because they occurred during the system
+			 * sleep transition.
+			 */
+			if (priv->phydev->irq_rerun) {
+				priv->phydev->irq_rerun = 0;
+				enable_irq(priv->phydev->irq);
+				irq_wake_thread(priv->phydev->irq, priv->phydev);
+			}
+		}
 	}
 
 	rtnl_lock();

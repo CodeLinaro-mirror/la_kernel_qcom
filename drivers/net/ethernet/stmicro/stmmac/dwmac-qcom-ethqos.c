@@ -2,7 +2,7 @@
 
 // Copyright (c) 2018-19, Linaro Limited
 // Copyright (c) 2021, The Linux Foundation. All rights reserved.
-// Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -419,6 +419,18 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 	else
 		return ALL_OTHER_TX_TRAFFIC_IPA_DISABLED;
 #endif
+
+	if (priv->plat->tc_select_queue) {
+		if (skb && skb->priority) {
+			txqueue_select =  netdev_pick_tx(dev, skb, NULL) %
+					  dev->real_num_tx_queues;
+		}
+
+		if (ethqos->ipa_enabled && txqueue_select == 0)
+			txqueue_select = 1;
+
+		return txqueue_select;
+	}
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
 
@@ -892,6 +904,11 @@ static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 	idev = __in6_dev_get_safely(dev);
 
 	/*For valid IPv6 address*/
+
+	if (!idev) {
+		ETHQOSERR("Failed to assign IPv6 address\n");
+		return -EFAULT;
+	}
 
 	if (!net || !net->genl_sock || !net->genl_sock->sk_socket) {
 		ETHQOSERR("Sock is null, unable to assign ipv6 address\n");
@@ -3093,6 +3110,8 @@ void qcom_ethqos_request_phy_wol(void *plat_n)
 
 		if (priv->plat->separate_wol_pin)
 			enable_irq_wake(ethqos->wol_intr);
+		else if (phy_interrupt_is_valid(priv->phydev))
+			enable_irq_wake(priv->phydev->irq);
 		else
 			enable_irq_wake(ethqos->phy_intr);
 		device_set_wakeup_enable(&ethqos->pdev->dev, 1);
@@ -4519,6 +4538,11 @@ static ssize_t nw_loopback_handling_config_sysfs(struct device *dev,
 	struct net_device *netdev;
 	struct stmmac_priv *priv;
 
+	if (!in_buf) {
+		pr_err("in_buf is NULL\n");
+		return -EINVAL;
+	}
+
 	parent = kobj_to_dev(dev->kobj.parent);
 
 	netdev = to_net_dev(parent);
@@ -4914,6 +4938,51 @@ static DEVICE_ATTR(ipc_stmmac_log_low, ETHQOS_SYSFS_DEV_ATTR_PERMS,
 		   show_ipc_stmmac_log_ctxt_low,
 		   store_ipc_stmmac_log_ctxt_low);
 
+static ssize_t show_tc_queue_select(struct device *dev,
+				    struct device_attribute *attr, char *user_buf)
+{
+	return 0;
+}
+
+static ssize_t store_tc_queue_select(struct device *dev, struct device_attribute *attr,
+				     const char *user_buf, size_t count)
+{
+	struct device *parent = NULL;
+	struct net_device *netdev;
+	struct stmmac_priv *priv;
+	int tmp;
+
+	parent = kobj_to_dev(dev->kobj.parent);
+	netdev = to_net_dev(parent);
+	if (!netdev) {
+		pr_err("netdev is NULL\n");
+		return -EINVAL;
+	}
+
+	priv = netdev_priv(netdev);
+	if (!priv) {
+		pr_err("priv is NULL\n");
+		return -EINVAL;
+	}
+
+	if (sscanf(user_buf, "%du", &tmp) < 0) {
+		ETHQOSERR("sscanf failed\n");
+		return -EINVAL;
+	}
+
+	if (tmp) {
+		ETHQOSINFO(" enabling TC based queue selection");
+		priv->plat->tc_select_queue = true;
+	} else {
+		ETHQOSINFO(" disabling TC based queue selection");
+		priv->plat->tc_select_queue = false;
+	}
+	return count;
+}
+
+static DEVICE_ATTR(tc_queue_select, ETHQOS_SYSFS_DEV_ATTR_PERMS,
+		   show_tc_queue_select, store_tc_queue_select);
+
 static int ethqos_create_sysfs_nodes(struct qcom_ethqos *ethqos)
 {
 	struct stmmac_priv *priv;
@@ -4974,6 +5043,12 @@ static int ethqos_create_sysfs_nodes(struct qcom_ethqos *ethqos)
 	ret = sysfs_create_file(ethqos->sysfs_kobj, &dev_attr_nw_loopback_enable.attr);
 	if (ret) {
 		ETHQOSERR("unable to create sysfs nw_loopback_enable node\n");
+		goto fail;
+	}
+
+	ret = sysfs_create_file(ethqos->sysfs_kobj, &dev_attr_tc_queue_select.attr);
+	if (ret) {
+		ETHQOSERR("unable to create sysfs tc_queue_select node\n");
 		goto fail;
 	}
 
@@ -5876,6 +5951,8 @@ static int ethqos_enable_wol(struct net_device *ndev, struct ethtool_wolinfo *wo
 			if (!priv->dev->wol_enabled) {
 				if (priv->plat->separate_wol_pin)
 					ret = enable_irq_wake(ethqos->wol_intr);
+				else if (priv->phydev && phy_interrupt_is_valid(priv->phydev))
+					ret = enable_irq_wake(priv->phydev->irq);
 				else
 					ret = enable_irq_wake(ethqos->phy_intr);
 			}
@@ -5886,6 +5963,8 @@ static int ethqos_enable_wol(struct net_device *ndev, struct ethtool_wolinfo *wo
 			if (priv->dev->wol_enabled) {
 				if (priv->plat->separate_wol_pin)
 					ret = disable_irq_wake(ethqos->wol_intr);
+				else if (priv->phydev && phy_interrupt_is_valid(priv->phydev))
+					ret = disable_irq_wake(priv->phydev->irq);
 				else
 					ret = disable_irq_wake(ethqos->phy_intr);
 			}
@@ -5947,6 +6026,11 @@ static ssize_t ethqos_mac_recovery_enable(struct file *file,
 	char *in_buf = kstrdup(user_buf, GFP_KERNEL);
 	int i;
 	struct qcom_ethqos *ethqos = pethqos[0];
+
+	if (!in_buf) {
+		ETHQOSERR("Failed to allocate memory for in_buf\n");
+		return -EFAULT;
+	}
 
 	if (sizeof(in_buf) < count) {
 		ETHQOSERR("emac string is too long - count=%zu\n", count);
@@ -7000,10 +7084,12 @@ static int qcom_ethqos_bring_up_phy_if(struct device *dev)
 
 	ret = stmmac_resume(&ethqos->pdev->dev);
 
-	if (phydev->interface == PHY_INTERFACE_MODE_USXGMII)
-		speed = SPEED_10000;
-	else if (phydev->interface == PHY_INTERFACE_MODE_SGMII)
-		speed = SPEED_1000;
+	if (!priv->plat->mac2mac_en) {
+		if (phydev->interface == PHY_INTERFACE_MODE_USXGMII)
+			speed = SPEED_10000;
+		else if (phydev->interface == PHY_INTERFACE_MODE_SGMII)
+			speed = SPEED_1000;
+	}
 
 	if (!net->rtnl) {
 		ETHQOSINFO("Netlink-kernel : No Socket->rtnl created\n");
