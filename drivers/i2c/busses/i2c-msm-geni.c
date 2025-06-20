@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -283,6 +283,7 @@ static struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
 	{KHz(100), 7, 10, 12, 26},
 	{KHz(400), 2,  3, 11, 22},
 	{KHz(1000), 1, 2,  8, 18},
+	{KHz(800), 1, 3,  7, 16},
 };
 
 static struct geni_i2c_clk_fld geni_i2c_hub_clk_map[] = {
