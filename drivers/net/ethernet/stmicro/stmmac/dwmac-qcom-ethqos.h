@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+// SPDX-License-Identifier: BSD-3-Clause-Clear
 /* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef	_DWMAC_QCOM_ETHQOS_H
@@ -13,6 +13,8 @@
 	pr_err(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
 #define ETHQOSINFO(fmt, args...) \
 	pr_info(DRV_NAME " %s:%d " fmt, __func__, __LINE__, ## args)
+
+#define PM_WAKEUP_MS			5000
 
 #define RGMII_IO_MACRO_CONFIG		0x0
 #define SDCC_HC_REG_DLL_CONFIG		0x4
@@ -30,6 +32,8 @@
 #define EMAC_HW_v2_3_1 0x20030001
 #define EMAC_HW_v3_0_0_RG 0x30000000
 #define EMAC_HW_vMAX 9
+
+#define EMAC_GDSC_EMAC_NAME "emac_gdsc"
 
 struct ethqos_emac_por {
 	unsigned int offset;
@@ -79,6 +83,13 @@ struct qcom_ethqos {
 
 	bool phyad_change;
 	bool is_gpio_phy_reset;
+
+	/* Boolean to check if clock is suspended*/
+	int clks_suspended;
+	struct completion clk_enable_done;
+	/* Boolean flag for turning off GDSC during suspend */
+	bool gdsc_off_on_suspend;
+
 };
 
 int ethqos_init_regulators(struct qcom_ethqos *ethqos);
