@@ -3,6 +3,7 @@
 #define __DRM_FB_DMA_HELPER_H__
 
 #include <linux/types.h>
+#include <drm/drm_framebuffer.h>
 
 struct drm_device;
 struct drm_framebuffer;
