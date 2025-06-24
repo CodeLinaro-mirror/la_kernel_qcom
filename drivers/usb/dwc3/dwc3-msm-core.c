@@ -6776,8 +6776,10 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 put_dwc3:
 	usb_role_switch_unregister(mdwc->role_switch);
-	for (i = 0; i < ARRAY_SIZE(mdwc->icc_paths); i++)
+	for (i = 0; i < ARRAY_SIZE(mdwc->icc_paths); i++) {
 		icc_put(mdwc->icc_paths[i]);
+			mdwc->icc_paths[i] = NULL;
+	}
 
 err:
 	destroy_workqueue(mdwc->sm_usb_wq);
@@ -6863,8 +6865,10 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	pm_runtime_set_suspended(mdwc->dev);
 	device_wakeup_disable(mdwc->dev);
 
-	for (i = 0; i < ARRAY_SIZE(mdwc->icc_paths); i++)
+	for (i = 0; i < ARRAY_SIZE(mdwc->icc_paths); i++) {
 		icc_put(mdwc->icc_paths[i]);
+		mdwc->icc_paths[i] = NULL;
+	}
 
 	vbus_regulator_toggle(mdwc, false);
 
