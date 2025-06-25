@@ -135,6 +135,7 @@
 #define DMA_CONTROL_ST			BIT(0)
 
 /* DMA Rx Channel X Control register defines */
+#define DMA_CONTROL_RPF			BIT(31)
 #define DMA_CONTROL_SR			BIT(0)
 #define DMA_RBSZ_MASK			GENMASK(14, 1)
 #define DMA_RBSZ_SHIFT			1
