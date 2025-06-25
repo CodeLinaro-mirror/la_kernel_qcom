@@ -211,6 +211,15 @@ config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
 
+config MSM_POWER_STATE
+	tristate "Power State driver support for Deep Sleep and Hibernate"
+	help
+	  This option enables Power State Driver which is the kernel component
+	  for supporting deep sleep and hibernate. Create a power_state device
+	  node for user space communication. User space client can open device
+	  node for communication required for handling deep sleep and hibernate
+	  modes.
+
 config QCOM_OCMEM
 	tristate "Qualcomm On Chip Memory (OCMEM) driver"
 	depends on ARCH_QCOM
@@ -283,6 +292,14 @@ config QCOM_QFPROM_SYS
            values are exported as sysfs entries.
 
            Say y here to enable QFPROM SYS support.
+
+config MSM_CORE_HANG_DETECT
+        tristate "MSM Core Hang Detection Support"
+        help
+          This enables the core hang detection module. It causes SoC
+          reset on core hang detection and collects the core context
+          for hang. By using sysfs entries core hang detection can be
+          enabled or disabled dynamically.
 
 config QCOM_RAMP_CTRL
 	tristate "Qualcomm Ramp Controller driver"
@@ -533,6 +550,15 @@ config QCOM_WDT_CORE
 	   watchdog module must be loaded along with this for watchdog
 	   functionality.
 
+config QCOM_CX_IPEAK
+	tristate "Common driver to handle Cx iPeak limitation"
+	help
+	  Cx ipeak HW module is used to limit the current drawn by various
+	  subsystem blocks on Cx power rail. Each client needs to set their
+	  bit in tcsr register if it is going to cross its own threshold.
+	  If all clients are going to cross their thresholds then Cx ipeak
+	  hw module will raise an interrupt to cDSP block to throttle cDSP fmax.
+
 config QCOM_SOC_WATCHDOG
 	tristate "Qualcomm Technologies, Inc. Soc Watchdog"
 	depends on QCOM_WDT_CORE
@@ -686,6 +712,15 @@ config QCOM_ADSP_SLEEPMON
 	   activity notifications from these userspace clients, the driver
 	   detects and logs sleep violations from ADSP subsystem. The driver
 	   uses master stats from ADSP subsystem stored in SMEM.
+
+config USB_BAM
+        tristate "USB BAM Driver"
+	depends on SPS && USB_GADGET
+        help
+          Enabling this option adds USB BAM Driver.
+          USB BAM driver was added to supports Smart Peripheral Subsystem
+          Peripheral-to-Peripheral transfers between the USB and other
+          peripheral.
 
 config QCOM_CPU_VENDOR_HOOKS
         tristate "QTI Vendor Hooks Support"

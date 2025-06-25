@@ -44,6 +44,7 @@
 #define GMAC_MDIO_DATA			0x00000204
 #define GMAC_GPIO_STATUS		0x0000020C
 #define GMAC_ARP_ADDR			0x00000210
+#define GMAC_EXT_CFG1			0x00000238
 #define GMAC_ADDR_HIGH(reg)		(0x300 + reg * 8)
 #define GMAC_ADDR_LOW(reg)		(0x304 + reg * 8)
 #define GMAC_L3L4_CTRL(reg)		(0x900 + (reg) * 0x30)
@@ -284,6 +285,10 @@ enum power_event {
 #define GMAC_HW_FEAT_DVLAN		BIT(5)
 #define GMAC_HW_FEAT_NRVF		GENMASK(2, 0)
 
+/* MAC extended config 1 */
+#define GMAC_CONFIG1_SAVE_EN		BIT(24)
+#define GMAC_CONFIG1_SPLM(v)		FIELD_PREP(GENMASK(9, 8), v)
+
 /* GMAC GPIO Status reg */
 #define GMAC_GPO0			BIT(16)
 #define GMAC_GPO1			BIT(17)
@@ -334,9 +339,15 @@ enum power_event {
 #define MTL_RXQ_DMA_MAP1		0x00000c34 /* queue 4 to 7 */
 #define MTL_RXQ_DMA_QXMDMACH_MASK(x)	(0xf << 8 * (x))
 #define MTL_RXQ_DMA_QXMDMACH(chan, q)	((chan) << (8 * (q)))
-
+#ifdef CONFIG_DWMAC_QCOM_VER3
+#define MTL_CHAN_BASE_ADDR		0x00008000
+#define MTL_CHAN_BASE_OFFSET		0x1000
+#else
 #define MTL_CHAN_BASE_ADDR		0x00000d00
 #define MTL_CHAN_BASE_OFFSET		0x40
+#endif
+#define MTL_CHANX_BASE_ADDR(x)		(MTL_CHAN_BASE_ADDR + \
+					((x) * MTL_CHAN_BASE_OFFSET))
 
 static inline u32 mtl_chanx_base_addr(const struct dwmac4_addrs *addrs,
 				      const u32 x)
@@ -398,8 +409,15 @@ static inline u32 mtl_chanx_base_addr(const struct dwmac4_addrs *addrs,
 #define MTL_OP_MODE_RTC_128		(3 << MTL_OP_MODE_RTC_SHIFT)
 
 /* MTL ETS Control register */
+#ifdef CONFIG_DWMAC_QCOM_VER3
+#define MTL_ETS_CTRL_BASE_ADDR		0x00008010
+#define MTL_ETS_CTRL_BASE_OFFSET	0x1000
+#else
 #define MTL_ETS_CTRL_BASE_ADDR		0x00000d10
 #define MTL_ETS_CTRL_BASE_OFFSET	0x40
+#endif
+#define MTL_ETSX_CTRL_BASE_ADDR(x)	(MTL_ETS_CTRL_BASE_ADDR + \
+					((x) * MTL_ETS_CTRL_BASE_OFFSET))
 
 static inline u32 mtl_etsx_ctrl_base_addr(const struct dwmac4_addrs *addrs,
 					  const u32 x)
@@ -418,8 +436,16 @@ static inline u32 mtl_etsx_ctrl_base_addr(const struct dwmac4_addrs *addrs,
 #define MTL_ETS_CTRL_AVALG		BIT(2)
 
 /* MTL Queue Quantum Weight */
+#ifdef CONFIG_DWMAC_QCOM_VER3
+#define MTL_TXQ_WEIGHT_BASE_ADDR	0x00008018
+#define MTL_TXQ_WEIGHT_BASE_OFFSET	0x1000
+#else
 #define MTL_TXQ_WEIGHT_BASE_ADDR	0x00000d18
 #define MTL_TXQ_WEIGHT_BASE_OFFSET	0x40
+#endif
+#define MTL_TXQX_WEIGHT_BASE_ADDR(x)	(MTL_TXQ_WEIGHT_BASE_ADDR + \
+					((x) * MTL_TXQ_WEIGHT_BASE_OFFSET))
+#define MTL_TXQ_WEIGHT_ISCQW_MASK	GENMASK(20, 0)
 
 static inline u32 mtl_txqx_weight_base_addr(const struct dwmac4_addrs *addrs,
 					    const u32 x)
@@ -434,11 +460,18 @@ static inline u32 mtl_txqx_weight_base_addr(const struct dwmac4_addrs *addrs,
 	return addr;
 }
 
-#define MTL_TXQ_WEIGHT_ISCQW_MASK	GENMASK(20, 0)
-
 /* MTL sendSlopeCredit register */
+#ifdef CONFIG_DWMAC_QCOM_VER3
+#define MTL_SEND_SLP_CRED_BASE_ADDR	0x0000801c
+#define MTL_SEND_SLP_CRED_OFFSET	0x1000
+#else
 #define MTL_SEND_SLP_CRED_BASE_ADDR	0x00000d1c
 #define MTL_SEND_SLP_CRED_OFFSET	0x40
+#endif
+#define MTL_SEND_SLP_CREDX_BASE_ADDR(x)	(MTL_SEND_SLP_CRED_BASE_ADDR + \
+					((x) * MTL_SEND_SLP_CRED_OFFSET))
+
+#define MTL_SEND_SLP_CRED_SSC_MASK	GENMASK(13, 0)
 
 static inline u32 mtl_send_slp_credx_base_addr(const struct dwmac4_addrs *addrs,
 					       const u32 x)
@@ -453,11 +486,18 @@ static inline u32 mtl_send_slp_credx_base_addr(const struct dwmac4_addrs *addrs,
 	return addr;
 }
 
-#define MTL_SEND_SLP_CRED_SSC_MASK	GENMASK(13, 0)
-
 /* MTL hiCredit register */
+#ifdef CONFIG_DWMAC_QCOM_VER3
+#define MTL_HIGH_CRED_BASE_ADDR		0x00008020
+#define MTL_HIGH_CRED_OFFSET		0x1000
+#else
 #define MTL_HIGH_CRED_BASE_ADDR		0x00000d20
 #define MTL_HIGH_CRED_OFFSET		0x40
+#endif
+#define MTL_HIGH_CREDX_BASE_ADDR(x)	(MTL_HIGH_CRED_BASE_ADDR + \
+					((x) * MTL_HIGH_CRED_OFFSET))
+
+#define MTL_HIGH_CRED_HC_MASK		GENMASK(28, 0)
 
 static inline u32 mtl_high_credx_base_addr(const struct dwmac4_addrs *addrs,
 					   const u32 x)
@@ -472,11 +512,18 @@ static inline u32 mtl_high_credx_base_addr(const struct dwmac4_addrs *addrs,
 	return addr;
 }
 
-#define MTL_HIGH_CRED_HC_MASK		GENMASK(28, 0)
-
 /* MTL loCredit register */
+#ifdef CONFIG_DWMAC_QCOM_VER3
+#define MTL_LOW_CRED_BASE_ADDR		0x00008024
+#define MTL_LOW_CRED_OFFSET		0x1000
+#else
 #define MTL_LOW_CRED_BASE_ADDR		0x00000d24
 #define MTL_LOW_CRED_OFFSET		0x40
+#endif
+#define MTL_LOW_CREDX_BASE_ADDR(x)	(MTL_LOW_CRED_BASE_ADDR + \
+					((x) * MTL_LOW_CRED_OFFSET))
+
+#define MTL_HIGH_CRED_LC_MASK		GENMASK(28, 0)
 
 static inline u32 mtl_low_credx_base_addr(const struct dwmac4_addrs *addrs,
 					  const u32 x)
@@ -490,8 +537,6 @@ static inline u32 mtl_low_credx_base_addr(const struct dwmac4_addrs *addrs,
 
 	return addr;
 }
-
-#define MTL_HIGH_CRED_LC_MASK		GENMASK(28, 0)
 
 /*  MTL debug */
 #define MTL_DEBUG_TXSTSFSTS		BIT(5)
