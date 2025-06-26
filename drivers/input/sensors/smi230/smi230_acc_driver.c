@@ -1864,8 +1864,10 @@ static int smi230_acc_early_buff_init(struct smi230_client_data *client_data)
 
 	err |= smi230_acc_fifo_reset(p_smi230_dev);
 
-	p_smi230_dev->accel_cfg.power = SMI230_ACCEL_PM_ACTIVE;
-	smi230_acc_set_power_mode(p_smi230_dev);
+	if (p_smi230_dev->accel_cfg.power != SMI230_ACCEL_PM_ACTIVE) {
+		p_smi230_dev->accel_cfg.power = SMI230_ACCEL_PM_ACTIVE;
+		smi230_acc_set_power_mode(p_smi230_dev);
+	}
 	client_data->timestamp_old = ktime_get_boottime_ns();
 
 	return 1;
@@ -2441,12 +2443,14 @@ static int smi230_acc_configuration(struct smi230_dev *p_smi230_dev)
 		SMI230_ENABLE;
 #endif
 
+#ifndef CONFIG_ENABLE_SMI230_ACC_GYRO_BUFFERING
 	p_smi230_dev->accel_cfg.odr = SMI230_ACCEL_ODR_100_HZ;
 	p_smi230_dev->accel_cfg.bw = SMI230_ACCEL_BW_NORMAL;
 	p_smi230_dev->accel_cfg.range = SMI230_ACCEL_RANGE_4G;
 
 	err |= smi230_acc_set_meas_conf(p_smi230_dev);
 	smi230_delay(100);
+#endif
 
 #ifdef CONFIG_SMI230_ACC_FIFO
 	PINFO("ACC FIFO is enabled");
@@ -2732,6 +2736,7 @@ static int smi230_acc_configuration(struct smi230_dev *p_smi230_dev)
 	}
 #endif
 
+#ifndef CONFIG_ENABLE_SMI230_ACC_GYRO_BUFFERING
 #ifndef CONFIG_SMI230_DATA_SYNC
 #ifndef CONFIG_SMI230_DEBUG
 	/*if not for the convenience of debugging, sensors should be disabled at startup*/
@@ -2741,6 +2746,7 @@ static int smi230_acc_configuration(struct smi230_dev *p_smi230_dev)
 		PERR("set power mode failed");
 		return err;
 	}
+#endif
 #endif
 #endif
 	return err;
