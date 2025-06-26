@@ -642,6 +642,8 @@ static int inv_mpu_probe(struct i2c_client *client)
 #ifdef TIMER_BASED_BATCHING
 	pr_info("Timer based batching\n");
 #endif
+	st->ws = wakeup_source_register(st->dev, "iam20680");
+
 	result = inv_acc_gyro_early_buff_init(indio_dev);
 
 	if (result != 1)
@@ -696,6 +698,7 @@ static int inv_mpu_remove(struct i2c_client *client)
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 	struct inv_mpu_state *st = iio_priv(indio_dev);
 
+	wakeup_source_unregister(st->ws);
 	inv_acc_gyro_input_cleanup(indio_dev);
 #ifndef CONFIG_HAS_WAKELOCK
 	if (st->wake_lock)
