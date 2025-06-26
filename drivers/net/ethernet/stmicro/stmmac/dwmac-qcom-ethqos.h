@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+/* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef	_DWMAC_QCOM_ETHQOS_H
