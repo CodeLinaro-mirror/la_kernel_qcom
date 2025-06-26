@@ -6424,7 +6424,7 @@ read_again:
 			buf->page = NULL;
 		}
 
-		if (buf2_len) {
+		if (buf2_len && buf->sec_page) {
 			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV, buf->sec_addr,
 						buf2_len, dma_dir);
 			skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
