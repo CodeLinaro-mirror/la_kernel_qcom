@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -11,13 +11,28 @@
 #include <linux/qseecom_kernel.h>
 #include <trace/hooks/bl_hib.h>
 #include <linux/reboot.h>
+#include <linux/smci_clientenv.h>
+#include <soc/qcom/smci_low_power_key_mgr.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/init.h>
 
+#define ILOWPOWERKEYMANAGER_ERROR_INVALID_OPERATION_CHECK 11
 #define AUTH_SIZE		16
+#define AUTHTAG			1
 #define QSEECOM_ALIGN_SIZE      0x40
 #define QSEECOM_ALIGN_MASK      (QSEECOM_ALIGN_SIZE - 1)
 #define QSEECOM_ALIGN(x)        \
 	((x + QSEECOM_ALIGN_MASK) & (~QSEECOM_ALIGN_MASK))
 
+
+typedef __u32 __bitwise blk_opf_t;
+
+
+static bool gethibkey_value = false;
+static struct kobject *gethibkey_kobj;
+static struct smci_object client_env = {0};
+static struct smci_object key_mgr_object = {0};
 
 struct s4app_time {
 	uint16_t year;
@@ -76,7 +91,9 @@ static struct crypto_aead *tfm;
 static struct aead_request *req;
 static u8 iv_size;
 static u8 key[AES256_KEY_SIZE];
+#ifndef CONFIG_QCOM_KERNEL_STATIC_KEY
 static struct qseecom_handle *app_handle;
+#endif
 static int first_encrypt;
 static void *temp_out_buf;
 static int pos;
@@ -99,6 +116,15 @@ static void init_sg(struct scatterlist *sg, void *data, unsigned int size)
 
 static void save_auth(uint8_t *out_buf)
 {
+	int i;
+	u8 *auth_ptr = out_buf + PAGE_SIZE;
+
+	if (pos<=2)
+		pr_err("Auth pos:%d\n",pos);
+	for (i = 0; i < AUTH_SIZE && pos<=2; ++i) {
+		pr_err("%02x ", auth_ptr[i]);
+	}
+
 	memcpy(authslot_start + (pos * AUTH_SIZE), out_buf + PAGE_SIZE,
 		AUTH_SIZE);
 	pos++;
@@ -129,8 +155,12 @@ static void encrypt_page(void *data, void *buf)
 	struct scatterlist sg_in[2], sg_out[2];
 	struct crypto_wait wait;
 	int ret = 0;
+	int i;
 
+	unsigned char *test_buf_before = (unsigned char *)buf;
+	unsigned char *test_buf_after = (unsigned char *)temp_out_buf;
 	/* Allocate a request object */
+	memset(key, AUTHTAG, AES256_KEY_SIZE);
 	req = aead_request_alloc(tfm, GFP_KERNEL);
 	if (!req) {
 		ret = -ENOMEM;
@@ -168,7 +198,19 @@ static void encrypt_page(void *data, void *buf)
 		pr_err("Error encrypting data: %d\n", ret);
 		goto out;
 	}
+	if (pos<=2)
+		pr_err("iv:%d\n",pos);
+		for (i = 0; i < IV_SIZE && pos<=2; ++i)
+			pr_err("%02x ", iv[i]);
+	if (pos<=2)
+		pr_err("Buf before:%d\n",pos);
+	for (i = 0; i < AUTH_SIZE && pos<=2; ++i)
+		pr_err("%02x ", test_buf_before[i]);
 
+	if (pos<=2)
+		pr_err("Buf after:%d\n",pos);
+	for (i = 0; i < AUTH_SIZE && pos<=2; ++i)
+		pr_err("%02x ", test_buf_after[i]);
 	memcpy(buf, temp_out_buf, PAGE_SIZE);
 	save_auth(temp_out_buf);
 
@@ -181,6 +223,79 @@ out:
 err_aead:
 	free_pages((unsigned long)temp_out_buf, 1);
 }
+
+#ifndef CONFIG_QCOM_BOOTLOADER_BASED_RESTORE
+static void init_sg_decrypt(struct scatterlist *sg, void *data, unsigned int size)
+{
+	sg_init_table(sg, 2);
+	sg_set_buf(&sg[0], "SECURE_S2D!!", 12);
+	sg_set_buf(&sg[1], data, size);
+}
+
+static void decrypt_page(void *data, void *buf)
+{
+	struct scatterlist sg_in[2], sg_out[2];
+	struct crypto_wait wait;
+	int ret = 0;
+	struct aead_request *decrypt_req = NULL;
+	void *decrypt_temp_out_buf = NULL;
+	unsigned char iv_decrypt[IV_SIZE];
+	static struct crypto_aead *decrypt_tfm;
+
+	decrypt_tfm = crypto_alloc_aead("gcm(aes)", 0, 0);
+
+	/* Allocate a request object */
+	decrypt_req = aead_request_alloc(decrypt_tfm, GFP_KERNEL);
+	if (!decrypt_req) {
+		pr_err("[%s]: Error allocating aead req\n", __func__);
+		return;
+	}
+
+	crypto_init_wait(&wait);
+	aead_request_set_callback(decrypt_req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+			crypto_req_done, &wait);
+
+	ret = crypto_aead_setauthsize(decrypt_tfm, AUTH_SIZE);
+
+	iv_size = crypto_aead_ivsize(decrypt_tfm);
+	if (iv_size)
+		memset(iv_decrypt, AUTH_TAG, iv_size);
+
+	ret = crypto_aead_setkey(decrypt_tfm, key, AES256_KEY_SIZE);
+	if (ret) {
+		pr_err("Error setting key: %d\n", ret);
+		goto out;
+	}
+	crypto_aead_clear_flags(decrypt_tfm, ~0);
+	decrypt_temp_out_buf = (void *)__get_free_pages(GFP_KERNEL, 1);
+	if (!decrypt_temp_out_buf) {
+		pr_err("[%s]: Error allocating memory for decryption output buffer\n", __func__);
+		goto out;
+	}
+
+	memset(decrypt_temp_out_buf, 0, 2 * PAGE_SIZE);
+	memcpy(decrypt_temp_out_buf, buf, PAGE_SIZE);
+	init_sg_decrypt(sg_in, decrypt_temp_out_buf, PAGE_SIZE + AUTH_SIZE);
+	memset(buf, 0, PAGE_SIZE);
+	init_sg_decrypt(sg_out, buf, PAGE_SIZE);
+	aead_request_set_ad(decrypt_req, 12);
+	aead_request_set_crypt(decrypt_req, sg_in, sg_out, PAGE_SIZE + AUTH_SIZE, iv_decrypt);
+	crypto_aead_decrypt(decrypt_req);
+	crypto_wait_req(ret, &wait);
+	if (ret) {
+		goto fail;
+	}
+
+fail:
+	if (decrypt_temp_out_buf)
+		free_pages((unsigned long)decrypt_temp_out_buf, 1);
+out:
+	aead_request_free(decrypt_req);
+
+	return;
+}
+
+#endif
 
 static int read_authpage_count(void)
 {
@@ -335,12 +450,15 @@ static void save_auth_and_params_to_disk(struct work_struct *work)
 	struct hib_bio_batch hb;
 	int err2, i = 0;
 
+	pr_debug("Queued save_auth_and_params_to_disk..");
 	hib_init_batch(&hb);
 
 	/*
 	 * Allocate a page to save the encryption params
 	 */
 	params_slot = alloc_swapdev_block(root_swap_dev);
+	pr_debug("root_swap_dev:%hu",root_swap_dev);
+	pr_debug("params_slot:%d",params_slot);
 
 	if (auth_slot) {
 		*(int *)auth_slot = params_slot + 1;
@@ -360,17 +478,21 @@ static void save_auth_and_params_to_disk(struct work_struct *work)
 		 * authentication slot number. This data will be stored at index as
 		 * that of the first swap_map_page.
 		 */
+		pr_debug("write_page 1 auth_slot");
 		write_page(auth_slot, 1, &hb);
 	}
 
 	authpage = authslot_start;
+	pr_debug("authpage_count:%d", authpage_count);
 	while (authslot_count < authpage_count) {
 		cur_slot = alloc_swapdev_block(root_swap_dev);
 		write_page(authpage, cur_slot, &hb);
 		authpage = (unsigned char *)authpage + PAGE_SIZE;
 		authslot_count++;
 	}
+	pr_debug("write_page params_slot, authslot_count:%d", authslot_count);
 	params->authslot_count = authslot_count;
+	pr_debug("writing params_slot:%d",params_slot);
 	write_page(params, params_slot, &hb);
 
 	/*
@@ -378,9 +500,10 @@ static void save_auth_and_params_to_disk(struct work_struct *work)
 	 */
 	if (compressed_blk_array) {
 		uint32_t size = get_size_of_compression_block_array(nr_pages);
-
+		pr_debug("get_size_of_compression_block_array size:%u",size);
 		for (i = 0; i < size / PAGE_SIZE; i++) {
 			cur_slot = alloc_swapdev_block(root_swap_dev);
+			pr_debug("write_page compressed_blk_array, cur_slot:%d", cur_slot);
 			write_page(compressed_blk_array + (i * PAGE_SIZE), cur_slot, &hb);
 		}
 	}
@@ -392,6 +515,7 @@ static void save_auth_and_params_to_disk(struct work_struct *work)
 
 static void save_params_to_disk(void *data, unsigned short root_swap)
 {
+	pr_debug("save_params_to_disk..");
 	root_swap_dev = root_swap;
 	queue_work(system_wq, &save_params_work);
 }
@@ -417,6 +541,7 @@ static struct notifier_block poweroff_nb = {
 	.notifier_call = poweroff_notifier,
 };
 
+#ifndef CONFIG_QCOM_KERNEL_STATIC_KEY
 static int get_key_from_ta(void)
 {
 	int ret;
@@ -449,6 +574,7 @@ static int get_key_from_ta(void)
 	}
 	return ret;
 }
+#endif
 
 static int init_aead(void)
 {
@@ -462,6 +588,7 @@ static int init_aead(void)
 	return 0;
 }
 
+#ifndef CONFIG_QCOM_KERNEL_STATIC_KEY
 static int init_ta_and_set_key(void)
 {
 	const uint32_t shared_buffer_len = 4096;
@@ -483,6 +610,7 @@ static int init_ta_and_set_key(void)
 
 	return ret;
 }
+#endif
 
 static int alloc_auth_memory(void)
 {
@@ -495,6 +623,7 @@ static int alloc_auth_memory(void)
 	authslot_start = vmalloc(total_auth_size);
 	if (!authslot_start)
 		return -ENOMEM;
+	pr_debug("%s: authslot_count:%u, total_auth_size:%lu",__func__,params->authslot_count,total_auth_size);
 	return 0;
 }
 
@@ -529,11 +658,121 @@ static void cleanup_cmp_blk_array(void)
 	}
 }
 
+static int setup(void)
+{
+	int ret = 0;
+
+	ret =  smci_get_client_env_object(&client_env);
+	if (ret) {
+		pr_err("Failed to get client env object, ret = %d\n", ret);
+		return ret;
+	}
+
+	ret = smci_clientenv_open(client_env, CLOWPOWERKEYMANAGER_UID,
+				  &key_mgr_object);
+	if (ret)
+		pr_err("Failed to get Key Manager object, ret = %d\n", ret);
+
+	return ret;
+}
+
+static void cleanup(void)
+{
+	SMCI_OBJECT_ASSIGN_NULL(key_mgr_object);
+	SMCI_OBJECT_ASSIGN_NULL(client_env);
+}
+
+int key_mgr_get_key(uint32_t event, void *key, size_t key_len,
+		    size_t *key_len_out)
+{
+	int ret = setup();
+
+	if (ret)
+		goto exit;
+
+	ret = ILowPowerKeyManager_getKey(key_mgr_object, event, key,
+					 key_len, key_len_out);
+exit:
+	cleanup();
+	return ret;
+}
+
+int key_mgr_prepare(uint32_t event, const ILOWPOWERKEYMANAGER_key_info *key_info)
+{
+	int ret = setup();
+
+	if (ret)
+		goto exit;
+
+	ret = ILowPowerKeyManager_prepare(key_mgr_object, event, key_info);
+exit:
+	cleanup();
+	return ret;
+}
+
+#ifdef CONFIG_QCOM_KERNEL_SEC_KEY
+
+
+void print_key(void) {
+	int i;
+	for (i = 0; i < AES256_KEY_SIZE; i++) {
+		pr_debug("%u ", key[i]);
+	}
+}
+
+int get_key_for_hib_exp(void)
+{
+        int qtee_ret = 0;
+        size_t key_len_out;
+
+        ILOWPOWERKEYMANAGER_key_info *key_info;
+
+        pr_err("%s: Getting key from SSG",__func__);
+        key_info = kmalloc(sizeof(ILOWPOWERKEYMANAGER_key_info), GFP_KERNEL);
+        key_info->key_size = AES256_KEY_SIZE;
+
+        qtee_ret = key_mgr_prepare(ILOWPOWERKEYMANAGER_HIBERNATE_WITH_ENCRYPTION, key_info);
+	if(qtee_ret){
+	        if (qtee_ret == ILOWPOWERKEYMANAGER_ERROR_INVALID_OPERATION_CHECK) {
+			pr_debug("%s: Thrashing the old key.. %d, %d", __func__, qtee_ret, ILOWPOWERKEYMANAGER_ERROR_INVALID_OPERATION);
+			qtee_ret = key_mgr_get_key(ILOWPOWERKEYMANAGER_HIBERNATE_WITH_ENCRYPTION, key,
+					AES256_KEY_SIZE, &key_len_out);
+			if (qtee_ret) {
+				pr_debug("%s: Failed to init QTEE: key_mgr_get_key: %d\n", __func__, qtee_ret);
+				return qtee_ret;
+			}
+			qtee_ret = key_mgr_prepare(ILOWPOWERKEYMANAGER_HIBERNATE_WITH_ENCRYPTION, key_info);
+			if (qtee_ret) {
+	        	        pr_debug("%s: Failed to init QTEE: key_mgr_prepare: %d\n", __func__, qtee_ret);
+				return qtee_ret;
+			}
+		} else {
+			pr_debug("%s: Failed to init QTEE: key_mgr_prepare: %d\n", __func__, qtee_ret);
+			return qtee_ret;
+		}
+	}
+
+        qtee_ret = key_mgr_get_key(ILOWPOWERKEYMANAGER_HIBERNATE_WITH_ENCRYPTION, key,
+				AES256_KEY_SIZE, &key_len_out);
+        if (qtee_ret) {
+                pr_debug("%s: Failed to get Key: %d\n", __func__, qtee_ret);
+	} else {
+	        print_key();
+	}
+
+	return qtee_ret;
+}
+EXPORT_SYMBOL_GPL(get_key_for_hib_exp);
+#endif
+
 static int hibernate_pm_notifier(struct notifier_block *nb,
 				unsigned long event, void *unused)
 {
 	int ret = NOTIFY_DONE;
 
+#ifdef CONFIG_QCOM_KERNEL_SEC_KEY
+	size_t key_len_out;
+#endif 
 	switch (event) {
 
 	case (PM_HIBERNATION_PREPARE):
@@ -547,11 +786,13 @@ static int hibernate_pm_notifier(struct notifier_block *nb,
 			goto err_aead;
 		}
 
+		#ifndef CONFIG_QCOM_KERNEL_STATIC_KEY
 		ret = init_ta_and_set_key();
 		if (ret) {
 			pr_err("%s: Failed to init TA: %d\n", __func__, ret);
 			goto err_setkey;
 		}
+		#endif
 
 		temp_out_buf = (void *)__get_free_pages(GFP_KERNEL, 1);
 		if (!temp_out_buf) {
@@ -567,6 +808,22 @@ static int hibernate_pm_notifier(struct notifier_block *nb,
 		cleanup_cmp_blk_array();
 		break;
 
+	case (PM_RESTORE_PREPARE):
+		#ifdef CONFIG_QCOM_KERNEL_SEC_KEY
+			ret = key_mgr_get_key(ILOWPOWERKEYMANAGER_HIBERNATE_WITH_ENCRYPTION, key,
+					AES256_KEY_SIZE, &key_len_out);
+			if (ret) {
+				pr_err("%s: PM_RESTORE_PREPARE: Unable to restore key from QTEE: %d\n",
+						__func__, ret);
+				return NOTIFY_STOP;
+			}
+			print_key();
+		#endif
+		break;
+	case (PM_POST_RESTORE):
+		deinit_aes_encrypt();
+		cleanup_cmp_blk_array();
+		break;
 	default:
 		WARN_ONCE(1, "Invalid PM Notifier\n");
 		break;
@@ -630,10 +887,9 @@ static void hibernated_do_mem_alloc(void *data, unsigned long pages,
 
 	/* total no. of pages in the snapshot image */
 	nr_pages = pages;
-
+	pr_debug("%s: total_snapshot_pages:%lu..",__func__, pages);
 	if (!(swsusp_header_flags & SF_NOCOMPRESS_MODE)) {
 		size = get_size_of_compression_block_array(pages);
-
 		compressed_blk_array = kvzalloc(size, GFP_KERNEL);
 		if (!compressed_blk_array) {
 			*ret = -ENOMEM;
@@ -657,6 +913,33 @@ static void hibernate_save_cmp_len(void *data, size_t cmp_len)
 	compressed_blk_array[blk_array_pos++] = pages;
 }
 
+static ssize_t gethibkey_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, AES256_KEY_SIZE, "%d\n", gethibkey_value);
+}
+
+static ssize_t gethibkey_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	bool new_value;
+	int ret = kstrtobool(buf, &new_value);
+	if (ret < 0)
+		return ret;
+
+	gethibkey_value = new_value;
+
+	if (gethibkey_value) {
+		pr_err("Calling get_key_for_hib_exp..");
+#ifdef CONFIG_QCOM_KERNEL_SEC_KEY
+		get_key_for_hib_exp();
+#endif
+	}
+
+	pr_err("Received: %s", buf);
+	return count;
+}
+
+static struct kobj_attribute gethibkey_attr = __ATTR(gethibkey, 0664, gethibkey_show, gethibkey_store);
+
 static int __init qcom_secure_hibernattion_init(void)
 {
 	int ret;
@@ -667,6 +950,15 @@ static int __init qcom_secure_hibernattion_init(void)
 	register_trace_android_vh_post_image_save(save_params_to_disk, NULL);
 	register_trace_android_vh_hibernate_save_cmp_len(hibernate_save_cmp_len, NULL);
 	register_trace_android_vh_hibernated_do_mem_alloc(hibernated_do_mem_alloc, NULL);
+
+
+	gethibkey_kobj = kobject_create_and_add("gethibkey_kobject", kernel_kobj);
+	if (!gethibkey_kobj)
+		return -ENOMEM;
+
+	ret = sysfs_create_file(gethibkey_kobj, &gethibkey_attr.attr);
+	if (ret)
+		kobject_put(gethibkey_kobj);
 
 	ret = register_pm_notifier(&pm_nb);
 	if (ret) {

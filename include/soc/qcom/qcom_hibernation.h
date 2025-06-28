@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __SOC_QCOM_HIBERNATION_H__
@@ -41,5 +41,6 @@ struct hib_bio_batch {
 };
 
 extern struct block_device *hiber_bdev;
+extern int get_key_for_hib_exp(void);
 
 #endif /* __SOC_QCOM_HIBERNATION_H__ */
