@@ -23,6 +23,7 @@ def define_autoghgvm():
         "drivers/iommu/iommu-logger.ko",
         "drivers/iommu/qcom_iommu_debug.ko",
         "drivers/iommu/qcom_iommu_util.ko",
+        "drivers/irqchip/qcom-pdc.ko",
         "drivers/mailbox/qcom-ipcc.ko",
         "drivers/net/ethernet/stmicro/stmmac/dwmac-generic.ko",
         "drivers/net/ethernet/stmicro/stmmac/dwmac-ipq806x.ko",
@@ -82,6 +83,10 @@ def define_autoghgvm():
         "net/core/failover.ko",
         "net/qrtr/qrtr.ko",
         "net/qrtr/qrtr-mhi.ko",
+        "net/sched/cls_flower.ko",
+        "net/sched/sch_cbs.ko",
+        "net/sched/sch_etf.ko",
+        "net/sched/sch_mqprio.ko",
         "net/vmw_vsock/vmw_vsock_virtio_transport.ko",
         "net/wireless/cfg80211.ko",
     ]
