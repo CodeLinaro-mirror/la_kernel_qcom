@@ -24,6 +24,7 @@ load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
 load(":kleaf-scripts/targets/malabar.bzl", "define_malabar")
 load(":kleaf-scripts/targets/monaco.bzl", "define_monaco")
 load(":kleaf-scripts/targets/pikachu.bzl", "define_pikachu")
+load(":kleaf-scripts/targets/seraph.bzl", "define_seraph")
 load(
     ":kleaf-scripts/targets/sun.bzl",
     "define_sun",
@@ -303,6 +304,8 @@ define_bengal()
 define_sun_tuivm()
 
 define_sun_oemvm()
+
+define_seraph()
 
 define_sun_vms()
 
