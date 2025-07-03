@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19, Linaro Limited
-// Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -29,6 +29,31 @@
 
 #include "stmmac_ptp.h"
 #include "dwmac-qcom-serdes.h"
+
+#define DMA_BUS_MODE			0x00001000
+#define DMA_BUS_MODE_SFT_RESET		BIT(0)
+
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+#define DMA_CHAN_BASE_ADDR		0x00008100
+#define DMA_CHAN_BASE_OFFSET		0x1000
+#else
+#define DMA_CHAN_BASE_ADDR		0x00001100
+#define DMA_CHAN_BASE_OFFSET		0x80
+#endif
+#define DMA_CHANX_BASE_ADDR(x)		(DMA_CHAN_BASE_ADDR + \
+					((x) * DMA_CHAN_BASE_OFFSET))
+
+#define DMA_CHAN_TX_CONTROL(x)		(DMA_CHANX_BASE_ADDR(x) + 0x4)
+#define DMA_CHAN_RX_CONTROL(x)		(DMA_CHANX_BASE_ADDR(x) + 0x8)
+
+#define DMA_CONTROL_ST			BIT(0)
+#define DMA_CONTROL_SR			BIT(0)
+
+ /*  MAC registers */
+#define GMAC_CONFIG			0x00000000
+#define GMAC_CONFIG_TE			BIT(1)
+#define GMAC_CONFIG_RE			BIT(0)
+#define DMA_CONTROL_RPF			BIT(31)
 
 #define RGMII_IO_MACRO_DEBUG1		0x20
 #define EMAC_SYSTEM_LOW_POWER_DEBUG	0x28
@@ -2282,6 +2307,113 @@ static void qcom_ethqos_request_phy_wol(void *plat_n)
 	}
 }
 
+static int ethqos_set_fixed_link(struct platform_device *pdev)
+{
+	struct device_node *fixed_phy_node;
+	struct property *status_prop;
+
+	ETHQOSINFO("Enter");
+	fixed_phy_node = of_get_child_by_name(pdev->dev.of_node, "fixed-link");
+
+		if (fixed_phy_node) {
+			status_prop = kzalloc(sizeof(*status_prop), GFP_KERNEL);
+			if (!status_prop) {
+				ETHQOSERR("kzalloc failed\n");
+				return -ENOMEM;
+			}
+
+			status_prop->name = kstrdup("status", GFP_KERNEL);
+			if (!(status_prop->name)) {
+				ETHQOSERR("kstrdup failed to alloc space for name\n");
+				kfree(status_prop);
+				return -ENOMEM;
+			}
+			status_prop->value = kstrdup("okay", GFP_KERNEL);
+			if (!(status_prop->value)) {
+				ETHQOSERR("kstrdup failed to alloc space for value\n");
+				kfree(status_prop);
+				return -ENOMEM;
+			}
+			status_prop->length = strlen(status_prop->value) + 1;
+
+			if (!(of_update_property(fixed_phy_node, status_prop) == 0)) {
+				kfree(status_prop);
+				ETHQOSERR("Fixed-link status update failed\n");
+				return -ENOENT;
+			}
+			ETHQOSINFO("Switch case: Fixed-link enabled from code\n");
+		}
+
+	of_node_put(fixed_phy_node);
+	return 0;
+}
+
+void qcom_stop_dma(void __iomem *ioaddr)
+{
+	u32 value = readl(ioaddr + DMA_CHAN_TX_CONTROL(0));
+
+	//stop tx dma
+	value &= ~DMA_CONTROL_ST;
+	writel(value, ioaddr + DMA_CHAN_TX_CONTROL(0));
+
+	//stop rx
+	value = readl(ioaddr + DMA_CHAN_RX_CONTROL(0));
+
+	//stop RPF
+	value |= DMA_CONTROL_RPF;
+	value &= ~DMA_CONTROL_SR;
+	writel(value, ioaddr + DMA_CHAN_RX_CONTROL(0));
+}
+
+void qcom_disable_mac(void __iomem *ioaddr, bool enable)
+{
+	u32 value = readl(ioaddr + GMAC_CONFIG);
+	u32 old_val = value;
+
+	if (enable)
+		value |= GMAC_CONFIG_RE | GMAC_CONFIG_TE;
+	else
+		value &= ~(GMAC_CONFIG_TE | GMAC_CONFIG_RE);
+
+	if (value != old_val)
+		writel(value, ioaddr + GMAC_CONFIG);
+}
+
+int qcom_dwmac4_dma_reset(void __iomem *ioaddr, struct plat_stmmacenet_data *plat)
+{
+	u32 value = 0;
+	int ret = 0;
+
+	qcom_serdes_loopback_v3_1(plat, true);
+
+	//serdes power up
+	ret =  qcom_ethqos_serdes_update(pethqos, pethqos->speed,
+					 plat->interface);
+
+	if (ret < 0) {
+		ETHQOSERR("serdes up failed\n");
+		return 0;
+	}
+
+	/* DMA SW reset */
+	value |= DMA_BUS_MODE_SFT_RESET;
+	writel(value, ioaddr + DMA_BUS_MODE);
+
+	return readl_poll_timeout(ioaddr + DMA_BUS_MODE, value,
+			!(value & DMA_BUS_MODE_SFT_RESET),
+			10000, 1000000);
+}
+
+void ethqos_cleanup(void __iomem *ioaddr, struct plat_stmmacenet_data *plat)
+{
+	//stop DMA
+	qcom_stop_dma(ioaddr);
+	//stop mac
+	qcom_disable_mac(ioaddr, false);
+	//reset DMA
+	qcom_dwmac4_dma_reset(ioaddr, plat);
+}
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -2328,6 +2460,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 			ret = set_pcs_ane(pcs_ane);
 #endif
 
+	if (phytype == SWITCH)
+		ethqos_set_fixed_link(pdev);
 	stmmac_set_phytype(phytype);
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
@@ -2423,20 +2557,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))
 		plat_dat->rx_clk_runs_in_lpi = 1;
 
-	if (of_property_read_bool(pdev->dev.of_node, "qcom,arm-smmu")) {
-		emac_emb_smmu_ctx.pdev_master = pdev;
-		ret = of_platform_populate(pdev->dev.of_node,
-					   qcom_ethqos_match, NULL, &pdev->dev);
-		if (ret)
-			ETHQOSERR("Failed to populate EMAC platform\n");
-		if (emac_emb_smmu_ctx.ret) {
-			ETHQOSERR("smmu probe failed\n");
-			of_platform_depopulate(&pdev->dev);
-			ret = emac_emb_smmu_ctx.ret;
-			emac_emb_smmu_ctx.ret = 0;
-		}
-	}
-
+	pethqos = ethqos;
 	if (of_property_read_bool(pdev->dev.of_node,
 				  "emac-core-version")) {
 		/* Read emac core version value from dtsi */
@@ -2454,6 +2575,25 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 	ETHQOSDBG(": emac_core_version = %d\n", ethqos->emac_ver);
 
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+	//reset DMA
+	ethqos_cleanup((&stmmac_res)->addr, plat_dat);
+#endif
+
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,arm-smmu")) {
+		emac_emb_smmu_ctx.pdev_master = pdev;
+		ret = of_platform_populate(pdev->dev.of_node,
+					   qcom_ethqos_match, NULL, &pdev->dev);
+		if (ret)
+			ETHQOSERR("Failed to populate EMAC platform\n");
+		if (emac_emb_smmu_ctx.ret) {
+			ETHQOSERR("smmu probe failed\n");
+			of_platform_depopulate(&pdev->dev);
+			ret = emac_emb_smmu_ctx.ret;
+			emac_emb_smmu_ctx.ret = 0;
+		}
+	}
+
 	if (of_property_read_bool(pdev->dev.of_node,
 				  "gdsc-off-on-suspend")) {
 		ethqos->gdsc_off_on_suspend = true;
@@ -2467,8 +2607,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;
-
-	pethqos = ethqos;
 
 	if (of_property_read_bool(np, "pcs-v3")) {
 		plat_dat->pcs_v3 = true;

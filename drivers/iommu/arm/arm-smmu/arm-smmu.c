@@ -99,6 +99,7 @@ static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ ARM_SMMU_OPT_CONTEXT_FAULT_RETRY, "qcom,context-fault-retry" },
 	{ ARM_SMMU_OPT_MULTI_MATCH_HANDOFF_SMR, "qcom,multi-match-handoff-smr" },
 	{ ARM_SMMU_OPT_IGNORE_NUMPAGENDXB, "qcom,ignore-numpagendxb" },
+	{ ARM_SMMU_OPT_DS_NOT_SUPPORTED, "qcom,ds-not-supported" },
 	{ 0, NULL},
 };
 
@@ -3906,7 +3907,9 @@ static int __maybe_unused arm_smmu_pm_suspend(struct device *dev)
 	int ret = 0;
 	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+
+	if ((pm_suspend_target_state == PM_SUSPEND_MEM) &&
+				!(smmu->options & ARM_SMMU_OPT_DS_NOT_SUPPORTED))
 		return arm_smmu_pm_freeze_late(dev);
 
 	if (pm_runtime_suspended(dev))
@@ -3923,10 +3926,15 @@ clk_unprepare:
 
 static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
 {
-	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
+
+	if ((pm_suspend_target_state == PM_SUSPEND_MEM) &&
+				!(smmu->options & ARM_SMMU_OPT_DS_NOT_SUPPORTED))
 		return arm_smmu_pm_restore_early(dev);
+
 	else
 		return arm_smmu_pm_resume_common(dev);
+
 }
 
 static const struct dev_pm_ops arm_smmu_pm_ops = {
