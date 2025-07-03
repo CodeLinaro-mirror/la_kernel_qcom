@@ -69,6 +69,9 @@ config INTERCONNECT_QCOM_RPMH_POSSIBLE
 config INTERCONNECT_QCOM_RPMH
 	tristate
 
+config INTERCONNECT_QCOM_RPM
+	tristate
+
 config INTERCONNECT_QCOM_SA8775P
 	tristate "Qualcomm SA8775P interconnect driver"
 	depends on INTERCONNECT_QCOM_RPMH_POSSIBLE
