@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-/* Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* ​​​​Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.​ */
 
 /* ========================================================================== */
 /*                          INCLUDE FILES                                     */
@@ -214,7 +214,7 @@ static int __maybe_unused emac_mdio_fe_xmit_and_wait(struct emac_mdio_dev *pdev)
 	pdev->tx_msg.request_data.physeq = pdev->emac_mdio_fe_seq;
 	pdev->phy_reply = -1;
 	emac_mdio_fe_xmit(pdev);
-	EMAC_MDIO_FE_INFO("Sent EMAC_MDIO_FE_REQ Cmd");
+	EMAC_MDIO_FE_DBG("Sent EMAC_MDIO_FE_REQ Cmd");
 
 	tmp = msecs_to_jiffies(WAIT_PHY_REPLY_MAX_TIMEOUT);
 	ret = down_timeout(&pdev->emac_mdio_fe_sem, tmp);
@@ -304,7 +304,7 @@ static void emac_mdio_fe_update(struct emac_mdio_dev *pdev, struct be_to_fe_msg 
 		req_seq = pdev->emac_mdio_fe_seq;
 		reply_seq = msg->result.physeq;
 		phy_reply = msg->result.phyrst;
-		EMAC_MDIO_FE_INFO("Notify EMAC_MDIO_HW_REPLY with rst as %d", phy_reply);
+		EMAC_MDIO_FE_DBG("Notify EMAC_MDIO_HW_REPLY with rst as %d", phy_reply);
 		if (req_seq == reply_seq) {
 			pdev->phy_reply = phy_reply;
 			up(&pdev->emac_mdio_fe_sem);
