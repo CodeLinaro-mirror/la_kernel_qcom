@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __MSM_MHI_DEV_H
@@ -282,6 +282,9 @@ int mhi_vf_ctrl_state_info(u32 vf_id, uint32_t idx, uint32_t *info);
 /**
  * mhi_register_state_cb() - Clients can register and receive callback after
  *		MHI channel is connected or disconnected.
+ *
+ *		Invoking this function in cases where mhi_dev_probe has failed,
+ *		will result in a return value of -EOPNOTSUPP.
  */
 int mhi_register_state_cb(void (*mhi_state_cb)
 			(struct mhi_dev_client_cb_data *cb_data), void *data,
