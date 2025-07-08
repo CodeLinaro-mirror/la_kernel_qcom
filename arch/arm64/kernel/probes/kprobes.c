@@ -212,7 +212,7 @@ static void __kprobes setup_singlestep(struct kprobe *p,
 	}
 
 
-	if (p->ainsn.api.insn) {
+	if (p->ainsn.api.insn && false) {
 		/* prepare for single stepping */
 		slot = (unsigned long)p->ainsn.api.insn;
 
