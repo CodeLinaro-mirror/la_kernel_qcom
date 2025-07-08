@@ -7,21 +7,22 @@
 
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/spmi/spmi.h>
 #include "qcs8300.dtsi"
 #include "qcs8300-pmics.dtsi"
 
 /delete-node/ &usb_1_dwc3;
 /delete-node/ &usb_2_dwc3;
 / {
-	model = "Qualcomm Technologies, Inc. IQ 8275 EVK";
-	compatible = "qcom,qcs8275-iq-8275-evk", "qcom,qcs8275", "qcom,qcs8300";
+	model = "Qualcomm Technologies, Inc. IQ8 8275 Pro SKU EVK";
+	compatible = "qcom,qcs8275-iq-8275-evk-pro-sku", "qcom,qcs8275", "qcom,qcs8300";
 
 	qcom,msm-id = <675 0x10000>;
-	qcom,board-id = <0x00010020 0>, <0x00010019 0>;
+	qcom,board-id = <0x00010020 2>, <0x00010019 2>;
 
 	aliases {
 		serial0 = &uart7;
-		serial1 = &uart2;
 	};
 
 	chosen {
@@ -49,20 +50,6 @@
 	regulators-0 {
 		compatible = "qcom,pmm8654au-rpmh-regulators";
 		qcom,pmic-id = "a";
-
-		vreg_s4a: smps4 {
-			regulator-name = "vreg_s4a";
-			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1800000>;
-			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
-		};
-
-		vreg_s9a: smps9 {
-			regulator-name = "vreg_s9a";
-			regulator-min-microvolt = <1352000>;
-			regulator-max-microvolt = <1352000>;
-			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
-		};
 
 		vreg_l3a: ldo3 {
 			regulator-name = "vreg_l3a";
@@ -149,7 +136,7 @@
 		vreg_l1c: ldo1 {
 			regulator-name = "vreg_l1c";
 			regulator-min-microvolt = <300000>;
-			regulator-max-microvolt = <500000>;
+			regulator-max-microvolt = <512000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 			regulator-allow-set-load;
 			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
@@ -170,16 +157,6 @@
 			regulator-name = "vreg_l4c";
 			regulator-min-microvolt = <1200000>;
 			regulator-max-microvolt = <1200000>;
-			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
-			regulator-allow-set-load;
-			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
-						   RPMH_REGULATOR_MODE_HPM>;
-		};
-
-		vreg_l6c: ldo6 {
-			regulator-name = "vreg_l6c";
-			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1800000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 			regulator-allow-set-load;
 			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
@@ -214,94 +191,6 @@
 			regulator-allow-set-load;
 			regulator-allowed-modes = <RPMH_REGULATOR_MODE_LPM
 						   RPMH_REGULATOR_MODE_HPM>;
-		};
-	};
-};
-
-&ethernet0 {
-	phy-mode = "sgmii";
-	phy-handle = <&sgmii_phy0>;
-
-	pinctrl-0 = <&ethernet0_default>;
-	pinctrl-names = "default";
-
-	snps,mtl-rx-config = <&mtl_rx_setup>;
-	snps,mtl-tx-config = <&mtl_tx_setup>;
-	snps,ps-speed = <1000>;
-
-	status = "okay";
-
-	mdio {
-		compatible = "snps,dwmac-mdio";
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		sgmii_phy0: phy@1c {
-			compatible = "ethernet-phy-id004d.d101";
-			reg = <0x1c>;
-			device_type = "ethernet-phy";
-			reset-gpios = <&tlmm 31 GPIO_ACTIVE_LOW>;
-			reset-assert-us = <11000>;
-			reset-deassert-us = <70000>;
-		};
-	};
-
-	mtl_rx_setup: rx-queues-config {
-		snps,rx-queues-to-use = <4>;
-		snps,rx-sched-sp;
-
-		queue0 {
-			snps,dcb-algorithm;
-			snps,map-to-dma-channel = <0x0>;
-			snps,route-up;
-			snps,priority = <0x1>;
-		};
-
-		queue1 {
-			snps,dcb-algorithm;
-			snps,map-to-dma-channel = <0x1>;
-			snps,route-ptp;
-		};
-
-		queue2 {
-			snps,avb-algorithm;
-			snps,map-to-dma-channel = <0x2>;
-			snps,route-avcp;
-		};
-
-		queue3 {
-			snps,avb-algorithm;
-			snps,map-to-dma-channel = <0x3>;
-			snps,priority = <0xc>;
-		};
-	};
-
-	mtl_tx_setup: tx-queues-config {
-		snps,tx-queues-to-use = <4>;
-		snps,tx-sched-sp;
-
-		queue0 {
-			snps,dcb-algorithm;
-		};
-
-		queue1 {
-			snps,dcb-algorithm;
-		};
-
-		queue2 {
-			snps,avb-algorithm;
-			snps,send_slope = <0x1000>;
-			snps,idle_slope = <0x1000>;
-			snps,high_credit = <0x3e800>;
-			snps,low_credit = <0xffc18000>;
-		};
-
-		queue3 {
-			snps,avb-algorithm;
-			snps,send_slope = <0x1000>;
-			snps,idle_slope = <0x1000>;
-			snps,high_credit = <0x3e800>;
-			snps,low_credit = <0xffc18000>;
 		};
 	};
 };
@@ -398,49 +287,9 @@
 		gpio-controller;
 		reg = <0x3e>;
 	};
+
 };
 
-&gpi_dma0 {
-	status = "okay";
-};
-
-&gpi_dma1 {
-	status = "okay";
-};
-
-&pcie0 {
-	perst-gpios = <&tlmm 2 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&pcie0_default_state>;
-
-	status = "okay";
-};
-
-&pcie1 {
-	perst-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 21 GPIO_ACTIVE_HIGH>;
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&pcie1_default_state>;
-
-	status = "okay";
-};
-
-&pcie0_phy {
-	vdda-phy-supply = <&vreg_l6a>;
-	vdda-pll-supply = <&vreg_l5a>;
-
-	status = "okay";
-};
-
-&pcie1_phy {
-	vdda-phy-supply = <&vreg_l6a>;
-	vdda-pll-supply = <&vreg_l5a>;
-
-	status = "okay";
-};
 
 &pmm8620au_0_gpios {
 	usb2_id_det_default: usb2-id-det-default {
@@ -460,21 +309,6 @@
 	status = "okay";
 };
 
-&remoteproc_adsp {
-	firmware-name = "qcom/qcs8300/adsp.mbn";
-	status = "okay";
-};
-
-&remoteproc_cdsp {
-	firmware-name = "qcom/qcs8300/cdsp0.mbn";
-	status = "okay";
-};
-
-&remoteproc_gpdsp {
-	firmware-name = "qcom/qcs8300/gpdsp0.mbn";
-	status = "okay";
-};
-
 &sdhc_2 {
 	vmmc-supply = <&dummy_reg>;
 	vqmmc-supply = <&dummy_s4a>;
@@ -486,14 +320,8 @@
 	cap-sd-highspeed;
 
 	cd-gpios = <&tlmm 11 GPIO_ACTIVE_LOW>;
-
 	iommus = <&apps_smmu 0x0 0x0>;
 
-	status = "okay";
-};
-
-&serdes0 {
-	phy-supply = <&vreg_l5a>;
 	status = "okay";
 };
 
@@ -537,85 +365,10 @@
 	};
 };
 
-&spi10 {
-	status = "okay";
-
-	st33htpm0: st33htpm@0 {
-		compatible = "st,st33htpm-spi";
-		reg = <0>;
-		spi-max-frequency = <20000000>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		status = "okay";
-	};
-};
-
 &tlmm {
 
 	dp_hot_plug_det: dp-hot-plug-det-state {
 	/* TODO: Add the required nodes once mdss_dp0 is available.*/
-	};
-
-	ethernet0_default: ethernet0-default-state {
-		ethernet0_mdc: ethernet0-mdc-pins {
-			pins = "gpio5";
-			function = "emac0_mdc";
-			drive-strength = <16>;
-			bias-pull-up;
-		};
-
-		ethernet0_mdio: ethernet0-mdio-pins {
-			pins = "gpio6";
-			function = "emac0_mdio";
-			drive-strength = <16>;
-			bias-pull-up;
-		};
-	};
-
-	pcie0_default_state: pcie0-default-state {
-		perst-pins {
-			pins = "gpio2";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-pull-down;
-		};
-
-		clkreq-pins {
-			pins = "gpio1";
-			function = "pcie0_clkreq";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
-
-		wake-pins {
-			pins = "gpio0";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
-	};
-
-	pcie1_default_state: pcie1-default-state {
-		perst-pins {
-			pins = "gpio23";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-pull-down;
-		};
-
-		clkreq-pins {
-			pins = "gpio22";
-			function = "pcie1_clkreq";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
-
-		wake-pins {
-			pins = "gpio21";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
 	};
 
 	qup_i2c0_default: qup-i2c0-state {
@@ -672,18 +425,6 @@
 		pins = "gpio11";
 		function = "gpio";
 		bias-pull-up;
-	};
-};
-
-&uart2 {
-	pinctrl-names = "default";
-	status = "okay";
-
-	/* HS UART Instance */
-	bluetooth: bluetooth {
-		compatible = "qcom,wcn6855-bt";
-		pinctrl-names = "default";
-		max-speed = <3200000>;
 	};
 };
 

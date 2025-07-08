@@ -87,11 +87,6 @@
 	dummy_reg: regulator-dummy {
 		compatible = "regulator-fixed";
 		regulator-name = "dummy-supply";
-	};
-
-	dummy_s4a: regulator-dummy-s4a {
-		compatible = "regulator-fixed";
-		regulator-name = "dummy-supply-s4a";
 
 		regulator-min-microvolt = <2950000>;
 		regulator-max-microvolt = <2950000>;
@@ -484,6 +479,7 @@
 		reg = <0x67>;
 		interrupt-parent = <&pmm8654au_2_gpios>;
 		interrupts = < 5 IRQ_TYPE_EDGE_FALLING>;
+		wakeup-source;
 
 		connector@0 {
 			compatible = "usb-c-connector";
@@ -645,13 +641,6 @@
 			  "USB2_PWR_EN",
 			  "USB2_FAULT";
 
-	usb2_en_state: usb2-en-state {
-		pins = "gpio9";
-		function = "normal";
-		output-high;
-		power-source = <0>;
-	};
-
 	wlan_en_state: wlan-en-state {
 		pins = "gpio7";
 		function = "normal";
@@ -668,17 +657,28 @@
 		bias-pull-up;
 		power-source = <0>;
 	};
+
+	usb2_id_det_default: usb2-id-det-default {
+		pins = "gpio11";
+		function = "normal";
+		input-enable;
+		bias-pull-up;
+		power-source = <0>;
+	};
 };
 
 &qupv3_id_0 {
+	firmware-name = "qcom/sa8775p/qupv3fw.elf";
 	status = "okay";
 };
 
 &qupv3_id_1 {
+	firmware-name = "qcom/sa8775p/qupv3fw.elf";
 	status = "okay";
 };
 
 &qupv3_id_2 {
+	firmware-name = "qcom/sa8775p/qupv3fw.elf";
 	status = "okay";
 };
 
@@ -977,6 +977,13 @@
 		function = "gpio";
 		bias-pull-up;
 	};
+
+	usb1_id_det_default: usb1-id-det-default {
+		pins = "gpio51";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
 };
 
 &pcie0 {
@@ -1155,6 +1162,60 @@
 };
 
 &soc {
+	connector_usb1: connector-usb1 {
+		compatible = "gpio-usb-b-connector";
+		id-gpio = <&tlmm 51 GPIO_ACTIVE_HIGH>;
+		vbus-supply = <&vbus_supply_regulator_1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb1_id_det_default>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				usb1_port_connector: endpoint {
+					remote-endpoint = <&usb1_port>;
+				};
+			};
+		};
+	};
+
+	connector_usb2: connector-usb2 {
+		compatible = "gpio-usb-b-connector";
+		id-gpio = <&pmm8654au_2_gpios 11 GPIO_ACTIVE_HIGH>;
+		vbus-supply = <&vbus_supply_regulator_2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_id_det_default>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				usb2_port_connector: endpoint {
+					remote-endpoint = <&usb2_port>;
+				};
+			};
+		};
+	};
+
+	vreg_sdc: regulator-sdc {
+		compatible = "regulator-gpio";
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <2950000>;
+		regulator-name = "vreg_sdc";
+		regulator-type = "voltage";
+
+		startup-delay-us = <100>;
+
+		gpios = <&expander1 7 GPIO_ACTIVE_HIGH>;
+
+		states = <1800000 0x1
+			  2950000 0x0>;
+	};
+
 	vbus_supply_regulator_0: vbus_supply_regulator_0 {
 		compatible = "regulator-fixed";
 		regulator-name = "vbus_supply_0";
@@ -1173,7 +1234,16 @@
 		regulator-max-microvolt = <5000000>;
 		regulator-boot-on;
 		enable-active-high;
-		regulator-always-on;
+	};
+
+	vbus_supply_regulator_2: vbus-supply-regulator2 {
+		compatible = "regulator-fixed";
+		regulator-name = "vbus_supply_2";
+		gpio = <&pmm8654au_1_gpios 9 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		regulator-boot-on;
+		enable-active-high;
 	};
 };
 
@@ -1277,9 +1347,21 @@
 	maximum-speed = "super-speed";
 	dr_mode = "otg";
 	usb-role-switch;
-	role-switch-default-mode = "host";
-	vbus_dwc3-supply = <&vbus_supply_regulator_1>;
 	status = "okay";
+
+	ports {
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			usb1_port: endpoint {
+				remote-endpoint = <&usb1_port_connector>;
+			};
+		};
+
+	};
 };
 
 &usb_1_hsphy {
@@ -1312,16 +1394,26 @@
 	phys = <&usb_2_hsphy>;
 	phy-names = "usb2-phy";
 
-	pinctrl-names = "default";
-	pinctrl-0 = <&usb2_en_state>;
-
 	dr_mode = "otg";
 	usb-role-switch;
-	role-switch-default-mode = "host";
 	qcom,enable-rt;
 	wakeup-source;
 
 	status = "okay";
+
+	ports {
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			usb2_port: endpoint {
+				remote-endpoint = <&usb2_port_connector>;
+			};
+		};
+
+	};
 };
 
 &usb_2_hsphy {
@@ -1338,13 +1430,11 @@
 
 &sdhc_1 {
 	vmmc-supply = <&dummy_reg>;
-	vqmmc-supply = <&dummy_s4a>;
+	vqmmc-supply = <&vreg_sdc>;
 
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&sdc1_clk>, <&sdc1_cmd>, <&sdc1_data>, <&sd_cd>;
 	pinctrl-1 = <&sdc1_clk_sleep>, <&sdc1_cmd_sleep>, <&sdc1_data_sleep>, <&sd_cd>;
-
-	cap-sd-highspeed;
 
 	cd-gpios = <&tlmm 36 GPIO_ACTIVE_LOW>;
 

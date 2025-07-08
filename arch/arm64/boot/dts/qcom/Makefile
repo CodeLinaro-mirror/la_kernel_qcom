@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
+dtb-$(CONFIG_ARCH_QCOM)	+= qcom-dtb-metadata.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc-d3-camera-mezzanine.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8039-t2.dtb
@@ -123,6 +124,11 @@ qcs8275-addons-iq-8275-evk-mezz-dtbs:= qcs8275-addons-iq-8275-evk.dtb qcs8275-ad
 
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-mezz.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-iq-8275-evk.dtb
+
+qcs8275-addons-iq-8275-evk-pro-sku-dtbs:= qcs8275-iq-8275-evk-pro-sku.dtb qcs8275-addons-iq-8275-evk-pro-sku.dtbo
+
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-pro-sku.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-iq-8275-evk-pro-sku.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-addons-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-addons-aim300-aiot.dtb

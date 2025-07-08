@@ -904,8 +904,8 @@
 				      <&smp2p_cdsp_in 1 IRQ_TYPE_EDGE_RISING>,
 				      <&smp2p_cdsp_in 2 IRQ_TYPE_EDGE_RISING>,
 				      <&smp2p_cdsp_in 3 IRQ_TYPE_EDGE_RISING>;
-		interrupt-names = "wdog", "fatal", "handover",
-				  "ready", "stop-ack";
+		interrupt-names = "wdog", "fatal", "ready",
+				  "handover", "stop-ack";
 
 		clocks = <&rpmhcc RPMH_CXO_CLK>;
 		clock-names = "xo";
@@ -1036,8 +1036,8 @@
 				      <&smp2p_cdsp1_in 1 IRQ_TYPE_EDGE_RISING>,
 				      <&smp2p_cdsp1_in 2 IRQ_TYPE_EDGE_RISING>,
 				      <&smp2p_cdsp1_in 3 IRQ_TYPE_EDGE_RISING>;
-		interrupt-names = "wdog", "fatal", "handover",
-				  "ready", "stop-ack";
+		interrupt-names = "wdog", "fatal", "ready",
+				  "handover", "stop-ack";
 
 		clocks = <&rpmhcc RPMH_CXO_CLK>;
 		clock-names = "xo";
@@ -2428,18 +2428,6 @@
 			interrupts-extended = <&pdc 11 IRQ_TYPE_LEVEL_HIGH>;
 
 			status = "disabled";
-
-			ports {
-				#address-cells = <1>;
-				#size-cells = <0>;
-
-				port@0 {
-					reg = <0>;
-					eud_ep: endpoint {
-					};
-				};
-			};
-
 		};
 
 		qupv3_id_0: geniqup@9c0000 {
@@ -6893,12 +6881,6 @@
 				snps,dis-u2-entry-quirk;
 
 				role-switch;
-
-				port {
-					usb0_role_switch: endpoint {
-						remote-endpoint = <&eud_ep>;
-					};
-				};
 			};
 		};
 
@@ -10692,6 +10674,10 @@
 		phys = <&pcie0_phy>;
 		phy-names = "pciephy";
 
+		eq-presets-8gts = /bits/ 16 <0x5555 0x5555 0x5555 0x5555
+					     0x5555 0x5555 0x5555 0x5555>;
+		eq-presets-16gts = /bits/ 8 <0x55 0x55 0x55 0x55 0x55 0x55 0x55 0x55>;
+
 		status = "disabled";
 
 		pcieport0: pcie@0 {
@@ -10800,6 +10786,10 @@
 
 		phys = <&pcie1_phy>;
 		phy-names = "pciephy";
+
+		eq-presets-8gts = /bits/ 16 <0x5555 0x5555 0x5555 0x5555
+			     0x5555 0x5555 0x5555 0x5555>;
+		eq-presets-16gts = /bits/ 8 <0x55 0x55 0x55 0x55 0x55 0x55 0x55 0x55>;
 
 		status = "disabled";
 	};
