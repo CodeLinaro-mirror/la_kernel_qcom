@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -1791,7 +1791,7 @@ static int __init gcc_sdxbaagha_init(void)
 {
 	return platform_driver_register(&gcc_sdxbaagha_driver);
 }
-subsys_initcall(gcc_sdxbaagha_init);
+arch_initcall(gcc_sdxbaagha_init);
 
 static void __exit gcc_sdxbaagha_exit(void)
 {
