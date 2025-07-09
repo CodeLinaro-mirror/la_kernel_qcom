@@ -604,6 +604,8 @@ static const struct soc_id soc_id[] = {
 	{ 700, "SG_CLIFFS7P" },
 	{ 549, "ANORAK" },
 	{ 554, "NEO-LA" },
+	{ 525, "NEO-LE" },
+	{ 579, "NEO-LA-V2" },
 	{ 645, "QCM_PINEAPPLE" },
 	{ 646, "QCS_PINEAPPLE" },
 	{ 702, "QCS8625_PINEAPPLE" },
@@ -1662,10 +1664,16 @@ static int qcom_socinfo_probe(struct platform_device *pdev)
 	qs->attr.revision = devm_kasprintf(&pdev->dev, GFP_KERNEL, "%u.%u",
 					   SOCINFO_MAJOR(le32_to_cpu(info->ver)),
 					   SOCINFO_MINOR(le32_to_cpu(info->ver)));
-	if (offsetof(struct socinfo, serial_num) <= item_size)
+	if (!qs->attr.soc_id || !qs->attr.revision)
+		return -ENOMEM;
+
+	if (offsetof(struct socinfo, serial_num) <= item_size) {
 		qs->attr.serial_number = devm_kasprintf(&pdev->dev, GFP_KERNEL,
 							"%u",
 							le32_to_cpu(info->serial_num));
+		if (!qs->attr.serial_number)
+			return -ENOMEM;
+	}
 
 	if (socinfo_format >= SOCINFO_VERSION(0, 16)) {
 		socinfo_enumerate_partinfo_details();
