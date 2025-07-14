@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2012-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef _IPC_LOGGING_PRIVATE_H
 #define _IPC_LOGGING_PRIVATE_H
@@ -172,11 +172,11 @@ void check_and_create_debugfs(void);
 void create_ctx_debugfs(struct ipc_log_context *ctxt,
 			const char *mod_name);
 #else
-void check_and_create_debugfs(void)
+static inline void check_and_create_debugfs(void)
 {
 }
 
-void create_ctx_debugfs(struct ipc_log_context *ctxt, const char *mod_name)
+static inline void create_ctx_debugfs(struct ipc_log_context *ctxt, const char *mod_name)
 {
 }
 #endif

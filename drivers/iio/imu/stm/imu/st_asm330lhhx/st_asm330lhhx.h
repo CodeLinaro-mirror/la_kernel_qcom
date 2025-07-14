@@ -905,6 +905,7 @@ struct st_asm330lhhx_hw {
 
 	bool wakeup_source;
 	u32 wakeup_status;
+	struct wakeup_source *ws;
 };
 
 /**

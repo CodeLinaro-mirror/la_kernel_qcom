@@ -2913,6 +2913,8 @@ int st_asm330lhhx_probe(struct device *dev, int irq, int hw_id,
 	device_init_wakeup(dev,
 			   device_property_read_bool(dev, "wakeup-source"));
 
+	hw->ws = wakeup_source_register(dev, "st_asm330lhhx");
+
 	dev_info(dev, "Device probed\n");
 
 #ifdef CONFIG_MSM_BOOT_TIME_MARKER
@@ -3104,16 +3106,6 @@ static int __maybe_unused st_asm330lhhx_resume(struct device *dev)
 					st_asm330lhhx_odr_table[ST_ASM330LHHX_ID_ACC].reg.mask));
 
 		disable_irq_wake(hw->irq_emb);
-
-		/* clean wake-up source */
-		err = regmap_read(hw->regmap,
-				  ST_ASM330LHHX_REG_WAKE_UP_SRC_ADDR,
-				  &hw->wakeup_status);
-		if (err < 0)
-			return err;
-
-		/* unmask only bits: WU_IA, X_WU, Y_WU and Z_WU */
-		hw->wakeup_status &= ST_ASM330LHHX_WAKE_UP_EVENT_MASK;
 
 #if defined(CONFIG_IIO_ST_ASM330LHHX_STORE_SAMPLE_FIFO_SUSPEND)
 	/* flush fifo data to user space */

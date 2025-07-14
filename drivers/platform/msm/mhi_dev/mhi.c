@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 /*
  * MSM MHI device core driver.
@@ -81,6 +81,7 @@ enum mhi_msg_level mhi_ipc_err_msg_lvl = MHI_MSG_ERROR;
 void *mhi_ipc_vf_log[MHI_MAX_NUM_INSTANCES];
 void *mhi_ipc_err_log;
 void *mhi_ipc_default_err_log;
+static atomic_t mhi_probe_status = ATOMIC_INIT(0);
 
 static struct mhi_dev_ctx *mhi_hw_ctx;
 static struct mhi_dma_ops *mhi_dma_fun_ops;
@@ -4682,8 +4683,19 @@ int mhi_register_state_cb(void (*mhi_state_cb) (struct mhi_dev_client_cb_data *c
 	struct mhi_dev *mhi = mhi_get_dev_ctx(mhi_hw_ctx, MHI_DEV_PHY_FUN);
 	int ret_val = 0;
 
-	if (!mhi)
+	if (!mhi) {
+		/*
+		 * Provide clients with a distinct return code to differentiate between
+		 * whether mhi driver is not probed yet or probed but probe failed.
+		 */
+		if (atomic_read(&mhi_probe_status)) {
+			mhi_log(MHI_DEV_PHY_FUN, MHI_MSG_ERROR,
+				"Boot media is not PCIe or MHI probe failed.\n");
+			return -EOPNOTSUPP;
+		}
+
 		return -EPROBE_DEFER;
+	}
 
 	if (channel >= MHI_MAX_SOFTWARE_CHANNELS) {
 		mhi_log(mhi->vf_id, MHI_MSG_ERROR, "Invalid ch_id:%d\n", channel);
@@ -5623,14 +5635,15 @@ static int mhi_dev_probe(struct platform_device *pdev)
 
 	if (is_non_pcie_boot(pdev)) {
 		dev_dbg(&pdev->dev, "PCIe: not a pcie boot\n");
-		return -EPERM;
+		rc = -EPERM;
+		goto mhi_probe_failed;
 	}
 
 	if (pdev->dev.of_node) {
 		rc = mhi_get_device_info(pdev);
 		if (rc) {
 			dev_err(&pdev->dev, "Error reading MHI Dev DT\n");
-			return rc;
+			goto mhi_probe_failed;
 		}
 
 		mhi_pf = mhi_get_dev_ctx(mhi_hw_ctx, MHI_DEV_PHY_FUN);
@@ -5638,7 +5651,7 @@ static int mhi_dev_probe(struct platform_device *pdev)
 		if (!mhi_pf) {
 			mhi_log(MHI_DEFAULT_ERROR_LOG_ID, MHI_MSG_ERROR,
 					"mhi_pf is NULL, defering\n");
-			return -EINVAL;
+			goto mhi_probe_failed;
 		}
 
 		devfac = mhi_pf->mhi_num_ipc_pages_dev_fac;
@@ -5690,7 +5703,7 @@ static int mhi_dev_probe(struct platform_device *pdev)
 		if (!mhi_pf) {
 			mhi_log(MHI_DEFAULT_ERROR_LOG_ID, MHI_MSG_ERROR,
 					"mhi_pf is NULL, defering\n");
-			return -EINVAL;
+			goto mhi_probe_failed;
 		}
 
 		mhi_dev_setup_virt_device(mhi_hw_ctx);
@@ -5707,11 +5720,18 @@ static int mhi_dev_probe(struct platform_device *pdev)
 		if (rc) {
 			mhi_log(MHI_DEFAULT_ERROR_LOG_ID, MHI_MSG_ERROR,
 				"Failed to register for events from PCIe\n");
-			return rc;
+			goto mhi_probe_failed;
 		}
 	}
 
 	return 0;
+
+mhi_probe_failed:
+	if (!rc)
+		rc = -EINVAL;
+
+	atomic_set(&mhi_probe_status, 1);
+	return rc;
 }
 
 static int mhi_dev_remove(struct platform_device *pdev)

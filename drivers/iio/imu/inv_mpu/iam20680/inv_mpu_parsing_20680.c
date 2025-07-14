@@ -30,6 +30,8 @@
 
 #include "../inv_mpu_iio.h"
 
+#define INV_IAM20680_WAKEUP_MS                 10000
+
 static int inv_check_fsync(struct inv_mpu_state *st)
 {
 	u8 data[1];
@@ -332,6 +334,7 @@ bool inv_mpu_interrupt_handler(struct iio_dev *indio_dev, s64 timestamp)
 
 	/* handle WoM event */
 	if (status & BIT_WOM_ALL_INT) {
+		pm_wakeup_ws_event(st->ws, INV_IAM20680_WAKEUP_MS, true);
 		wom_code = IIO_MOD_EVENT_CODE(IIO_ACCEL, 0, IIO_MOD_X_OR_Y_OR_Z,
 				IIO_EV_TYPE_THRESH, IIO_EV_DIR_RISING);
 		iio_push_event(indio_dev, wom_code, timestamp);

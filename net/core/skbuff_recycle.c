@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidaries.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -285,6 +285,14 @@ inline bool skb_recycler_consume(struct sk_buff *skb)
 	if (unlikely(skb_queue_len(h) >= max_spare_skbs)) {
 		u8 cur_tail, next_tail;
 
+		/* if the global list is full return false*/
+
+		if (((glob_recycler.tail + 1) &
+		     SKB_RECYCLE_MAX_SHARED_POOLS_MASK) == glob_recycler.head) {
+			local_irq_restore(flags);
+			preempt_enable();
+			return false;
+		}
 		spin_lock(&glob_recycler.lock);
 		cur_tail = glob_recycler.tail;
 		next_tail = (cur_tail + 1) & SKB_RECYCLE_MAX_SHARED_POOLS_MASK;

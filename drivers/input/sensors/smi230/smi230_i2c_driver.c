@@ -57,7 +57,7 @@
 #include "smi230.h"
 #include "smi230_log.h"
 
-#define SMI230_MAX_RETRY_I2C_XFER   1
+#define SMI230_MAX_RETRY_I2C_XFER   2
 #define SMI230_I2C_WRITE_DELAY_TIME 1
 
 static DEFINE_MUTEX(xfer_lock);

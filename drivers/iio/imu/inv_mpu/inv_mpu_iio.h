@@ -947,6 +947,7 @@ struct inv_mpu_state {
 	int gesture_int_count;
 	u8 smplrt_div;
 	s64 it_timestamp;
+	struct wakeup_source *ws;
 #ifdef CONFIG_ENABLE_IAM_ACC_GYRO_BUFFERING
 	bool read_acc_boot_sample;
 	bool read_gyro_boot_sample;

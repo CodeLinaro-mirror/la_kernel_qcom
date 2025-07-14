@@ -3010,6 +3010,10 @@ int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[queue];
 	unsigned int bytes_compl = 0, pkts_compl = 0;
 	unsigned int entry, xmits = 0, count = 0;
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+	unsigned int eth_type;
+	unsigned int priority = 0;
+#endif
 
 	__netif_tx_lock_bh(netdev_get_tx_queue(priv->dev, queue));
 
@@ -3119,6 +3123,19 @@ int stmmac_tx_clean(struct stmmac_priv *priv, int budget, u32 queue)
 			if (likely(skb)) {
 				pkts_compl++;
 				bytes_compl += skb->len;
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+				eth_type = priv->plat->get_eth_type(skb->data);
+				if (eth_type == ETH_P_1588) {
+					priv->xstats.tx_ptp_pkt_cnt++;
+				} else if (eth_type == ETH_P_TSN) {
+					priority = priv->plat->get_vlan_ucp(skb->data);
+					priority >>= VLAN_TAG_UCP_SHIFT;
+					if (priority == CLASS_A_TRAFFIC_UCP)
+						priv->xstats.tx_avb_class_a_pkt_cnt++;
+					else if (priority == CLASS_B_TRAFFIC_UCP)
+						priv->xstats.tx_avb_class_b_pkt_cnt++;
+				}
+#endif
 				dev_consume_skb_any(skb);
 				tx_q->tx_skbuff[entry] = NULL;
 			}
@@ -6199,6 +6216,9 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 	int xdp_status = 0;
 	int buf_sz;
 	unsigned int eth_type;
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+	unsigned int priority = 0;
+#endif
 
 	dma_dir = page_pool_get_dma_dir(rx_q->page_pool);
 	buf_sz = DIV_ROUND_UP(priv->dma_buf_sz, PAGE_SIZE) * PAGE_SIZE;
@@ -6404,7 +6424,7 @@ read_again:
 			buf->page = NULL;
 		}
 
-		if (buf2_len) {
+		if (buf2_len && buf->sec_page) {
 			dma_sync_single_for_cpu(GET_MEM_PDEV_DEV, buf->sec_addr,
 						buf2_len, dma_dir);
 			skb_add_rx_frag(skb, skb_shinfo(skb)->nr_frags,
@@ -6421,6 +6441,19 @@ read_again:
 		if (priv->current_loopback > 0 &&
 		    eth_type == ETH_P_IP)
 			swap_ip_port(skb, eth_type);
+
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+		if (eth_type == ETH_P_1588) {
+			priv->xstats.rx_ptp_pkt_cnt++;
+		} else if (eth_type == ETH_P_TSN) {
+			priority = priv->plat->get_vlan_ucp(skb->data);
+			priority >>= VLAN_TAG_UCP_SHIFT;
+			if (priority == CLASS_A_TRAFFIC_UCP)
+				priv->xstats.rx_avb_class_a_pkt_cnt++;
+			else if (priority == CLASS_B_TRAFFIC_UCP)
+				priv->xstats.rx_avb_class_b_pkt_cnt++;
+		}
+#endif
 
 drain_data:
 		if (likely(status & rx_not_ls))

@@ -278,6 +278,7 @@ struct plat_stmmacenet_data {
 			   void *ctx);
 	void (*dump_debug_regs)(void *priv);
 	unsigned int (*get_eth_type)(unsigned char *buf);
+	unsigned int (*get_vlan_ucp)(unsigned char *buf);
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
 	void (*set_skb_prio)(void *priv_n, struct sk_buff *skb, u32 queue);
 	bool (*is_skprio_routing)(void *priv);

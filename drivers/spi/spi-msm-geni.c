@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -20,6 +20,7 @@
 #include <linux/qcom-geni-se-common.h>
 #include <linux/msm_gpi.h>
 #include <linux/spi/spi.h>
+#include <linux/spinlock.h>
 #include <linux/pinctrl/consumer.h>
 #include <soc/qcom/boot_stats.h>
 
@@ -183,6 +184,7 @@ struct spi_geni_master {
 	struct pinctrl *geni_pinctrl;
 	struct pinctrl_state *geni_gpio_active;
 	struct pinctrl_state *geni_gpio_sleep;
+	spinlock_t data_dump_lock;
 	resource_size_t phys_addr;
 	resource_size_t size;
 	void __iomem *base;
@@ -405,6 +407,7 @@ static void spi_dump_ipc(struct spi_geni_master *mas, char *prefix, char *str, i
 		return;
 	}
 
+	spin_lock(&mas->data_dump_lock);
 	if (mas->max_data_dump_size > 0 && size > mas->max_data_dump_size)
 		size = mas->max_data_dump_size;
 
@@ -415,6 +418,7 @@ static void spi_dump_ipc(struct spi_geni_master *mas, char *prefix, char *str, i
 		size -= SPI_DATA_DUMP_SIZE;
 	}
 	__spi_dump_ipc(mas, prefix, (char *)str + offset, total_bytes, offset, size);
+	spin_unlock(&mas->data_dump_lock);
 }
 
 /*
@@ -458,13 +462,18 @@ static ssize_t spi_max_dump_size_store(struct device *dev, struct device_attribu
 
 	geni_mas = spi_master_get_devdata(spi);
 
+	spin_lock(&geni_mas->data_dump_lock);
 	if (kstrtoint(buf, 0, &geni_mas->max_data_dump_size)) {
 		dev_err(dev, "%s Invalid input\n", __func__);
+		spin_unlock(&geni_mas->data_dump_lock);
 		return -EINVAL;
 	}
 
 	if (geni_mas->max_data_dump_size <= 0)
 		geni_mas->max_data_dump_size = SPI_DATA_DUMP_SIZE;
+
+	spin_unlock(&geni_mas->data_dump_lock);
+
 	return size;
 }
 
@@ -1360,7 +1369,7 @@ static int spi_geni_map_buf(struct spi_geni_master *mas,
 						xfer->len, DMA_FROM_DEVICE);
 			if (ret) {
 				SPI_LOG_ERR(mas->ipc, true, mas->dev,
-				"%s: Mapping Rx buffer %d\n", __func__, ret);
+					    "%s: Mapping Rx buffer %d\n", __func__, ret);
 				return ret;
 			}
 		}
@@ -1372,7 +1381,7 @@ static int spi_geni_map_buf(struct spi_geni_master *mas,
 						xfer->len, DMA_TO_DEVICE);
 			if (ret) {
 				SPI_LOG_ERR(mas->ipc, true, mas->dev,
-				"%s: Mapping Tx buffer %d\n", __func__, ret);
+					    "%s: Mapping Tx buffer %d\n", __func__, ret);
 				return ret;
 			}
 		}
@@ -1516,8 +1525,8 @@ static int spi_geni_unprepare_message(struct spi_master *spi_mas,
 			pm_runtime_put_sync(mas->dev);
 			count = atomic_read(&mas->dev->power.usage_count);
 			if (count < 0)
-				SPI_LOG_ERR(mas->ipc, false, mas->dev,
-					"suspend usage count mismatch:%d",
+				SPI_LOG_DBG(mas->ipc, false, mas->dev,
+					    "suspend usage count mismatch:%d",
 								count);
 		} else if (!pm_runtime_status_suspended(mas->dev) &&
 				pm_runtime_enabled(mas->dev)) {
@@ -1716,15 +1725,19 @@ setup_ipc:
 		return ret;
 
 	hw_ver = geni_se_get_qup_hw_version(&mas->spi_rsc);
+	if (unlikely(!hw_ver)) {
+		dev_err(mas->dev, "%s:Err getting HW version %d\n", __func__, hw_ver);
+		return -ENXIO;
+	}
+
 	major = GENI_SE_VERSION_MAJOR(hw_ver);
 	minor = GENI_SE_VERSION_MINOR(hw_ver);
 
-	if ((major == 1) && (minor == 0)) {
+	if (major == 1 && minor == 0)
 		mas->oversampling = 2;
-		SPI_LOG_DBG(mas->ipc, false, mas->dev,
-			"%s:Major:%d Minor:%d os%d\n",
-		__func__, major, minor, mas->oversampling);
-	}
+
+	SPI_LOG_DBG(mas->ipc, false, mas->dev, "%s:Major:%d Minor:%d os%d\n",
+		    __func__, major, minor, mas->oversampling);
 	if (mas->set_miso_sampling)
 		spi_geni_set_sampling_rate(mas, major, minor);
 
@@ -1770,8 +1783,8 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 		}
 
 		if (ret)
-			SPI_LOG_ERR(mas->ipc, false, mas->dev,
-			"%s: Error %d pinctrl_select_state\n", __func__, ret);
+			SPI_LOG_DBG(mas->ipc, false, mas->dev,
+				    "%s: Error %d pinctrl_select_state\n", __func__, ret);
 	}
 
 	if (!mas->setup || !mas->shared_ee) {
@@ -1802,8 +1815,8 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 		if (mas->dis_autosuspend) {
 			count = atomic_read(&mas->dev->power.usage_count);
 			if (count <= 0)
-				SPI_LOG_ERR(mas->ipc, false, mas->dev,
-				"resume usage count mismatch:%d", count);
+				SPI_LOG_DBG(mas->ipc, false, mas->dev,
+					    "resume usage count mismatch:%d", count);
 		}
 	}
 
@@ -1836,16 +1849,16 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 		}
 
 		if (ret)
-			SPI_LOG_ERR(mas->ipc, false, mas->dev,
-			"%s: Error %d pinctrl_select_state\n", __func__, ret);
+			SPI_LOG_DBG(mas->ipc, false, mas->dev,
+				    "%s: Error %d pinctrl_select_state\n", __func__, ret);
 	}
 
 	if (mas->dis_autosuspend) {
 		pm_runtime_put_sync(mas->dev);
 		count = atomic_read(&mas->dev->power.usage_count);
 		if (count < 0)
-			SPI_LOG_ERR(mas->ipc, false, mas->dev,
-				"suspend usage count mismatch:%d", count);
+			SPI_LOG_DBG(mas->ipc, false, mas->dev,
+				    "suspend usage count mismatch:%d", count);
 	} else if (!pm_runtime_status_suspended(mas->dev) &&
 			pm_runtime_enabled(mas->dev)) {
 		pm_runtime_mark_last_busy(mas->dev);
@@ -2115,8 +2128,9 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 				struct spi_transfer *xfer)
 {
 	int ret = 0;
+	unsigned int xfer_timeout;
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
-	unsigned long timeout, xfer_timeout;
+	unsigned long timeout, xfer_timeout_jiffies;
 	unsigned long long start_time;
 
 	start_time = geni_capture_start_time(&mas->spi_rsc, mas->ipc_log_kpi, __func__,
@@ -2155,9 +2169,9 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 			xfer_timeout += SPI_XFER_TIMEOUT_OFFSET;
 	}
 
-	SPI_LOG_ERR(mas->ipc, false, mas->dev,
-		    "current xfer_timeout:%lu ms.\n", xfer_timeout);
-	xfer_timeout = msecs_to_jiffies(xfer_timeout);
+	SPI_LOG_DBG(mas->ipc, false, mas->dev,
+		    "current xfer_timeout:%u ms.\n", xfer_timeout);
+	xfer_timeout_jiffies = msecs_to_jiffies(xfer_timeout);
 
 	if (mas->cur_xfer_mode != GENI_GPI_DMA) {
 		reinit_completion(&mas->xfer_done);
@@ -2171,7 +2185,7 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 
 		if (spi->slave)
 			mas->slave_state = true;
-		timeout = wait_for_completion_timeout(&mas->xfer_done, xfer_timeout);
+		timeout = wait_for_completion_timeout(&mas->xfer_done, xfer_timeout_jiffies);
 		if (spi->slave)
 			mas->slave_state = false;
 
@@ -2638,6 +2652,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 		}
 	}
 
+	spin_lock_init(&geni_mas->data_dump_lock);
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (ret) {
 		ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));

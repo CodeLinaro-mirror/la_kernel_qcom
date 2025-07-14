@@ -78,6 +78,7 @@ struct smi_acc_sample {
 	unsigned long long tnsec;
 };
 #endif
+#define SMI230_WAKEUP_MS                 10000
 
 struct smi230_client_data {
 	struct device *dev;
@@ -86,6 +87,8 @@ struct smi230_client_data {
 	int gpio_pin;
 	uint64_t timestamp;
 	uint64_t timestamp_old;
+	int wakeup_status;
+	struct wakeup_source *ws;
 #ifdef CONFIG_ENABLE_SMI230_ACC_GYRO_BUFFERING
 	bool read_acc_boot_sample;
 	int acc_bufsample_cnt;
@@ -107,6 +110,8 @@ static struct smi230_no_motion_cfg no_motion_cfg;
 static struct smi230_high_g_cfg high_g_cfg;
 static struct smi230_low_g_cfg low_g_cfg;
 static struct smi230_int_cfg int_config;
+static uint8_t smi230_acc_int1_int2_map_data;
+static uint8_t smi230_acc_odr;
 
 #ifdef CONFIG_ENABLE_SMI230_ACC_GYRO_BUFFERING
 static void smi230_check_acc_enable_flag(struct smi230_client_data *client_data,
@@ -636,7 +641,7 @@ static ssize_t smi230_acc_store_range(struct device *dev,
 	mutex_lock(&interrupt_handling_lock);
 	err = smi230_acc_set_meas_conf(p_smi230_dev);
 
-	PDEBUG("set range to %d, err %d", range, err);
+	PINFO("set range to %d, err %d", range, err);
 
 	if (err) {
 		PERR("setting range failed");
@@ -673,9 +678,9 @@ static ssize_t smi230_acc_store_range(struct device *dev,
 	mutex_unlock(&interrupt_handling_lock);
 
 	if (range_reg_val == p_smi230_dev->accel_cfg.range)
-		PDEBUG("successfully set range to %d", range);
+		PINFO("successfully set range to %d", range);
 	else {
-		PDEBUG("set range to %d failed. reg_val %d", range,
+		PERR("set range to %d failed. reg_val %d", range,
 		       range_reg_val);
 		return -1;
 	}
@@ -895,6 +900,22 @@ smi230_acc_anymotion_z_enable_store(struct device *dev,
 	smi230_configure_anymotion(&anymotion_cfg, p_smi230_dev);
 
 	return count;
+}
+
+static ssize_t anymotion_status_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct smi230_client_data *client_data = dev_get_drvdata(dev);
+	int len;
+
+	len = scnprintf(buf, 16, "%x\n",
+			client_data->wakeup_status);
+
+	//reset wakeup status
+	client_data->wakeup_status = 0;
+
+	return len;
 }
 
 static ssize_t smi230_acc_high_g_enable_store(struct device *dev,
@@ -1615,6 +1636,7 @@ static DEVICE_ATTR(anymotion_y_enable, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		   smi230_acc_anymotion_y_enable_store);
 static DEVICE_ATTR(anymotion_z_enable, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		   smi230_acc_anymotion_z_enable_store);
+static DEVICE_ATTR_RO(anymotion_status);
 
 static DEVICE_ATTR(high_g_enable, S_IRUGO | S_IWUSR | S_IWGRP, NULL,
 		   smi230_acc_high_g_enable_store);
@@ -1693,6 +1715,7 @@ static struct attribute *smi230_attributes[] = {
 	&dev_attr_anymotion_x_enable.attr,
 	&dev_attr_anymotion_y_enable.attr,
 	&dev_attr_anymotion_z_enable.attr,
+	&dev_attr_anymotion_status.attr,
 	&dev_attr_high_g_enable.attr,
 	&dev_attr_high_g_threshold.attr,
 	&dev_attr_high_g_hysteresis.attr,
@@ -2016,6 +2039,9 @@ static void smi230_anymotion_handle(struct smi230_client_data *client_data)
 
 	input_sync(client_data->input);
 
+	pm_wakeup_ws_event(client_data->ws, SMI230_WAKEUP_MS, true);
+	client_data->wakeup_status = (int)anymotion_cfg.threshold;
+	sysfs_notify(&client_data->input->dev.kobj, NULL, "anymotion_status");
 	PINFO("anymotion int detected");
 }
 
@@ -2377,6 +2403,7 @@ int smi230_acc_remove(struct device *dev)
 	struct smi230_client_data *client_data = dev_get_drvdata(dev);
 
 	if (NULL != client_data) {
+		wakeup_source_unregister(client_data->ws);
 		smi230_acc_input_cleanup(client_data);
 		smi230_free_irq(client_data);
 		sysfs_remove_group(&client_data->input->dev.kobj,
@@ -2798,6 +2825,17 @@ int smi230_acc_probe(struct device *dev, struct smi230_dev *smi230_dev)
 		goto exit_cleanup_sysfs;
 	}
 
+	if (device_property_read_bool(dev, "wakeup-source")) {
+		err = device_init_wakeup(dev, true);
+		PINFO("device_init_wakeup: %d\n", err);
+	}
+
+	client_data->ws = wakeup_source_register(dev, "smi230");
+
+	//backup the initial data interrupt register value
+	smi230_acc_get_regs(SMI230_ACCEL_INT1_INT2_MAP_DATA_REG,
+			    &smi230_acc_int1_int2_map_data, 1, p_smi230_dev);
+
 	err = smi230_acc_early_buff_init(client_data);
 	if (err != 1)
 		return err;
@@ -2824,11 +2862,39 @@ exit_directly:
 int smi230_acc_suspend(struct device *dev)
 {
 	int ret = 0;
-
+	uint8_t reset = 0;
 	mutex_lock(&interrupt_handling_lock);
-	p_smi230_dev->accel_cfg.power = SMI230_ACCEL_PM_SUSPEND;
-	ret = smi230_acc_set_power_mode(p_smi230_dev);
-	PINFO("Sensor %s Suspended", SENSOR_ACC_NAME);
+	if (device_may_wakeup(dev) && (anymotion_cfg.enable == 1)) {
+		struct smi230_client_data *client_data = dev_get_drvdata(dev);
+		// check if acc is active and enable it if necessary
+		if (p_smi230_dev->accel_cfg.power == SMI230_ACCEL_PM_SUSPEND) {
+			p_smi230_dev->accel_cfg.power = SMI230_ACCEL_PM_ACTIVE;
+			ret = smi230_acc_set_power_mode(p_smi230_dev);
+		}
+		//backup data interrupt settings
+		smi230_acc_get_regs(SMI230_ACCEL_INT1_INT2_MAP_DATA_REG,
+				    &smi230_acc_int1_int2_map_data, 1,
+				    p_smi230_dev);
+		//disable data interrupt
+		smi230_acc_set_regs(SMI230_ACCEL_INT1_INT2_MAP_DATA_REG, &reset,
+				    1, p_smi230_dev);
+		//backup odr and set odr to 12.5 hz to save energy consumption
+		smi230_acc_odr = p_smi230_dev->accel_cfg.odr;
+		p_smi230_dev->accel_cfg.odr = SMI230_ACCEL_ODR_12_5_HZ;
+		ret = smi230_acc_set_meas_conf(p_smi230_dev);
+		//reconfigure anymotion in suspend after sensor activated
+		ret = smi230_configure_anymotion(&anymotion_cfg, p_smi230_dev);
+		if (ret != SMI230_OK)
+			PERR("set anymotion config failed");
+		//finally enable irq wake
+		ret = enable_irq_wake(client_data->IRQ);
+		dev_info(dev, "enable_irq_wake: %d [%d]\n", ret,
+			 client_data->IRQ);
+	} else {
+		p_smi230_dev->accel_cfg.power = SMI230_ACCEL_PM_SUSPEND;
+		ret = smi230_acc_set_power_mode(p_smi230_dev);
+		PINFO("Sensor %s Suspended", SENSOR_ACC_NAME);
+	}
 	mutex_unlock(&interrupt_handling_lock);
 	return ret;
 }
@@ -2836,11 +2902,27 @@ int smi230_acc_suspend(struct device *dev)
 int smi230_acc_resume(struct device *dev)
 {
 	int ret = 0;
-
 	mutex_lock(&interrupt_handling_lock);
-	p_smi230_dev->accel_cfg.power = SMI230_ACCEL_PM_ACTIVE;
-	ret = smi230_acc_set_power_mode(p_smi230_dev);
-	PINFO("Sensor %s Resumed", SENSOR_ACC_NAME);
+	if (device_may_wakeup(dev) && (anymotion_cfg.enable == 1)) {
+		struct smi230_client_data *client_data = dev_get_drvdata(dev);
+
+		ret = disable_irq_wake(client_data->IRQ);
+
+		//re-enable data interrupt
+		smi230_acc_set_regs(SMI230_ACCEL_INT1_INT2_MAP_DATA_REG,
+				    &smi230_acc_int1_int2_map_data, 1,
+				    p_smi230_dev);
+		//restore original odr value
+		p_smi230_dev->accel_cfg.odr = smi230_acc_odr;
+		ret = smi230_acc_set_meas_conf(p_smi230_dev);
+
+		dev_info(dev, "disable_irq_wake: %d [%d]\n", ret,
+			 client_data->IRQ);
+	} else {
+		p_smi230_dev->accel_cfg.power = SMI230_ACCEL_PM_ACTIVE;
+		ret = smi230_acc_set_power_mode(p_smi230_dev);
+		PINFO("Sensor %s Resumed", SENSOR_ACC_NAME);
+	}
 	mutex_unlock(&interrupt_handling_lock);
 	return ret;
 }
