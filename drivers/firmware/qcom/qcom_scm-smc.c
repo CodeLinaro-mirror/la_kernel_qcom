@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015,2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * ​​​​Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.​
  */
 
 #include <linux/cleanup.h>
@@ -312,12 +312,12 @@ void __qcom_scm_init(void)
 	 * If not, there could be errors that might cause the
 	 * system to crash.
 	 */
-	scm_qcpe_hab_open();
-	hab_calling_convention = true;
-
+	if (scm_qcpe_hab_open_atomic() != -EOPNOTSUPP)
+		hab_calling_convention = true;
 }
 
 void __qcom_scm_qcpe_exit(void)
 {
-	scm_qcpe_hab_close();
+	if (hab_calling_convention)
+		scm_qcpe_hab_close();
 }
