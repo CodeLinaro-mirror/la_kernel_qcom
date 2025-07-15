@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2009-2017, 2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2017-2019, Linaro Ltd.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/debugfs.h>
@@ -267,6 +267,7 @@ static const char *const pmic_models[] = {
 	[55] = "PM4125",
 	[58] = "PM8450",
 	[65] = "PM8010",
+	[85] = "PMX35"
 };
 
 struct socinfo_params {
