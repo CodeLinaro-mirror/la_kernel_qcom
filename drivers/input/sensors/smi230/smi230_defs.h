@@ -261,6 +261,9 @@
 #define SMI230_ACCEL_POWER_DISABLE UINT8_C(0x00)
 #define SMI230_ACCEL_POWER_ENABLE  UINT8_C(0x04)
 
+/**\name    Accel power mode config delay */
+#define SMI230_ACCEL_POWER_MODE_CONFIG_DELAY UINT8_C(50)
+
 /**\name    Accel internal interrupt pin mapping */
 #define SMI230_ACCEL_INTA_DISABLE UINT8_C(0x00)
 #define SMI230_ACCEL_INTA_ENABLE  UINT8_C(0x01)

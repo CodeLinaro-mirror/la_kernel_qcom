@@ -585,7 +585,7 @@ int8_t smi230_acc_write_config_file(const struct smi230_dev *dev)
 					1, dev);
 			if (rslt == SMI230_OK) {
 				/*delay required to switch power modes*/
-				dev->delay_ms(SMI230_POWER_CONFIG_DELAY);
+				dev->delay_ms(SMI230_ACCEL_POWER_MODE_CONFIG_DELAY);
 			} else {
 				return rslt;
 			}
@@ -633,7 +633,7 @@ int8_t smi230_acc_write_config_file(const struct smi230_dev *dev)
 						if (rslt == SMI230_OK) {
 							/*delay required to switch power modes*/
 							dev->delay_ms(
-								SMI230_POWER_CONFIG_DELAY);
+							SMI230_ACCEL_POWER_MODE_CONFIG_DELAY);
 						}
 					}
 				}
@@ -1036,7 +1036,7 @@ int8_t smi230_acc_set_power_mode(const struct smi230_dev *dev)
 				if (rslt == SMI230_OK) {
 					/*delay required to switch power modes*/
 					dev->delay_ms(
-						SMI230_POWER_CONFIG_DELAY);
+						SMI230_ACCEL_POWER_MODE_CONFIG_DELAY);
 				}
 			}
 		}
