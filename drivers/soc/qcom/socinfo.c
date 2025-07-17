@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2009-2017, 2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2017-2019, Linaro Ltd.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/debugfs.h>
@@ -301,6 +301,38 @@ struct smem_image_version {
 	char pad;
 	char oem[SMEM_IMAGE_VERSION_OEM_SIZE];
 };
+
+static ssize_t msm_get_images(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	char *image_address;
+	size_t size;
+	int pos = 0, i;
+
+	image_address = qcom_smem_get(QCOM_SMEM_HOST_ANY,
+				       SMEM_IMAGE_VERSION_TABLE, &size);
+	if (IS_ERR_OR_NULL(image_address))
+		return scnprintf(buf, PAGE_SIZE, "Unavailable\n");
+
+	for (i = 0; i < ARRAY_SIZE(socinfo_image_names); i++) {
+		if (!socinfo_image_names[i])
+			continue;
+
+		char *block = image_address + i * 128;
+		char *variant = block + 75;
+		char *oem = block + 95;
+
+		if (block[0] == '\0')
+			continue;
+
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%d:\n", i);
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "\tCRM:\t\t%-75s\n", block);
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "\tVariant:\t%-20s\n", variant);
+		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "\tVersion:\t%-33s\n", oem);
+	}
+
+	return pos;
+}
+static DEVICE_ATTR(images, 0444, msm_get_images, NULL);
 #endif /* CONFIG_DEBUG_FS */
 
 #define MAX_SOCINFO_ATTRS 50
@@ -1340,6 +1372,9 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 		break;
 	}
 
+#ifdef CONFIG_DEBUG_FS
+	msm_custom_socinfo_attrs[i++] = &dev_attr_images.attr;
+#endif
 	msm_custom_socinfo_attrs[i++] = NULL;
 	qcom_socinfo->attr.custom_attr_group = &custom_soc_attr_group;
 }
