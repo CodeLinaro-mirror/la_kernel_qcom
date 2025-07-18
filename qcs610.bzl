@@ -137,7 +137,6 @@ def define_qcs610():
         "drivers/power/supply/qcom/qpnp-smb5-main.ko",
         "drivers/pps/pps_core.ko",
         "drivers/ptp/ptp.ko",
-        "drivers/ptp/ptp_kvm.ko",
         "drivers/pwm/pwm-qti-lpg.ko",
         "drivers/regulator/debug-regulator.ko",
         "drivers/regulator/proxy-consumer.ko",
