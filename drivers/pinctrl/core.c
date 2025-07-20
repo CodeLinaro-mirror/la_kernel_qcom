@@ -938,7 +938,6 @@ EXPORT_SYMBOL_GPL(pinctrl_gpio_set_config);
 int pinctrl_gpio_get_config(unsigned int gpio, unsigned long *config)
 {
 	struct pinctrl_gpio_range *range;
-	const struct pinconf_ops *ops;
 	struct pinctrl_dev *pctldev;
 	int ret, pin;
 
@@ -946,19 +945,16 @@ int pinctrl_gpio_get_config(unsigned int gpio, unsigned long *config)
 	if (ret)
 		return ret;
 
-	ops = pctldev->desc->confops;
-	if (!ops || !ops->pin_config_get)
-		return -EINVAL;
-
 	mutex_lock(&pctldev->mutex);
 	pin = gpio_to_pin(range, gpio);
-	ret = ops->pin_config_get(pctldev, pin, config);
+	ret = pin_config_get_for_pin(pctldev, pin, config);
 	mutex_unlock(&pctldev->mutex);
 
 	if (ret)
 		return ret;
 
 	*config = pinconf_to_config_argument(*config);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(pinctrl_gpio_get_config);
