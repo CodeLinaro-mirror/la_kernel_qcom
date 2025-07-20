@@ -682,7 +682,7 @@ static int cy8c95x0_gpio_get_pincfg(struct cy8c95x0_pinctrl *chip,
 	case PIN_CONFIG_MODE_PWM:
 		reg = CY8C95X0_PWMSEL;
 		break;
-	case PIN_CONFIG_OUTPUT:
+	case PIN_CONFIG_LEVEL:
 		reg = CY8C95X0_OUTPUT_(port);
 		break;
 	case PIN_CONFIG_OUTPUT_ENABLE:
