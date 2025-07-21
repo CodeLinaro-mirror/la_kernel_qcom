@@ -6234,6 +6234,9 @@ static int ufs_qcom_system_freeze(struct device *dev)
 static int ufs_qcom_system_restore(struct device *dev)
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host;
+
+	host = ufshcd_get_variant(hba);
 
 	if (!is_bootdevice_ufs) {
 		dev_info(dev, "UFS is not boot dev.\n");
@@ -6241,6 +6244,8 @@ static int ufs_qcom_system_restore(struct device *dev)
 	}
 
 	ufs_qcom_set_s2r_cap(dev);
+	if (host->set_ds_spm_level)
+		hba->spm_lvl = UFS_PM_LVL_5;
 	ufshcd_set_link_off(hba);
 	return ufshcd_system_restore(dev);
 }
