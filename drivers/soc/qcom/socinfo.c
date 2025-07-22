@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2009-2017, 2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2017-2019, Linaro Ltd.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/debugfs.h>
@@ -628,6 +628,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(PARROTPRO) },
 	{ qcom_board_id(PARROTPROP) },
 	{ qcom_board_id(PARROTPROQ) },
+	{ qcom_board_id(PARROTLITE) },
 	{ qcom_board_id(RAVELIN) },
 	{ qcom_board_id(RAVELINP) },
 	{ qcom_board_id(SG_RAVELIN) },
@@ -645,6 +646,12 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(KERA) },
 	{ qcom_board_id(KERAP) },
 	{ qcom_board_id(QCS610) },
+	{ qcom_board_id(CQ8750S) },
+	{ qcom_board_id(CQ8725S) },
+	{ qcom_board_id(MONTAGUE) },
+	{ qcom_board_id(MONTAGUEP) },
+	{ qcom_board_id(CQ7790S) },
+	{ qcom_board_id(CQ7790M) },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];
@@ -1731,7 +1738,7 @@ static int qcom_socinfo_probe(struct platform_device *pdev)
 	if (!qs->attr.soc_id || !qs->attr.revision)
 		return -ENOMEM;
 
-	if (offsetof(struct socinfo, serial_num) <= item_size) {
+	if (offsetofend(struct socinfo, serial_num) <= item_size) {
 		qs->attr.serial_number = devm_kasprintf(&pdev->dev, GFP_KERNEL,
 							"%u",
 							le32_to_cpu(info->serial_num));

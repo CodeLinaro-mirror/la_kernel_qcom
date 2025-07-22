@@ -67,7 +67,6 @@
 
 #define SLAVE_SB_PGD_PORT_RX_NUM			16
 #define SLAVE_SB_PGD_PORT_TX_NUM			16
-#define SLAVE_SB_PGD_PORT_TX_A2DP			2
 
 /* PGD Port Map */
 #define SLAVE_SB_PGD_PORT_TX_SCO			0

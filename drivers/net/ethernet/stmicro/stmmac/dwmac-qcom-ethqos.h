@@ -84,12 +84,9 @@ struct qcom_ethqos {
 	bool phyad_change;
 	bool is_gpio_phy_reset;
 
-	/* Boolean to check if clock is suspended*/
 	int clks_suspended;
 	struct completion clk_enable_done;
-	/* Boolean flag for turning off GDSC during suspend */
 	bool gdsc_off_on_suspend;
-
 };
 
 int ethqos_init_regulators(struct qcom_ethqos *ethqos);

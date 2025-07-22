@@ -15,9 +15,7 @@
 #include <linux/pm.h>
 #include <linux/of_address.h>
 #include <linux/nvmem-consumer.h>
-#if defined(CONFIG_ARCH_SM6150) && defined(CONFIG_INPUT_QPNP_POWER_ON)
 #include <linux/input/qpnp-power-on.h>
-#endif
 
 struct qcom_reboot_reason {
 	struct device *dev;
@@ -56,11 +54,9 @@ static int qcom_reboot_reason_reboot(struct notifier_block *this,
 				nvmem_cell_write(reboot->nvmem_cell,
 						 &reason->pon_reason,
 						 sizeof(reason->pon_reason));
-#if defined(CONFIG_ARCH_SM6150) && defined(CONFIG_INPUT_QPNP_POWER_ON)
 			else
 				qpnp_pon_set_restart_reason(
 						(enum pon_restart_reason)reason->pon_reason);
-#endif
 			break;
 		}
 	}

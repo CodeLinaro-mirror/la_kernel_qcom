@@ -15,9 +15,9 @@
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
 #include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <linux/phy.h>
 #include <linux/phy/phy.h>
-#include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
@@ -643,7 +643,7 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 		rgmii_updatel(ethqos, RGMII_CONFIG2_RSVD_CONFIG15,
 			      0, RGMII_IO_MACRO_CONFIG2);
 		if (ethqos->has_emac_ge_3 ||
-		    ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
+			ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
 			ethqos->emac_ver == EMAC_HW_v2_1_2 ||
 			ethqos->emac_ver == EMAC_HW_v2_1_1 ||
 			ethqos->emac_ver == EMAC_HW_v2_3_1)
@@ -1366,13 +1366,13 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ret = ethqos_init_regulators(ethqos);
 	if (ret)
-		return ret;
+		goto err;
 
 	ret = ethqos_init_gpio(ethqos);
 	if (ret)
-		return ret;
+		goto err;
 
-	plat_dat = stmmac_probe_config_dt(pdev, stmmac_res.mac);
+	plat_dat = devm_stmmac_probe_config_dt(pdev, stmmac_res.mac);
 	if (IS_ERR(plat_dat)) {
 		return dev_err_probe(dev, PTR_ERR(plat_dat),
 				     "dt configuration failed\n");
@@ -1401,22 +1401,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
-	if (IS_ERR(ethqos->rgmii_base)) {
-		ret = PTR_ERR(ethqos->rgmii_base);
-		goto err_mem;
-	}
+	if (IS_ERR(ethqos->rgmii_base))
+		return dev_err_probe(dev, PTR_ERR(ethqos->rgmii_base),
+				     "Failed to map rgmii resource\n");
 
 	ethqos->mac_base = stmmac_res.addr;
 
 	data = of_device_get_match_data(dev);
 
-	/* NOTE:
-	 * Following properties are dependent on existence of data block
-	 * which is an alternate of extracting information from DeviceTree.
-	 *
-	 * It is irrelevant in case of QCOM, but kept inplace to maintain
-	 * backward compatibility.
-	 */
+	/* Properties depend on data block ; retained for backward compatibility */
 	if (data) {
 		if (data->por)
 			ethqos->por = data->por;
@@ -1435,14 +1428,17 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	ethqos->link_clk = devm_clk_get(dev, "rgmii");
-	if (IS_ERR(ethqos->link_clk)) {
-		ret = PTR_ERR(ethqos->link_clk);
-		goto err_mem;
-	}
+	if (IS_ERR(ethqos->link_clk))
+		return dev_err_probe(dev, PTR_ERR(ethqos->link_clk),
+				     "Failed to get link_clk\n");
 
 	ret = ethqos_clks_config(ethqos, true);
 	if (ret)
-		goto err_mem;
+		goto err;
+
+	ret = devm_add_action_or_reset(dev, ethqos_clks_disable, ethqos);
+	if (ret)
+		goto err;
 
 	ethqos->serdes_phy = devm_phy_optional_get(dev, "serdes");
 	if (IS_ERR(ethqos->serdes_phy))
@@ -1514,36 +1510,25 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ETHQOSDBG(": emac_core_version = %d\n", ethqos->emac_ver);
 
 	if (of_property_read_bool(pdev->dev.of_node,
-				  "gdsc-off-on-suspend")) {
+				  "gdsc-off-on-suspend"))
 		ethqos->gdsc_off_on_suspend = true;
-	} else {
+	else
 		ethqos->gdsc_off_on_suspend = false;
-	}
-	ETHQOSDBG("gdsc-off-on-suspend = %d\n",
-		  ethqos->gdsc_off_on_suspend);
 
-	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
-	if (ret)
-		goto err_clk;
+	ETHQOSDBG("gdsc-off-on-suspend = %d\n", ethqos->gdsc_off_on_suspend);
 
 	if (!ethqos_phy_intr_config(ethqos)) {
-		if(ethqos_phy_intr_enable(ethqos))
+		ret = ethqos_phy_intr_enable(ethqos);
+		if (ret)
 			ETHQOSERR("ethqos_phy_intr_enable failed\n");
 	} else {
 		ETHQOSERR("Phy interrupt configuration failed\n");
 	}
 
-	return 0;
+	return devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
 
-err_clk:
+err:
 	rgmii_dump(ethqos);
-	ethqos_clks_disable(ethqos);
-
-err_mem:
-	stmmac_remove_config_dt(pdev, plat_dat);
-	if (ethqos)
-		ethqos_disable_regulators(ethqos);
-
 	return ret;
 }
 
@@ -1552,22 +1537,11 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 	struct qcom_ethqos *ethqos;
 	struct stmmac_priv *priv;
 
-	if (of_device_is_compatible(pdev->dev.of_node, "qcom,emac-smmu-embedded")) {
-		of_platform_depopulate(&pdev->dev);
-		return 0;
-	}
-
 	ethqos = get_stmmac_bsp_priv(&pdev->dev);
 	if (!ethqos)
 		return -ENODEV;
 
 	priv = qcom_ethqos_get_priv(ethqos);
-
-	stmmac_pltfr_remove(pdev);
-
-	if (ethqos->link_clk)
-		clk_disable_unprepare(ethqos->link_clk);
-
 	if (priv->plat->phy_intr_en_extn_stm)
 		free_irq(ethqos->phy_intr, ethqos);
 
@@ -1575,12 +1549,8 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 		cancel_work_sync(&ethqos->emac_phy_work);
 
 	emac_emb_smmu_exit();
-	ethqos_free_gpios(ethqos);
 	ethqos_disable_regulators(ethqos);
-	ethqos_clks_disable(ethqos);
-
-	platform_set_drvdata(pdev, NULL);
-	of_platform_depopulate(&pdev->dev);
+	ethqos_clks_config(ethqos, false);
 
 	return 0;
 }
@@ -1614,7 +1584,7 @@ static int qcom_ethqos_suspend(struct device *dev)
 		}
 	}
 
-	ETHQOSDBG(" ret = %d\n", ret);
+	ETHQOSDBG("ret = %d\n", ret);
 	return ret;
 }
 
@@ -1642,7 +1612,7 @@ static int qcom_ethqos_resume(struct device *dev)
 
 	ndev = dev_get_drvdata(dev);
 	if (!ndev) {
-		ETHQOSERR(" Resume not possible\n");
+		ETHQOSERR("Resume not possible\n");
 		return -EINVAL;
 	}
 
