@@ -3821,9 +3821,9 @@ static ssize_t read_qos_regs(struct file *file,
 	struct qcom_ethqos *ethqos = file->private_data;
 	struct stmmac_priv *priv;
 	char *buf;
-	u32 vlan;
+	u32 vlan = 0;
 	u32 quant_weight, send_slope, high_cred, low_cred;
-	u32 l3l4_ctrl, l4_addr, l3_addr0, l3_addr1, l3_addr2, l3_addr3;
+	u32 l3l4_ctrl = 0, l4_addr = 0, l3_addr0 = 0, l3_addr1 = 0, l3_addr2 = 0, l3_addr3 = 0;
 	int len = 0;
 	int ret;
 	int i;
