@@ -6778,9 +6778,6 @@ static int ethqos_serdes_power_saving(struct net_device *ndev, void *priv,
 	struct qcom_ethqos *ethqos = priv;
 	int ret = 0;
 
-	if (ethqos->emac_ver != EMAC_HW_v4_0_0)
-		return -EINVAL;
-
 	if (ethqos->power_state == power_state)
 		return -EINVAL;
 
