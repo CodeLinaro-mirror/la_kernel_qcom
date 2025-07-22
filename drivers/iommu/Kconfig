@@ -676,12 +676,13 @@ config QCOM_IOMMU_DEBUG
 	  can be done through the debugfs nodes which this option
 	  makes available.
 
-config QCOM_QAD
-	bool "QAD errata"
+config QCOM_SMMU_IRGN0_ERRATA
+	bool "IRGN0 errata"
 	depends on QCOM_IOMMU_UTIL
+	depends on ARCH_SERAPH
         help
-	  This option is used to modify the TCR register
-	  to apply the QAD errata for all context banks.
+	  This option is used to apply a work around for
+	  an internal errata to adjust the irgn bit.
 
 	  Say N here if unsure.
 
