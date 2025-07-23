@@ -16,7 +16,6 @@ def define_sa510m():
         "drivers/char/hw_random/arm_smccc_trng.ko",
         "drivers/hwtracing/coresight/coresight.ko",
         "drivers/hwtracing/coresight/coresight-catu.ko",
-        "drivers/hwtracing/coresight/coresight-cpu-debug.ko",
         "drivers/hwtracing/coresight/coresight-csr.ko",
         "drivers/hwtracing/coresight/coresight-cti.ko",
         "drivers/hwtracing/coresight/coresight-dummy.ko",
