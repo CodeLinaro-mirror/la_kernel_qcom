@@ -17,6 +17,7 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/events.h>
 #include <linux/firmware.h>
+#include <linux/of.h>
 #include <linux/version.h>
 
 #include "st_asm330lhhx.h"
@@ -40,7 +41,56 @@
 #define ST_ASM330LHHX_MLC_FSM_TRSD_UPDATE	1
 
 static struct iio_dev *st_asm330lhhx_mlc_alloc_iio_dev(struct st_asm330lhhx_hw *hw,
-						       enum st_asm330lhhx_sensor_id id);
+						      enum st_asm330lhhx_sensor_id id);
+
+struct threshold_t {
+	u8 th1h;
+	u8 th1l;
+	u8 th2h;
+	u8 th2l;
+	u16 addr;
+};
+
+struct fsm_duration_t {
+	u8 thh;
+	u8 thl;
+	u16 addr;
+};
+
+/* threshold FSM configuration */
+static struct threshold_t thresholds[] = {
+	{ .th1h = 0x00, .th1l = 0x00, .th2h = 0x00, .th2l = 0x00, .addr = 0x0406 },
+	{ .th1h = 0x00, .th1l = 0x00, .th2h = 0x00, .th2l = 0x00, .addr = 0x0448 },
+	{ .th1h = 0x00, .th1l = 0x00, .th2h = 0x00, .th2l = 0x00, .addr = 0x048a },
+};
+
+/* algo_towing_jack_min_duration */
+static struct fsm_duration_t towing_jack_min_duration[] = {
+	{ .thh = 0x00, .thl = 0x00, .addr = 0x0410 },
+	{ .thh = 0x00, .thl = 0x00, .addr = 0x0452 },
+	{ .thh = 0x00, .thl = 0x00, .addr = 0x0494 },
+};
+
+/* algo_crash_impact_th */
+static struct threshold_t crash_impact_th[] = {
+	{ .th1h = 0x00, .th1l = 0x00, .th2h = 0x00, .th2l = 0x00, .addr = 0x04cc },
+};
+
+/* algo_crash_min_duration */
+static struct fsm_duration_t crash_min_duration[] = {
+	{ .thh = 0x00, .thl = 0x00, .addr = 0x04d6 },
+};
+
+static struct iio_dev *st_asm330lhhx_mlc_alloc_iio_dev(struct st_asm330lhhx_hw *hw,
+					 enum st_asm330lhhx_sensor_id id);
+
+static const struct
+iio_chan_spec st_asm330lhhx_mlc_fifo_acc_channels[] = {
+	ST_ASM330LHHX_DATA_CHANNEL(IIO_ACCEL, 0, 1, IIO_MOD_X, 0, 16, 16, 's', NULL),
+	ST_ASM330LHHX_DATA_CHANNEL(IIO_ACCEL, 0, 1, IIO_MOD_Y, 1, 16, 16, 's', NULL),
+	ST_ASM330LHHX_DATA_CHANNEL(IIO_ACCEL, 0, 1, IIO_MOD_Z, 2, 16, 16, 's', NULL),
+	IIO_CHAN_SOFT_TIMESTAMP(3),
+};
 
 /* FSM / MLC IIO event channel definition */
 static const struct iio_chan_spec st_asm330lhhx_mlc_fsm_x_ch[] = {
@@ -50,6 +100,10 @@ static const struct iio_chan_spec st_asm330lhhx_mlc_fsm_x_ch[] = {
 static const unsigned long
 st_asm330lhhx_fsm_mlc_available_scan_masks[] = {
 	BIT(0), 0x0
+};
+
+static const unsigned long st_asm330lhhx_fifo_mlc_scan_masks[] = {
+	0x7, 0x0
 };
 
 /* remove old mlc/fsm configuration */
@@ -381,6 +435,16 @@ static int st_asm330lhhx_program_mlc(const struct firmware *fw,
 			case ST_ASM330LHHX_REG_CTRL6_C_ADDR:
 			case ST_ASM330LHHX_REG_CTRL7_G_ADDR:
 			case ST_ASM330LHHX_REG_CTRL10_C_ADDR:
+			/*
+			 * these registers may change the configuration of the
+			 * embedded event functions
+			 */
+			case ST_ASM330LHHX_REG_INT_CFG0_ADDR:
+			case ST_ASM330LHHX_REG_INT_CFG1_ADDR:
+			case ST_ASM330LHHX_REG_THS_6D_ADDR:
+			case ST_ASM330LHHX_REG_WAKE_UP_THS_ADDR:
+			case ST_ASM330LHHX_REG_WAKE_UP_DUR_ADDR:
+			case ST_ASM330LHHX_REG_FREE_FALL_ADDR:
 				skip = true;
 				break;
 			/* save requested odr for later */
@@ -453,6 +517,399 @@ unlock_page:
 	mutex_unlock(&hw->page_lock);
 
 	return (fsm_num + mlc_num) > 0 ? fsm_num + mlc_num : 0;
+}
+
+static int st_asm330lhhx_read_fsm_data(struct st_asm330lhhx_hw *hw,
+				       u16 addr, unsigned int *data)
+{
+	int init, status, ret = 0;
+
+	mutex_lock(&hw->page_lock);
+
+	ret = st_asm330lhhx_set_page_access(hw, true,
+				       ST_ASM330LHHX_REG_FUNC_CFG_MASK);
+	if (ret < 0)
+		goto unlock_page;
+
+	ret = regmap_read(hw->regmap, ST_ASM330LHHX_EMB_FUNC_EN_B_ADDR,
+		&status);
+	if (ret < 0)
+		goto restore_page;
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_PAGE_SEL_ADDR, BIT(1),
+				 FIELD_PREP(BIT(1), 1));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_write(hw->regmap, ST_ASM330LHHX_EMB_FUNC_EN_B_ADDR,
+			   (status & ~(ST_ASM330LHHX_FSM_EN_MASK |
+				       ST_ASM330LHHX_MLC_EN_MASK)));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_read(hw->regmap,
+			  ST_ASM330LHHX_REG_EMB_FUNC_INIT_B_ADDR,
+			  &init);
+	if (ret < 0)
+		goto restore_page;
+
+	ret = regmap_write(hw->regmap,
+			   ST_ASM330LHHX_REG_EMB_FUNC_INIT_B_ADDR,
+			   init & ~(ST_ASM330LHHX_FSM_INIT_MASK |
+				     ST_ASM330LHHX_MLC_INIT_MASK));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_PAGE_SEL_ADDR, BIT(1),
+				 FIELD_PREP(BIT(1), 0));
+	if (ret < 0)
+		goto restore_status;
+
+	usleep_range(10000, 10100);
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_REG_PAGE_RW,
+				 ST_ASM330LHHX_REG_PAGE_READ_MASK,
+				 FIELD_PREP(ST_ASM330LHHX_REG_PAGE_READ_MASK, 1));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_PAGE_SEL_ADDR,
+				 ST_ASM330LHHX_PAGE_SEL_MASK,
+				 FIELD_PREP(ST_ASM330LHHX_PAGE_SEL_MASK,
+					    FSM_PAGE_MASK(addr)));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_write(hw->regmap, ST_ASM330LHHX_PAGE_ADDRESS_ADDR,
+			   FSM_OFFSET(addr));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_read(hw->regmap, ST_ASM330LHHX_PAGE_VALUE_ADDR,
+			  data);
+	if (ret)
+		dev_err(hw->dev, "regmap_read fails\n");
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_PAGE_SEL_ADDR,
+				 ST_ASM330LHHX_PAGE_SEL_MASK,
+				 FIELD_PREP(ST_ASM330LHHX_PAGE_SEL_MASK, 0));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_REG_PAGE_RW,
+				 ST_ASM330LHHX_REG_PAGE_READ_MASK,
+				 FIELD_PREP(ST_ASM330LHHX_REG_PAGE_WRITE_MASK, 0));
+
+restore_status:
+	ret = regmap_write(hw->regmap, ST_ASM330LHHX_EMB_FUNC_EN_B_ADDR,
+			   status);
+restore_page:
+	st_asm330lhhx_set_page_access(hw, false,
+				      ST_ASM330LHHX_REG_FUNC_CFG_MASK);
+unlock_page:
+	mutex_unlock(&hw->page_lock);
+
+	return ret;
+}
+
+/* update fsm thresholds */
+static int st_asm330lhhx_write_fsm_data(struct st_asm330lhhx_hw *hw,
+					u8 *fsm_update_code,
+					int len)
+{
+	int reg, val;
+	int i, ret = 0;
+	int status, init;
+
+	mutex_lock(&hw->page_lock);
+	ret = st_asm330lhhx_set_page_access(hw, true,
+				       ST_ASM330LHHX_REG_FUNC_CFG_MASK);
+	if (ret < 0)
+		goto unlock_page;
+
+	ret = regmap_read(hw->regmap, ST_ASM330LHHX_EMB_FUNC_EN_B_ADDR,
+			  &status);
+	if (ret < 0)
+		goto restore_page;
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_PAGE_SEL_ADDR, BIT(1),
+				 FIELD_PREP(BIT(1), 1));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_write(hw->regmap, ST_ASM330LHHX_EMB_FUNC_EN_B_ADDR,
+			   (status & ~(ST_ASM330LHHX_FSM_EN_MASK |
+				       ST_ASM330LHHX_MLC_EN_MASK)));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_read(hw->regmap,
+			  ST_ASM330LHHX_REG_EMB_FUNC_INIT_B_ADDR,
+			  &init);
+	if (ret < 0)
+		goto restore_page;
+
+	ret = regmap_write(hw->regmap,
+			   ST_ASM330LHHX_REG_EMB_FUNC_INIT_B_ADDR,
+			   (init & ~(ST_ASM330LHHX_FSM_INIT_MASK |
+				     ST_ASM330LHHX_MLC_INIT_MASK)));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_PAGE_SEL_ADDR, BIT(1),
+				 FIELD_PREP(BIT(1), 0));
+	if (ret < 0)
+		goto restore_status;
+
+	usleep_range(10000, 10100);
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_REG_PAGE_RW,
+				 ST_ASM330LHHX_REG_PAGE_WRITE_MASK,
+				 FIELD_PREP(ST_ASM330LHHX_REG_PAGE_WRITE_MASK, 1));
+	if (ret < 0)
+		goto restore_status;
+
+	for (i = 0; i < len; i += 2) {
+		reg = fsm_update_code[i];
+		val = fsm_update_code[i + 1];
+		ret = regmap_write(hw->regmap, reg, val);
+		if (ret) {
+			dev_err(hw->dev, "regmap_write fails\n");
+
+			break;
+		}
+	}
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_PAGE_SEL_ADDR,
+				 ST_ASM330LHHX_PAGE_SEL_MASK,
+				 FIELD_PREP(ST_ASM330LHHX_PAGE_SEL_MASK, 0));
+	if (ret < 0)
+		goto restore_status;
+
+	ret = regmap_update_bits(hw->regmap,
+				 ST_ASM330LHHX_REG_PAGE_RW,
+				 ST_ASM330LHHX_REG_PAGE_WRITE_MASK,
+				 FIELD_PREP(ST_ASM330LHHX_REG_PAGE_WRITE_MASK, 0));
+
+restore_status:
+	ret = regmap_write(hw->regmap, ST_ASM330LHHX_EMB_FUNC_EN_B_ADDR,
+			   status);
+restore_page:
+	st_asm330lhhx_set_page_access(hw, false,
+				      ST_ASM330LHHX_REG_FUNC_CFG_MASK);
+unlock_page:
+	mutex_unlock(&hw->page_lock);
+
+	return ret;
+}
+
+/* update fsm thresholds */
+static int st_asm330lhhx_update_thresholds(struct st_asm330lhhx_hw *hw)
+{
+	u8 fsm_update_code[] = {
+		ST_ASM330LHHX_PAGE_SEL_ADDR, FSM_PAGE(thresholds[0].addr),
+		ST_ASM330LHHX_PAGE_ADDRESS_ADDR, FSM_OFFSET(thresholds[0].addr),
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[0].th1l,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[0].th1h,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[0].th2l,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[0].th2h,
+		//ST_ASM330LHHX_REG_PAGE_RW, ST_ASM330LHHX_REG_PAGE_WRITE_MASK,
+		ST_ASM330LHHX_PAGE_SEL_ADDR, FSM_PAGE(thresholds[1].addr),
+		ST_ASM330LHHX_PAGE_ADDRESS_ADDR, FSM_OFFSET(thresholds[1].addr),
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[1].th1l,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[1].th1h,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[1].th2l,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[1].th2h,
+		//ST_ASM330LHHX_REG_PAGE_RW, ST_ASM330LHHX_REG_PAGE_WRITE_MASK,
+		ST_ASM330LHHX_PAGE_SEL_ADDR, FSM_PAGE(thresholds[2].addr),
+		ST_ASM330LHHX_PAGE_ADDRESS_ADDR, FSM_OFFSET(thresholds[2].addr),
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[2].th1l,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[2].th1h,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[2].th2l,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, thresholds[2].th2h,
+	};
+
+	return st_asm330lhhx_write_fsm_data(hw, fsm_update_code,
+					    ARRAY_SIZE(fsm_update_code));
+}
+
+static int st_asm330lhhx_read_thresholds(struct st_asm330lhhx_hw *hw)
+{
+	unsigned int val;
+	int i, ret = 0;
+
+	for (i = 0; i < ARRAY_SIZE(thresholds); i++) {
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  thresholds[i].addr,
+						  &val);
+		if (!ret)
+			thresholds[i].th1l = val;
+
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  thresholds[i].addr + 1,
+						  &val);
+		if (!ret)
+			thresholds[i].th1h = val;
+
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  thresholds[i].addr + 2,
+						  &val);
+		if (!ret)
+			thresholds[i].th2l = val;
+
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  thresholds[i].addr + 3,
+						  &val);
+		if (!ret)
+			thresholds[i].th2h = val;
+	}
+
+	return ret;
+}
+
+/* update jack_min_duration */
+static int st_asm330lhhx_update_towing_jack_min_duration(struct st_asm330lhhx_hw *hw)
+{
+	u8 fsm_update_code[] = {
+		ST_ASM330LHHX_PAGE_SEL_ADDR, FSM_PAGE(towing_jack_min_duration[0].addr),
+		ST_ASM330LHHX_PAGE_ADDRESS_ADDR, FSM_OFFSET(towing_jack_min_duration[0].addr),
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, towing_jack_min_duration[0].thl,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, towing_jack_min_duration[0].thh,
+		ST_ASM330LHHX_PAGE_SEL_ADDR, FSM_PAGE(towing_jack_min_duration[1].addr),
+		ST_ASM330LHHX_PAGE_ADDRESS_ADDR, FSM_OFFSET(towing_jack_min_duration[1].addr),
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, towing_jack_min_duration[1].thl,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, towing_jack_min_duration[1].thh,
+		ST_ASM330LHHX_PAGE_SEL_ADDR, FSM_PAGE(towing_jack_min_duration[2].addr),
+		ST_ASM330LHHX_PAGE_ADDRESS_ADDR, FSM_OFFSET(towing_jack_min_duration[2].addr),
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, towing_jack_min_duration[2].thl,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, towing_jack_min_duration[2].thh,
+	};
+
+	return st_asm330lhhx_write_fsm_data(hw, fsm_update_code,
+					    ARRAY_SIZE(fsm_update_code));
+}
+
+static
+int st_asm330lhhx_read_towing_jack_min_duration(struct st_asm330lhhx_hw *hw)
+{
+	unsigned int val;
+	int i, ret = 0;
+
+	for (i = 0; i < ARRAY_SIZE(towing_jack_min_duration); i++) {
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  towing_jack_min_duration[i].addr,
+						  &val);
+		if (!ret)
+			towing_jack_min_duration[i].thl = val;
+
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  towing_jack_min_duration[i].addr + 1,
+						  &val);
+		if (!ret)
+			towing_jack_min_duration[i].thh = val;
+	}
+
+	return ret;
+}
+
+/* update crash_impact_th */
+static
+int st_asm330lhhx_update_crash_impact_th(struct st_asm330lhhx_hw *hw)
+{
+	u8 fsm_update_code[] = {
+		ST_ASM330LHHX_PAGE_SEL_ADDR, FSM_PAGE(crash_impact_th[0].addr),
+		ST_ASM330LHHX_PAGE_ADDRESS_ADDR, FSM_OFFSET(crash_impact_th[0].addr),
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, crash_impact_th[0].th1l,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, crash_impact_th[0].th1h,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, crash_impact_th[0].th2l,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, crash_impact_th[0].th2h,
+	};
+
+	return st_asm330lhhx_write_fsm_data(hw, fsm_update_code,
+					    ARRAY_SIZE(fsm_update_code));
+}
+
+static
+int st_asm330lhhx_read_crash_impact_th(struct st_asm330lhhx_hw *hw)
+{
+	unsigned int val;
+	int i, ret = 0;
+
+	for (i = 0; i < ARRAY_SIZE(crash_impact_th); i++) {
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  crash_impact_th[i].addr,
+						  &val);
+		if (!ret)
+			crash_impact_th[i].th1l = val;
+
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  crash_impact_th[i].addr + 1,
+						  &val);
+		if (!ret)
+			crash_impact_th[i].th1h = val;
+
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  crash_impact_th[i].addr + 2,
+						  &val);
+		if (!ret)
+			crash_impact_th[i].th2l = val;
+
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  crash_impact_th[i].addr + 3,
+						  &val);
+		if (!ret)
+			crash_impact_th[i].th2h = val;
+	}
+
+	return ret;
+}
+
+/* update algo_crash_min_duration */
+static
+int st_asm330lhhx_update_crash_min_duration(struct st_asm330lhhx_hw *hw)
+{
+	u8 fsm_update_code[] = {
+		ST_ASM330LHHX_PAGE_SEL_ADDR, FSM_PAGE(crash_min_duration[0].addr),
+		ST_ASM330LHHX_PAGE_ADDRESS_ADDR, FSM_OFFSET(crash_min_duration[0].addr),
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, crash_min_duration[0].thl,
+		ST_ASM330LHHX_PAGE_VALUE_ADDR, crash_min_duration[0].thh,
+	};
+
+	return st_asm330lhhx_write_fsm_data(hw, fsm_update_code,
+					    ARRAY_SIZE(fsm_update_code));
+}
+
+static
+int st_asm330lhhx_read_crash_min_duration(struct st_asm330lhhx_hw *hw)
+{
+	unsigned int val;
+	int i, ret = 0;
+
+	for (i = 0; i < ARRAY_SIZE(crash_min_duration); i++) {
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  crash_min_duration[i].addr,
+						  &val);
+		if (!ret)
+			crash_min_duration[i].thl = val;
+
+		ret = st_asm330lhhx_read_fsm_data(hw,
+						  crash_min_duration[i].addr + 1,
+						  &val);
+		if (!ret)
+			crash_min_duration[i].thh = val;
+	}
+
+	return ret;
 }
 
 static void st_asm330lhhx_mlc_update(const struct firmware *fw,
@@ -662,6 +1119,219 @@ static ssize_t st_asm330lhhx_mlc_flush(struct device *dev,
 	return ret < 0 ? ret : size;
 }
 
+static int st_asm330lhhx_read_mlc_fifo_raw(struct iio_dev *iio_dev,
+					   struct iio_chan_spec const *ch,
+					   int *val, int *val2, long mask)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(iio_dev);
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	struct st_asm330lhhx_sensor *sensor_acc;
+	int ret = 0;
+
+	sensor_acc = iio_priv(hw->iio_devs[ST_ASM330LHHX_ID_ACC]);
+
+	switch (mask) {
+	case IIO_CHAN_INFO_RAW:
+		break;
+	case IIO_CHAN_INFO_SAMP_FREQ:
+		*val = (int)sensor_acc->odr;
+		*val2 = (int)sensor_acc->uodr;
+		ret = IIO_VAL_INT_PLUS_MICRO;
+		break;
+	case IIO_CHAN_INFO_SCALE:
+		switch (ch->type) {
+		case IIO_ACCEL:
+			*val = 0;
+			*val2 = sensor_acc->gain;
+			ret = IIO_VAL_INT_PLUS_NANO;
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case IIO_CHAN_INFO_OFFSET:
+		return -EINVAL;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static int st_asm330lhhx_write_mlc_fifo_raw(struct iio_dev *iio_dev,
+					    struct iio_chan_spec const *chan,
+					    int val, int val2, long mask)
+{
+	return 0;
+}
+
+static
+ssize_t st_asm330lhhx_set_fsm_threshold(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	int ret;
+
+	ret = sscanf(buf, "%hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx,%hhx",
+		     &thresholds[0].th1h, &thresholds[0].th1l,
+		     &thresholds[0].th2h, &thresholds[0].th2l,
+		     &thresholds[1].th1h, &thresholds[1].th1l,
+		     &thresholds[1].th2h, &thresholds[1].th2l,
+		     &thresholds[2].th1h, &thresholds[2].th1l,
+		     &thresholds[2].th2h, &thresholds[2].th2l);
+	if (ret != 12)
+		ret = -EINVAL;
+
+	st_asm330lhhx_update_thresholds(hw);
+
+	return size;
+}
+
+static ssize_t st_asm330lhhx_get_fsm_threshold(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	int ret;
+
+	ret = st_asm330lhhx_read_thresholds(hw);
+
+	return ret ? ret : scnprintf(buf, PAGE_SIZE,
+				"%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x,%x\n",
+				thresholds[0].th1h, thresholds[0].th1l,
+				thresholds[0].th2h, thresholds[0].th2l,
+				thresholds[1].th1h, thresholds[1].th1l,
+				thresholds[1].th2h, thresholds[1].th2l,
+				thresholds[2].th1h, thresholds[2].th1l,
+				thresholds[2].th2h, thresholds[2].th2l);
+}
+
+static
+ssize_t st_asm330lhhx_set_towing_jack_min_duration(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	int ret;
+
+	ret = sscanf(buf, "%hhx,%hhx,%hhx,%hhx,%hhx,%hhx",
+		     &towing_jack_min_duration[0].thh,
+		     &towing_jack_min_duration[0].thl,
+		     &towing_jack_min_duration[1].thh,
+		     &towing_jack_min_duration[1].thl,
+		     &towing_jack_min_duration[2].thh,
+		     &towing_jack_min_duration[2].thl);
+	if (ret != 6)
+		ret = -EINVAL;
+
+	st_asm330lhhx_update_towing_jack_min_duration(hw);
+
+	return size;
+}
+
+static
+ssize_t st_asm330lhhx_get_towing_jack_min_duration(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	int ret;
+
+	ret = st_asm330lhhx_read_towing_jack_min_duration(hw);
+
+	return ret ? ret : scnprintf(buf, PAGE_SIZE,
+				"%x,%x,%x,%x,%x,%x\n",
+				towing_jack_min_duration[0].thh,
+				towing_jack_min_duration[0].thl,
+				towing_jack_min_duration[1].thh,
+				towing_jack_min_duration[1].thl,
+				towing_jack_min_duration[2].thh,
+				towing_jack_min_duration[2].thl);
+}
+
+static
+ssize_t st_asm330lhhx_set_crash_impact_th(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	int ret;
+
+	ret = sscanf(buf, "%hhx,%hhx,%hhx,%hhx",
+		     &crash_impact_th[0].th1h,
+		     &crash_impact_th[0].th1l,
+		     &crash_impact_th[0].th2h,
+		     &crash_impact_th[0].th2l);
+	if (ret != 4)
+		ret = -EINVAL;
+
+	st_asm330lhhx_update_crash_impact_th(hw);
+
+	return size;
+}
+
+static
+ssize_t st_asm330lhhx_get_crash_impact_th(struct device *dev,
+					  struct device_attribute *attr,
+					  char *buf)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	int ret;
+
+	ret = st_asm330lhhx_read_crash_impact_th(hw);
+
+	return ret ? ret : scnprintf(buf, PAGE_SIZE,
+				"%x,%x,%x,%x\n",
+				crash_impact_th[0].th1h,
+				crash_impact_th[0].th1l,
+				crash_impact_th[0].th2h,
+				crash_impact_th[0].th2l);
+}
+
+static
+ssize_t st_asm330lhhx_set_crash_min_duration(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	int ret;
+
+	ret = sscanf(buf, "%hhx,%hhx",
+		     &crash_min_duration[0].thh,
+		     &crash_min_duration[0].thl);
+	if (ret != 2)
+		ret = -EINVAL;
+
+	st_asm330lhhx_update_crash_min_duration(hw);
+
+	return size;
+}
+
+static
+ssize_t st_asm330lhhx_get_crash_min_duration(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct st_asm330lhhx_sensor *sensor = iio_priv(dev_get_drvdata(dev));
+	struct st_asm330lhhx_hw *hw = sensor->hw;
+	int ret;
+
+	ret = st_asm330lhhx_read_crash_min_duration(hw);
+
+	return ret ? ret : scnprintf(buf, PAGE_SIZE, "%x,%x\n",
+				crash_min_duration[0].thh,
+				crash_min_duration[0].thl);
+}
+
 static IIO_DEVICE_ATTR(mlc_info, 0444,
 		       st_asm330lhhx_mlc_info, NULL, 0);
 static IIO_DEVICE_ATTR(mlc_flush, 0200,
@@ -671,6 +1341,18 @@ static IIO_DEVICE_ATTR(mlc_version, 0444,
 static IIO_DEVICE_ATTR(load_mlc, 0200,
 		       NULL, st_asm330lhhx_mlc_upload_firmware, 0);
 static IIO_DEVICE_ATTR(module_id, 0444, st_asm330lhhx_get_module_id, NULL, 0);
+static IIO_DEVICE_ATTR(fsm_threshold, S_IWUSR | S_IRUGO,
+		       st_asm330lhhx_get_fsm_threshold,
+		       st_asm330lhhx_set_fsm_threshold, 0);
+static IIO_DEVICE_ATTR(towing_jack_min_duration, S_IWUSR | S_IRUGO,
+		       st_asm330lhhx_get_towing_jack_min_duration,
+		       st_asm330lhhx_set_towing_jack_min_duration, 0);
+static IIO_DEVICE_ATTR(crash_impact_th, S_IWUSR | S_IRUGO,
+		       st_asm330lhhx_get_crash_impact_th,
+		       st_asm330lhhx_set_crash_impact_th, 0);
+static IIO_DEVICE_ATTR(crash_min_duration, S_IWUSR | S_IRUGO,
+		       st_asm330lhhx_get_crash_min_duration,
+		       st_asm330lhhx_set_crash_min_duration, 0);
 
 static struct attribute *st_asm330lhhx_mlc_event_attributes[] = {
 	&iio_dev_attr_mlc_info.dev_attr.attr,
@@ -678,6 +1360,10 @@ static struct attribute *st_asm330lhhx_mlc_event_attributes[] = {
 	&iio_dev_attr_load_mlc.dev_attr.attr,
 	&iio_dev_attr_mlc_flush.dev_attr.attr,
 	&iio_dev_attr_module_id.dev_attr.attr,
+	&iio_dev_attr_fsm_threshold.dev_attr.attr,
+	&iio_dev_attr_towing_jack_min_duration.dev_attr.attr,
+	&iio_dev_attr_crash_impact_th.dev_attr.attr,
+	&iio_dev_attr_crash_min_duration.dev_attr.attr,
 	NULL,
 };
 
@@ -705,6 +1391,20 @@ static const struct iio_info st_asm330lhhx_mlc_x_event_info = {
 	.read_event_config = st_asm330lhhx_mlc_read_event_config,
 	.write_event_config = st_asm330lhhx_mlc_write_event_config,
 };
+
+static struct attribute *st_asm330lhhx_mlc_fifo_acc_attributes[] = {
+	NULL,
+};
+
+static const struct attribute_group st_asm330lhhx_mlc_fifo_acc_attribute_group = {
+	.attrs = st_asm330lhhx_mlc_fifo_acc_attributes,
+};
+
+static const struct iio_info st_asm330lhhx_mlc_fifo_acc_info = {
+	.read_raw = st_asm330lhhx_read_mlc_fifo_raw,
+	.write_raw = st_asm330lhhx_write_mlc_fifo_raw,
+};
+
 
 static struct iio_dev *
 st_asm330lhhx_mlc_alloc_iio_dev(struct st_asm330lhhx_hw *hw,
@@ -743,6 +1443,16 @@ st_asm330lhhx_mlc_alloc_iio_dev(struct st_asm330lhhx_hw *hw,
 		iio_dev->info = &st_asm330lhhx_mlc_event_info;
 		scnprintf(sensor->name, sizeof(sensor->name),
 			  "%s_mlc", hw->settings->id.name);
+		break;
+	case ST_ASM330LHHX_ID_FIFO_MLC:
+		iio_dev->channels = st_asm330lhhx_mlc_fifo_acc_channels;
+		iio_dev->num_channels =
+				ARRAY_SIZE(st_asm330lhhx_mlc_fifo_acc_channels);
+		iio_dev->available_scan_masks =
+			st_asm330lhhx_fifo_mlc_scan_masks;
+		scnprintf(sensor->name, sizeof(sensor->name),
+			  "%s_mfifo", hw->settings->id.name);
+		iio_dev->info = &st_asm330lhhx_mlc_fifo_acc_info;
 		break;
 	case ST_ASM330LHHX_ID_MLC_0:
 	case ST_ASM330LHHX_ID_MLC_1:
@@ -817,6 +1527,8 @@ st_asm330lhhx_mlc_alloc_iio_dev(struct st_asm330lhhx_hw *hw,
  */
 int st_asm330lhhx_mlc_check_status(struct st_asm330lhhx_hw *hw)
 {
+	bool fsm_running = st_asm330lhhx_fsm_running(hw);
+	bool mlc_running = st_asm330lhhx_mlc_running(hw);
 	struct st_asm330lhhx_sensor *sensor;
 	struct iio_dev *iio_dev;
 	__le16 __fsm_status = 0;
@@ -824,7 +1536,8 @@ int st_asm330lhhx_mlc_check_status(struct st_asm330lhhx_hw *hw)
 	u8 i, mlc_status, id;
 	u16 fsm_status;
 
-	if (hw->mlc_config->status & ST_ASM330LHHX_MLC_ENABLED) {
+	if ((hw->mlc_config->status & ST_ASM330LHHX_MLC_ENABLED) &&
+	     mlc_running) {
 		ret = st_asm330lhhx_read_locked(hw,
 					ST_ASM330LHHX_MLC_STATUS_MAINPAGE,
 					(void *)&mlc_status, 1);
@@ -868,7 +1581,8 @@ int st_asm330lhhx_mlc_check_status(struct st_asm330lhhx_hw *hw)
 		}
 	}
 
-	if (hw->mlc_config->status & ST_ASM330LHHX_FSM_ENABLED) {
+	if ((hw->mlc_config->status & ST_ASM330LHHX_FSM_ENABLED) &&
+	    fsm_running) {
 		ret = st_asm330lhhx_read_locked(hw,
 					ST_ASM330LHHX_FSM_STATUS_A_MAINPAGE,
 					(void *)&__fsm_status, 2);
@@ -958,8 +1672,16 @@ static int st_asm330lhhx_of_get_mlc_int_pin(struct st_asm330lhhx_hw *hw,
 	return 0;
 }
 
+static const struct iio_buffer_setup_ops st_asm330lhhx_mlc_fifo_ops = {
+};
+
 int st_asm330lhhx_mlc_probe(struct st_asm330lhhx_hw *hw)
 {
+
+#if KERNEL_VERSION(5, 13, 0) > LINUX_VERSION_CODE
+	struct iio_buffer *buffer;
+#endif /* LINUX_VERSION_CODE */
+
 	int int_pin;
 	int ret;
 
@@ -967,6 +1689,39 @@ int st_asm330lhhx_mlc_probe(struct st_asm330lhhx_hw *hw)
 	if (ret)
 		return -EINVAL;
 
+	/* prepare FIFO_MLC IIO device with buffer */
+	hw->iio_devs[ST_ASM330LHHX_ID_FIFO_MLC] =
+		st_asm330lhhx_mlc_alloc_iio_dev(hw, ST_ASM330LHHX_ID_FIFO_MLC);
+	if (!hw->iio_devs[ST_ASM330LHHX_ID_FIFO_MLC])
+		return -ENOMEM;
+
+#if KERNEL_VERSION(5, 19, 0) <= LINUX_VERSION_CODE
+	ret = devm_iio_kfifo_buffer_setup(hw->dev,
+					  hw->iio_devs[ST_ASM330LHHX_ID_FIFO_MLC],
+					  &st_asm330lhhx_mlc_fifo_ops);
+	if (ret)
+		return ret;
+#elif KERNEL_VERSION(5, 13, 0) <= LINUX_VERSION_CODE
+	ret = devm_iio_kfifo_buffer_setup(hw->dev,
+					  hw->iio_devs[ST_ASM330LHHX_ID_FIFO_MLC],
+					  INDIO_BUFFER_SOFTWARE,
+					  &st_asm330lhhx_mlc_fifo_ops);
+	if (ret)
+		return ret;
+#else /* LINUX_VERSION_CODE */
+	buffer = devm_iio_kfifo_allocate(hw->dev);
+	if (!buffer)
+		return -ENOMEM;
+
+	iio_device_attach_buffer(hw->iio_devs[ST_ASM330LHHX_ID_FIFO_MLC],
+				 buffer);
+	hw->iio_devs[ST_ASM330LHHX_ID_FIFO_MLC]->modes |=
+						  INDIO_BUFFER_SOFTWARE;
+	hw->iio_devs[ST_ASM330LHHX_ID_FIFO_MLC]->setup_ops =
+					    &st_asm330lhhx_mlc_fifo_ops;
+#endif /* LINUX_VERSION_CODE */
+
+	/* prepare MLC IIO device */
 	hw->iio_devs[ST_ASM330LHHX_ID_MLC] =
 		st_asm330lhhx_mlc_alloc_iio_dev(hw,
 						ST_ASM330LHHX_ID_MLC);

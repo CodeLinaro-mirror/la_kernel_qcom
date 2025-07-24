@@ -645,7 +645,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 	if ((reg_src[0] & ST_ASM330LHHX_WAKE_UP_SRC_WU_IA_MASK) &&
 	    ST_ASM330LHHX_IS_EVENT_ENABLED(ST_ASM330LHHX_EVENT_WAKEUP)) {
 		iio_dev = hw->iio_devs[ST_ASM330LHHX_ID_ACC];
-	pm_wakeup_ws_event(hw->ws, ST_ASM330LHHX_WAKEUP_MS, true);
+		pm_wakeup_ws_event(hw->ws, ST_ASM330LHHX_WAKEUP_MS, true);
 		if (reg_src[0] & ST_ASM330LHHX_Z_WU_MASK) {
 			iio_push_event(iio_dev,
 				       IIO_MOD_EVENT_CODE(IIO_ACCEL, 0,
@@ -754,6 +754,12 @@ int st_asm330lhhx_event_init(struct st_asm330lhhx_hw *hw)
 	if (err < 0)
 		return err;
 
+	err = regmap_update_bits(hw->regmap, ST_ASM330LHHX_REG_INT_CFG0_ADDR,
+				 ST_ASM330LHHX_LIR_MASK,
+				 FIELD_PREP(ST_ASM330LHHX_LIR_MASK, 1));
+	if (err < 0)
+		return err;
+
 	/* apply HPF on wake-up */
 	err = regmap_update_bits(hw->regmap, ST_ASM330LHHX_REG_INT_CFG0_ADDR,
 				 ST_ASM330LHHX_SLOPE_FDS_MASK,
@@ -761,13 +767,13 @@ int st_asm330lhhx_event_init(struct st_asm330lhhx_hw *hw)
 	if (err < 0)
 		return err;
 
-	/* Set default wake-up thershold to 100 mg */
-	err = st_asm330lhhx_set_wake_up_thershold(hw, 1000);
+	/* Set default wake-up thershold to 200 mg */
+	err = st_asm330lhhx_set_wake_up_thershold(hw, 200);
 	if (err < 0)
 		return err;
 
 	/* Set default wake-up duration to 0 */
-	err = st_asm330lhhx_set_wake_up_duration(hw, 100);
+	err = st_asm330lhhx_set_wake_up_duration(hw, 0);
 	if (err < 0)
 		return err;
 
