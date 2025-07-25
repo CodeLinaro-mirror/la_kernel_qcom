@@ -6236,12 +6236,12 @@ static int ufs_qcom_system_restore(struct device *dev)
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 	struct ufs_qcom_host *host;
 
-	host = ufshcd_get_variant(hba);
-
 	if (!is_bootdevice_ufs) {
 		dev_info(dev, "UFS is not boot dev.\n");
 		return 0;
 	}
+
+	host = ufshcd_get_variant(hba);
 
 	ufs_qcom_set_s2r_cap(dev);
 	if (host->set_ds_spm_level)
