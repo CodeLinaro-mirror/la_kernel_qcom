@@ -532,14 +532,11 @@ static int ep_pcie_pipe_clk_init(struct ep_pcie_dev_t *dev)
 		info = &dev->pipeclk[i];
 
 		if (!info->hdl) {
-			if (info->required) {
-				EP_PCIE_ERR(dev, "PCIe V%d:  handle of Pipe Clock %s is NULL\n",
-					dev->rev, info->name);
-
-				rc = -EINVAL;
-				break;
-			} else
-				continue;
+			EP_PCIE_ERR(dev,
+				"PCIe V%d:  handle of Pipe Clock %s is NULL\n",
+				dev->rev, info->name);
+			rc = -EINVAL;
+			break;
 		}
 
 		if (info->freq) {
@@ -1321,7 +1318,8 @@ static int ep_pcie_get_resources(struct ep_pcie_dev_t *dev,
 			}
 		} else {
 			if (clkfreq != NULL) {
-				//clk_info->freq = clkfreq[i + EP_PCIE_MAX_PIPE_CLK];
+				clk_info->freq = clkfreq[i +
+					EP_PCIE_MAX_PIPE_CLK];
 				EP_PCIE_DBG(dev, "Freq of Clock %s is:%d\n",
 					clk_info->name, clk_info->freq);
 			}
@@ -1427,14 +1425,16 @@ static int ep_pcie_get_resources(struct ep_pcie_dev_t *dev,
 	for (i = 0; i < EP_PCIE_MAX_IRQ; i++) {
 		irq_info = &dev->irq[i];
 
-		ret = platform_get_irq_byname(pdev, irq_info->name);
-		if (ret <= 0) {
-			EP_PCIE_DBG2(dev, "PCIe V%d: can't find IRQ # for %s ret=%d\n",
-				dev->rev, irq_info->name, res);
+		res = platform_get_resource_byname(pdev, IORESOURCE_IRQ,
+							irq_info->name);
+
+		if (!res) {
+			EP_PCIE_DBG2(dev, "PCIe V%d: can't find IRQ # for %s\n",
+				dev->rev, irq_info->name);
 		} else {
-			irq_info->num = ret;
-			EP_PCIE_DBG2(dev, "IRQ # for %s is %d\n", irq_info->name, irq_info->num);
-			ret = 0;
+			irq_info->num = res->start;
+			EP_PCIE_DBG2(dev, "IRQ # for %s is %d\n",
+				irq_info->name,	irq_info->num);
 		}
 	}
 
