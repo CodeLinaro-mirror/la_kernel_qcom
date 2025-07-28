@@ -419,6 +419,10 @@ int ubiblock_create(struct ubi_volume_info *vi)
 	dev->rq = gd->queue;
 	blk_queue_max_segments(dev->rq, UBI_MAX_SG_COUNT);
 
+	/* Configure bounce limit for DMA operations to high memory */
+	if (IS_ENABLED(CONFIG_HIGHMEM))
+		blk_queue_bounce_limit(dev->rq, BLK_BOUNCE_HIGH);
+
 	list_add_tail(&dev->list, &ubiblock_devices);
 
 	/* Must be the last step: anyone can call file ops from now on */
