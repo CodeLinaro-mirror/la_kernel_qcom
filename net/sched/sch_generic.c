@@ -462,34 +462,24 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets)
 		root_lock = qdisc_lock(q);
 
 	while (skb) {
-		struct sk_buff *next = skb->next;
-
-		skb->next = NULL;
-
 		if (likely(skb->fast_qdisc)) {
-			/* For SFE fast_qdisc marked packets, we send packets directly
-			 * to physical interface pointed to by skb->dev
-			 * We can clear fast_qdisc since we will not re-enqueue packet in this
-			 * path
+			struct sk_buff *next = skb->next;
+
+			/* Fast path: break the skb chain and handle one at a time.
+			 * sch_direct_xmit_fast always returns true, so no need to check
 			 */
+			skb->next = NULL;
 			skb->fast_qdisc = 0;
-			if (!sch_direct_xmit_fast(skb, q, skb->dev, root_lock))
-				return false;
-		} else {
-			dev = qdisc_dev(q);
-			txq = skb_get_tx_queue(dev, skb);
+			sch_direct_xmit_fast(skb, q, skb->dev, root_lock);
 
-			if (!sch_direct_xmit(skb, q, dev, txq, root_lock, validate)) {
-				if (next) {
-					skb = next;
-					dev_requeue_skb(skb, q);
-				}
-
-				return false;
-			}
+			skb = next;
+			continue;
 		}
 
-		skb = next;
+		/* Normal path: let sch_direct_xmit handle the (potentially bulk) skb chain */
+		dev = qdisc_dev(q);
+		txq = skb_get_tx_queue(dev, skb);
+		return sch_direct_xmit(skb, q, dev, txq, root_lock, validate);
 	}
 
 	return true;
