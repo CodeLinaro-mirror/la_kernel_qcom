@@ -121,58 +121,6 @@ struct glink_core_rx_intent {
 	struct list_head node;
 };
 
-/**
- * struct qcom_glink - driver context, relates to one remote subsystem
- * @dev:	reference to the associated struct device
- * @name:	remote subsystem name
- * @rx_pipe:	pipe object for receive FIFO
- * @tx_pipe:	pipe object for transmit FIFO
- * @kworker:	kworker to handle rx_done work
- * @task:	kthread running @kworker
- * @rx_work:	worker for handling received control messages
- * @rx_lock:	protects the @rx_queue
- * @rx_queue:	queue of received control messages to be processed in @rx_work
- * @tx_lock:	synchronizes operations on the tx fifo
- * @idr_lock:	synchronizes @lcids and @rcids modifications
- * @lcids:	idr of all channels with a known local channel id
- * @rcids:	idr of all channels with a known remote channel id
- * @features:	remote features
- * @intentless:	flag to indicate that there is no intent
- * @tx_avail_notify: Waitqueue for pending tx tasks
- * @sent_read_notify: flag to check cmd sent or not
- * @abort_tx:	flag indicating that all tx attempts should fail
- * @ilc:	ipc logging context reference
- */
-struct qcom_glink {
-	struct device *dev;
-
-	const char *name;
-
-	struct qcom_glink_pipe *rx_pipe;
-	struct qcom_glink_pipe *tx_pipe;
-
-	struct kthread_worker kworker;
-	struct task_struct *task;
-
-	struct work_struct rx_work;
-	spinlock_t rx_lock;
-	struct list_head rx_queue;
-
-	spinlock_t tx_lock;
-
-	spinlock_t idr_lock;
-	struct idr lcids;
-	struct idr rcids;
-	unsigned long features;
-
-	bool intentless;
-	wait_queue_head_t tx_avail_notify;
-	bool sent_read_notify;
-
-	bool abort_tx;
-	void *ilc;
-};
-
 enum {
 	GLINK_STATE_CLOSED,
 	GLINK_STATE_OPENING,
