@@ -18,6 +18,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/wait.h>
+#include <linux/wakeup_reason.h>
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
 #include <linux/mailbox_client.h>
@@ -1498,10 +1499,10 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 	int retry = 0;
 	int ret = 0;
 
-	if (should_wake) {
-		dev_dbg(glink->dev, "%s: wakeup\n", __func__);
+	if (should_wake && !glink->intentless) {
 		glink_resume_pkt = true;
 		should_wake = false;
+		log_abnormal_wakeup_reason("IRQ %d, %s", glink->irq, glink->irqname);
 		pm_system_wakeup();
 	}
 	/* To wakeup any blocking writers */
