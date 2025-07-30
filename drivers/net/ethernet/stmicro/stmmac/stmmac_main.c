@@ -1321,7 +1321,7 @@ static void stmmac_mac_link_down(struct phylink_config *config,
 	}
 
 	if (priv->plat->pcs_v3)
-		qcom_serdes_loopback_v3_1(priv->plat, true);
+		qcom_sgmii_clock_loopback(priv->plat, true);
 
 	priv->eee_active = false;
 	priv->tx_lpi_enabled = false;
@@ -1380,7 +1380,7 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 	}
 
 	if (priv->plat->pcs_v3)
-		qcom_serdes_loopback_v3_1(priv->plat, false);
+		qcom_sgmii_clock_loopback(priv->plat, false);
 
 	ctrl = readl(priv->ioaddr + MAC_CTRL_REG);
 	ctrl &= ~priv->hw->link.speed_mask;
@@ -4612,7 +4612,7 @@ static int stmmac_open(struct net_device *dev)
 		if (ret < 0)
 			netdev_err(priv->dev, "Failed to enable SerDes loopback\n");
 	} else if (priv->plat->pcs_v3) {
-		qcom_serdes_loopback_v3_1(priv->plat, true);
+		qcom_sgmii_clock_loopback(priv->plat, true);
 	}
 
 	/* Extra statistics */

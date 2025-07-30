@@ -2,7 +2,7 @@
 
 // Copyright (c) 2018-19, Linaro Limited
 // Copyright (c) 2021, The Linux Foundation. All rights reserved.
-// Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -3444,7 +3444,7 @@ static void setup_config_registers(struct qcom_ethqos *ethqos,
 	ETHQOSERR("End\n");
 }
 
-void qcom_serdes_loopback_v3_1(struct plat_stmmacenet_data *plat, bool on)
+void qcom_sgmii_clock_loopback(struct plat_stmmacenet_data *plat, bool on)
 {
 	struct qcom_ethqos *ethqos = plat->bsp_priv;
 
