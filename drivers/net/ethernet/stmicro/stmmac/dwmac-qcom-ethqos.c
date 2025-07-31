@@ -2307,12 +2307,11 @@ static void qcom_ethqos_request_phy_wol(void *plat_n)
 	}
 }
 
-static int ethqos_set_fixed_link(struct platform_device *pdev)
+static int qcom_ethqos_set_fixed_link(struct platform_device *pdev)
 {
 	struct device_node *fixed_phy_node;
 	struct property *status_prop;
 
-	ETHQOSINFO("Enter");
 	fixed_phy_node = of_get_child_by_name(pdev->dev.of_node, "fixed-link");
 
 		if (fixed_phy_node) {
@@ -2345,6 +2344,35 @@ static int ethqos_set_fixed_link(struct platform_device *pdev)
 		}
 
 	of_node_put(fixed_phy_node);
+	kfree(plat_dat->mdio_bus_data);
+	return 0;
+}
+
+static int qcom_ethqos_check_mdio_and_fix_link(struct platform_device *pdev)
+{
+	size_t size;
+
+	size = sizeof(*plat_dat->mdio_bus_data);
+	if (phytype == SWITCH) {
+		ETHQOSINFO("Switch detected, Enable fixed-link");
+		qcom_ethqos_set_fixed_link(pdev);
+	} else {
+		struct device_node *fixed_phy_node;
+
+		fixed_phy_node = of_get_child_by_name(pdev->dev.of_node, "fixed-link");
+		if (of_device_is_available(fixed_phy_node)) {
+			ETHQOSINFO("Fixed link already enabled here");
+			kfree(plat_dat->mdio_bus_data);
+			return 0;
+		}
+		if (!plat_dat->mdio_bus_data) {
+			ETHQOSINFO("Detected Phy type %d", phytype);
+			plat_dat->mdio_bus_data = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
+			if (!plat_dat->mdio_bus_data)
+				return -ENOMEM;
+			plat_dat->mdio_bus_data->needs_reset = true;
+		}
+	}
 	return 0;
 }
 
@@ -2460,9 +2488,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 			ret = set_pcs_ane(pcs_ane);
 #endif
 
-	if (phytype == SWITCH)
-		ethqos_set_fixed_link(pdev);
-	stmmac_set_phytype(phytype);
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return ret;
@@ -2485,6 +2510,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return PTR_ERR(plat_dat);
 	}
 
+	ret = qcom_ethqos_check_mdio_and_fix_link(pdev);
+	if (ret)
+		goto err_mem;
 	plat_dat->disable_pcs_ane = disable_pcs_ane;
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
