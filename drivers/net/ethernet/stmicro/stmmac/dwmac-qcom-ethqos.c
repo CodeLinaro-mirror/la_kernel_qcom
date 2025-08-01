@@ -3484,7 +3484,7 @@ static void setup_config_registers(struct qcom_ethqos *ethqos,
 	ETHQOSERR("End\n");
 }
 
-void qcom_serdes_loopback_v3_1(struct plat_stmmacenet_data *plat, bool on)
+void qcom_sgmii_clock_loopback(struct plat_stmmacenet_data *plat, bool on)
 {
 	struct qcom_ethqos *ethqos = plat->bsp_priv;
 
