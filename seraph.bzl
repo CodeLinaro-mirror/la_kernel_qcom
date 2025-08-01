@@ -32,6 +32,7 @@ def define_seraph():
         "drivers/dma/qcom/msm_gpi.ko",
         "drivers/edac/kryo_arm64_edac.ko",
         "drivers/edac/qcom_edac.ko",
+        "drivers/extcon/extcon-qcom-spmi-misc.ko",
         "drivers/firmware/qcom-scm.ko",
         "drivers/firmware/qcom/si_core/mem_object.ko",
         "drivers/firmware/qcom/si_core/si_core_module.ko",
@@ -75,7 +76,7 @@ def define_seraph():
         "drivers/mailbox/qcom-ipcc.ko",
         "drivers/mfd/qcom-spmi-pmic.ko",
         "drivers/misc/isl97900_led/isl97900_led.ko",
-        "drivers/misc/smci_proxy.ko",
+        "drivers/misc/rtimd-i2c/rtimd-i2c.ko",
         "drivers/mmc/host/cqhci.ko",
         "drivers/mmc/host/sdhci-msm.ko",
         "drivers/nvmem/nvmem_qcom-spmi-sdam.ko",
@@ -140,6 +141,7 @@ def define_seraph():
         "drivers/soc/qcom/mem_buf/mem_buf_msgq.ko",
         "drivers/soc/qcom/memory_dump_v2.ko",
         "drivers/soc/qcom/minidump.ko",
+        "drivers/soc/qcom/msm_performance.ko",
         "drivers/soc/qcom/pdr_interface.ko",
         "drivers/soc/qcom/pmic-pon-log.ko",
         "drivers/soc/qcom/qcom_aoss.ko",
@@ -181,7 +183,6 @@ def define_seraph():
         "drivers/tty/hvc/hvc_gunyah.ko",
         "drivers/tty/serial/msm_geni_serial.ko",
         "drivers/usb/dwc3/dwc3-msm.ko",
-        "drivers/usb/gadget/function/usb_f_ccid.ko",
         "drivers/usb/gadget/function/usb_f_cdev.ko",
         "drivers/usb/gadget/function/usb_f_gsi.ko",
         "drivers/usb/gadget/function/usb_f_qdss.ko",
@@ -209,7 +210,6 @@ def define_seraph():
         "net/qrtr/qrtr-mhi.ko",
         "net/qrtr/qrtr-smd.ko",
         "net/wireless/cfg80211.ko",
-        "sound/usb/snd-usb-audio-qmi.ko",
     ]
 
     _seraph_consolidate_in_tree_modules = _seraph_in_tree_modules + [
