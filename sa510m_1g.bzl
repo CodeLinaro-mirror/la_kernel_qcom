@@ -37,8 +37,15 @@ def define_sa510m_1g():
         # keep sorted
     ]
 
+    _sa510m_1g_debug_le_in_tree_modules = _sa510m_1g_in_tree_modules + [
+        "drivers/hwtracing/coresight/coresight-cpu-debug.ko",
+    ]
+
     for variant in le_32_variants:
-        mod_list = _sa510m_1g_in_tree_modules
+        if variant == "debug-defconfig":
+            mod_list = _sa510m_1g_debug_le_in_tree_modules
+        else:
+            mod_list = _sa510m_1g_in_tree_modules
 
         define_msm_le_32(
             msm_target = target_name,
