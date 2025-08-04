@@ -1288,4 +1288,34 @@ config QCOM_SECURE_HIBERNATION
 	  pages at the kernel.
 	  If not sure, say N.
 
+config QCOM_HIB_USE_STATIC_KEY
+	tristate "Debug case to generate Key & Test"
+	depends on HIBERNATION
+	help
+	  Debug case to generate Key & Test.
+
+config QCOM_HIB_KERNEL_BASED
+	tristate "Enable it to specify its using Kernel based Hibernation exit"
+	depends on HIBERNATION
+	help
+	  Enable it to specify its using Kernel based Hibernation exit
+
+config QCOM_KERNEL_SEC_KEY
+	tristate "SOC supports Qcom Secure Kernel Key"
+	depends on HIBERNATION
+	help
+	  SOC supports Qcom Secure Kernel Key
+	  If not sure, say N.
+
+config QCOM_BOOTLOADER_BASED_RESTORE
+	tristate "Denotes bootloader based restore"
+	depends on HIBERNATION
+	help
+	  Select if qcom chipsets are equipped with bootloader based restore.
+
+config QCOM_KERNEL_STATIC_KEY
+       tristate "Use STATIC_KEY for hibernation"
+       help
+         Use STATIC_KEY for hibernation
+
 endmenu
