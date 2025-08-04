@@ -1894,7 +1894,7 @@ static ssize_t uvcg_framebased_##cname##_show(struct config_item *item,	\
 	opts = to_f_uvc_opts(opts_item);				\
 									\
 	mutex_lock(&opts->lock);					\
-	result = scnprintf(page, PAGE_SIZE, "%u\n", le##bits##_to_cpu(u->desc.aname));\
+	result = sprintf(page, "%u\n", le##bits##_to_cpu(u->desc.aname));\
 	mutex_unlock(&opts->lock);					\
 									\
 	mutex_unlock(su_mutex);						\
@@ -1919,7 +1919,7 @@ static ssize_t uvcg_framebased_##cname##_show(struct config_item *item,	\
 	opts = to_f_uvc_opts(opts_item);				\
 									\
 	mutex_lock(&opts->lock);					\
-	result = scnprintf(page, PAGE_SIZE, "%u\n", le##bits##_to_cpu(u->desc.aname));\
+	result = sprintf(page, "%u\n", le##bits##_to_cpu(u->desc.aname));\
 	mutex_unlock(&opts->lock);					\
 									\
 	mutex_unlock(su_mutex);						\

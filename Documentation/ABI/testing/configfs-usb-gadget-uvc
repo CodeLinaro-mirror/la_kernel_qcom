@@ -319,7 +319,7 @@ Description:    Specific framebased format descriptors
                 bAspectRatioX           the Y dimension of the picture aspect
                                         ratio, read-only
                 bDefaultFrameIndex      optimum frame index for this stream
-                bBitsPerPixel           number of bitsperpixel used to
+                bBitsPerPixel           number of bits per pixel used to
                                         specify color in the decoded video
                                         frame
                 guidFormat              globally unique id used to identify

@@ -502,7 +502,7 @@ static struct qcom_msi *qcom_msi_init(struct device *dev)
 	return msi;
 }
 
-static int qcom_pcie_ecam_suspend_noirq(struct device *dev)
+static int qcom_pcie_ecam_suspend(struct device *dev)
 {
 	int ret;
 
@@ -520,7 +520,7 @@ static int qcom_pcie_ecam_suspend_noirq(struct device *dev)
 	return 0;
 }
 
-static int qcom_pcie_ecam_resume_noirq(struct device *dev)
+static int qcom_pcie_ecam_resume(struct device *dev)
 {
 	struct qcom_msi *msi = (struct qcom_msi *)dev_get_drvdata(dev);
 	int ret;
@@ -539,6 +539,36 @@ static int qcom_pcie_ecam_resume_noirq(struct device *dev)
 	 * till return success here.
 	 */
 	return 0;
+}
+
+static int qcom_pci_ecam_runtime_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int qcom_pci_ecam_runtime_resume(struct device *dev)
+{
+	struct qcom_msi *msi = (struct qcom_msi *)dev_get_drvdata(dev);
+
+	/*
+	 * During suspend msi address gets cleared,
+	 * re-configuring the msi in resume process.
+	 */
+	if (msi)
+		qcom_msi_config(msi->msi_domain);
+
+	return 0;
+}
+
+static void qcom_pcie_ecam_shutdown(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	int ret;
+
+	/* Put PCIe into D3cold to avoid any access while rebooting device */
+	ret = qcom_pcie_ecam_suspend(dev);
+	if (ret)
+		dev_err(dev, "fail to shutdown pcie controller: %d\n", ret);
 }
 
 static int qcom_pcie_ecam_probe(struct platform_device *pdev)
@@ -575,8 +605,10 @@ static int qcom_pcie_ecam_probe(struct platform_device *pdev)
 }
 
 static const struct dev_pm_ops qcom_pcie_ecam_pm_ops = {
-	NOIRQ_SYSTEM_SLEEP_PM_OPS(qcom_pcie_ecam_suspend_noirq,
-				qcom_pcie_ecam_resume_noirq)
+	SET_RUNTIME_PM_OPS(qcom_pci_ecam_runtime_suspend,
+				qcom_pci_ecam_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(qcom_pcie_ecam_suspend,
+				qcom_pcie_ecam_resume)
 };
 
 static const struct pci_ecam_ops qcom_pcie_ecam_ops = {
@@ -598,6 +630,7 @@ MODULE_DEVICE_TABLE(of, qcom_pcie_ecam_of_match);
 
 static struct platform_driver qcom_pcie_ecam_driver = {
 	.probe	= qcom_pcie_ecam_probe,
+	.shutdown	= qcom_pcie_ecam_shutdown,
 	.driver	= {
 		.name			= "qcom-pcie-ecam-rc",
 		.suppress_bind_attrs	= true,
