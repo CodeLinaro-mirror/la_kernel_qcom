@@ -128,6 +128,7 @@ hamoa_perf_config = {
     "CONFIG_SCHED_WALT": "m",
     "CONFIG_SCHED_WALT_STATS": "n",
     "CONFIG_SCHED_WALT_DEBUG": "n",
+    "CONFIG_SERIAL_MSM_GENI": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SECURE_BUFFER": "m",
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
