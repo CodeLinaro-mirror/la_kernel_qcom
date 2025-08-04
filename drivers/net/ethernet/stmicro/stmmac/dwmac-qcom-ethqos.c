@@ -3533,6 +3533,61 @@ static void ethqos_rgmii_io_macro_loopback(struct qcom_ethqos *ethqos, int mode)
 	}
 }
 
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+static void ethqos_mac_loopback_v3_1(struct qcom_ethqos *ethqos, int mode)
+{
+	u32 read_value = (u32)readl_relaxed(ethqos->ioaddr + MAC_CONFIGURATION);
+	/* Set loopback mode */
+	if (mode == 1)
+		read_value |= MAC_LM;
+	else
+		read_value &= ~MAC_LM;
+	writel_relaxed(read_value, ethqos->ioaddr + MAC_CONFIGURATION);
+}
+
+static void ethqos_serdes_loopback_v3_1(struct plat_stmmacenet_data *plat, bool on)
+{
+	struct qcom_ethqos *ethqos = plat->bsp_priv;
+	u32 read_value = (u32)readl_relaxed(ethqos->ioaddr + MAC_AN_CONTROL);
+
+	if (on) {
+		rgmii_updatel(ethqos, SGMII_PHY_CNTRL1_SGMII_TX_TO_RX_LOOPBACK_EN,
+			      SGMII_PHY_CNTRL1_SGMII_TX_TO_RX_LOOPBACK_EN,
+			      EMAC_WRAPPER_SGMII_PHY_CNTRL1);
+		read_value |= MAC_ELE;
+	} else {
+		rgmii_updatel(ethqos, SGMII_PHY_CNTRL1_SGMII_TX_TO_RX_LOOPBACK_EN, 0,
+			      EMAC_WRAPPER_SGMII_PHY_CNTRL1);
+		read_value &= ~MAC_ELE;
+	}
+	writel_relaxed(read_value, ethqos->ioaddr + MAC_AN_CONTROL);
+}
+
+static int phy_digital_loopback_v3_1(struct qcom_ethqos *ethqos, int speed, int config)
+{
+	struct platform_device *pdev = ethqos->pdev;
+	struct net_device *dev = platform_get_drvdata(pdev);
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	if (config == 1) {
+		ETHQOSINFO("Request for phy digital loopback enable\n");
+		if (speed != SPEED_1000 && speed != SPEED_100 &&
+		    speed != SPEED_10) {
+			ETHQOSERR("Invalid link speed\n");
+			return -EINVAL;
+		}
+	} else if (config == 0) {
+		ETHQOSINFO("Request for phy digital loopback disable\n");
+	} else {
+		ETHQOSERR("Invalid option\n");
+		return -EINVAL;
+	}
+	phy_loopback(priv->phydev, config);
+
+	return 0;
+}
+
+#else
 static void ethqos_mac_loopback(struct qcom_ethqos *ethqos, int mode)
 {
 	u32 read_value = (u32)readl_relaxed(ethqos->ioaddr + XGMAC_RX_CONFIG);
@@ -3566,6 +3621,31 @@ static void ethqos_mac_loopback(struct qcom_ethqos *ethqos, int mode)
 			      0, RGMII_IO_MACRO_CONFIG);
 	}
 }
+
+static void ethqos_pcs_loopback(struct qcom_ethqos *ethqos, int config)
+{
+	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
+
+	if (config == 1)
+		qcom_xpcs_pcs_loopback(priv->hw->qxpcs, 1);
+	else if (config == 0)
+		qcom_xpcs_pcs_loopback(priv->hw->qxpcs, 0);
+}
+
+static void ethqos_serdes_loopback(struct qcom_ethqos *ethqos, int speed, int config)
+{
+	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
+
+	qcom_xpcs_link_up(&priv->hw->qxpcs->pcs, 1, priv->plat->interface,
+			  speed, priv->dev->phydev->duplex);
+
+	if (config == 1)
+		qcom_xpcs_serdes_loopback(priv->hw->qxpcs, 1);
+	else if (config == 0)
+		qcom_xpcs_serdes_loopback(priv->hw->qxpcs, 0);
+}
+
+#endif
 
 static int phy_rgmii_digital_loopback(struct qcom_ethqos *ethqos, int speed, int config)
 {
@@ -3695,6 +3775,9 @@ static int phy_digital_loopback_config(struct qcom_ethqos *ethqos, int speed, in
 	case PHY_INTERFACE_MODE_RGMII_TXID:
 		return phy_rgmii_digital_loopback(ethqos, speed, config);
 	case PHY_INTERFACE_MODE_SGMII:
+		#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+			return phy_digital_loopback_v3_1(ethqos, speed, config);
+		#endif
 	case PHY_INTERFACE_MODE_USXGMII:
 	case PHY_INTERFACE_MODE_5GBASER:
 	case PHY_INTERFACE_MODE_2500BASEX:
@@ -3703,29 +3786,6 @@ static int phy_digital_loopback_config(struct qcom_ethqos *ethqos, int speed, in
 		ETHQOSERR("Invalid interface with PHY loopback\n");
 		return -EINVAL;
 	}
-}
-
-static void ethqos_pcs_loopback(struct qcom_ethqos *ethqos, int config)
-{
-	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
-
-	if (config == 1)
-		qcom_xpcs_pcs_loopback(priv->hw->qxpcs, 1);
-	else if (config == 0)
-		qcom_xpcs_pcs_loopback(priv->hw->qxpcs, 0);
-}
-
-static void ethqos_serdes_loopback(struct qcom_ethqos *ethqos, int speed, int config)
-{
-	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
-
-	qcom_xpcs_link_up(&priv->hw->qxpcs->pcs, 1, priv->plat->interface,
-			  speed, priv->dev->phydev->duplex);
-
-	if (config == 1)
-		qcom_xpcs_serdes_loopback(priv->hw->qxpcs, 1);
-	else if (config == 0)
-		qcom_xpcs_serdes_loopback(priv->hw->qxpcs, 0);
 }
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
@@ -4648,6 +4708,7 @@ static ssize_t read_rgmii_reg_dump_sysfs(struct device *dev,
 static DEVICE_ATTR(rgmii_reg_dump, ETHQOS_SYSFS_DEV_ATTR_PERMS,
 		   read_rgmii_reg_dump_sysfs, NULL);
 
+#if !IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
 static ssize_t nw_loopback_handling_config_sysfs(struct device *dev,
 						 struct device_attribute *attr,
 						 const char *user_buffer, size_t count)
@@ -4734,6 +4795,7 @@ static ssize_t nw_loopback_handling_config_sysfs(struct device *dev,
 
 	return count;
 }
+#endif
 
 static ssize_t loopback_handling_config_sysfs(struct device *dev,
 					      struct device_attribute *attr,
@@ -4810,13 +4872,20 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 		ETHQOSINFO("Request to Disable Loopback\n");
 		if (priv->current_loopback == ENABLE_IO_MACRO_LOOPBACK)
 			ethqos_rgmii_io_macro_loopback(ethqos, 0);
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+		else if (priv->current_loopback == ENABLE_MAC_LOOPBACK)
+			ethqos_mac_loopback_v3_1(ethqos, 0);
+		else if (priv->current_loopback == ENABLE_SERDES_LOOPBACK)
+			ethqos_serdes_loopback_v3_1(priv->plat, 0);
+#else
 		else if (priv->current_loopback == ENABLE_MAC_LOOPBACK)
 			ethqos_mac_loopback(ethqos, 0);
+		else if (priv->current_loopback == ENABLE_SERDES_LOOPBACK)
+			ethqos_serdes_loopback(ethqos, ethqos->backup_speed, 0);
+#endif
 		else if (priv->current_loopback == ENABLE_PHY_LOOPBACK)
 			phy_digital_loopback_config(ethqos,
 						    ethqos->backup_speed, 0);
-		else if (priv->current_loopback == ENABLE_SERDES_LOOPBACK)
-			ethqos_serdes_loopback(ethqos, ethqos->backup_speed, 0);
 		break;
 	case ENABLE_IO_MACRO_LOOPBACK:
 		ETHQOSINFO("Request to Enable IO MACRO LOOPBACK\n");
@@ -4824,7 +4893,11 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 		break;
 	case ENABLE_MAC_LOOPBACK:
 		ETHQOSINFO("Request to Enable MAC LOOPBACK\n");
-		ethqos_mac_loopback(ethqos, 1);
+		#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+			ethqos_mac_loopback_v3_1(ethqos, 1);
+		#else
+			ethqos_mac_loopback(ethqos, 1);
+		#endif
 		break;
 	case ENABLE_PHY_LOOPBACK:
 		ETHQOSINFO("Request to Enable PHY LOOPBACK\n");
@@ -4833,7 +4906,11 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 		break;
 	case ENABLE_SERDES_LOOPBACK:
 		ETHQOSINFO("Request to Enable SERDES LOOPBACK\n");
-		ethqos_serdes_loopback(ethqos, speed, 1);
+		#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+			ethqos_serdes_loopback_v3_1(priv->plat, 1);
+		#else
+			ethqos_serdes_loopback(ethqos, speed, 1);
+		#endif
 		break;
 	default:
 		ETHQOSINFO("Invalid Loopback=%d\n", config);
@@ -4855,6 +4932,7 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 	return count;
 }
 
+#if !IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
 static ssize_t read_nw_loopback_config_sysfs(struct device *dev,
 					     struct device_attribute *attr,
 					     char *user_buf)
@@ -4904,6 +4982,7 @@ out:
 
 static DEVICE_ATTR(nw_loopback_enable, ETHQOS_SYSFS_DEV_ATTR_PERMS,
 		   read_nw_loopback_config_sysfs, nw_loopback_handling_config_sysfs);
+#endif
 
 static ssize_t read_loopback_config_sysfs(struct device *dev,
 					  struct device_attribute *attr,
@@ -5161,12 +5240,15 @@ static int ethqos_create_sysfs_nodes(struct qcom_ethqos *ethqos)
 		ETHQOSERR("unable to create sysfs loopback_enable_mode node\n");
 		goto fail;
 	}
-
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+	ETHQOSINFO("NW Loopback is not supported");
+#else
 	ret = sysfs_create_file(ethqos->sysfs_kobj, &dev_attr_nw_loopback_enable.attr);
 	if (ret) {
 		ETHQOSERR("unable to create sysfs nw_loopback_enable node\n");
 		goto fail;
 	}
+#endif
 
 	ret = sysfs_create_file(ethqos->sysfs_kobj, &dev_attr_tc_queue_select.attr);
 	if (ret) {
