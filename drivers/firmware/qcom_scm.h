@@ -193,6 +193,7 @@ extern int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 #define QCOM_SCM_ES_CONFIG_SET_ICE_KEY_V2	0x05
 #define QCOM_SCM_ES_CLEAR_ICE_KEY		0x06
 #define QCOM_SCM_ES_DERIVE_RAW_SECRET	0x07
+#define QCOM_SCM_ES_HIBERNATE_EXIT	0xB
 
 #define QCOM_SCM_SVC_HDCP		0x11
 #define QCOM_SCM_HDCP_INVOKE		0x01
@@ -258,6 +259,8 @@ extern int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 
 #define QCOM_SCM_SVC_CPUCFG			0x29
 #define QCOM_SCM_CPUCFG_PREFETCH_TGT_CMD	0x1
+#define QCOM_SCM_GET_MEM_LAT_STATS_ID		0x15
+#define QCOM_SCM_SVC_MEM_LAT			0x06
 
 #define QCOM_SCM_SVC_MISSRATE			0x06
 #define QCOM_SCM_GET_LLCC_MISSRATE_STATS_ID	0x14
