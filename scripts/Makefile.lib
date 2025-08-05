@@ -250,6 +250,16 @@ dtc_cpp_flags  = -Wp,-MMD,$(depfile).pre.tmp -nostdinc                    \
 		 $(addprefix -I,$(DTC_INCLUDE))                          \
 		 -undef -D__DTS__
 
+# __WLAN_LITE_PROFILE__: It is used to conditionally apply memory optimizations
+# in the device tree for memory-constrained platforms (e.g., CPE-min).
+# Under this profile:
+# - Reserved memory regions for WLAN are reduced.
+# - WLAN-related DT properties are adjusted to reflect lower memory usage.
+# - Intended for platforms where full-feature WLAN is not feasible.
+ifeq ($(CONFIG_WLAN_LITE),y)
+dtc_cpp_flags  += -D __WLAN_LITE_PROFILE__
+endif
+
 ifdef CONFIG_OBJTOOL
 
 objtool := $(objtree)/tools/objtool/objtool
