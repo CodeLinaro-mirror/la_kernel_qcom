@@ -2464,9 +2464,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ETHQOSDBG("IPC logging has been enabled for emac\n");
 #if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
 	bootmarker_place_marker("M - Ethernet probe start");
-#else
-	ETHQOSINFO("M - Ethernet probe start\n");
 #endif
+	ETHQOSINFO("M - Ethernet probe start\n");
 
 #ifdef MODULE
 		if (enet)
@@ -2681,9 +2680,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	atomic_set(&priv->plat->phy_clks_suspended, 0);
 #if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
 	bootmarker_place_marker("M - Ethernet probe end");
-#else
-	ETHQOSINFO("M - Ethernet probe end\n");
 #endif
+	ETHQOSINFO("M - Ethernet probe end\n");
 	return ret;
 
 err_clk:
