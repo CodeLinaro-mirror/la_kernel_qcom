@@ -292,6 +292,8 @@
 #define QCOM_ID_CQ8725S                 706
 #define QCOM_ID_MONTAGUE		581
 #define QCOM_ID_MONTAGUEP		582
+#define QCOM_ID_CQ7790M         731
+#define QCOM_ID_CQ7790S         732
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and
