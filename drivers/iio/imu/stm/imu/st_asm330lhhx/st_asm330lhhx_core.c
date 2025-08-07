@@ -3109,7 +3109,6 @@ static int st_asm330lhhx_mlc_fsm_suspend(struct st_asm330lhhx_hw *hw)
 		return err;
 
 	enable_irq_wake(hw->irq);
-	dev_info(dev, "Enabling mlc fsm wakeup\n");
 	mutex_lock(&hw->handler_lock);
 
 	return err < 0 ? err : 0;
