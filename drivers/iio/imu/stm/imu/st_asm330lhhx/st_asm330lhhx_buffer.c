@@ -160,7 +160,7 @@ st_asm330lhhx_set_sensor_batching_odr(struct st_asm330lhhx_sensor *s,
 		}
 
 		id = ST_ASM330LHHX_ID_ACC;
-		for (i = ST_ASM330LHHX_ID_ACC; i < ST_ASM330LHHX_ID_MAX; i++) {
+		for (i = ST_ASM330LHHX_ID_ACC; i <= ST_ASM330LHHX_ID_EXT1; i++) {
 			if (!hw->iio_devs[i] || i == s->id)
 				continue;
 

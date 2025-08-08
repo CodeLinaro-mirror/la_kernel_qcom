@@ -3307,6 +3307,8 @@ static int __maybe_unused st_asm330lhhx_resume(struct device *dev)
 
 	if (st_asm330lhhx_is_fifo_enabled(hw))
 		err = st_asm330lhhx_set_fifo_mode(hw, ST_ASM330LHHX_FIFO_CONT);
+	else
+		err = st_asm330lhhx_set_fifo_mode(hw, ST_ASM330LHHX_FIFO_BYPASS);
 
 #if defined(CONFIG_IIO_ST_ASM330LHHX_ASYNC_HW_TIMESTAMP)
 	if (hw->fifo_mode != ST_ASM330LHHX_FIFO_BYPASS) {
