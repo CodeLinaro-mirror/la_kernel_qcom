@@ -7,7 +7,7 @@
  * Copyright 2006-2010	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014 Intel Mobile Communications GmbH
  * Copyright 2015-2017	Intel Deutschland GmbH
- * Copyright (C) 2018-2021, 2023 Intel Corporation
+ * Copyright (C) 2018-2024 Intel Corporation
  */
 
 #include <linux/ethtool.h>
@@ -764,6 +764,9 @@ struct key_params {
  *	chan will define the primary channel and all other
  *	parameters are ignored.
  * @freq1_offset: offset from @center_freq1, in KHz
+ * @punctured: mask of the punctured 20 MHz subchannels, with
+ *	bits turned on being disabled (punctured); numbered
+ *	from lower to higher frequency (like in the spec)
  */
 struct cfg80211_chan_def {
 	struct ieee80211_channel *chan;
@@ -772,6 +775,7 @@ struct cfg80211_chan_def {
 	u32 center_freq2;
 	struct ieee80211_edmg edmg;
 	u16 freq1_offset;
+	u16 punctured;
 };
 
 /*
@@ -912,7 +916,8 @@ cfg80211_chandef_identical(const struct cfg80211_chan_def *chandef1,
 		chandef1->width == chandef2->width &&
 		chandef1->center_freq1 == chandef2->center_freq1 &&
 		chandef1->freq1_offset == chandef2->freq1_offset &&
-		chandef1->center_freq2 == chandef2->center_freq2);
+		chandef1->center_freq2 == chandef2->center_freq2 &&
+		chandef1->punctured == chandef2->punctured);
 }
 
 /**
@@ -969,6 +974,20 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 int cfg80211_chandef_dfs_required(struct wiphy *wiphy,
 				  const struct cfg80211_chan_def *chandef,
 				  enum nl80211_iftype iftype);
+
+/**
+ * cfg80211_chandef_primary_freq - calculate primary 40/80/160 MHz freq
+ * @chandef: chandef to calculate for
+ * @primary_chan_width: primary channel width to calculate center for
+ * @punctured: punctured sub-channel bitmap, will be recalculated
+ *	according to the new bandwidth, can be %NULL
+ *
+ * Returns: the primary 40/80/160 MHz channel center frequency, or -1
+ *	for errors, updating the punctured bitmap
+ */
+int cfg80211_chandef_primary(const struct cfg80211_chan_def *chandef,
+			     enum nl80211_chan_width primary_chan_width,
+			     u16 *punctured);
 
 /**
  * nl80211_send_chandef - sends the channel definition.
@@ -8815,14 +8834,13 @@ bool cfg80211_reg_can_beacon_relax(struct wiphy *wiphy,
  * @dev: the device which switched channels
  * @chandef: the new channel definition
  * @link_id: the link ID for MLO, must be 0 for non-MLO
- * @punct_bitmap: the new puncturing bitmap
  *
  * Caller must acquire wdev_lock, therefore must only be called from sleepable
  * driver context!
  */
 void cfg80211_ch_switch_notify(struct net_device *dev,
 			       struct cfg80211_chan_def *chandef,
-			       unsigned int link_id, u16 punct_bitmap);
+			       unsigned int link_id);
 
 /*
  * cfg80211_ch_switch_started_notify - notify channel switch start
@@ -8831,7 +8849,6 @@ void cfg80211_ch_switch_notify(struct net_device *dev,
  * @link_id: the link ID for MLO, must be 0 for non-MLO
  * @count: the number of TBTTs until the channel switch happens
  * @quiet: whether or not immediate quiet was requested by the AP
- * @punct_bitmap: the future puncturing bitmap
  *
  * Inform the userspace about the channel switch that has just
  * started, so that it can take appropriate actions (eg. starting
@@ -8840,7 +8857,7 @@ void cfg80211_ch_switch_notify(struct net_device *dev,
 void cfg80211_ch_switch_started_notify(struct net_device *dev,
 				       struct cfg80211_chan_def *chandef,
 				       unsigned int link_id, u8 count,
-				       bool quiet, u16 punct_bitmap);
+				       bool quiet);
 
 /**
  * ieee80211_operating_class_to_band - convert operating class to band
@@ -9443,18 +9460,6 @@ static inline int cfg80211_color_change_notify(struct net_device *dev)
 					 NL80211_CMD_COLOR_CHANGE_COMPLETED,
 					 0, 0);
 }
-
-/**
- * cfg80211_valid_disable_subchannel_bitmap - validate puncturing bitmap
- * @bitmap: bitmap to be validated
- * @chandef: channel definition
- *
- * Validate the puncturing bitmap.
- *
- * Return: %true if the bitmap is valid. %false otherwise.
- */
-bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
-					      const struct cfg80211_chan_def *chandef);
 
 /**
  * cfg80211_links_removed - Notify about removed STA MLD setup links.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * mac80211 - channel management
- * Copyright 2020 - 2022 Intel Corporation
+ * Copyright 2020 - 2024 Intel Corporation
  */
 
 #include <linux/nl80211.h>
@@ -477,7 +477,7 @@ static void _ieee80211_change_chanctx(struct ieee80211_local *local,
 				      const struct cfg80211_chan_def *chandef,
 				      struct ieee80211_link_data *rsvd_for)
 {
-	u32 changed;
+	u32 changed = 0;
 
 	/* expected to handle only 20/40/80/160/320 channel widths */
 	switch (chandef->width) {
@@ -506,11 +506,15 @@ static void _ieee80211_change_chanctx(struct ieee80211_local *local,
 
 	WARN_ON(!cfg80211_chandef_compatible(&ctx->conf.def, chandef));
 
+	if (ctx->conf.def.width != chandef->width)
+		changed |= IEEE80211_CHANCTX_CHANGE_WIDTH;
+	if (ctx->conf.def.punctured != chandef->punctured)
+		changed |= IEEE80211_CHANCTX_CHANGE_PUNCTURING;
+
 	ctx->conf.def = *chandef;
 
 	/* check if min chanctx also changed */
-	changed = IEEE80211_CHANCTX_CHANGE_WIDTH |
-		  _ieee80211_recalc_chanctx_min_def(local, ctx, rsvd_for);
+	changed |= _ieee80211_recalc_chanctx_min_def(local, ctx, rsvd_for);
 	drv_change_chanctx(local, ctx, changed);
 
 	if (!local->use_chanctx) {
