@@ -20,6 +20,7 @@ load(
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
 load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
+load(":kleaf-scripts/targets/pikachu.bzl", "define_pikachu")
 load(
     ":kleaf-scripts/targets/sun.bzl",
     "define_sun",
@@ -305,6 +306,8 @@ define_canoe_tuivm()
 define_canoe_oemvm()
 
 define_canoe_vms()
+
+define_pikachu()
 
 define_vienna()
 

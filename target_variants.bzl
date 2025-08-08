@@ -5,6 +5,7 @@ targets = [
     "autogvm",
     "hamoa",
     "lahaina",
+    "pikachu",
     "sun",
     "vienna",
 ]
