@@ -250,7 +250,6 @@ canoe_perf_config = {
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SI_CORE_ADCI": "y",
-    "CONFIG_QCOM_SI_CORE_MEM_OBJECT": "m",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
     "CONFIG_QCOM_SLC_PERFMON": "m",
     "CONFIG_QCOM_SMEM": "m",

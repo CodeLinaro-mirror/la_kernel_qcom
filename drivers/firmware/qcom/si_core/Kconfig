@@ -21,16 +21,6 @@ config QCOM_SI_CORE_WQ
 
 	  Enable if only QTEE does not support asynchronous message.
 
-config QCOM_SI_CORE_MEM_OBJECT
-	tristate "Add support for memory object"
-	depends on QCOM_SI_CORE
-	depends on QTEE_SHM_BRIDGE
-	help
-	  Enable support for memory object. This provide an interface
-	  to export or sharing memory with QTEE. It allows kernel clients
-	  to create memory object and do the necessary mapping and unmapping
-	  using QTEE shared memory bridge driver.
-
 config QCOM_SI_CORE_ADCI
 	bool "Use ADCI thread to cater service requests from other VMs"
 	depends on QCOM_SI_CORE
