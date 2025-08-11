@@ -34,6 +34,8 @@
 #include <soc/qcom/boot_stats.h>
 #endif
 
+#define ST_ASM330LHHX_WAKEUP_MS		10000
+
 #include "st_asm330lhhx.h"
 
 static struct st_asm330lhhx_selftest_table {
@@ -2911,8 +2913,7 @@ int st_asm330lhhx_probe(struct device *dev, int irq,
 
 	st_asm330lhh_enable_acc_gyro(hw);
 
-	device_init_wakeup(dev,
-			   device_property_read_bool(dev, "wakeup-source"));
+	device_init_wakeup(dev, true);
 
 	hw->ws = wakeup_source_register(dev, "st_asm330lhhx");
 
@@ -3215,8 +3216,10 @@ static int st_asm330lhhx_mlc_fsm_resume(struct st_asm330lhhx_hw *hw)
 	int err, notify;
 
 	notify = st_asm330lhhx_mlc_check_status(hw);
-	if (notify)
+	if (notify) {
+		pm_wakeup_ws_event(hw->ws, ST_ASM330LHHX_WAKEUP_MS, true);
 		st_asm330lhhx_read_fifo(hw, notify);
+	}
 
 	hw->resuming = false;
 
