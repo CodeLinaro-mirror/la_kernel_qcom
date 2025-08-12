@@ -1,4 +1,5 @@
 load(":gen3auto.bzl", "define_gen3auto")
+load(":gen3gvmcoqos.bzl", "define_gen3gvmcoqos")
 load(":autogvm.bzl", "define_autogvm")
 load(":autoghgvm.bzl", "define_autoghgvm")
 load(":autoghgvm_lxc.bzl", "define_autoghgvm_lxc")
@@ -24,6 +25,7 @@ def define_msm_platforms():
     define_top_level_rules()
     define_signing_keys()
     define_gen3auto()
+    define_gen3gvmcoqos()
     define_autogvm()
     define_autoghgvm()
     define_autoghgvm_lxc()

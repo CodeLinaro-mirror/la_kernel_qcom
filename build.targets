@@ -12,6 +12,7 @@ build.config.msm.niobe.vm
 build.config.msm.pineapple.allyes
 build.config.msm.blair
 build.config.msm.gen3auto
+build.config.msm.gen3gvmcoqos
 build.config.msm.gen4auto
 build.config.msm.sdmsteppeauto
 build.config.msm.pitti
