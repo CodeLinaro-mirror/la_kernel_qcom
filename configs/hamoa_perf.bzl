@@ -190,6 +190,7 @@ hamoa_perf_config = {
     "CONFIG_SC_CAMCC_X1P42100": "m",
     "CONFIG_SC_GCC_X1P42100": "m",
     "CONFIG_SC_VIDEOCC_X1P42100": "m",
+    "CONFIG_SM_VIDEOCC_8550": "m",
     "CONFIG_SND_USB_AUDIO_QMI": "n",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB_DEBUG": "m",
