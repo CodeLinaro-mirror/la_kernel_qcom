@@ -230,4 +230,10 @@ int get_si_object(struct si_object *object);
 void put_si_object(struct si_object *object);
 int get_async_proto_version(void);
 
+/* si-core helpers */
+int si_core_get_client_env(struct si_object_invoke_ctx *oic, struct si_object **client_env);
+int si_core_client_env_open(struct si_object_invoke_ctx *oic, struct si_object *client_env,
+			    u32 uid_val, struct si_object **service);
+
+
 #endif /* _LINUX_SI_OBJECT_H__ */
