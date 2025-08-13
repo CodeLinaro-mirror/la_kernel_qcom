@@ -12,7 +12,7 @@ config QCOM_SCM
 
 config QTEE_SHM_BRIDGE
 	bool "QTI TEE shared memory bridge"
-	depends on QCOM_SCM
+	depends on QCOM_SCM && QCOM_TZMEM
 	default y if QCOM_SCM
 	help
 	  QTEE shared memory bridge driver provides kernel APIs to share
