@@ -14,6 +14,7 @@
 #include <linux/of_gpio.h>
 #include <linux/of_mdio.h>
 #include <linux/of_net.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/phy.h>
 #include <linux/phy/phy.h>
@@ -233,7 +234,8 @@ qcom_ethqos_set_sgmii_loopback(struct qcom_ethqos *ethqos, bool enable)
 
 static void ethqos_set_func_clk_en(struct qcom_ethqos *ethqos)
 {
-	qcom_ethqos_set_sgmii_loopback(ethqos, true);
+	if (ethqos->needs_sgmii_loopback)
+		qcom_ethqos_set_sgmii_loopback(ethqos, true);
 	rgmii_updatel(ethqos, RGMII_CONFIG_FUNC_CLK_EN,
 		      RGMII_CONFIG_FUNC_CLK_EN, RGMII_IO_MACRO_CONFIG);
 }
@@ -338,6 +340,17 @@ static const struct ethqos_emac_driver_data emac_v4_0_0_data = {
 	},
 };
 
+static const struct of_device_id qcom_ethqos_match[] = {
+	{ .compatible = "qcom,qcs404-ethqos", .data = &emac_v2_3_0_data},
+	{ .compatible = "qcom,sa8775p-ethqos", .data = &emac_v4_0_0_data},
+	{ .compatible = "qcom,sc8280xp-ethqos", .data = &emac_v3_0_0_data},
+	{ .compatible = "qcom,sm8150-ethqos", .data = &emac_v2_1_0_data},
+	{ .compatible = "qcom,stmmac-ethqos", },
+	{ .compatible = "qcom,emac-smmu-embedded", },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, qcom_ethqos_match);
+
 static int ethqos_dll_configure(struct qcom_ethqos *ethqos)
 {
 	struct device *dev = &ethqos->pdev->dev;
@@ -365,7 +378,7 @@ static int ethqos_dll_configure(struct qcom_ethqos *ethqos)
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_DLL_EN,
 		      SDCC_DLL_CONFIG_DLL_EN, SDCC_HC_REG_DLL_CONFIG);
 
-	if (!ethqos->has_emac_ge_3 ||
+	if (!ethqos->has_emac_ge_3 &&
 	    (ethqos->emac_ver != EMAC_HW_v2_3_2_RG &&
 		 ethqos->emac_ver != EMAC_HW_v2_1_2)) {
 		rgmii_updatel(ethqos, SDCC_DLL_MCLK_GATING_EN,
@@ -407,7 +420,7 @@ static int ethqos_dll_configure(struct qcom_ethqos *ethqos)
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG2_DDR_CAL_EN,
 		      SDCC_DLL_CONFIG2_DDR_CAL_EN, SDCC_HC_REG_DLL_CONFIG2);
 
-	if (!ethqos->has_emac_ge_3 ||
+	if (!ethqos->has_emac_ge_3 &&
 	    (ethqos->emac_ver != EMAC_HW_v2_3_2_RG &&
 	     ethqos->emac_ver != EMAC_HW_v2_1_2)) {
 		rgmii_updatel(ethqos, SDCC_DLL_CONFIG2_DLL_CLOCK_DIS,
@@ -534,12 +547,8 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 	int loopback;
 
 	/* Determine if the PHY adds a 2 ns TX delay or the MAC handles it */
-	if ((ethqos->phy_mode != PHY_INTERFACE_MODE_RGMII_ID &&
-	     ethqos->phy_mode != PHY_INTERFACE_MODE_RGMII_TXID) ||
-		ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
-		ethqos->emac_ver == EMAC_HW_v2_1_2 ||
-		ethqos->emac_ver == EMAC_HW_v2_1_1 ||
-		ethqos->emac_ver == EMAC_HW_v2_3_1)
+	if (ethqos->phy_mode != PHY_INTERFACE_MODE_RGMII_ID &&
+	    ethqos->phy_mode != PHY_INTERFACE_MODE_RGMII_TXID)
 		phase_shift = RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN;
 	else
 		phase_shift = 0;
@@ -549,9 +558,9 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 		      0, RGMII_IO_MACRO_CONFIG2);
 
 	/* Determine if this platform wants loopback enabled after programming */
-	if (ethqos->rgmii_config_loopback_en ||
-	    (ethqos->emac_ver != EMAC_HW_v2_3_2_RG ||
-	     ethqos->emac_ver != EMAC_HW_v2_1_2))
+	if (ethqos->rgmii_config_loopback_en &&
+	    ethqos->emac_ver != EMAC_HW_v2_3_2_RG &&
+		ethqos->emac_ver != EMAC_HW_v2_1_2)
 		loopback = RGMII_CONFIG_LOOPBACK_EN;
 	else
 		loopback = 0;
@@ -659,6 +668,12 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 		break;
 
 	case SPEED_10:
+		if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG ||
+		    ethqos->emac_ver == EMAC_HW_v2_1_2 ||
+			ethqos->emac_ver == EMAC_HW_v2_1_1 ||
+			ethqos->emac_ver == EMAC_HW_v2_3_1)
+			phase_shift = RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN;
+
 		rgmii_updatel(ethqos, RGMII_CONFIG_DDR_MODE,
 			      RGMII_CONFIG_DDR_MODE, RGMII_IO_MACRO_CONFIG);
 		rgmii_updatel(ethqos, RGMII_CONFIG_BYPASS_TX_ID_EN,
@@ -964,8 +979,12 @@ static void ethqos_fix_mac_speed(void *priv, unsigned int speed, unsigned int mo
 	struct qcom_ethqos *ethqos = priv;
 	int ret = 0;
 
-	qcom_ethqos_set_sgmii_loopback(ethqos, false);
+	if (ethqos->needs_sgmii_loopback)
+		qcom_ethqos_set_sgmii_loopback(ethqos, false);
+
 	ethqos->speed = speed;
+	ethqos_update_link_clk(ethqos, speed);
+
 	if (ethqos->emac_ver == EMAC_HW_v3_0_0_RG)
 		ret = ethqos_configure_mac_v3(ethqos);
 	else
@@ -1021,11 +1040,6 @@ static int ethqos_clks_config(void *priv, bool enabled)
 	}
 
 	return ret;
-}
-
-static void ethqos_clks_disable(void *data)
-{
-	ethqos_clks_config(data, false);
 }
 
 static void ethqos_ptp_clk_freq_config(struct stmmac_priv *priv)
@@ -1141,12 +1155,17 @@ static void ethqos_defer_phy_isr_work(struct work_struct *work)
 	struct qcom_ethqos *ethqos =
 		container_of(work, struct qcom_ethqos, emac_phy_work);
 
+	if (ethqos->clks_suspended)
+		wait_for_completion(&ethqos->clk_enable_done);
+
 	ethqos_handle_phy_interrupt(ethqos);
 }
 
 static irqreturn_t ethqos_phy_isr(int irq, void *dev_data)
 {
 	struct qcom_ethqos *ethqos = (struct qcom_ethqos *)dev_data;
+
+	pm_wakeup_event(&ethqos->pdev->dev, PM_WAKEUP_MS);
 
 	queue_work(system_wq, &ethqos->emac_phy_work);
 	return IRQ_HANDLED;
@@ -1158,6 +1177,8 @@ static int ethqos_phy_intr_enable(struct qcom_ethqos *ethqos)
 	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
 
 	INIT_WORK(&ethqos->emac_phy_work, ethqos_defer_phy_isr_work);
+	init_completion(&ethqos->clk_enable_done);
+
 	ret = request_irq(ethqos->phy_intr, ethqos_phy_isr,
 			  IRQF_SHARED, "stmmac", ethqos);
 	if (ret) {
@@ -1220,11 +1241,105 @@ smmu_probe_done:
 	return result;
 }
 
+static void ethqos_clks_disable(void *data)
+{
+	ethqos_clks_config(data, false);
+}
+
+static void qcom_ethqos_parse_dt(struct qcom_ethqos *ethqos)
+{
+	struct device_node *np = ethqos->pdev->dev.of_node;
+
+	ethqos->phyad_change =
+		of_property_read_bool(np, "qcom,phyad_change");
+	ETHQOSDBG("qcom,phyad_change %s\n",
+		  ethqos->phyad_change ? "present" : "not present");
+
+	ethqos->is_gpio_phy_reset =
+		of_property_read_bool(np, "snps,reset-gpios");
+	ETHQOSDBG("qcom,phy-reset %s\n",
+		  ethqos->is_gpio_phy_reset ? "present" : "not present");
+
+	ethqos->rgmii_config_loopback_en =
+		of_property_read_bool(np, "qcom,rgmii-config-loopback");
+	ETHQOSDBG("qcom,rgmii-config-loopback %s\n",
+		  ethqos->rgmii_config_loopback_en ? "enabled" : "disabled");
+}
+
+static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
+{
+	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
+
+	ETHQOSDBG("Enter\n");
+
+	if (priv->plat->phy_intr_en_extn_stm)
+		reinit_completion(&ethqos->clk_enable_done);
+
+	ethqos->clks_suspended = 1;
+
+	ethqos_update_link_clk(ethqos, 0);
+
+	if (!IS_ERR(priv->plat->stmmac_clk))
+		clk_disable_unprepare(priv->plat->stmmac_clk);
+
+	if (!IS_ERR(priv->plat->pclk))
+		clk_disable_unprepare(priv->plat->pclk);
+
+	if (!IS_ERR(priv->plat->clk_ptp_ref))
+		clk_disable_unprepare(priv->plat->clk_ptp_ref);
+
+	if (!IS_ERR(ethqos->link_clk))
+		clk_disable_unprepare(ethqos->link_clk);
+
+	ETHQOSDBG("Exit\n");
+}
+
+static inline bool qcom_ethqos_is_phy_link_up(struct qcom_ethqos *ethqos)
+{
+	/* PHY driver initializes phydev->link=1.
+	 * So, phydev->link is 1 even on bootup with no PHY connected.
+	 * phydev->link is valid only after adjust_link is called once.
+	 */
+	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
+
+	return (priv->dev->phydev && priv->dev->phydev->link);
+}
+
+static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
+{
+	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
+
+	ETHQOSDBG("Enter\n");
+
+	if (!IS_ERR(priv->plat->stmmac_clk))
+		clk_prepare_enable(priv->plat->stmmac_clk);
+
+	if (!IS_ERR(priv->plat->pclk))
+		clk_prepare_enable(priv->plat->pclk);
+
+	if (!IS_ERR(priv->plat->clk_ptp_ref))
+		clk_prepare_enable(priv->plat->clk_ptp_ref);
+
+	if (!IS_ERR(ethqos->link_clk))
+		clk_prepare_enable(ethqos->link_clk);
+
+	if (qcom_ethqos_is_phy_link_up(ethqos))
+		ethqos_update_link_clk(ethqos, ethqos->speed);
+	else
+		ethqos_update_link_clk(ethqos, SPEED_10);
+
+	ethqos->clks_suspended = 0;
+
+	if (priv->plat->phy_intr_en_extn_stm)
+		complete_all(&ethqos->clk_enable_done);
+
+	ETHQOSDBG("Exit\n");
+}
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	const struct ethqos_emac_driver_data *data;
-	struct plat_stmmacenet_data *plat_dat;
 	struct stmmac_resources stmmac_res;
 	struct device *dev = &pdev->dev;
 	struct qcom_ethqos *ethqos = NULL;
@@ -1241,15 +1356,27 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, ret,
 				     "Failed to get platform resources\n");
 
+	ethqos = devm_kzalloc(&pdev->dev, sizeof(*ethqos), GFP_KERNEL);
+	if (!ethqos)
+		return -ENOMEM;
+
+	ethqos->pdev = pdev;
+
+	qcom_ethqos_parse_dt(ethqos);
+
+	ret = ethqos_init_regulators(ethqos);
+	if (ret)
+		goto err;
+
+	ret = ethqos_init_gpio(ethqos);
+	if (ret)
+		goto err;
+
 	plat_dat = devm_stmmac_probe_config_dt(pdev, stmmac_res.mac);
 	if (IS_ERR(plat_dat)) {
 		return dev_err_probe(dev, PTR_ERR(plat_dat),
 				     "dt configuration failed\n");
 	}
-
-	ethqos = devm_kzalloc(&pdev->dev, sizeof(*ethqos), GFP_KERNEL);
-	if (!ethqos)
-		return -ENOMEM;
 
 	plat_dat->clks_config = ethqos_clks_config;
 
@@ -1273,7 +1400,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	ethqos->pdev = pdev;
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
 	if (IS_ERR(ethqos->rgmii_base))
 		return dev_err_probe(dev, PTR_ERR(ethqos->rgmii_base),
@@ -1282,24 +1408,29 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ethqos->mac_base = stmmac_res.addr;
 
 	data = of_device_get_match_data(dev);
-	ethqos->por = data->por;
-	ethqos->num_por = data->num_por;
-	ethqos->rgmii_config_loopback_en = data->rgmii_config_loopback_en;
-	ethqos->has_emac_ge_3 = data->has_emac_ge_3;
-	ethqos->needs_sgmii_loopback = data->needs_sgmii_loopback;
 
-	ethqos->link_clk = devm_clk_get(dev, data->link_clk_name ?: "rgmii");
+	/* Properties depend on data block ; retained for backward compatibility */
+	if (data) {
+		if (data->por)
+			ethqos->por = data->por;
+		if (data->num_por)
+			ethqos->num_por = data->num_por;
+		if (data->has_emac_ge_3)
+			ethqos->has_emac_ge_3 = data->has_emac_ge_3;
+		if (data->rgmii_config_loopback_en)
+			ethqos->rgmii_config_loopback_en = data->rgmii_config_loopback_en;
+		if (data->needs_sgmii_loopback)
+			ethqos->needs_sgmii_loopback = data->needs_sgmii_loopback;
+		if (data->has_integrated_pcs)
+			plat_dat->flags |= STMMAC_FLAG_HAS_INTEGRATED_PCS;
+		if (data->dma_addr_width)
+			plat_dat->host_dma_width = data->dma_addr_width;
+	}
+
+	ethqos->link_clk = devm_clk_get(dev, "rgmii");
 	if (IS_ERR(ethqos->link_clk))
 		return dev_err_probe(dev, PTR_ERR(ethqos->link_clk),
 				     "Failed to get link_clk\n");
-
-	ret = ethqos_init_regulators(ethqos);
-	if (ret)
-		goto err;
-
-	ret = ethqos_init_gpio(ethqos);
-	if (ret)
-		goto err;
 
 	ret = ethqos_clks_config(ethqos, true);
 	if (ret)
@@ -1325,6 +1456,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	plat_dat->has_gmac4 = 1;
 	if (ethqos->has_emac_ge_3)
 		plat_dat->dwmac4_addrs = &data->dwmac4_addrs;
+	plat_dat->phyad_change = ethqos->phyad_change;
+	plat_dat->is_gpio_phy_reset = ethqos->is_gpio_phy_reset;
+
 	/* Set mdio phy addr probe capability to c22 .
 	 * If c22_c45 is set then multiple phy is getting detected.
 	 */
@@ -1337,10 +1471,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->flags |= STMMAC_FLAG_TSO_EN;
 	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))
 		plat_dat->flags |= STMMAC_FLAG_RX_CLK_RUNS_IN_LPI;
-	if (data->has_integrated_pcs)
-		plat_dat->flags |= STMMAC_FLAG_HAS_INTEGRATED_PCS;
-	if (data->dma_addr_width)
-		plat_dat->host_dma_width = data->dma_addr_width;
 
 	if (ethqos->serdes_phy) {
 		plat_dat->serdes_powerup = qcom_ethqos_serdes_powerup;
@@ -1379,6 +1509,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ETHQOSDBG(": emac_core_version = %d\n", ethqos->emac_ver);
 
+	if (of_property_read_bool(pdev->dev.of_node,
+				  "gdsc-off-on-suspend"))
+		ethqos->gdsc_off_on_suspend = true;
+	else
+		ethqos->gdsc_off_on_suspend = false;
+
+	ETHQOSDBG("gdsc-off-on-suspend = %d\n", ethqos->gdsc_off_on_suspend);
+
 	if (!ethqos_phy_intr_config(ethqos)) {
 		ret = ethqos_phy_intr_enable(ethqos);
 		if (ret)
@@ -1397,7 +1535,6 @@ err:
 static int qcom_ethqos_remove(struct platform_device *pdev)
 {
 	struct qcom_ethqos *ethqos;
-	int ret;
 	struct stmmac_priv *priv;
 
 	ethqos = get_stmmac_bsp_priv(&pdev->dev);
@@ -1408,28 +1545,98 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 	if (priv->plat->phy_intr_en_extn_stm)
 		free_irq(ethqos->phy_intr, ethqos);
 
+	if (priv->plat->phy_intr_en_extn_stm)
+		cancel_work_sync(&ethqos->emac_phy_work);
+
 	emac_emb_smmu_exit();
 	ethqos_disable_regulators(ethqos);
 	ethqos_clks_config(ethqos, false);
+
+	return 0;
 }
 
-static const struct of_device_id qcom_ethqos_match[] = {
-	{ .compatible = "qcom,qcs404-ethqos", .data = &emac_v2_3_0_data},
-	{ .compatible = "qcom,sa8775p-ethqos", .data = &emac_v4_0_0_data},
-	{ .compatible = "qcom,sc8280xp-ethqos", .data = &emac_v3_0_0_data},
-	{ .compatible = "qcom,sm8150-ethqos", .data = &emac_v2_1_0_data},
-	{ .compatible = "qcom,stmmac-ethqos", },
-	{ .compatible = "qcom,emac-smmu-embedded", },
-	{ }
+static int qcom_ethqos_suspend(struct device *dev)
+{
+	struct qcom_ethqos *ethqos;
+	struct net_device *ndev = NULL;
+	int ret;
+
+	if (of_device_is_compatible(dev->of_node, "qcom,emac-smmu-embedded")) {
+		ETHQOSDBG("smmu return\n");
+		return 0;
+	}
+
+	ethqos = get_stmmac_bsp_priv(dev);
+	if (!ethqos)
+		return -ENODEV;
+
+	ndev = dev_get_drvdata(dev);
+	if (!ndev)
+		return -EINVAL;
+
+	ret = stmmac_suspend(dev);
+	qcom_ethqos_phy_suspend_clks(ethqos);
+
+	if (ethqos->gdsc_off_on_suspend) {
+		if (ethqos->gdsc_emac) {
+			regulator_disable(ethqos->gdsc_emac);
+			ETHQOSDBG("Disabled <%s>\n", EMAC_GDSC_EMAC_NAME);
+		}
+	}
+
+	ETHQOSDBG("ret = %d\n", ret);
+	return ret;
+}
+
+static int qcom_ethqos_resume(struct device *dev)
+{
+	struct net_device *ndev = NULL;
+	struct qcom_ethqos *ethqos;
+	int ret;
+
+	ETHQOSDBG("Resume Enter\n");
+	if (of_device_is_compatible(dev->of_node, "qcom,emac-smmu-embedded"))
+		return 0;
+
+	ethqos = get_stmmac_bsp_priv(dev);
+
+	if (!ethqos)
+		return -ENODEV;
+
+	if (ethqos->gdsc_off_on_suspend) {
+		ret = regulator_enable(ethqos->gdsc_emac);
+		if (ret)
+			ETHQOSERR("Can not enable <%s>\n", EMAC_GDSC_EMAC_NAME);
+		ETHQOSDBG("Enabled <%s>\n", EMAC_GDSC_EMAC_NAME);
+	}
+
+	ndev = dev_get_drvdata(dev);
+	if (!ndev) {
+		ETHQOSERR("Resume not possible\n");
+		return -EINVAL;
+	}
+
+	qcom_ethqos_phy_resume_clks(ethqos);
+	if (ethqos->gdsc_off_on_suspend)
+		ethqos_set_func_clk_en(ethqos);
+
+	ret = stmmac_resume(dev);
+
+	ETHQOSDBG("<--Resume Exit\n");
+	return ret;
+}
+
+static const struct dev_pm_ops qcom_ethqos_pm_ops = {
+	.suspend = qcom_ethqos_suspend,
+	.resume = qcom_ethqos_resume,
 };
-MODULE_DEVICE_TABLE(of, qcom_ethqos_match);
 
 static struct platform_driver qcom_ethqos_driver = {
 	.probe  = qcom_ethqos_probe,
 	.remove	= qcom_ethqos_remove,
 	.driver = {
 		.name           = DRV_NAME,
-		.pm		= &stmmac_pltfr_pm_ops,
+		.pm             = &qcom_ethqos_pm_ops,
 		.of_match_table = of_match_ptr(qcom_ethqos_match),
 	},
 };
