@@ -8,6 +8,9 @@
 
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/si_object.h>
+#include <linux/arm_ffa.h>
+#include <linux/scatterlist.h>
+#include <linux/uuid.h>
 
 /* QTEE object ID API. */
 
@@ -36,10 +39,60 @@ void release_user_object(struct si_object *object);
 
 /* ASYNC message management API. */
 
+/* Auto mapping operation. */
+#define OBJECT_OP_AUTO_MAP_SHM 0x00000003UL
+#define OBJECT_OP_AUTO_MAP_FFA 0x00000004UL
+
 void __append__async_reqs(struct si_object_invoke_ctx *oic);
 void __revive__async_queued_reqs(struct si_object_invoke_ctx *oic);
 void __release__async_queued_reqs(struct si_object_invoke_ctx *oic);
 void __fetch__async_reqs(struct si_object_invoke_ctx *oic);
+
+/* FFA related API. */
+
+/* 571217bb-16d2-543f-917e-c4f04237a774 */
+#define QTEE_SP_FFA_UUID                                                    \
+	UUID_INIT(0x571217bb, 0x16d2, 0x543f, 0x91, 0x7e, 0xc4, 0xf0, 0x42, \
+		  0x37, 0xa7, 0x74)
+
+#ifdef CONFIG_QCOM_SI_CORE_MEM_FFA
+
+int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle);
+int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle);
+int qtee_ffa_mem_reclaim(uint64_t ffa_handle);
+
+int si_core_ffa_driver_register(void);
+void si_core_ffa_driver_unregister(void);
+
+#else
+
+static inline int qtee_ffa_mem_share(struct sg_table *sgt,
+				     uint64_t tag, uint64_t *ffa_handle)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int qtee_ffa_mem_lend(struct sg_table *sgt,
+				    uint64_t tag, uint64_t *ffa_handle)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int qtee_ffa_mem_reclaim(uint64_t ffa_handle)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int si_core_ffa_driver_register(void)
+{
+	return 0;
+}
+
+static inline void si_core_ffa_driver_unregister(void)
+{
+}
+
+#endif /* CONFIG_QCOM_SI_CORE_MEM_FFA */
 
 /* ''QTEE'' related definitions. */
 

@@ -1394,6 +1394,7 @@ err_kobj_create:
 
 static void si_core_remove(struct platform_device *pdev)
 {
+	/* TODO. Prevent unloading if 'xa_si_objects' is not empty. */
 	adci_shutdown();
 	sysfs_remove_group(si_core_kobj, &attr_group);
 
@@ -1418,9 +1419,15 @@ static int __init si_core_init(void)
 {
 	int ret;
 
-	ret = platform_driver_register(&si_core_plat_driver);
+	ret = si_core_ffa_driver_register();
 	if (ret)
 		return ret;
+
+	ret = platform_driver_register(&si_core_plat_driver);
+	if (ret) {
+		si_core_ffa_driver_unregister();
+		return ret;
+	}
 
 	return 0;
 }
@@ -1428,6 +1435,7 @@ static int __init si_core_init(void)
 static void __exit si_core_exit(void)
 {
 	platform_driver_unregister(&si_core_plat_driver);
+	si_core_ffa_driver_unregister();
 }
 
 module_init(si_core_init);

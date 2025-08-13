@@ -28,9 +28,17 @@ def register_modules(registry):
                     "drivers/firmware/qcom/si_core/si_core_wq.c",
                 ],
             },
+            "CONFIG_QCOM_SI_CORE_MEM_FFA": {
+                True: [
+                    # do not sort
+                    "drivers/firmware/qcom/si_core/si_core_ffa.c",
+                ],
+            },
         },
         deps = [
             # do not sort
+            "drivers/firmware/arm_ffa_transport",
+            "drivers/firmware/arm_ffa",
             "drivers/soc/qcom/mem_buf/mem_buf_dev",
             "drivers/soc/qcom/secure_buffer",
             "drivers/firmware/qcom/qcom-scm",

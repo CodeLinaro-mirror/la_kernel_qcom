@@ -12,17 +12,19 @@
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/si_core_xts.h>
 
+#include "si_core.h"
 #include "mem-object.h"
+
 /* Memory object operations. */
 /* ... */
 
 /* 'Primordial Object' operations related to memory object. */
-#define OBJECT_OP_MAP_REGION	0
+#define OBJECT_OP_MAP_REGION_SHM	0
+#define OBJECT_OP_MAP_REGION_FFA	1
 
-/* Auto mapping operation. */
-#define OBJECT_OP_AUTO_MAP 0x00000003UL
-
-#define SMCINVOKE_ASYNC_VERSION 0x00010002U
+#define SMCINVOKE_MIN_ASYNC_VERSION 0x00010002U
+#define SMCINVOKE_ASYNC_VERSION_SHM 0x00010002U
+#define SMCINVOKE_ASYNC_VERSION_FFA 0x00010003U
 
 /* TZ defined values for cacheability */
 #define CACHE_NS_CACHED 0x10000000U
@@ -58,30 +60,36 @@ struct mem_object {
 
 	struct dma_buf *dma_buf;
 
+	uint64_t flags;
+
+	struct map {
+		struct dma_buf_attachment *buf_attach;
+		struct sg_table *sgt;
+		bool owned;
+
+		/* 'lock' to protect concurrent request from QTEE. */
+		struct mutex lock;
+		int early_mapped;
+	} map;
+
+	/* Either use an SHMBridge or FFA handle. */
+	u64 handle;
+	u64 tag;
+
+	/* Either SHM bridge or FFA mapping info. */
 	union {
-		struct {
+		struct shm_mapping_info {
+			phys_addr_t p_addr;
+			size_t p_addr_len;
+			uint32_t perms;
+		} shm_mapping_info;
 
-			/* SHMBridge information. */
-			/* Select with 'qcom,shmbridge'. */
-
-			struct map {
-				struct dma_buf_attachment *buf_attach;
-				struct sg_table *sgt;
-
-				/* 'lock' to protect concurrent request from QTEE. */
-				struct mutex lock;
-				int early_mapped;
-			} map;
-
-			/* Use SHMBridge, hence the handle. */
-			u64 shm_bridge_handle;
-
-			struct mapping_info {
-				phys_addr_t p_addr;
-				size_t p_addr_len;
-				uint32_t perms;
-			} mapping_info;
-		};
+		struct ffa_mapping_info {
+			u64 ffa_tag;
+			size_t offset;
+			size_t size;
+			uint32_t mem_attr;
+		} ffa_mapping_info;
 
 		/* XXX information. */
 		/* struct { ... } */
@@ -94,6 +102,20 @@ struct mem_object {
 	void *private;
 
 	void (*release)(void *private);
+};
+
+struct mi_shm {
+	u64 p_addr;
+	u64 len;
+	u32 perms;
+};
+
+struct mi_ffa {
+	u64 ffa_handle;
+	u64 ffa_tag;
+	size_t offset;
+	size_t size;
+	u32 mem_attr;
 };
 
 #define to_mem_object(o) container_of((o), struct mem_object, object)
@@ -121,94 +143,194 @@ static struct si_object_operations mem_ops = {
 	.dispatch = mo_dispatch
 };
 
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
 int op_supported(unsigned long op)
 {
 	switch (op) {
-	case OBJECT_OP_MAP_REGION:
+	case OBJECT_OP_MAP_REGION_SHM:
+		return 0;
+	case OBJECT_OP_MAP_REGION_FFA:
 		return 1;
 	default:
 		return 0;
 	}
 }
 
-/** Support for 'SHMBridge'. **/
+/** Support for FFA based memory sharing, which supports scattered memory **/
 
-/* 'make_shm_bridge_single' only support single continuous memory. */
-
-static int make_shm_bridge_single(struct mem_object *mo)
+static int map_via_ffa_abi(struct mem_object *mo)
 {
 	int ret;
+	unsigned int i;
+	size_t total_len = 0;
+	struct sg_table *sgt = mo->map.sgt;
+	struct scatterlist *sgl = sgt->sgl;
+	unsigned int nents = sg_nents(sgl);
+	struct scatterlist *sg;
 
+	if (mo->flags & SI_CORE_MEM_OBJ_LEND)
+		ret = qtee_ffa_mem_lend(sgt, mo->tag, &mo->handle);
+	else /* By default, we always share */
+		ret = qtee_ffa_mem_share(sgt, mo->tag, &mo->handle);
+
+	if (ret) {
+		mo->handle = 0;
+		goto out;
+	}
+
+	if (mo->dma_buf) { // DMA-mapped
+		for_each_sg(sgl, sg, nents, i) {
+			total_len += sg_dma_len(sg);
+		}
+	} else {
+		for_each_sg(sgl, sg, nents, i) {
+			total_len += sg->length;
+		}
+	}
+
+	mo->ffa_mapping_info.ffa_tag = mo->tag;
+	mo->ffa_mapping_info.offset = 0;
+	mo->ffa_mapping_info.size = total_len;
+	mo->ffa_mapping_info.mem_attr = QCOM_SCM_PERM_RW;
+
+out:
+	return ret;
+}
+
+static int register_tz_shm(struct mem_object *mo)
+{
+	return map_via_ffa_abi(mo);
+}
+
+static void deregister_tz_shm(struct mem_object *mo)
+{
+	if (mo->handle)
+		qtee_ffa_mem_reclaim(mo->handle);
+
+	mo->handle = 0;
+}
+
+#else /* CONFIG_QCOM_SI_CORE_MEM_FFA */
+
+int op_supported(unsigned long op)
+{
+	switch (op) {
+	case OBJECT_OP_MAP_REGION_SHM:
+		return 1;
+	case OBJECT_OP_MAP_REGION_FFA:
+		return 0;
+	default:
+		return 0;
+	}
+}
+
+/** Support for 'SHMBridge'. Which only supports continuous memory **/
+
+/* 'map_via_shm_bridge' only support single continuous memory. */
+
+static int map_via_shm_bridge(struct mem_object *mo)
+{
+	int ret;
 	u32 *vmid_list, *perms_list, nelems;
-
-	/* 'sgt' should have one mapped entry. **/
+	u32 hlos_vmid = QCOM_SCM_VMID_HLOS;
+	u32 hlos_perms = QCOM_SCM_PERM_RW;
+	struct scatterlist *sgl;
 
 	if (mo->map.sgt->nents != 1)
 		return -EINVAL;
 
-	ret = mem_buf_dma_buf_copy_vmperm(mo->dma_buf,
-		(int **)(&vmid_list),
-		(int **)(&perms_list),
-		(int *)(&nelems));
+	sgl = mo->map.sgt->sgl;
 
-	if (ret)
-		return ret;
+	/* If this MO is associated with a dmabuf, get the associated
+	 * VM permissions for sharing with QTEE
+	 */
+	if (mo->dma_buf) {
+		ret = mem_buf_dma_buf_copy_vmperm(mo->dma_buf,
+						 (int **)(&vmid_list),
+						 (int **)(&perms_list),
+						 (int *)(&nelems));
 
-	if (mem_buf_dma_buf_exclusive_owner(mo->dma_buf))
-		perms_list[0] = QCOM_SCM_PERM_RW;
+		if (ret)
+			return ret;
 
-	mo->mapping_info.p_addr = sg_dma_address(mo->map.sgt->sgl);
-	mo->mapping_info.p_addr_len = sg_dma_len(mo->map.sgt->sgl);
-	mo->mapping_info.perms = QCOM_SCM_PERM_RW;
+		if (mem_buf_dma_buf_exclusive_owner(mo->dma_buf))
+			perms_list[0] = QCOM_SCM_PERM_RW;
 
-	ret = qtee_shmbridge_register(mo->mapping_info.p_addr, mo->mapping_info.p_addr_len,
-		vmid_list, perms_list, nelems, mo->mapping_info.perms,
-		&mo->shm_bridge_handle);
+		mo->shm_mapping_info.p_addr = sg_dma_address(sgl);
+		mo->shm_mapping_info.p_addr_len = sg_dma_len(sgl);
+	} else {
+		/* TODO: Add and fetch vmid from DTSI */
+		vmid_list = &hlos_vmid;
+		perms_list = &hlos_perms;
+		nelems = 1;
 
-	kfree(perms_list);
-	kfree(vmid_list);
+		mo->shm_mapping_info.p_addr = page_to_phys(sg_page(sgl));
+		mo->shm_mapping_info.p_addr_len = sgl->length;
+	}
+
+	mo->shm_mapping_info.perms = QCOM_SCM_PERM_RW;
+
+	ret = qtee_shmbridge_register(mo->shm_mapping_info.p_addr,
+				      mo->shm_mapping_info.p_addr_len,
+				      vmid_list, perms_list, nelems,
+				      mo->shm_mapping_info.perms,
+				      &mo->handle);
+
+	if (mo->dma_buf) {
+		kfree(perms_list);
+		kfree(vmid_list);
+	}
 
 	if (ret) {
+		/* If 'handle' is not zero, then the memory object is already mapped. */
 
-		/* If 'shm_bridge_handle' is not zero, then the memory object is already mapped. */
-
-		mo->mapping_info.p_addr = 0;
-		mo->mapping_info.p_addr_len = 0;
+		mo->shm_mapping_info.p_addr = 0;
+		mo->shm_mapping_info.p_addr_len = 0;
 		// SCM driver touch this value even an failure so set to 0
-		mo->shm_bridge_handle = 0;
+		mo->handle = 0;
 	}
 
 	return ret;
 }
 
-static int make_shm_bridge_single_kernel(struct mem_object *mo)
+static int register_tz_shm(struct mem_object *mo)
 {
-	int ret;
-
-	/* TODO: Add and fetch vmid from DTSI */
-	u32 vmid_list = QCOM_SCM_VMID_HLOS;
-	u32 perms_list = QCOM_SCM_PERM_RW;
-	u32 nelems = 1;
-
-	ret = qtee_shmbridge_register(mo->mapping_info.p_addr, mo->mapping_info.p_addr_len,
-		&vmid_list, &perms_list, nelems, mo->mapping_info.perms,
-		&mo->shm_bridge_handle);
-
-	if (ret) {
-
-		/* If 'shm_bridge_handle' is not zero, then the memory object is already mapped. */
-		// SCM driver touch this value even an failure so set to 0
-		mo->shm_bridge_handle = 0;
-	}
-
-	return ret;
+	return map_via_shm_bridge(mo);
 }
 
-static void rm_shm_bridge(struct mem_object *mo)
+static void deregister_tz_shm(struct mem_object *mo)
 {
-	if (mo->shm_bridge_handle)
-		qtee_shmbridge_deregister(mo->shm_bridge_handle);
-	mo->shm_bridge_handle = 0;
+	if (mo->handle)
+		qtee_shmbridge_deregister(mo->handle);
+
+	mo->handle = 0;
+}
+
+#endif /* CONFIG_QCOM_SI_CORE_MEM_FFA */
+
+static void free_mo_sgt(struct mem_object *mo)
+{
+	struct sg_table *sgt;
+	struct scatterlist *sglist;
+	unsigned int nents;
+	struct scatterlist *sg;
+	int i;
+	struct page *page;
+
+	if (mo->map.sgt && mo->map.owned) {
+		sgt = mo->map.sgt;
+		sglist = sgt->sgl;
+		nents = sg_nents(sglist);
+
+		for_each_sg(sglist, sg, nents, i) {
+			page = sg_page(sg);
+			if (page)
+				__free_page(page);
+		}
+
+		sg_free_table(sgt);
+		kfree(sgt);
+	}
 }
 
 static void detach_dma_buf(struct mem_object *mo)
@@ -235,7 +357,6 @@ static int init_tz_shared_memory(struct mem_object *mo)
 
 	mo->map.buf_attach = NULL;
 	mo->map.sgt = NULL;
-	mo->shm_bridge_handle = 0;
 
 	buf_attach = dma_buf_attach(mo->dma_buf, &mem_object_pdev->dev);
 	if (IS_ERR(buf_attach))
@@ -253,7 +374,7 @@ static int init_tz_shared_memory(struct mem_object *mo)
 
 	mo->map.sgt = sgt;
 
-	ret = make_shm_bridge_single(mo);
+	ret = register_tz_shm(mo);
 	if (ret)
 		goto out_failed;
 
@@ -274,14 +395,14 @@ static int map_memory_obj(struct mem_object *mo, int advisory)
 			si_object_name(&mo->object));
 
 	mutex_lock(&mo->map.lock);
-	if (mo->shm_bridge_handle == 0) {
+	if (mo->handle == 0) {
 		/* 'mo' has not been mapped before. Do it now. */
-		if (mo->mapping_info.p_addr == 0) {
-			/* 'mo' from user-space */
+		if (mo->dma_buf) {
+			/* A dmabuf associated 'mo' which needs mapping */
 			ret = init_tz_shared_memory(mo);
 		} else {
-			/* 'mo' from kernel-space */
-			ret = make_shm_bridge_single_kernel(mo);
+			/* A plain 'mo', sgt already prepared for sharing */
+			ret = register_tz_shm(mo);
 		}
 	} else {
 
@@ -297,25 +418,21 @@ static int map_memory_obj(struct mem_object *mo, int advisory)
 
 static void release_memory_obj(struct mem_object *mo)
 {
-	rm_shm_bridge(mo);
+	deregister_tz_shm(mo);
 
-	detach_dma_buf(mo);
+	if (mo->dma_buf)
+		detach_dma_buf(mo);
+	else
+		free_mo_sgt(mo);
 }
 
-static unsigned long mo_shm_bridge_prepare(struct si_object *object, struct si_arg args[])
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+static unsigned long mo_prepare_ffa(struct si_object *object, struct si_arg args[])
 {
 	struct mem_object *mo = to_mem_object(object);
+	struct mi_ffa *ffa;
 
-	struct {
-		u64 p_addr;
-		u64 len;
-		u32 perms;
-	} *mi;
-
-	if (get_async_proto_version() != SMCINVOKE_ASYNC_VERSION)
-		return SI_OBJECT_OP_NO_OP;
-
-	if (args[0].b.size < sizeof(*mi))
+	if (args[0].b.size < sizeof(struct mi_ffa))
 		return SI_OBJECT_OP_NO_OP;
 
 	if (!map_memory_obj(mo, 1)) {
@@ -325,22 +442,94 @@ static unsigned long mo_shm_bridge_prepare(struct si_object *object, struct si_a
 
 		get_si_object(object);
 
-		mi = (typeof(mi)) (args[0].b.addr);
-		mi->p_addr = mo->mapping_info.p_addr;
-		mi->len = mo->mapping_info.p_addr_len;
+		ffa = (struct mi_ffa *)(args[0].b.addr);
+
+		ffa->ffa_handle = mo->handle;
+		ffa->ffa_tag = mo->ffa_mapping_info.ffa_tag;
+		ffa->offset = mo->ffa_mapping_info.offset;
+		ffa->size = mo->ffa_mapping_info.size;
 		/* append cacheability info to upper nibble */
-		mi->perms = CACHE_NS_CACHED | mo->mapping_info.perms;
-		args[0].b.size = sizeof(*mi);
+		ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
+
+		args[0].b.size = sizeof(*ffa);
 
 		args[1].o = object;
 
-		return OBJECT_OP_AUTO_MAP;
+		return OBJECT_OP_AUTO_MAP_FFA;
 	}
 
 	return SI_OBJECT_OP_NO_OP;
 }
 
-static void mo_shm_bridge_release(struct si_object *object)
+static unsigned long mo_prepare_shm(struct si_object *object, struct si_arg args[])
+{
+	pr_err("mapping of a memory object only supported via ffa.\n");
+	return SI_OBJECT_OP_NO_OP;
+}
+
+#else /* CONFIG_QCOM_SI_CORE_MEM_FFA */
+
+static unsigned long mo_prepare_ffa(struct si_object *object, struct si_arg args[])
+{
+	pr_err("mapping of a memory object only supported via shmb.\n");
+	return SI_OBJECT_OP_NO_OP;
+}
+
+static unsigned long mo_prepare_shm(struct si_object *object, struct si_arg args[])
+{
+	struct mem_object *mo = to_mem_object(object);
+	struct mi_shm *shm;
+
+	if (args[0].b.size < sizeof(struct mi_shm))
+		return SI_OBJECT_OP_NO_OP;
+
+	if (!map_memory_obj(mo, 1)) {
+		mo->map.early_mapped = 1;
+
+		/* 'object' has been mapped. Share it. */
+
+		get_si_object(object);
+
+		shm = (struct mi_shm *)(args[0].b.addr);
+
+		shm->p_addr = mo->shm_mapping_info.p_addr;
+		shm->len = mo->shm_mapping_info.p_addr_len;
+		/* append cacheability info to upper nibble */
+		shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
+
+		args[0].b.size = sizeof(*shm);
+
+		args[1].o = object;
+
+		return OBJECT_OP_AUTO_MAP_SHM;
+	}
+
+	return SI_OBJECT_OP_NO_OP;
+}
+
+#endif /* CONFIG_QCOM_SI_CORE_MEM_FFA */
+
+static unsigned long mo_prepare(struct si_object *object, struct si_arg args[])
+{
+	unsigned long ret;
+	uint32_t async_version = get_async_proto_version();
+
+	if (async_version < SMCINVOKE_MIN_ASYNC_VERSION)
+		return SI_OBJECT_OP_NO_OP;
+
+	/* QTEE bumps up the async protocol minor version on introducing
+	 * a new handler. FFA based memory object is supported from
+	 * SMCINVOKE_ASYNC_VERSION_FFA onwards.
+	 */
+	if (async_version < SMCINVOKE_ASYNC_VERSION_FFA)
+		ret = mo_prepare_shm(object, args);
+	else
+		ret = mo_prepare_ffa(object, args);
+
+	return ret;
+}
+
+static void mo_release(struct si_object *object)
 {
 	struct mem_object *mo = to_mem_object(object);
 
@@ -363,6 +552,136 @@ static void mo_shm_bridge_release(struct si_object *object)
 	kfree(mo);
 }
 
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+
+static int map_memory_obj_ffa(struct si_arg args[])
+{
+	int ret;
+	struct mi_ffa *ffa;
+	struct si_object *object;
+	struct mem_object *mo;
+
+	/* Format of response as expected by TZ. */
+
+	if (size_of_arg(args) != 3 ||
+	    args[0].type != SI_AT_OB  ||
+	    args[1].type != SI_AT_IO  ||
+	    args[2].type != SI_AT_OO) {
+
+		pr_err("mapping of a memory object with invalid message format.\n");
+
+		return -EINVAL;
+	}
+
+	object = args[1].o;
+
+	if (!is_mem_object(object)) {
+		pr_err("mapping of a non-memory object.\n");
+
+		put_si_object(object);
+		return -EINVAL;
+	}
+
+	mo = to_mem_object(object);
+
+	ret = map_memory_obj(mo, 0);
+	if (!ret) {
+
+		/* 'object' has been mapped. Share it. */
+
+		args[2].o = object;
+
+		ffa = (struct mi_ffa *)(args[0].b.addr);
+
+		ffa->ffa_handle = mo->handle;
+		ffa->ffa_tag = mo->ffa_mapping_info.ffa_tag;
+		ffa->offset = mo->ffa_mapping_info.offset;
+		ffa->size = mo->ffa_mapping_info.size;
+		/* append cacheability info to upper nibble */
+		ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
+
+		pr_info("%s ffa-mapped %llx %lx\n",
+			si_object_name(object), ffa->ffa_handle, ffa->size);
+	} else {
+		pr_err("mapping memory object via ffa %s failed.\n",
+			si_object_name(object));
+
+		put_si_object(object);
+	}
+
+	return ret;
+}
+
+static int map_memory_obj_shm(struct si_arg args[])
+{
+	pr_err("mapping of a memory object only supported via ffa.\n");
+	return -EOPNOTSUPP;
+}
+
+#else /* CONFIG_QCOM_SI_CORE_MEM_FFA */
+
+static int map_memory_obj_ffa(struct si_arg args[])
+{
+	pr_err("mapping of a memory object only supported via shmb.\n");
+	return -EOPNOTSUPP;
+}
+
+static int map_memory_obj_shm(struct si_arg args[])
+{
+	int ret;
+	struct mi_shm *shm;
+	struct si_object *object;
+	struct mem_object *mo;
+
+	if (size_of_arg(args) != 3 ||
+	    args[0].type != SI_AT_OB  ||
+	    args[1].type != SI_AT_IO  ||
+	    args[2].type != SI_AT_OO) {
+
+		pr_err("mapping of a memory object with invalid message format.\n");
+
+		return -EINVAL;
+	}
+
+	object = args[1].o;
+
+	if (!is_mem_object(object)) {
+		pr_err("mapping of a non-memory object.\n");
+
+		put_si_object(object);
+		return -EINVAL;
+	}
+
+	mo = to_mem_object(object);
+
+	ret = map_memory_obj(mo, 0);
+	if (!ret) {
+
+		/* 'object' has been mapped. Share it. */
+
+		args[2].o = object;
+
+		shm = (struct mi_shm *)(args[0].b.addr);
+
+		shm->p_addr = mo->shm_mapping_info.p_addr;
+		shm->len = mo->shm_mapping_info.p_addr_len;
+		/* append cacheability info to upper nibble */
+		shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
+
+		pr_info("%s shm-mapped %llx %llx\n",
+			si_object_name(object), shm->p_addr, shm->len);
+	} else {
+		pr_err("mapping memory object via shmb %s failed.\n",
+			si_object_name(object));
+
+		put_si_object(object);
+	}
+
+	return ret;
+}
+
+#endif /* CONFIG_QCOM_SI_CORE_MEM_FFA */
+
 /* Primordial object for 'SHMBridge'. */
 
 static int shm_bridge__po_dispatch(unsigned int context_id,
@@ -370,64 +689,15 @@ static int shm_bridge__po_dispatch(unsigned int context_id,
 {
 	int ret;
 
-	struct si_object *object;
-	struct mem_object *mo;
-
 	switch (op) {
-	case OBJECT_OP_MAP_REGION: {
+	case OBJECT_OP_MAP_REGION_SHM:
 
-		/* Format of response as expected by TZ. */
+		ret = map_memory_obj_shm(args);
 
-		struct {
-			u64 p_addr;
-			u64 len;
-			u32 perms;
-		} *mi;
+		break;
+	case OBJECT_OP_MAP_REGION_FFA:
 
-		if (size_of_arg(args) != 3 ||
-			args[0].type != SI_AT_OB  ||
-			args[1].type != SI_AT_IO  ||
-			args[2].type != SI_AT_OO) {
-
-			pr_err("mapping of a memory object with invalid message format.\n");
-
-			return -EINVAL;
-		}
-
-		object = args[1].o;
-
-		if (!is_mem_object(object)) {
-			pr_err("mapping of a non-memory object.\n");
-
-			put_si_object(object);
-			return -EINVAL;
-		}
-
-		mo = to_mem_object(object);
-
-		ret = map_memory_obj(mo, 0);
-		if (!ret) {
-
-			/* 'object' has been mapped. Share it. */
-
-			args[2].o = object;
-
-			mi = (typeof(mi)) (args[0].b.addr);
-			mi->p_addr = mo->mapping_info.p_addr;
-			mi->len = mo->mapping_info.p_addr_len;
-			/* append cacheability info to upper nibble */
-			mi->perms = CACHE_NS_CACHED | mo->mapping_info.perms;
-
-			pr_info("%s mapped %llx %llx\n",
-				si_object_name(object), mi->p_addr, mi->len);
-
-		} else {
-			pr_err("mapping memory object %s failed.\n",
-				si_object_name(object));
-
-			put_si_object(object);
-		}
-	}
+		ret = map_memory_obj_ffa(args);
 
 		break;
 	default:
@@ -482,6 +752,205 @@ struct si_object *init_si_mem_object_user(struct dma_buf *dma_buf,
 }
 EXPORT_SYMBOL_GPL(init_si_mem_object_user);
 
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+static const unsigned int order_table[] = { 8, 4, 0 };
+
+static void si_core_free_page_policy(struct list_head *pages)
+{
+	struct page *page, *tmp_page;
+
+	list_for_each_entry_safe(page, tmp_page, pages, lru) {
+		list_del(&page->lru);
+		__free_pages(page, compound_order(page));
+	}
+}
+
+static size_t si_core_alloc_page_policy(struct list_head *pages, size_t size,
+					gfp_t gfp_base)
+{
+	size_t size_remaining = PAGE_ALIGN(size);
+	size_t count = 0;
+
+	for (int i = 0; i < ARRAY_SIZE(order_table) && size_remaining; i++) {
+		/* Next order to allocate: */
+		const unsigned int order = order_table[i];
+		const size_t chunk = PAGE_SIZE << order;
+
+		gfp_t gfp = gfp_base;
+		/* Some default flag combinations: */
+		if (order) {
+			gfp |= __GFP_COMP;
+			/* Don't thrash if higher order pages are scarce. */
+			gfp |= __GFP_NOWARN | __GFP_NORETRY;
+		}
+
+		while (size_remaining >= chunk) {
+			struct page *page;
+
+			/* TODO use dma_alloc_pages. */
+			page = alloc_pages(gfp, order);
+			if (!page) /* drop to next smaller order  */
+				break;
+
+			list_add_tail(&page->lru, pages);
+			size_remaining -= chunk;
+			count++;
+		}
+	}
+
+	if (size_remaining) {
+		si_core_free_page_policy(pages);
+		return -ENOMEM;
+	}
+
+	return count;
+}
+
+struct si_object *init_si_mem_object_pages(size_t *size, uint64_t tag,
+					   uint64_t flags, void (*release)(void *),
+					   void *private)
+{
+	int rc;
+	struct page *page, *tmp_page;
+	unsigned int chunk_size;
+	struct sg_table *sgt;
+	struct scatterlist *sg;
+	LIST_HEAD(page_list);
+	int count;
+	struct mem_object *mo;
+
+	if (!size || *size == 0) {
+		pr_err("invalid size input!\n");
+		return NULL_SI_OBJECT;
+	}
+
+	if (!mem_ops.release) {
+		pr_err("memory object type is unknown.\n");
+		return NULL_SI_OBJECT;
+	}
+
+	/* This API only allocates at page granularity */
+	*size = PAGE_ALIGN(*size);
+
+	count = si_core_alloc_page_policy(&page_list, *size, GFP_KERNEL);
+	if (!count) {
+		pr_err("si_core_alloc_page_policy failed.\n");
+		goto err_si_core_alloc_pages;
+	}
+
+	sgt = kzalloc(sizeof(*sgt), GFP_KERNEL);
+	if (!sgt)
+		goto err_sgt_alloc;
+
+	rc = sg_alloc_table(sgt, count, GFP_KERNEL);
+	if (rc)
+		goto err_sg_alloc;
+
+	/* Transfer page_list to sg_table. */
+	sg = sgt->sgl;
+	list_for_each_entry_safe(page, tmp_page, &page_list, lru) {
+		chunk_size = PAGE_SIZE << compound_order(page);
+		sg_set_page(sg, page, chunk_size, 0);
+		sg = sg_next(sg);
+		list_del(&page->lru);
+	}
+
+	mo = kzalloc(sizeof(*mo), GFP_KERNEL);
+	if (!mo)
+		goto err_mo_alloc;
+
+	mutex_init(&mo->map.lock);
+
+	mo->private = private;
+	mo->release = release;
+
+	mo->map.sgt = sgt;
+	mo->map.owned = true;
+	mo->flags = flags;
+	mo->tag = tag;
+
+	init_si_object_user(&mo->object, SI_OT_CB_OBJECT, &mem_ops,
+		"kernel-mem-object-%p", sgt);
+
+	mutex_lock(&mo_list_mutex);
+	list_add_tail(&mo->node, &mo_list);
+	mutex_unlock(&mo_list_mutex);
+
+	return &mo->object;
+
+err_mo_alloc:
+	sg_free_table(sgt);
+err_sg_alloc:
+	kfree(sgt);
+err_sgt_alloc:
+	si_core_free_page_policy(&page_list);
+err_si_core_alloc_pages:
+	return NULL_SI_OBJECT;
+}
+EXPORT_SYMBOL_GPL(init_si_mem_object_pages);
+#endif
+
+struct si_object *init_si_mem_object_sg(struct sg_table *sgt, uint64_t tag,
+					uint32_t flags, void (*release)(void *),
+					void *private)
+{
+	struct mem_object *mo;
+
+	if (!sgt) {
+		pr_err("sgt not initialized!\n");
+		return NULL_SI_OBJECT;
+	}
+
+#if !IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	/* Better to fail early here to avoid failuring during memory object
+	 * mapping
+	 */
+	if (sgt->nents > 1) {
+		pr_err("SHM bridge only maps continuous memory!\n");
+		return NULL_SI_OBJECT;
+	}
+#endif
+
+	if (!mem_ops.release) {
+		pr_err("memory object type is unknown.\n");
+		return NULL_SI_OBJECT;
+	}
+
+	mo = kzalloc(sizeof(*mo), GFP_KERNEL);
+	if (!mo)
+		return NULL_SI_OBJECT;
+
+	mutex_init(&mo->map.lock);
+
+	mo->private = private;
+	mo->release = release;
+
+	/* This sgt is not owned by us, we will not free it */
+	mo->map.sgt = sgt;
+	mo->map.owned = false;
+	mo->flags = flags;
+	mo->tag = tag;
+
+	init_si_object_user(&mo->object, SI_OT_CB_OBJECT, &mem_ops,
+		"kernel-mem-object-%p", sgt);
+
+	mutex_lock(&mo_list_mutex);
+	list_add_tail(&mo->node, &mo_list);
+	mutex_unlock(&mo_list_mutex);
+
+	return &mo->object;
+}
+EXPORT_SYMBOL_GPL(init_si_mem_object_sg);
+
+struct sg_table *mem_object_to_sgt(struct si_object *object)
+{
+	if (is_mem_object(object))
+		return to_mem_object(object)->map.sgt;
+
+	return ERR_PTR(-EINVAL);
+}
+EXPORT_SYMBOL_GPL(mem_object_to_sgt);
+
 struct dma_buf *mem_object_to_dma_buf(struct si_object *object)
 {
 	if (is_mem_object(object))
@@ -502,18 +971,63 @@ int is_mem_object(struct si_object *object)
 }
 EXPORT_SYMBOL_GPL(is_mem_object);
 
+int early_map_memory_obj(struct si_object *object)
+{
+	int ret;
+	struct mem_object *mo;
+	int advisory = 1;
+
+	if (!is_mem_object(object)) {
+		pr_err("mapping of a non-memory object.\n");
+		return -EINVAL;
+	}
+
+	mo = to_mem_object(object);
+
+	ret = map_memory_obj(mo, advisory);
+	if (ret == advisory) {
+		pr_err("failed to early map, memory object already mapped!\n");
+		return -EINVAL;
+	}
+
+	if (ret) {
+		pr_err("failed to early map memory object. ret %d\n", ret);
+		return ret;
+	}
+
+	mo->map.early_mapped = 1;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(early_map_memory_obj);
+
 ssize_t mem_objects_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	size_t len = 0;
 	struct mem_object *mo;
 
 	mutex_lock(&mo_list_mutex);
-	list_for_each_entry(mo, &mo_list, node) {
-		len += scnprintf(buf + len, PAGE_SIZE - len, "%s %u (%llx %zx) %d\n",
-			si_object_name(&mo->object), kref_read(&mo->object.refcount),
-			mo->mapping_info.p_addr, mo->mapping_info.p_addr_len, mo->map.early_mapped);
-	}
 
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	list_for_each_entry(mo, &mo_list, node) {
+		len += scnprintf(buf + len, PAGE_SIZE - len,
+				"%s %u (%llx %zx) %d\n",
+				si_object_name(&mo->object),
+				kref_read(&mo->object.refcount),
+				mo->handle,
+				mo->ffa_mapping_info.size,
+				mo->map.early_mapped);
+	}
+#else
+	list_for_each_entry(mo, &mo_list, node) {
+		len += scnprintf(buf + len, PAGE_SIZE - len,
+				"%s %u (%llx %zx) %d\n",
+				si_object_name(&mo->object),
+				kref_read(&mo->object.refcount),
+				mo->shm_mapping_info.p_addr,
+				mo->shm_mapping_info.p_addr_len,
+				mo->map.early_mapped);
+	}
+#endif
 	mutex_unlock(&mo_list_mutex);
 
 	return len;
@@ -528,8 +1042,8 @@ int mem_object_init(struct platform_device *pdev)
 		return ret;
 
 	/* Select memory object type: default to SHMBridge. */
-	mem_ops.release = mo_shm_bridge_release;
-	mem_ops.prepare = mo_shm_bridge_prepare;
+	mem_ops.release = mo_release;
+	mem_ops.prepare = mo_prepare;
 
 	init_si_object_user(&primordial_object,
 		SI_OT_ROOT, &shm_bridge__po_ops, "po_in_mem_object");
