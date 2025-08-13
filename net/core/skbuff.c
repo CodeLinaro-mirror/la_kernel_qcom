@@ -93,6 +93,28 @@ struct kmem_cache *skbuff_cache __ro_after_init;
 
 struct kmem_cache *skb_data_cache;
 
+#if defined(CONFIG_SKB_CUSTOM_SLAB)
+struct kmem_cache *skb_data_cache_1984;
+struct kmem_cache *skb_data_cache_2200;
+struct kmem_cache *skb_data_cache_2304;
+struct kmem_cache *skb_data_cache_2350;
+
+#define SKB_DATA_CACHE_SIZE_1984 \
+	(SKB_DATA_ALIGN(1984 + NET_SKB_PAD) + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+
+#define SKB_DATA_CACHE_SIZE_2200 \
+	(SKB_DATA_ALIGN(2200 + NET_SKB_PAD) + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+
+#define SKB_DATA_CACHE_SIZE_2304 \
+	(SKB_DATA_ALIGN(2304 + NET_SKB_PAD) + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+
+#define SKB_DATA_CACHE_SIZE_2350 \
+	(SKB_DATA_ALIGN(2350 + NET_SKB_PAD) + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+#else /* CONFIG_SKB_CUSTOM_SLAB */
 /* For low memory profile, NSS_SKB_FIXED_SIZE_2K is enabled and
  * CONFIG_SKB_RECYCLER is disabled. For premium and enterprise profile
  * CONFIG_SKB_RECYCLER is enabled and NSS_SKB_FIXED_SIZE_2K is disabled.
@@ -119,6 +141,7 @@ struct kmem_cache *skb_data_cache;
 			)
 #endif
 #endif
+#endif /* CONFIG_SKB_CUSTOM_SLAB */
 
 #include "skbuff_recycle.h"
 #include "skbuff_debug.h"
@@ -597,6 +620,38 @@ static void *kmalloc_reserve(unsigned int *size, gfp_t flags, int node,
 	struct kmem_cache *skb_cache;
 
 	obj_size = SKB_HEAD_ALIGN(*size);
+#if defined(CONFIG_SKB_CUSTOM_SLAB)
+	if ((obj_size <= SKB_SMALL_HEAD_CACHE_SIZE &&
+	     !(flags & KMALLOC_NOT_NORMAL_BITS)) ||
+	     (obj_size > SZ_2K && obj_size <= SKB_DATA_CACHE_SIZE_2350)) {
+		if (obj_size <= SKB_SMALL_HEAD_CACHE_SIZE) {
+			skb_cache = skb_small_head_cache;
+			*size = SKB_SMALL_HEAD_CACHE_SIZE;
+		} else if (obj_size <= SKB_DATA_CACHE_SIZE_1984) {
+			skb_cache = skb_data_cache_1984;
+			*size = SKB_DATA_CACHE_SIZE_1984;
+		} else if (obj_size <= SKB_DATA_CACHE_SIZE_2200) {
+			skb_cache = skb_data_cache_2200;
+			*size = SKB_DATA_CACHE_SIZE_2200;
+		} else if (obj_size <= SKB_DATA_CACHE_SIZE_2304) {
+			skb_cache = skb_data_cache_2304;
+			*size = SKB_DATA_CACHE_SIZE_2304;
+		} else {
+			skb_cache = skb_data_cache_2350;
+			*size = SKB_DATA_CACHE_SIZE_2350;
+		}
+		obj = kmem_cache_alloc_node(skb_cache,
+					    flags | __GFP_NOMEMALLOC | __GFP_NOWARN,
+					    node);
+
+		if (obj || !(gfp_pfmemalloc_allowed(flags)))
+			goto out;
+		/* Try again but now we are using pfmemalloc reserves */
+		ret_pfmemalloc = true;
+		obj = kmem_cache_alloc_node(skb_cache, flags, node);
+		goto out;
+	}
+#else  /* CONFIG_SKB_CUSTOM_SLAB */
 	if ((obj_size <= SKB_SMALL_HEAD_CACHE_SIZE &&
 	     !(flags & KMALLOC_NOT_NORMAL_BITS)) ||
 	     (obj_size > SZ_2K && obj_size <= SKB_DATA_CACHE_SIZE)) {
@@ -617,6 +672,7 @@ static void *kmalloc_reserve(unsigned int *size, gfp_t flags, int node,
 		obj = kmem_cache_alloc_node(skb_cache, flags, node);
 		goto out;
 	}
+#endif /* CONFIG_SKB_CUSTOM_SLAB */
 
 	obj_size = kmalloc_size_roundup(obj_size);
 	/* The following cast might truncate high-order bits of obj_size, this
@@ -5106,10 +5162,31 @@ static void skb_extensions_init(void) {}
 
 void __init skb_init(void)
 {
+#if defined(CONFIG_SKB_CUSTOM_SLAB)
+	skb_data_cache_1984 = kmem_cache_create_usercopy("skb_data_cache_1984",
+							 SKB_DATA_CACHE_SIZE_1984,
+							 0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE_1984,
+							 NULL);
+
+	skb_data_cache_2200 = kmem_cache_create_usercopy("skb_data_cache_2200",
+							 SKB_DATA_CACHE_SIZE_2200,
+							 0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE_2200,
+							 NULL);
+
+	skb_data_cache_2304 = kmem_cache_create_usercopy("skb_data_cache_2304",
+							 SKB_DATA_CACHE_SIZE_2304,
+							 0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE_2304,
+							 NULL);
+	skb_data_cache_2350 = kmem_cache_create_usercopy("skb_data_cache_2350",
+							 SKB_DATA_CACHE_SIZE_2350,
+							 0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE_2350,
+							 NULL);
+#else /* !CONFIG_SKB_CUSTOM_SLAB */
 	skb_data_cache = kmem_cache_create_usercopy("skb_data_cache",
 						     SKB_DATA_CACHE_SIZE,
 						     0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE,
 						     NULL);
+#endif /* CONFIG_SKB_CUSTOM_SLAB */
 
 	skbuff_cache = kmem_cache_create_usercopy("skbuff_head_cache",
 					      sizeof(struct sk_buff),
