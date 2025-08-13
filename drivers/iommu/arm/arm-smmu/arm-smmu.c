@@ -89,6 +89,17 @@ struct arm_smmu_option_prop {
 	const char *prop;
 };
 
+struct vmid_pool_entry {
+	u32 vmid;
+	int refcount;
+	struct gen_pool *pool;
+	struct device_node *mem_node;
+	struct list_head list;
+};
+
+static LIST_HEAD(vmid_pool_list);
+static DEFINE_MUTEX(vmid_pool_lock);
+
 static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ ARM_SMMU_OPT_FATAL_ASF, "qcom,fatal-asf" },
 	{ ARM_SMMU_OPT_3LVL_TABLES, "qcom,use-3-lvl-tables" },
@@ -1350,6 +1361,120 @@ static irqreturn_t arm_smmu_context_fault_irq(int irq, void *dev)
 	return IRQ_WAKE_THREAD;
 }
 
+static void *qcom_alloc_pages(void *cookie, size_t size, gfp_t gfp)
+{
+	unsigned long addr;
+	struct page *page = NULL;
+	struct arm_smmu_domain *domain = (void *)cookie;
+
+	if (!domain->secure_mem_pool)
+		return NULL;
+
+	addr = (unsigned long) gen_pool_alloc(domain->secure_mem_pool, size);
+	if (!addr)
+		return NULL;
+
+	page = pfn_to_page(PHYS_PFN(addr));
+	memset(page_address(page), 0, size);
+
+	return page_address(page);
+}
+
+static void qcom_free_pages(void *cookie, void *pages, size_t size)
+{
+	struct arm_smmu_domain *domain = (void *)cookie;
+	phys_addr_t phys;
+
+	if (pages == NULL)
+		return;
+
+	phys = virt_to_phys(pages);
+
+	if (domain->secure_mem_pool) {
+		memset(pages, 0, size);
+		gen_pool_free(domain->secure_mem_pool, (unsigned long) phys, size);
+	}
+}
+
+static struct gen_pool *lookup_pool_by_vmid_and_node(u32 vmid,
+						     struct device_node *mem_node)
+{
+	struct vmid_pool_entry *entry;
+
+	mutex_lock(&vmid_pool_lock);
+	list_for_each_entry(entry, &vmid_pool_list, list) {
+		if (entry->vmid == vmid && entry->mem_node == mem_node) {
+			entry->refcount++;
+			mutex_unlock(&vmid_pool_lock);
+			return entry->pool;
+		}
+	}
+	mutex_unlock(&vmid_pool_lock);
+
+	return NULL;
+}
+
+static struct vmid_pool_entry *find_vmid_pool_entry_nolock(u32 vmid,
+							   struct device_node *mem_node)
+{
+	struct vmid_pool_entry *entry;
+
+	list_for_each_entry(entry, &vmid_pool_list, list) {
+		if (entry->vmid == vmid && entry->mem_node == mem_node)
+			return entry;
+	}
+	return NULL;
+}
+
+static struct vmid_pool_entry *lookup_pool_by_vmid_only(u32 vmid)
+{
+	struct vmid_pool_entry *entry;
+
+	mutex_lock(&vmid_pool_lock);
+	list_for_each_entry(entry, &vmid_pool_list, list) {
+		if (entry->vmid == vmid) {
+			mutex_unlock(&vmid_pool_lock);
+			return entry;
+		}
+	}
+	mutex_unlock(&vmid_pool_lock);
+
+	return NULL;
+}
+
+static void gen_pool_destroy_for_vmid(u32 vmid)
+{
+	struct vmid_pool_entry *entry, *tmp;
+
+	mutex_lock(&vmid_pool_lock);
+	list_for_each_entry_safe(entry, tmp, &vmid_pool_list, list) {
+		if (entry->vmid == vmid) {
+			entry->refcount--;
+			if (entry->refcount <= 0) {
+				list_del(&entry->list);
+				if (entry->pool)
+					gen_pool_destroy(entry->pool);
+				kfree(entry);
+			}
+			mutex_unlock(&vmid_pool_lock);
+			return;
+		}
+	}
+	mutex_unlock(&vmid_pool_lock);
+}
+
+static void setup_secure_allocators(struct io_pgtable_cfg *cfg,
+				    struct arm_smmu_domain *smmu_domain)
+{
+	if (smmu_domain->secure_mem_pool) {
+		cfg->alloc = qcom_alloc_pages;
+		cfg->free  = qcom_free_pages;
+	} else {
+		cfg->alloc = NULL;
+		cfg->free  = NULL;
+	}
+}
+
 static int arm_smmu_init_domain_context(struct arm_smmu_domain *smmu_domain,
 					struct arm_smmu_device *smmu,
 					struct device *dev)
@@ -1515,6 +1640,8 @@ static int arm_smmu_init_domain_context(struct arm_smmu_domain *smmu_domain,
 		.iommu_dev	= smmu->dev,
 	};
 
+	setup_secure_allocators(&pgtbl_info->cfg, smmu_domain);
+
 	if (smmu->impl && smmu->impl->init_context) {
 		ret = smmu->impl->init_context(smmu_domain, pgtbl_cfg, dev);
 		if (ret)
@@ -1643,6 +1770,9 @@ static void arm_smmu_destroy_domain_context(struct arm_smmu_domain *smmu_domain)
 
 	if (!pinned)
 		__arm_smmu_free_bitmap(smmu->context_map, cfg->cbndx);
+
+	if (smmu_domain->secure_mem_pool)
+		gen_pool_destroy_for_vmid(smmu_domain->secure_vmid);
 
 	arm_smmu_rpm_put(smmu);
 }
@@ -1934,6 +2064,121 @@ static void arm_smmu_master_install_s2crs(struct arm_smmu_master_cfg *cfg,
 	mutex_unlock(&smmu->stream_map_mutex);
 }
 
+static bool arm_smmu_qcom_validate_secure_pool_node(struct device *dev,
+						    struct device_node *np)
+{
+	struct device_node *secure_mem_np;
+
+	secure_mem_np = of_parse_phandle(np, "secure_mem_pool", 0);
+	if (!secure_mem_np)
+		return false;
+
+	if (!of_property_read_bool(secure_mem_np, "qcom,secure-pt-reserved")) {
+		dev_err(dev, "Missing qcom,secure-pt-reserved property\n");
+		of_node_put(secure_mem_np);
+		return false;
+	}
+
+	if (of_property_read_bool(secure_mem_np, "no-map")) {
+		dev_err(dev, "The reserved region for secure PT cannot be no-map\n");
+		of_node_put(secure_mem_np);
+		return false;
+	}
+	of_node_put(secure_mem_np);
+
+	return true;
+}
+
+static int arm_smmu_qcom_get_secure_pool(struct device *dev,
+					 struct device_node *np,
+					 struct arm_smmu_domain *smmu_domain)
+{
+	struct vmid_pool_entry *entry, *existing, *conflict;
+	struct device_node *secure_mem_np;
+	struct gen_pool *secure_pool;
+	struct resource res;
+	int ret;
+
+	secure_mem_np = of_parse_phandle(np, "secure_mem_pool", 0);
+	if (!secure_mem_np)
+		return -ENXIO;
+
+	secure_pool = lookup_pool_by_vmid_and_node(smmu_domain->secure_vmid,
+						   secure_mem_np);
+	if (secure_pool) {
+		smmu_domain->secure_mem_pool = secure_pool;
+		of_node_put(secure_mem_np);
+		return 0;
+	}
+
+	conflict = lookup_pool_by_vmid_only(smmu_domain->secure_vmid);
+	if (conflict && conflict->mem_node != secure_mem_np) {
+		dev_err(dev, "Conflicting memory-region for VMID %u\n",
+				smmu_domain->secure_vmid);
+		of_node_put(secure_mem_np);
+		return -EINVAL;
+	}
+
+	ret = of_address_to_resource(secure_mem_np, 0, &res);
+	if (ret) {
+		of_node_put(secure_mem_np);
+		return ret;
+	}
+
+	if (resource_size(&res) < PAGE_SIZE * 4) {
+		dev_err(dev, "Secure memory pool too small\n");
+		of_node_put(secure_mem_np);
+		return -EINVAL;
+	}
+
+	secure_pool = gen_pool_create(PAGE_SHIFT, -1);
+	if (!secure_pool) {
+		dev_err(dev, "Secure gen pool creation failed\n");
+		of_node_put(secure_mem_np);
+		return -ENOMEM;
+	}
+
+	ret = gen_pool_add(secure_pool, (phys_addr_t)res.start, resource_size(&res), -1);
+	if (ret) {
+		dev_err(dev, "Secure gen pool add failed\n");
+		of_node_put(secure_mem_np);
+		gen_pool_destroy(secure_pool);
+		return ret;
+	}
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry) {
+		gen_pool_destroy(secure_pool);
+		of_node_put(secure_mem_np);
+		return -ENOMEM;
+	}
+
+	entry->vmid = smmu_domain->secure_vmid;
+	entry->pool = secure_pool;
+	entry->mem_node = secure_mem_np;
+	entry->refcount = 1;
+	INIT_LIST_HEAD(&entry->list);
+	mutex_lock(&vmid_pool_lock);
+	existing = find_vmid_pool_entry_nolock(smmu_domain->secure_vmid, secure_mem_np);
+	if (existing) {
+		existing->refcount++;
+		smmu_domain->secure_mem_pool = existing->pool;
+		mutex_unlock(&vmid_pool_lock);
+
+		gen_pool_destroy(secure_pool);
+		of_node_put(secure_mem_np);
+		kfree(entry);
+		return 0;
+	}
+
+	list_add(&entry->list, &vmid_pool_list);
+	mutex_unlock(&vmid_pool_lock);
+	of_node_put(secure_mem_np);
+	smmu_domain->secure_mem_pool = secure_pool;
+
+	return 0;
+}
+
 static int arm_smmu_setup_default_domain(struct device *dev,
 					 struct iommu_domain *domain)
 {
@@ -1991,8 +2236,18 @@ static int arm_smmu_setup_default_domain(struct device *dev,
 
 	/* Default value: disabled */
 	ret = of_property_read_u32(np, "qcom,iommu-vmid", &val);
-	if (!ret)
+	if (!ret) {
 		smmu_domain->secure_vmid = val;
+		smmu_domain->secure_mem_pool = NULL;
+
+		if (arm_smmu_qcom_validate_secure_pool_node(dev, np)) {
+			ret = arm_smmu_qcom_get_secure_pool(dev, np, smmu_domain);
+			if (ret) {
+				dev_err(dev, "Failed setting up secure memory pool\n");
+				return ret;
+			}
+		}
+	}
 
 	/* Default value: disabled */
 	ret = of_property_read_string(np, "qcom,iommu-pagetable", &str);
