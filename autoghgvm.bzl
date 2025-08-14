@@ -86,12 +86,14 @@ def define_autoghgvm():
         "net/core/failover.ko",
         "net/qrtr/qrtr.ko",
         "net/qrtr/qrtr-mhi.ko",
+        "net/qrtr/qrtr-smd.ko",
         "net/sched/cls_flower.ko",
         "net/sched/sch_cbs.ko",
         "net/sched/sch_etf.ko",
         "net/sched/sch_mqprio.ko",
         "net/vmw_vsock/vmw_vsock_virtio_transport.ko",
         "net/wireless/cfg80211.ko",
+        "sound/usb/snd-usb-audio-qmi.ko",
     ]
 
     _autoghgvm_consolidate_in_tree_modules = _autoghgvm_in_tree_modules + [
