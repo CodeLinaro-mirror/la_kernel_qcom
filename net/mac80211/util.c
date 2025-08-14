@@ -2734,6 +2734,10 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 				    sdata->vif.bss_conf.protected_keep_alive)
 					changed |= BSS_CHANGED_KEEP_ALIVE;
 
+				if (IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+					if (sdata->vif.bss_conf.eht_puncturing)
+						changed |= BSS_CHANGED_EHT_PUNCTURING;
+				}
 				ieee80211_bss_info_change_notify(sdata,
 								 changed);
 			} else if (!WARN_ON(!link)) {

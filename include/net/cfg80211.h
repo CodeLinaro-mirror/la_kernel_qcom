@@ -912,6 +912,14 @@ static inline bool
 cfg80211_chandef_identical(const struct cfg80211_chan_def *chandef1,
 			   const struct cfg80211_chan_def *chandef2)
 {
+	if (IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+		return (chandef1->chan == chandef2->chan &&
+			chandef1->width == chandef2->width &&
+			chandef1->center_freq1 == chandef2->center_freq1 &&
+			chandef1->freq1_offset == chandef2->freq1_offset &&
+			chandef1->center_freq2 == chandef2->center_freq2);
+	}
+
 	return (chandef1->chan == chandef2->chan &&
 		chandef1->width == chandef2->width &&
 		chandef1->center_freq1 == chandef2->center_freq1 &&
@@ -974,6 +982,17 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 int cfg80211_chandef_dfs_required(struct wiphy *wiphy,
 				  const struct cfg80211_chan_def *chandef,
 				  enum nl80211_iftype iftype);
+
+/**
+ * cfg80211_chandef_primary_freq - calculate primary 40/80/160 MHz freq
+ * @chandef: chandef to calculate for
+ * @primary_chan_width: primary channel width to calculate center for
+ *
+ * Returns: the primary 40/80/160 MHz channel center frequency, or -1
+ *	for errors, updating the punctured bitmap
+ */
+int cfg80211_chandef_primary_freq(const struct cfg80211_chan_def *chandef,
+				  enum nl80211_chan_width primary_chan_width);
 
 /**
  * cfg80211_chandef_primary_freq - calculate primary 40/80/160 MHz freq
@@ -8840,7 +8859,7 @@ bool cfg80211_reg_can_beacon_relax(struct wiphy *wiphy,
  */
 void cfg80211_ch_switch_notify(struct net_device *dev,
 			       struct cfg80211_chan_def *chandef,
-			       unsigned int link_id);
+			       unsigned int link_id, u16 punct_bitmap);
 
 /*
  * cfg80211_ch_switch_started_notify - notify channel switch start
@@ -8857,7 +8876,7 @@ void cfg80211_ch_switch_notify(struct net_device *dev,
 void cfg80211_ch_switch_started_notify(struct net_device *dev,
 				       struct cfg80211_chan_def *chandef,
 				       unsigned int link_id, u8 count,
-				       bool quiet);
+				       bool quiet, u16 punct_bitmap);
 
 /**
  * ieee80211_operating_class_to_band - convert operating class to band
@@ -9460,6 +9479,18 @@ static inline int cfg80211_color_change_notify(struct net_device *dev)
 					 NL80211_CMD_COLOR_CHANGE_COMPLETED,
 					 0, 0);
 }
+
+/**
+ * cfg80211_valid_disable_subchannel_bitmap - validate puncturing bitmap
+ * @bitmap: bitmap to be validated
+ * @chandef: channel definition
+ *
+ * Validate the puncturing bitmap.
+ *
+ * Return: %true if the bitmap is valid. %false otherwise.
+ */
+bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
+					      const struct cfg80211_chan_def *chandef);
 
 /**
  * cfg80211_links_removed - Notify about removed STA MLD setup links.

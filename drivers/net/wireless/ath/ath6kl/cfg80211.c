@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2004-2011 Atheros Communications Inc.
  * Copyright (c) 2011-2012 Qualcomm Atheros, Inc.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -1119,7 +1121,9 @@ void ath6kl_cfg80211_ch_switch_notify(struct ath6kl_vif *vif, int freq,
 					NL80211_CHAN_HT20 : NL80211_CHAN_NO_HT);
 
 	mutex_lock(&vif->wdev.mtx);
-	cfg80211_ch_switch_notify(vif->ndev, &chandef, 0);
+
+	cfg80211_ch_switch_notify(vif->ndev, &chandef, 0, 0);
+
 	mutex_unlock(&vif->wdev.mtx);
 }
 
