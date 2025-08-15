@@ -228,6 +228,10 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
 #define QCOM_SCM_SMCINVOKE_CB_RSP		0x01
 #define QCOM_SCM_SMCINVOKE_DOORBELL_ACK		0x06
 
+#define QCOM_SCM_SMCINVOKE_INVOKE_LEGACY_FFA	0x07
+#define QCOM_SCM_SMCINVOKE_INVOKE_FFA		0x08
+#define QCOM_SCM_SMCINVOKE_CB_RSP_FFA		0x09
+
 /* Feature IDs for QCOM_SCM_INFO_GET_FEAT_VERSION */
 #define QCOM_SCM_FEAT_LOG_ID			0x0a
 
