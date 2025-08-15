@@ -7,7 +7,7 @@
  *
  * Copyright (C) 2011 Google, Inc.
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/dma-mapping.h>
@@ -254,9 +254,15 @@ static int carveout_init_heap_memory(struct carveout_heap *co_heap,
 	struct page *page = pfn_to_page(PFN_DOWN(base));
 	int ret = 0;
 
-	ret = carveout_pages_zero(page, size);
-	if (ret)
-		return ret;
+	/* secure carveout heap pages may not be HLOS accessible
+	 * after allocation hence need to be zeroed during heap
+	 * initialization when these are accessible
+	 */
+	if (co_heap->is_secure) {
+		ret = carveout_pages_zero(page, size);
+		if (ret)
+			return ret;
+	}
 
 	co_heap->pool = gen_pool_create(PAGE_SHIFT, -1);
 	if (!co_heap->pool)
@@ -305,11 +311,11 @@ int qcom_carveout_heap_create(struct platform_heap *heap_data)
 	if (!carveout_heap)
 		return -ENOMEM;
 
+	carveout_heap->is_secure = false;
+
 	ret = __carveout_heap_init(heap_data, carveout_heap);
 	if (ret)
 		goto err;
-
-	carveout_heap->is_secure = false;
 
 	exp_info.name = heap_data->name;
 	exp_info.ops = &carveout_heap_ops;
@@ -387,6 +393,8 @@ int qcom_secure_carveout_heap_create(struct platform_heap *heap_data)
 	if (!sc_heap)
 		return -ENOMEM;
 
+	sc_heap->carveout_heap.is_secure = true;
+
 	ret = __carveout_heap_init(heap_data, &sc_heap->carveout_heap);
 	if (ret)
 		goto err;
@@ -400,8 +408,6 @@ int qcom_secure_carveout_heap_create(struct platform_heap *heap_data)
 	}
 
 	sc_heap->token = heap_data->token;
-	sc_heap->carveout_heap.is_secure = true;
-
 	exp_info.name = heap_data->name;
 	exp_info.ops = &sc_heap_ops;
 	exp_info.priv = sc_heap;
