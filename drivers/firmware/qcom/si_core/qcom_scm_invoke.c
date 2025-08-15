@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/delay.h>
@@ -14,6 +14,47 @@
 #define SCM_EBUSY_WAIT_MS 30
 #define SCM_EBUSY_MAX_RETRY 200
 
+static int invoke_direct_smc(struct si_object_invoke_ctx *oic,
+			     int *result, u64 *response_type,
+			     unsigned int *data)
+{
+	int ret = 0;
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	ret = qcom_scm_invoke_smc_ffa(oic->shm.ffa_handle,
+				      oic->shm.offset,
+				      oic->shm.in_size,
+				      oic->shm.out_size, result,
+				      response_type, data);
+#else
+	ret = qcom_scm_invoke_smc(oic->in.paddr, oic->in.msg.size,
+				  oic->out.paddr, oic->out.msg.size, result,
+				  response_type, data);
+#endif
+
+	return ret;
+}
+
+static int invoke_callback_smc(struct si_object_invoke_ctx *oic,
+			       int *result, u64 *response_type,
+			       unsigned int *data)
+{
+	int ret = 0;
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	ret = qcom_scm_invoke_callback_response_ffa(oic->shm.ffa_handle,
+						    oic->shm.offset +
+						    oic->shm.in_size,
+						    oic->shm.out_size,
+						    result,
+						    response_type, data);
+#else
+	ret = qcom_scm_invoke_callback_response(oic->out.paddr,
+						oic->out.msg.size, result,
+						response_type, data);
+#endif
+
+	return ret;
+}
+
 int si_object_invoke_ctx_invoke(struct si_object_invoke_ctx *oic,
 	int *result, u64 *response_type, unsigned int *data)
 {
@@ -24,20 +65,11 @@ int si_object_invoke_ctx_invoke(struct si_object_invoke_ctx *oic,
 	do {
 		/* Direct invocation of callback!? */
 		if (!(oic->flags & OIC_FLAG_BUSY)) {
-			ret = qcom_scm_invoke_smc(oic->in.paddr,
-				oic->in.msg.size,
-				oic->out.paddr,
-				oic->out.msg.size,
-				result,
-				response_type,
-				data);
-
+			ret = invoke_direct_smc(oic, result, response_type,
+						data);
 		} else {
-			ret = qcom_scm_invoke_callback_response(oic->out.paddr,
-				oic->out.msg.size,
-				result,
-				response_type,
-				data);
+			ret = invoke_callback_smc(oic, result, response_type,
+						  data);
 		}
 
 		if (ret != -EBUSY)

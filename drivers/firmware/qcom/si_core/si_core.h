@@ -9,6 +9,7 @@
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/si_object.h>
 #include <linux/arm_ffa.h>
+#include <linux/platform_device.h>
 #include <linux/scatterlist.h>
 #include <linux/uuid.h>
 
@@ -61,6 +62,13 @@ int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle);
 int qtee_ffa_mem_reclaim(uint64_t ffa_handle);
 
+int qtee_ffa_shm_alloc(size_t in_size, size_t out_size,
+		       struct ffa_shm *shm);
+void qtee_ffa_shm_free(struct ffa_shm shm);
+
+int qtee_ffa_shm_init(struct platform_device *pdev);
+void qtee_ffa_shm_deinit(struct platform_device *pdev);
+
 int si_core_ffa_driver_register(void);
 void si_core_ffa_driver_unregister(void);
 
@@ -81,6 +89,25 @@ static inline int qtee_ffa_mem_lend(struct sg_table *sgt,
 static inline int qtee_ffa_mem_reclaim(uint64_t ffa_handle)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline int qtee_ffa_shm_alloc(size_t in_size, size_t out_size,
+				     struct ffa_shm *shm)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void qtee_ffa_shm_free(struct ffa_shm shm)
+{
+}
+
+static inline int qtee_ffa_shm_init(struct platform_device *pdev)
+{
+	return 0;
+}
+
+static inline void qtee_ffa_shm_deinit(struct platform_device *pdev)
+{
 }
 
 static inline int si_core_ffa_driver_register(void)
