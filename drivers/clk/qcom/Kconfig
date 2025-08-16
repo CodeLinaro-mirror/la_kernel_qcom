@@ -713,4 +713,14 @@ config SM_VIDEOCC_8550
 	  Say Y if you want to support video devices and functionality such as
 	  video encode/decode.
 
+config CLK_X1E80100_CAMCC
+	tristate "X1E80100 Camera Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_X1E80100_GCC
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  X1E80100 devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 endif
