@@ -606,4 +606,15 @@ config PKT_THRESHOLD
 	  track number of packets over specific thresholds which
 	  helps in identifying traffic anomalies and optimizing
 	  performance.it is useful for network diagnostics and performance.
+
+config SKB_CUSTOM_SLAB
+	bool "Enable custom slabs for skb allocation"
+	default n
+	help
+	  This profile applies custom configurations aimed at reducing
+	  memory usage, making it suitable for memory-constrained environments.
+	  When enabled, the network stack will use multiple specialized SKB
+	  data caches with different sizes (1984, 2200, 2304, and 2350 bytes)
+	  instead of a single cache size, allowing for more efficient memory
+	  allocation that better matches actual packet sizes.
 endif   # if NET
