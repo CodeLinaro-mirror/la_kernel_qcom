@@ -3569,6 +3569,11 @@ static int phy_digital_loopback_v3_1(struct qcom_ethqos *ethqos, int speed, int 
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct stmmac_priv *priv = netdev_priv(dev);
 
+	if (!priv || !priv->phydev) {
+		ETHQOSERR("Invalid  PHY device\n");
+		return -ENODEV;
+	}
+
 	if (config == 1) {
 		ETHQOSINFO("Request for phy digital loopback enable\n");
 		if (speed != SPEED_1000 && speed != SPEED_100 &&
