@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.*/
 
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
@@ -6786,8 +6786,10 @@ static void msm_pci_dev_aer_stats_incr(struct pci_dev *pdev,
 		break;
 	}
 
-	for_each_set_bit(i, &status, max)
-		counter[i]++;
+	if (counter) {
+		for_each_set_bit(i, &status, max)
+			counter[i]++;
+	}
 }
 
 static void msm_pci_rootport_aer_stats_incr(struct pci_dev *pdev,
