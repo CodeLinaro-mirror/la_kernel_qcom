@@ -4839,6 +4839,12 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 		return -EINVAL;
 	}
 
+	if (config == ENABLE_PHY_LOOPBACK &&
+	    (plat_dat->fixed_phy_mode || plat_dat->mac2mac_en)) {
+		ETHQOSERR("PHY loopback is not supported in MAC2MAC mode\n");
+		return -EINVAL;
+	}
+
 	switch (config) {
 	case DISABLE_LOOPBACK:
 		ETHQOSINFO("Disabled loopback, config = %d\n", config);
