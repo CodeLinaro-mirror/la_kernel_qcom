@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/of_device.h>
 #include "hab.h"
+#include "hab_virq.h"
 
 /**
  * hab_sgl_copy_buffer - Copy data between a linear buffer and an SG list
@@ -676,20 +677,44 @@ struct export_desc_super *hab_rb_exp_insert(struct rb_root *root, struct export_
 	return NULL;
 }
 
-/* create one more char device for /dev/hab */
-#define CDEV_NUM_MAX (MM_ID_MAX / 100 + 1)
+/*
+ * Create one more char device for /dev/hab
+ * Additional +1 added for extra node for hab-virq
+ * which will exist at the end of cdev array
+ */
+#define CDEV_NUM_MAX (MM_ID_MAX / 100 + 2)
 
+/*
+ * Create a char device for the specified MMID group.
+ * The input argument is the MMID group divided by 100, e.g., 1 for audio, 6 for misc.
+ * If 0 is given, create a device for /dev/hab.
+ */
 int hab_create_cdev_node(int mmid_grp_index)
 {
 	int result;
 	const char *node_name;
 	dev_t dev_no;
+	struct local_vmid *settings;
+	int i, vmid;
 
 	node_name = HAB_MMID_MAP_NODE(mmid_grp_index * 100);
 	if (!node_name) {
 		pr_err("err hab group id %d\n", mmid_grp_index);
 		return -ENOENT;
 	}
+
+	settings = &hab_driver.settings;
+	/* locate first remote vmid */
+	for (i = 0; i < HABCFG_VMID_MAX; i++)
+		if (HABCFG_GET_VMID(settings, i) != HABCFG_VMID_INVALID &&
+			HABCFG_GET_VMID(settings, i) != settings->self)
+			break;
+
+	if (i == HABCFG_VMID_MAX) {
+		pr_err("remote vmid not filled\n");
+		return -ENODEV;
+	}
+	vmid = HABCFG_GET_VMID(settings, i);
 
 	cdev_init(&(hab_driver.cdev[mmid_grp_index]), &hab_fops);
 	hab_driver.cdev[mmid_grp_index].owner = THIS_MODULE;
@@ -703,7 +728,7 @@ int hab_create_cdev_node(int mmid_grp_index)
 	}
 
 	hab_driver.dev[mmid_grp_index] = device_create(hab_driver.class, NULL,
-					dev_no, &hab_driver, node_name);
+		dev_no, &hab_driver, node_name);
 
 	if (IS_ERR_OR_NULL(hab_driver.dev[mmid_grp_index])) {
 		result = PTR_ERR(hab_driver.dev[mmid_grp_index]);
@@ -726,7 +751,19 @@ int hab_create_cdev_node(int mmid_grp_index)
 		set_dma_ops(hab_driver.dev[mmid_grp_index], &hab_dma_ops);
 	}
 
-	pr_debug("create char device for /dev/%s successful\n", node_name);
+	if (mmid_grp_index != 0)
+		hab_driver.dev[mmid_grp_index]->dma_coherent =
+			HABCFG_GET_DMA_COHERENT(settings, vmid, mmid_grp_index);
+	else
+		/*
+		 * no device tree node for the super node /dev/hab
+		 * set the default value, false, for coherent of device /dev/hab
+		 */
+		hab_driver.dev[mmid_grp_index]->dma_coherent = false;
+
+	pr_debug("create char device for /dev/%s successful, coherent %d\n",
+		node_name, hab_driver.dev[mmid_grp_index]->dma_coherent);
+
 	return 0;
 }
 
@@ -764,7 +801,7 @@ static int __init hab_init(void)
 	}
 
 	result = register_reboot_notifier(&hab_reboot_notifier);
-	if (result)
+	if (result != 0)
 		pr_err("failed to register reboot notifier %d\n", result);
 
 	INIT_WORK(&hab_driver.reclaim_work, reclaim_cleanup);
@@ -782,10 +819,20 @@ static int __init hab_init(void)
 		goto err_hab_parse;
 	}
 
+	hab_driver.kvirq_ctx = virq_hab_ctx_alloc(1);
+
 	/* create the super char device node /dev/hab */
 	result = hab_create_cdev_node(0);
 	if (result)
 		goto err;
+
+	/* check if used for MM HAB device nodes */
+	if (hab_driver.dev[CDEV_NUM_MAX-1] == NULL) {
+		/* Create /dev/hab-virq */
+		result = hab_create_virq_cdev_node(CDEV_NUM_MAX-1);
+		if (result)
+			pr_err("VIRQ node creation fail resume with hab init result %d\n", result);
+	}
 
 	hab_hypervisor_register_post();
 	hab_stat_init(&hab_driver);
@@ -797,7 +844,10 @@ static int __init hab_init(void)
 	return 0;
 
 err:
-	hab_ctx_put(hab_driver.kctx);
+	if (hab_driver.kctx != NULL)
+		hab_ctx_put(hab_driver.kctx);
+	if (hab_driver.kvirq_ctx != NULL)
+		virq_hab_ctx_put(hab_driver.kvirq_ctx);
 err_hab_parse:
 	if (!IS_ERR_OR_NULL(hab_driver.class))
 		class_destroy(hab_driver.class);
@@ -819,6 +869,9 @@ static void __exit hab_exit(void)
 	hab_hypervisor_unregister();
 	hab_stat_deinit(&hab_driver);
 	hab_ctx_put(hab_driver.kctx);
+
+	if (hab_driver.kvirq_ctx != NULL)
+		virq_hab_ctx_put(hab_driver.kvirq_ctx);
 	for (i = 0; i < CDEV_NUM_MAX; i++) {
 		if (!IS_ERR_OR_NULL(hab_driver.dev[i])) {
 			device_destroy(hab_driver.class, MKDEV(hab_driver.major, i));
