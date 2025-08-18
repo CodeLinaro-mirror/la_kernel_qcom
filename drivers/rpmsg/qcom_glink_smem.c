@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2016, Linaro Ltd
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/io.h>
@@ -22,6 +23,7 @@
 #include <linux/regmap.h>
 #include <linux/workqueue.h>
 #include <linux/list.h>
+#include <linux/string.h>
 #include <linux/ipc_logging.h>
 
 #include <linux/rpmsg/qcom_glink.h>
@@ -389,6 +391,8 @@ struct qcom_glink_smem *qcom_glink_smem_register(struct device *parent,
 	if (!glink_ilctxt)
 		glink_ilctxt = ipc_log_context_create(GLINK_SMEM_IPC_LOG_PAGE_CNT,
 								"glink_smem", 0);
+	strscpy(glink->irqname, smem->irqname, GLINK_NAME_SIZE);
+	glink->irq = smem->irq;
 	smem->glink = glink;
 
 	enable_irq(smem->irq);

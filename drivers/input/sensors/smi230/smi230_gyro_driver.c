@@ -776,8 +776,10 @@ static int smi230_gyro_early_buff_init(struct smi230_client_data *client_data)
 	smi230_delay(100);
 
 	/* gyro driver should be initialized before acc */
-	p_smi230_dev->gyro_cfg.power = SMI230_GYRO_PM_NORMAL;
-	smi230_gyro_set_power_mode(p_smi230_dev);
+	if (p_smi230_dev->gyro_cfg.power != SMI230_GYRO_PM_NORMAL) {
+		p_smi230_dev->gyro_cfg.power = SMI230_GYRO_PM_NORMAL;
+		smi230_gyro_set_power_mode(p_smi230_dev);
+	}
 
 	PINFO("GYRO FIFO set water mark");
 	smi230_gyro_set_fifo_wm(10, p_smi230_dev);
@@ -1158,10 +1160,12 @@ int smi230_gyro_probe(struct device *dev, struct smi230_dev *smi230_dev)
 	int_config.gyro_int_config_2.int_pin_cfg.enable_int_pin = SMI230_ENABLE;
 #endif
 
+#ifndef CONFIG_ENABLE_SMI230_ACC_GYRO_BUFFERING
 	p_smi230_dev->gyro_cfg.odr = SMI230_GYRO_BW_12_ODR_100_HZ;
 	p_smi230_dev->gyro_cfg.range = SMI230_GYRO_RANGE_125_DPS;
 	err |= smi230_gyro_set_meas_conf(p_smi230_dev);
 	smi230_delay(100);
+#endif
 
 #ifdef CONFIG_SMI230_GYRO_FIFO
 	PINFO("GYRO FIFO is enabled");
@@ -1190,10 +1194,13 @@ int smi230_gyro_probe(struct device *dev, struct smi230_dev *smi230_dev)
 					  p_smi230_dev);
 #endif
 
+#ifndef CONFIG_ENABLE_SMI230_ACC_GYRO_BUFFERING
 	p_smi230_dev->gyro_cfg.odr = SMI230_GYRO_BW_32_ODR_100_HZ;
 	p_smi230_dev->gyro_cfg.range = SMI230_GYRO_RANGE_125_DPS;
 	err |= smi230_gyro_set_meas_conf(p_smi230_dev);
 	smi230_delay(100);
+#endif
+
 	fifo_config.mode = SMI230_GYRO_FIFO_MODE;
 #ifdef CONFIG_SMI230_GYRO_FIFO_WM
 	/* 0x88 to enable wm int, 0x80 to disable */
@@ -1254,6 +1261,7 @@ int smi230_gyro_probe(struct device *dev, struct smi230_dev *smi230_dev)
 	smi230_delay(100);
 #endif
 
+#ifndef CONFIG_ENABLE_SMI230_ACC_GYRO_BUFFERING
 #ifndef CONFIG_SMI230_DATA_SYNC
 #ifndef CONFIG_SMI230_DEBUG
 	/*if not for the convenience of debuging, sensors should be disabled at startup*/
@@ -1263,6 +1271,7 @@ int smi230_gyro_probe(struct device *dev, struct smi230_dev *smi230_dev)
 		PERR("set power mode failed");
 		goto exit_free_client_data;
 	}
+#endif
 #endif
 #endif
 

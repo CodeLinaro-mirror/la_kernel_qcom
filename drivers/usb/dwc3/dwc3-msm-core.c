@@ -4578,6 +4578,13 @@ skip_update:
 	if (mdwc->drd_state == DRD_STATE_UNDEFINED &&
 		!edev && !mdwc->resume_pending)
 		return;
+
+	if (atomic_read(&mdwc->pm_suspended)) {
+		dbg_event(0xFF, "RWrk PMSus", 0);
+		/* let pm resume kick in resume work later */
+		return;
+	}
+
 	/*
 	 * exit LPM first to meet resume timeline from device side.
 	 * resume_pending flag would prevent calling
@@ -4590,11 +4597,6 @@ skip_update:
 		mdwc->resume_pending = false;
 	}
 
-	if (atomic_read(&mdwc->pm_suspended)) {
-		dbg_event(0xFF, "RWrk PMSus", 0);
-		/* let pm resume kick in resume work later */
-		return;
-	}
 	dwc3_ext_event_notify(mdwc);
 }
 

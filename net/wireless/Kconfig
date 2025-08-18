@@ -42,6 +42,16 @@ config CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 	  Enable this option if wireless driver needs to operate in
 	  single wiphy feature with new 802.11be version.
 
+config WLAN_LITE
+	bool "WLAN Lite Profile for CPE-Min"
+	help
+	  Enable this option to activate a lightweight WLAN configuration
+	  optimized for memory-constrained CPE-min devices.
+
+	  This profile reduces memory usage by trimming down firmware memory sizes,
+	  disabling non-critical features, and optimizing internal allocations to
+	  ensure stable operation under low-memory conditions.
+
 config ML_RECONFIG_SINGLE_WIPHY
 	tristate "cfg80211 - wireless configuration for ML Reconfig"
 	help

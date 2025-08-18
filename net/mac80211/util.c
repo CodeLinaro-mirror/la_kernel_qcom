@@ -6,7 +6,7 @@
  * Copyright 2007	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017	Intel Deutschland GmbH
- * Copyright (C) 2018-2023 Intel Corporation
+ * Copyright (C) 2018-2024 Intel Corporation
  *
  * utilities for mac80211
  */
@@ -2733,9 +2733,6 @@ int ieee80211_reconfig(struct ieee80211_local *local)
 				if (sdata->vif.bss_conf.max_idle_period ||
 				    sdata->vif.bss_conf.protected_keep_alive)
 					changed |= BSS_CHANGED_KEEP_ALIVE;
-
-				if (sdata->vif.bss_conf.eht_puncturing)
-					changed |= BSS_CHANGED_EHT_PUNCTURING;
 
 				ieee80211_bss_info_change_notify(sdata,
 								 changed);

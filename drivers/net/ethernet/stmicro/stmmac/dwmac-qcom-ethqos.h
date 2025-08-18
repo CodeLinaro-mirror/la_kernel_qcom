@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef	_DWMAC_QCOM_ETHQOS_H
 #define	_DWMAC_QCOM_ETHQOS_H
@@ -166,6 +166,12 @@ do {\
 //Mac config
 #define XGMAC_RX_CONFIG		0x00000004
 #define XGMAC_CONFIG_LM			BIT(10)
+
+//Mac config
+#define MAC_CONFIGURATION 0x0
+#define MAC_LM BIT(12)
+#define MAC_AN_CONTROL 0xE0
+#define MAC_ELE BIT(14)
 
 //Mac config
 #define XGMAC_RX_CONFIG		0x00000004

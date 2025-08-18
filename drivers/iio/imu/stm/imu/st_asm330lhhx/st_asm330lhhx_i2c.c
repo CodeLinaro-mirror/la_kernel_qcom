@@ -21,37 +21,16 @@ static const struct regmap_config st_asm330lhhx_i2c_regmap_config = {
 	.val_bits = 8,
 };
 
-#if KERNEL_VERSION(6, 2, 0) <= LINUX_VERSION_CODE
+#if KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE
 static int st_asm330lhhx_i2c_probe(struct i2c_client *client)
 {
 	const struct i2c_device_id *id = i2c_client_get_device_id(client);
-	enum st_asm330lhhx_hw_id hw_id;
-	struct regmap *regmap;
-	const void *data;
-
-	data = device_get_match_data(&client->dev);
-	if (data)
-		hw_id = (uintptr_t)data;
-	else if (id)
-		hw_id = (enum st_asm330lhhx_hw_id)id->driver_data;
-	else
-		return -ENOSYS;
-
-	regmap = devm_regmap_init_i2c(client, &st_asm330lhhx_i2c_regmap_config);
-	if (IS_ERR(regmap)) {
-		dev_err(&client->dev,
-			"Failed to register i2c regmap %d\n",
-			(int)PTR_ERR(regmap));
-		return PTR_ERR(regmap);
-	}
-
-	return st_asm330lhhx_probe(&client->dev, client->irq, hw_id, regmap);
-}
 #else /* LINUX_VERSION_CODE */
 static int st_asm330lhhx_i2c_probe(struct i2c_client *client,
 			       const struct i2c_device_id *id)
 {
-	int hw_id = id->driver_data;
+#endif /* LINUX_VERSION_CODE */
+
 	struct regmap *regmap;
 
 	regmap = devm_regmap_init_i2c(client, &st_asm330lhhx_i2c_regmap_config);
@@ -62,9 +41,9 @@ static int st_asm330lhhx_i2c_probe(struct i2c_client *client,
 		return PTR_ERR(regmap);
 	}
 
-	return st_asm330lhhx_probe(&client->dev, client->irq, hw_id, regmap);
+	return st_asm330lhhx_probe(&client->dev, client->irq,
+				   id->driver_data, regmap);
 }
-#endif /* LINUX_VERSION_CODE */
 
 #if KERNEL_VERSION(6, 1, 0) <= LINUX_VERSION_CODE
 static void st_asm330lhhx_i2c_remove(struct i2c_client *client)
@@ -79,6 +58,11 @@ static int st_asm330lhhx_i2c_remove(struct i2c_client *client)
 	return 0;
 }
 #endif /* LINUX_VERSION_CODE */
+
+static void st_asm330lhhx_i2c_shutdown(struct i2c_client *client)
+{
+	st_asm330lhhx_shutdown(&client->dev);
+}
 
 static const struct of_device_id st_asm330lhhx_i2c_of_match[] = {
 	{
@@ -119,6 +103,7 @@ static struct i2c_driver st_asm330lhhx_driver = {
 	.probe = st_asm330lhhx_i2c_probe,
 	.remove = st_asm330lhhx_i2c_remove,
 	.id_table = st_asm330lhhx_i2c_id_table,
+	.shutdown = st_asm330lhhx_i2c_shutdown,
 };
 module_i2c_driver(st_asm330lhhx_driver);
 
