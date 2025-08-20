@@ -8258,22 +8258,23 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 		return -ENODEV;
 
 	priv = qcom_ethqos_get_priv(ethqos);
-
-	if (priv->hw->qxpcs) {
+	if (priv->hw->qxpcs)
 		if (priv->hw->qxpcs->intr_en)
 			free_irq(priv->hw->qxpcs->pcs_intr, priv);
-		qcom_xpcs_destroy(priv->hw->qxpcs);
-#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
-		priv->hw->qxpcs = NULL;
-		priv->plat->xpcs_powersaving = NULL;
-#endif
-	}
 
 	ethqos_remove_sysfs(ethqos);
 	qcom_ethqos_unregister_vm_notifier(ethqos);
 	ethqos_change_if_cleanup_sysfs(ethqos);
 	ethqos_thermal_netlink_cleanup_sysfs(ethqos);
 	ret = stmmac_pltfr_remove(pdev);
+
+	if (priv->hw->qxpcs) {
+		qcom_xpcs_destroy(priv->hw->qxpcs);
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
+		priv->hw->qxpcs = NULL;
+		priv->plat->xpcs_powersaving = NULL;
+#endif
+	}
 
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
 	ethqos_enable_clock_gating(ndev);
