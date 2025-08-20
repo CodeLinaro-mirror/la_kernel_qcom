@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020 Synopsys, Inc. and/or its affiliates.
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * Synopsys DesignWare XPCS helpers
  *
  * Author: Jose Abreu <Jose.Abreu@synopsys.com>
@@ -1308,58 +1308,6 @@ EXPORT_SYMBOL_GPL(qcom_xpcs_create);
 /* Power off the DWC_xpcs controller */
 void qcom_xpcs_destroy(struct dw_xpcs_qcom *xpcs)
 {
-	int i, ret;
-	u32 xpcs_id;
-	const struct xpcs_compat *compat;
-
-	xpcs_id = xpcs_get_id(xpcs);
-	if (xpcs_id == 0xffffffff) {
-		XPCSERR("Invalid XPCS Device ID\n");
-		ret = -ENODEV;
-		goto out;
-	}
-
-	for (i = 0; i < ARRAY_SIZE(xpcs_id_list); i++) {
-		const struct xpcs_id *entry = &xpcs_id_list[i];
-
-		if ((xpcs_id & entry->mask) != entry->id)
-			continue;
-
-		xpcs->id = entry;
-		compat = xpcs_find_compat(entry, g_interface);
-		if (!compat) {
-			XPCSERR("Incompatible MII interface: %d\n", g_interface);
-			ret = -ENODEV;
-			goto out;
-		}
-
-		ret = xpcs_soft_reset(xpcs, compat);
-		if (ret) {
-			XPCSERR("Soft reset of XPCS block failed\n");
-			ret = -ENODEV;
-		}
-		goto done;
-	}
-
-	/* Enable xpc_spdown_o signal assertion on xpcs power down, then
-	 * intiate the power down sequence
-	 */
-	ret = qcom_xpcs_read(xpcs, DW_SR_MII_VSMMD_CTRL);
-	if (ret < 0)
-		goto out;
-
-	ret = qcom_xpcs_write(xpcs, DW_SR_MII_VSMMD_CTRL, ret & ~PD_CTRL);
-
-	ret = qcom_xpcs_read(xpcs, DW_SR_MII_PCS_CTRL1);
-	if (ret < 0)
-		goto out;
-
-	ret = qcom_xpcs_write(xpcs, DW_SR_MII_PCS_CTRL1, ret | LPM_EN);
-	goto done;
-
-out:
-	XPCSERR("Could not power down the XPCS\n");
-done:
 	kfree(xpcs);
 }
 EXPORT_SYMBOL_GPL(qcom_xpcs_destroy);
