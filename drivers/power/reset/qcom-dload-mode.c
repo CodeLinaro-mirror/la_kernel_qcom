@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2020, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/delay.h>
@@ -46,7 +46,6 @@ struct qcom_dload {
 	struct regulator *mmcx_supply;
 	struct reg_info *regs;
 	int reg_cnt;
-	
 	struct device *dev;
 };
 
@@ -392,10 +391,11 @@ static int qcom_dload_reboot(struct notifier_block *this, unsigned long event,
 		if (!strcmp(cmd, "edl")) {
 			poweroff->in_reboot_edl = true;
 			set_download_mode(QCOM_DOWNLOAD_EDL);
-		        if (poweroff->in_reboot_edl) {
+			if (poweroff->in_reboot_edl) {
 				ret = enable_regulators(poweroff);
 				if (ret)
-					dev_err(poweroff->dev, "Regulator enable failed(rc:%d)\n", ret);
+					dev_err(poweroff->dev,
+						"Regulator enable failed(rc:%d)\n", ret);
 			}
 		} else if (!strcmp(cmd, "qcom_dload")) {
 			msm_enable_dump_mode(true);
@@ -404,7 +404,7 @@ static int qcom_dload_reboot(struct notifier_block *this, unsigned long event,
 
 	if (current_download_mode != QCOM_DOWNLOAD_NODUMP)
 		reboot_mode = REBOOT_WARM;
-	pr_err("%s: Return success\n",__func__);
+	pr_err("%s: Return success\n", __func__);
 	return NOTIFY_OK;
 }
 
@@ -473,7 +473,7 @@ static int qcom_dload_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, poweroff);
 	ret = poweroff_init_regulator(poweroff);
 	if (ret)
-		pr_err(" poweroff_init_regulator failed \n");
+		pr_err("poweroff_init_regulator failed.\n");
 	return 0;
 }
 
