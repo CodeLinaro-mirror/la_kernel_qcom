@@ -5317,15 +5317,20 @@ static ssize_t write_ethqos_rx_clock(struct device *dev,
 	if (kstrtos8(user_buffer, 0, &input))
 		return -EFAULT;
 
-	if (input != 1) {
+	if (input != 0 && input != 1) {
 		ETHQOSERR("invalid input\n");
 		return -EINVAL;
 	}
 
-	if (!plat->rx_clk_rdy) {
+	if (input && !plat->rx_clk_rdy) {
 		plat->rx_clk_rdy = true;
 		rtnl_lock();
 		phylink_resume(priv->phylink);
+		rtnl_unlock();
+	} else if (!input && plat->rx_clk_rdy) {
+		plat->rx_clk_rdy = false;
+		rtnl_lock();
+		phylink_stop(priv->phylink);
 		rtnl_unlock();
 	}
 
