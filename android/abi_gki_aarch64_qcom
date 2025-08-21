@@ -3202,6 +3202,7 @@
   sort
   __spi_alloc_controller
   spi_get_device_id
+  spi_new_device
   spi_register_controller
   __spi_register_driver
   spi_setup
