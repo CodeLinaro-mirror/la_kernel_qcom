@@ -1,3 +1,4 @@
+.. SPDX-License-Identifier: GPL-2.0-only
 .. _kernelparameters:
 
 The kernel's command-line parameters
@@ -233,3 +234,6 @@ ermac=	[KNL] Sets mac address at boot up for early ethernet.
 eiface= [KNL] Sets ethernet interface type at boot.
 
 eqos=	[KNL] Sets qos config at boot.
+
+ewait_switch_rdy=	[KNL] Sets wait for peer side switch ready before link up at boot up.
+
