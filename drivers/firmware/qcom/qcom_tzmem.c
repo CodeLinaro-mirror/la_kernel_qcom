@@ -64,7 +64,7 @@ static int qcom_tzmem_init(void)
 	return 0;
 }
 
-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+static int qcom_tzmem_init_area(struct qcom_tzmem_area *area, bool is_cached)
 {
 	return 0;
 }
@@ -258,6 +258,10 @@ int32_t qcom_tzmem_query(phys_addr_t paddr)
 {
 	int32_t ret = 0;
 
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	return 0;
+#endif
+
 	if (!qcom_tzmem_using_shm_bridge)
 		return 0;
 
@@ -290,6 +294,10 @@ int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 v
 		return 0;
 
 	size = PAGE_ALIGN(size);
+
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	return qcom_tzmem_ffa_mem_share(phys_to_virt(paddr), 0, size, handle);
+#endif
 
 	mutex_lock(&bridge_list_head.lock);
 	ret = qcom_tzmem_query_locked(paddr);
@@ -357,6 +365,10 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_create);
  */
 void qcom_tzmem_shm_bridge_delete(u64 handle)
 {
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	qcom_tzmem_ffa_mem_reclaim(handle);
+	return;
+#endif
 	if (!qcom_tzmem_using_shm_bridge)
 		return;
 
@@ -366,7 +378,7 @@ void qcom_tzmem_shm_bridge_delete(u64 handle)
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_delete);
 
-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+static int qcom_tzmem_init_area(struct qcom_tzmem_area *area, bool is_cached)
 {
 	int ret;
 
@@ -374,7 +386,19 @@ static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
 	if (!handle)
 		return -ENOMEM;
 
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	/*
+	 * Need to generate scattergatherlist later, so 2 options:
+	 * if cached, pass 0 in paddr
+	 * if uncached, pass dma_addr
+	 */
+	if (is_cached)
+		ret = qcom_tzmem_ffa_mem_share(area->vaddr, 0, area->size, handle);
+	else
+		ret = qcom_tzmem_ffa_mem_share(area->vaddr, area->paddr, area->size, handle);
+#else
 	ret = qcom_tzmem_shm_bridge_create(area->paddr, area->size, handle);
+#endif
 	if (ret)
 		return ret;
 
@@ -425,7 +449,7 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 			return -ENOMEM;
 	}
 
-	ret = qcom_tzmem_init_area(area);
+	ret = qcom_tzmem_init_area(area, pool->is_cached);
 	if (ret) {
 		pr_err("Failed to init area, ret: %d\n", ret);
 		goto exit_free_mem;
@@ -757,6 +781,14 @@ int qcom_tzmem_enable(struct device *dev)
 
 	qcom_tzmem_dev = dev;
 
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	if (qcom_tzmem_ffa_register(qcom_tzmem_dev)) {
+		dev_err(qcom_tzmem_dev, "Failed to register qcom_tzmem with FFA\n");
+		return -EINVAL;
+	}
+	qcom_tzmem_using_shm_bridge = true;
+	return 0;
+#endif
 	return qcom_tzmem_init();
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_enable);
