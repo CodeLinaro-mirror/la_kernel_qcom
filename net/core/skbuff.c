@@ -1079,8 +1079,58 @@ struct sk_buff *__netdev_alloc_skb_no_skb_reset(struct net_device *dev,
 EXPORT_SYMBOL_GPL(__netdev_alloc_skb_no_skb_reset);
 #endif
 
-/**
- *	__napi_alloc_skb - allocate skbuff for rx in a specific NAPI instance
+/* __napi_alloc_skb_fast - allocate skbuff for rx in a specific NAPI instance
+ *	when CONFIG_RECYCLER is enabled
+ *	@napi: napi instance this buffer was allocated for
+ *	@len: length to allocate
+ *	@gfp_mask: get_free_pages mask, passed to alloc_skb and alloc_pages
+ *
+ *	Allocate a new sk_buff for use in NAPI receive.  This buffer will
+ *	attempt to allocate the head from a special reserved region used
+ *	only for NAPI Rx allocation.  By doing this we can save several
+ *	CPU cycles by avoiding having to disable and re-enable IRQs.
+ *
+ *	%NULL is returned if there is no free memory.
+ */
+
+struct sk_buff *__napi_alloc_skb_fast(struct napi_struct *napi,
+				      unsigned int len, gfp_t gfp_mask)
+{
+	struct sk_buff *skb;
+	bool reset_skb = true;
+
+#ifdef CONFIG_SKB_RECYCLER
+	skb = skb_recycler_alloc(napi->dev, len, reset_skb);
+	if (likely(skb)) {
+		skb->recycled_for_ds = 0;
+#ifdef CONFIG_DEBUG_KMEMLEAK
+		kmemleak_update_trace(skb);
+		kmemleak_restore(skb, 1);
+		kmemleak_update_trace(skb->head);
+		kmemleak_restore(skb->head, 1);
+#endif
+		return skb;
+	}
+
+	if (likely(len <= SKB_RECYCLE_SIZE))
+		len = SKB_RECYCLE_SIZE;
+
+	skb = __alloc_skb(len + NET_SKB_PAD, gfp_mask, SKB_ALLOC_RX,
+			  NUMA_NO_NODE);
+	if (!skb)
+		goto skb_fail;
+	goto skb_success;
+#endif
+skb_success:
+	skb_reserve(skb, NET_SKB_PAD);
+	skb->dev = napi->dev;
+
+skb_fail:
+	return skb;
+}
+EXPORT_SYMBOL_GPL(__napi_alloc_skb_fast);
+
+/*        __napi_alloc_skb - allocate skbuff for rx in a specific NAPI instance
  *	@napi: napi instance this buffer was allocated for
  *	@len: length to allocate
  *	@gfp_mask: get_free_pages mask, passed to alloc_skb and alloc_pages
@@ -1095,32 +1145,11 @@ EXPORT_SYMBOL_GPL(__netdev_alloc_skb_no_skb_reset);
 struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 				 gfp_t gfp_mask)
 {
-	struct sk_buff *skb;
-
 #ifdef CONFIG_SKB_RECYCLER
-	bool reset_skb = true;
-
-	skb = skb_recycler_alloc(napi->dev, len, reset_skb);
-	if (likely(skb)) {
-		skb_recycler_clear_flags(skb);
-#ifdef CONFIG_DEBUG_KMEMLEAK
-		kmemleak_update_trace(skb);
-		kmemleak_restore(skb, 1);
-		kmemleak_update_trace(skb->head);
-		kmemleak_restore(skb->head, 1);
-#endif
-		return skb;
-	}
-
-	if (likely(len < SKB_RECYCLE_SIZE))
-		len = SKB_RECYCLE_SIZE;
-
-	skb = __alloc_skb(len + NET_SKB_PAD, gfp_mask,
-			  SKB_ALLOC_RX, NUMA_NO_NODE);
-	if (!skb)
-		goto skb_fail;
-	goto skb_success;
+	return __napi_alloc_skb_fast(napi, len, gfp_mask);
 #else
+	struct sk_buff *skb;
+	// Existing slow path remains here
 	struct napi_alloc_cache *nc;
 	bool pfmemalloc;
 	void *data;
@@ -1182,7 +1211,6 @@ struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 	if (pfmemalloc)
 		skb->pfmemalloc = 1;
 	skb->head_frag = 1;
-#endif
 
 skb_success:
 	skb_reserve(skb, NET_SKB_PAD + NET_IP_ALIGN);
@@ -1190,6 +1218,7 @@ skb_success:
 
 skb_fail:
 	return skb;
+#endif
 }
 EXPORT_SYMBOL(__napi_alloc_skb);
 
