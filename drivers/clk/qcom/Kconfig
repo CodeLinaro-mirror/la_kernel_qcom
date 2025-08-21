@@ -723,4 +723,13 @@ config CLK_X1E80100_CAMCC
 	  Say Y if you want to support camera devices and functionality such as
 	  capturing pictures.
 
+config SM_VIDEOCC_CHORA
+	tristate "CHORA Video Clock Controller"
+	depends on SM_GCC_CHORA
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc
+	  Chora devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
 endif
