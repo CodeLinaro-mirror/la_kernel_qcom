@@ -497,6 +497,10 @@ const char *msm_secure_vmid_to_string(int secure_vmid)
 	switch (secure_vmid) {
 	case VMID_TZ:
 		return "VMID_TZ";
+	case VMID_SSC_Q6:
+		return "VMID_SSC_Q6";
+	case VMID_ADSP_Q6:
+		return "VMID_ADSP_Q6";
 	case VMID_HLOS:
 		return "VMID_HLOS";
 	case VMID_CP_TOUCH:
