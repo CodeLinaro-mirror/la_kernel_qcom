@@ -19,7 +19,6 @@
 #include "qcom_common.h"
 #include "qcom_q6v5.h"
 #include <trace/events/rproc_qcom.h>
-#include <linux/pm_wakeirq.h>
 
 #define Q6V5_PANIC_DELAY_MS	200
 
@@ -411,18 +410,11 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 	if (q6v5->wdog_irq < 0)
 		return q6v5->wdog_irq;
 
-	ret = dev_pm_set_wake_irq(&pdev->dev, q6v5->wdog_irq);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to set wake_irq for wdog IRQ\n");
-		return ret;
-	}
-
 	ret = devm_request_threaded_irq(&pdev->dev, q6v5->wdog_irq,
 					NULL, q6v5_wdog_interrupt,
 					IRQF_ONESHOT,
 					"q6v5 wdog", q6v5);
 	if (ret) {
-		dev_pm_clear_wake_irq(&pdev->dev);
 		dev_err(&pdev->dev, "failed to acquire wdog IRQ\n");
 		return ret;
 	}
@@ -436,7 +428,6 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 					"q6v5 fatal", q6v5);
 	if (ret) {
-		dev_pm_clear_wake_irq(&pdev->dev);
 		dev_err(&pdev->dev, "failed to acquire fatal IRQ\n");
 		return ret;
 	}
@@ -450,7 +441,6 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 					"q6v5 ready", q6v5);
 	if (ret) {
-		dev_pm_clear_wake_irq(&pdev->dev);
 		dev_err(&pdev->dev, "failed to acquire ready IRQ\n");
 		return ret;
 	}
@@ -464,7 +454,6 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 					"q6v5 handover", q6v5);
 	if (ret) {
-		dev_pm_clear_wake_irq(&pdev->dev);
 		dev_err(&pdev->dev, "failed to acquire handover IRQ\n");
 		return ret;
 	}
@@ -479,14 +468,12 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 					IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 					"q6v5 stop", q6v5);
 	if (ret) {
-		dev_pm_clear_wake_irq(&pdev->dev);
 		dev_err(&pdev->dev, "failed to acquire stop-ack IRQ\n");
 		return ret;
 	}
 
 	q6v5->state = qcom_smem_state_get(&pdev->dev, "stop", &q6v5->stop_bit);
 	if (IS_ERR(q6v5->state)) {
-		dev_pm_clear_wake_irq(&pdev->dev);
 		dev_err(&pdev->dev, "failed to acquire stop state\n");
 		return PTR_ERR(q6v5->state);
 	}
