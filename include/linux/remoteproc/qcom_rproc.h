@@ -33,7 +33,6 @@ struct qcom_ssr_notify_data {
 
 #if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS)
 
-extern bool power_state_hibernate;
 int rproc_set_state(struct rproc *rproc, bool state);
 int qcom_rproc_set_dtb_firmware(struct rproc *rproc, const char *dtb_fw_name);
 

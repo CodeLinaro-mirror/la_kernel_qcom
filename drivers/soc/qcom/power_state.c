@@ -284,7 +284,6 @@ static long ps_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case EXIT_HIBERNATE_STATE:
 	case POWER_STATE_EXIT_HIBERNATE_STATE:
 		pr_debug("Exit Hibernate\n");
-		power_state_hibernate = true;
 		ret = subsystem_resume(drv, SUBSYS_HIBERNATE);
 		break;
 
