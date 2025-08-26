@@ -25,6 +25,7 @@
 #include <linux/uaccess.h>
 #include <soc/qcom/rpm-smd.h>
 #include <linux/soc/qcom/qcom_aoss.h>
+#include <soc/qcom/qcom_hibernation.h>
 
 #include "linux/power_state.h"
 
@@ -252,6 +253,13 @@ static long ps_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	int ret = 0;
 
 	switch (cmd) {
+	case GENERATE_HIB_KEY:
+	case POWER_STATE_GENERATE_HIB_KEY:
+#ifdef CONFIG_QCOM_KERNEL_TZ_KEY
+		ret = get_key_for_hib_exp();
+		pr_info("Generated sec hib key successfully..\n");
+#endif
+		break;
 	case LPM_ACTIVE:
 	case POWER_STATE_LPM_ACTIVE:
 		pr_debug("State changed to Active\n");
