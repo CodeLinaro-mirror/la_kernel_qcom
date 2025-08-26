@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/cpuidle.h>
@@ -50,7 +50,11 @@ static void check_hibernation_swap(void *data, struct block_device *dev,
 	if (dev == hiber_bdev)
 		*hib_swap = true;
 	else
+#ifdef CONFIG_QCOM_KERNEL_TZ_KEY
 		*hib_swap = true;
+#else
+		*hib_swap = false;
+#endif
 }
 
 static void save_cpu_resume(void *data, u64 *addr, u64 phys_addr)
