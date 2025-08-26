@@ -1961,7 +1961,7 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 	struct tcphdr *th, _tcph;
 	unsigned int dataoff;
 	unsigned int matchoff, matchlen, clen;
-	const char *dptr, *end;
+	const char *dptr, *end = NULL;
 	s16 diff, tdiff = 0;
 	int ret = NF_ACCEPT;
 	bool term;
@@ -2048,7 +2048,7 @@ static int sip_help_tcp(struct sk_buff *skb, unsigned int protoff,
 		}
 
 		clen = simple_strtoul(dptr + matchoff, (char **)&end, 10);
-		if (dptr + matchoff == end)
+		if (!end || dptr + matchoff == end)
 			break;
 
 		term = false;
@@ -2129,8 +2129,11 @@ destination:
 #endif
 	}
 #ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
-	sip_tcp_skb_combined_processing(skb_is_combined, skb, dir, combined_skb,
-					ct, protoff, sip_entry, tdiff, dataoff_orig, oldlen1);
+	if (combined_skb) {
+		sip_tcp_skb_combined_processing(skb_is_combined, skb, dir, combined_skb,
+						ct, protoff, sip_entry, tdiff,
+						dataoff_orig, oldlen1);
+	}
 
 here:
 #endif
