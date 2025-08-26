@@ -3899,12 +3899,12 @@ static int __maybe_unused arm_smmu_pm_restore_early(struct device *dev)
 
 	/*
 	 * since arm_smmu_pm_resume_common would increment power count as
-	 * part of arm_smmu_pm_resume, decrement it back in arm_smmu_power_off
-	 * to restore power status as before.
+	 * part of arm_smmu_pm_resume in case if it's not already runtime suspended,
+	 * so decrement it back in arm_smmu_power_off to restore power status as before.
 	 */
 
 	ret = arm_smmu_pm_resume_complete(dev);
-	if (!ret)
+	if (!ret && !pm_runtime_suspended(dev))
 		arm_smmu_power_off(smmu, smmu->pwr);
 
 	return ret;
