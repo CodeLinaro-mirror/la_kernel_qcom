@@ -17,6 +17,7 @@
 
 #include "buffer_manager.h"
 #include "pcie_eom_reg.h"
+#include "usb_eom_reg.h"
 
 #define EOM_MAX_LANES 32
 #define POSITIVE_SEQUENCE 1
@@ -122,7 +123,8 @@ static int msm_pcie_eom_init(struct eom_phy_device *phy, struct eom_lane *lane,
 	u32 lanenum = lane->lane_num;
 	int ret = -EINVAL;
 
-	if (atomic_read(&g_eom_seq_stop) || atomic_read(&lane->eom_seq_stop))
+	if (atomic_read(&g_eom_seq_stop) ||
+	    atomic_read(&lane->eom_seq_stop))
 		return 0;
 
 	pr_debug("RC%d EOM Initializing lanes\n", phy->index);
@@ -374,13 +376,304 @@ static int pcie_eom_sequence(struct eom_lane *lane)
 #endif /* CONFIG_PCI_MSM_EOM */
 
 #if IS_ENABLED(CONFIG_USB_MSM_EOM)
-static int usb_eom_sequence(struct eom_lane *lane)
+/**
+ * msm_usb_eom_init - Initialize USB3 PHY for EOM measurement
+ * @phy: Pointer to the EOM PHY device
+ * @lane: Pointer to the EOM lane structure
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int msm_usb_eom_init(struct eom_phy_device *phy, struct eom_lane *lane)
 {
-	pr_debug("Running USB EOM for %s\n", lane->seq->name);
-	/* Add USB EOM sequence logic */
+	int ret = -EINVAL;
+	u32 type_c;
+	unsigned int lane_block_offset;
+
+	if (atomic_read(&g_eom_seq_stop) || atomic_read(&lane->eom_seq_stop))
+		return -EINTR;
+
+	pr_debug("USB%d EOM Initializing lanes\n", phy->index);
+
+	ret = read_phy_reg(phy, USB_PHY_LANE_TYPE_CONFIG_OFFSET, &type_c);
+	if (ret < 0)
+		return ret;
+
+	if ((type_c & 0x03) != 0x03) {
+		pr_debug("INFO: Initializing lane : lane A\n");
+		lane_block_offset = USB3_QSERDES_LANE_A_BASE_OFFSET;
+	} else {
+		pr_debug("INFO: Initializing lane : lane B\n");
+		lane_block_offset = USB3_QSERDES_LANE_A_BASE_OFFSET + LANE_B_OFFSET;
+	}
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_TX_LANE_MODE_1_OFFSET, 0x04);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_TX_LANE_MODE_5_OFFSET, 0x08);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_AUX_CONTROL_OFFSET, 0x00);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_DFE_4_OFFSET, 0x00);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy,
+			    lane_block_offset + USB3_QSERDES_RX_AUX_DATA_TCOARSE_TFINE_OFFSET,
+			    0x00);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, USB3_QSERDES_RX_RCLK_AUXDATA_SEL_OFFSET, 0xFC);
+	if (ret < 0)
+		return ret;
+	usleep_range(1000, 1200);
+
+	ret = write_phy_reg(phy,
+			    lane_block_offset + USB3_QSERDES_RX_CDR_RESET_OVERRIDE_OFFSET,
+			    0x0A);
+	if (ret < 0)
+		return ret;
+	usleep_range(1000, 1200);
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_TX_RESET_GEN_OFFSET, 0x00);
+	if (ret < 0)
+		return ret;
+	usleep_range(1000, 1200);
+
+	ret = write_phy_reg(phy,
+			    lane_block_offset + USB3_QSERDES_RX_CDR_RESET_OVERRIDE_OFFSET,
+			    0x02);
+	if (ret < 0)
+		return ret;
+	usleep_range(1000, 1200);
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_AUX_CONTROL_OFFSET, 0x40);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_RCLK_AUXDATA_SEL_OFFSET, 0xFC);
+	if (ret < 0)
+		return ret;
+	usleep_range(1000, 1200);
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_RCLK_AUXDATA_SEL_OFFSET, 0xF4);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_AUX_CONTROL_OFFSET, 0x00);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_TX_LANE_MODE_5_OFFSET, 0x18);
+	if (ret < 0)
+		return ret;
+	usleep_range(1000, 1200);
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_AUX_CONTROL_OFFSET, 0x00);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_TX_LANE_MODE_5_OFFSET, 0x08);
+	if (ret < 0)
+		return ret;
+
+	pr_debug("INFO: USB3 EOM Initialization is done\n");
+	return ret;
+}
+
+/**
+ * msm_usb_eom_process_eye_sample - Process a single eye diagram sample point
+ * @lane: Pointer to the EOM lane structure
+ * @phy: Pointer to the EOM PHY device
+ * @t_coarse: Coarse time setting for vertical eye position
+ * @horizontal: Horizontal position in the eye diagram
+ * @vth_code: Voltage threshold code for vertical position
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int msm_usb_eom_process_eye_sample(struct eom_lane *lane, struct eom_phy_device *phy,
+					u32 t_coarse, u32 horizontal, u32 vth_code)
+{
+	u32 temp_err_low_val, temp_err_high_val;
+	u32 errorcntr;
+	int ret;
+	u32 type_c;
+	u32 lane_block_offset;
+	u32 absolute_ycoord;
+
+	ret = read_phy_reg(phy, USB_PHY_LANE_TYPE_CONFIG_OFFSET, &type_c);
+	if (ret < 0)
+		return ret;
+
+	if ((type_c & 0x03) != 0x03) {
+		pr_debug("INFO: Initializing lane : lane A\n");
+		lane_block_offset = USB3_QSERDES_LANE_A_BASE_OFFSET;
+	} else {
+		pr_debug("INFO: Initializing lane : lane B\n");
+		lane_block_offset = USB3_QSERDES_LANE_A_BASE_OFFSET + LANE_B_OFFSET;
+	}
+
+	ret = write_phy_reg(phy,
+			    lane_block_offset + USB3_QSERDES_RX_AUX_DATA_TCOARSE_TFINE_OFFSET,
+			    (0x80|(0x70&(t_coarse<<4))));
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy,
+			    lane_block_offset + USB3_QSERDES_RX_VTH_CODE_OFFSET,
+			    (vth_code & 0x1F));
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy,
+			    lane_block_offset + USB3_QSERDES_RX_AUX_CONTROL_OFFSET,
+			    (horizontal^0x20));
+	if (ret < 0)
+		return ret;
+	usleep_range(100, 200);
+
+	ret = write_phy_reg(phy,
+			    lane_block_offset + USB3_QSERDES_RX_AUX_CONTROL_OFFSET,
+			    (0x40|(horizontal^0x20)));
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_TX_LANE_MODE_5_OFFSET, 0x18);
+	if (ret < 0)
+		return ret;
+	usleep_range(100, 200);
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_TX_LANE_MODE_5_OFFSET, 0x08);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_RCLK_AUXDATA_SEL_OFFSET, 0xFC);
+	if (ret < 0)
+		return ret;
+	usleep_range(1000, 1200);
+
+	ret = write_phy_reg(phy, lane_block_offset + USB3_QSERDES_RX_RCLK_AUXDATA_SEL_OFFSET, 0xF4);
+	if (ret < 0)
+		return ret;
+
+	ret = write_phy_reg(phy,
+			    lane_block_offset + USB3_QSERDES_RX_AUX_CONTROL_OFFSET,
+			    ((horizontal^0x20)&(~0x40)));
+	if (ret < 0)
+		return ret;
+
+	usleep_range(10000, 12000);
+
+	ret = read_phy_reg(phy,
+			   lane_block_offset + USB3_QSERDES_TX_IA_ERROR_COUNTER_LOW_OFFSET,
+			   &temp_err_low_val);
+	if (ret < 0)
+		return ret;
+
+	ret = read_phy_reg(phy,
+			   lane_block_offset + USB3_QSERDES_TX_IA_ERROR_COUNTER_HIGH_OFFSET,
+			   &temp_err_high_val);
+	if (ret < 0)
+		return ret;
+
+	errorcntr = (temp_err_low_val & 0xff);
+	errorcntr = errorcntr | ((temp_err_high_val & 0xff) << 8);
+
+	absolute_ycoord = ((t_coarse / 2) * MAX_EYE_HEIGHT_MV) + vth_code;
+
+	struct eom_entry entry = {
+		(int)horizontal - (MAX_EYE_WIDTH / 2),
+		(int)absolute_ycoord,
+		errorcntr
+	};
+
+	eom_buffer_write(lane->buffer, (char *)&entry, sizeof(entry));
+
+	if (atomic_read(&g_eom_seq_stop) || atomic_read(&lane->eom_seq_stop))
+		return -EINTR;
+
 	return 0;
 }
-#endif
+
+/**
+ * msm_usb_eom_eye_seq - Perform a complete USB eye diagram measurement sequence
+ * @lane: Pointer to the EOM lane structure
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int msm_usb_eom_eye_seq(struct eom_lane *lane)
+{
+	struct eom_phy_device *phy = lane->phy_dev;
+	u32 t_coarse, horizontal, vth_code;
+	int ret = -EINVAL;
+
+	pr_debug("INFO: USB EOM eye seq\n");
+
+	for (horizontal = 0; horizontal < MAX_EYE_WIDTH; horizontal++) {
+
+		for (t_coarse = 0; t_coarse < MAX_T_COARSE; t_coarse += 2) {
+
+			for (vth_code = 0; vth_code < MAX_EYE_HEIGHT_MV; vth_code++) {
+
+				ret = msm_usb_eom_process_eye_sample(lane, phy, t_coarse,
+								     horizontal, vth_code);
+				if (ret < 0)
+					return ret;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * usb_eom_sequence - Main entry point for USB EOM measurement
+ * @lane: Pointer to the EOM lane structure
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int usb_eom_sequence(struct eom_lane *lane)
+{
+	struct eom_phy_device *phy = lane->phy_dev;
+	struct eom_context *ctx = NULL;
+	struct eom_context *temp_ctx = NULL;
+	int ret = 0;
+
+	pr_debug("Running USB EOM for %s instance %u lane %d\n",
+		lane->seq->name, lane->phy_dev->index, lane->lane_num);
+
+	mutex_lock(&eom_context_list_lock);
+	list_for_each_entry(ctx, &eom_context_list, list) {
+		if (ctx->phy_dev == phy) {
+			temp_ctx = ctx;
+			break;
+		}
+	}
+	mutex_unlock(&eom_context_list_lock);
+
+	if (!temp_ctx)
+		return -ENODEV;
+
+	mutex_lock(&temp_ctx->lock);
+
+	pr_debug("Initializing USB3 Phy and running EOM\n");
+	ret = msm_usb_eom_init(phy, lane);
+	if (ret < 0) {
+		mutex_unlock(&temp_ctx->lock);
+		return ret;
+	}
+
+	ret = msm_usb_eom_eye_seq(lane);
+	mutex_unlock(&temp_ctx->lock);
+	return ret;
+
+}
+#endif /* CONFIG_USB_MSM_EOM */
 
 enum eom_dev_sequence_index {
 	EOM_DUMMY_INDEX = TYPE_DUMMY,

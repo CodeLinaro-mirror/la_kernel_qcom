@@ -391,6 +391,7 @@ canoe_perf_config = {
     "CONFIG_USB_F_GSI": "m",
     "CONFIG_USB_F_QDSS": "m",
     "CONFIG_USB_M31_MSM_EUSB2_PHY": "m",
+    "CONFIG_USB_MSM_EOM": "m",
     "CONFIG_USB_MSM_SSPHY_QMP": "m",
     "CONFIG_USB_QCOM_EMU_PHY": "m",
     "CONFIG_USB_REDRIVER": "m",
