@@ -37,6 +37,10 @@ def register_modules(registry):
             # do not sort
             "drivers/usb/phy/phy-msm-ssusb-qmp.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/eom/eom_driver",
+        ],
     )
 
     registry.register(

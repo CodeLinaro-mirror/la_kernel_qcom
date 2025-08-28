@@ -21,6 +21,8 @@
 #include <linux/reset.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#include <linux/eom_ioctl.h>
+#include <linux/phy_core.h>
 
 enum core_ldo_levels {
 	CORE_LEVEL_NONE = 0,
@@ -154,6 +156,7 @@ struct msm_ssphy_qmp {
 	bool			fw_managed_pwr;
 	struct device		**pd_devs;
 	int			pd_count;
+	struct eom_phy_device	eom_phy; /* EOM USB Phy */
 };
 
 static const struct of_device_id msm_usb_id_table[] = {
@@ -1166,6 +1169,73 @@ static int msm_ssphy_qmp_get_resets(struct msm_ssphy_qmp *phy, struct device *de
 	return ret;
 }
 
+#if IS_ENABLED(CONFIG_USB_MSM_EOM)
+/**
+ * Read USB PHY register for EOM functionality
+ */
+static int usb_phy_read(void *priv, u32 offset, u32 *value)
+{
+	struct eom_phy_device *eom_phy = (struct eom_phy_device *)priv;
+	struct msm_ssphy_qmp *phy = container_of(eom_phy, struct msm_ssphy_qmp,
+					eom_phy);
+
+	*value = readl_relaxed(phy->base + offset);
+	dev_dbg(phy->phy.dev, "EOM PHY read\n");
+
+	return 0;
+}
+
+/**
+ * Write to USB PHY register for EOM functionality
+ */
+static int usb_phy_write(void *priv, u32 offset, u32 value)
+{
+	struct eom_phy_device *eom_phy = (struct eom_phy_device *)priv;
+	struct msm_ssphy_qmp *phy = container_of(eom_phy, struct msm_ssphy_qmp,
+					eom_phy);
+
+	writel_relaxed(value, phy->base + offset);
+	dev_dbg(phy->phy.dev, "EOM PHY write\n");
+
+	return 0;
+}
+
+/**
+ * EOM operations for USB PHY register access
+ */
+static struct eom_phy_ops usb_ops = {
+	.phy_read = usb_phy_read,
+	.phy_write = usb_phy_write,
+};
+
+/**
+ * Register USB PHY with the EOM framework
+ */
+static void register_eom_phy(struct msm_ssphy_qmp *phy)
+{
+	int ret = 0;
+	struct eom_phy_device *eom_phy = &phy->eom_phy;
+
+	if (!phy->base) {
+		dev_err(phy->phy.dev, "EOM reg phy base error\n");
+		return;
+	}
+
+	eom_phy->index = 0;
+	eom_phy->lanes = 2;
+
+	ret = register_phy_device(&usb_ops, eom_phy,
+				  eom_phy->index, 0, 0, TYPE_USB,
+				  eom_phy->lanes);
+	if (ret)
+		dev_err(phy->phy.dev, "EOM PHY registration failed\n");
+
+	dev_dbg(phy->phy.dev, "EOM PHY registered\n");
+}
+#else
+static inline void register_eom_phy(struct msm_ssphy_qmp *phy) { }
+#endif /* CONFIG_USB_MSM_EOM */
+
 static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 {
 	struct msm_ssphy_qmp *phy;
@@ -1351,6 +1421,8 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 		}
 		dev_err(dev, "usb3_dp_phy_gdsc optional regulator missing\n");
 	}
+
+	register_eom_phy(phy);
 
 	platform_set_drvdata(pdev, phy);
 
