@@ -52,6 +52,7 @@
  * @restart_nb:     restart notifier block.
  * @irq:            parent irq for the TLMM irq_chip.
  * @n_dir_conns:    The number of pins directly connected to GIC.
+ * @mpm_wake_ctl:   MPM wakeup capability control enable.
  * @intr_target_use_scm: route irq to application cpu using scm calls
  * @lock:           Spinlock to protect register resources as well
  *                  as msm_pinctrl data structures.
@@ -74,7 +75,7 @@ struct msm_pinctrl {
 
 	int irq;
 	int n_dir_conns;
-
+	bool mpm_wake_ctl;
 	bool intr_target_use_scm;
 
 	raw_spinlock_t lock;
@@ -969,6 +970,25 @@ static void msm_gpio_update_dual_edge_pos(struct msm_pinctrl *pctrl,
 		val, val2);
 }
 
+static bool is_gpio_dual_edge(struct irq_data *d, irq_hw_number_t *irq)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct msm_dir_conn *dc;
+	int i;
+
+	for (i = pctrl->n_dir_conns; i > 0; i--) {
+		dc = &pctrl->soc->dir_conn[i];
+
+		if (dc->gpio == d->hwirq) {
+			*irq = dc->irq;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void msm_gpio_irq_mask(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
@@ -1015,6 +1035,56 @@ static void msm_gpio_irq_mask(struct irq_data *d)
 	msm_writel_intr_cfg(val, pctrl, g);
 
 	clear_bit(d->hwirq, pctrl->enabled_irqs);
+
+	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
+}
+
+
+static void msm_gpio_irq_clear_unmask(struct irq_data *d, bool status_clear)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	const struct msm_pingroup *g;
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
+	unsigned long flags;
+	u32 val;
+
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
+	}
+
+	if (d->parent_data)
+		irq_chip_unmask_parent(d);
+
+	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
+		return;
+
+	g = &pctrl->soc->groups[d->hwirq];
+
+	raw_spin_lock_irqsave(&pctrl->lock, flags);
+
+	if (status_clear) {
+		/*
+		 * clear the interrupt status bit before unmask to avoid
+		 * any erroneous interrupts that would have got latched
+		 * when the interrupt is not in use.
+		 */
+		val = msm_readl_intr_status(pctrl, g);
+		val &= ~BIT(g->intr_status_bit);
+		msm_writel_intr_status(val, pctrl, g);
+	}
+
+	val = msm_readl_intr_cfg(pctrl, g);
+	val |= BIT(g->intr_raw_status_bit);
+	val |= BIT(g->intr_enable_bit);
+	msm_writel_intr_cfg(val, pctrl, g);
+
+	set_bit(d->hwirq, pctrl->enabled_irqs);
 
 	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 }
@@ -1122,28 +1192,69 @@ static void msm_gpio_irq_enable(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
 
-	gpiochip_enable_irq(gc, d->hwirq);
+	if (test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
+		if (pctrl->mpm_wake_ctl)
+			msm_gpio_mpm_wake_set(d->hwirq, true);
+	}
 
-	if (d->parent_data)
+	/*
+	 * Clear the interrupt that may be pending before we enable
+	 * the line.
+	 * This is especially a problem with the GPIOs routed to the
+	 * PDC. These GPIOs are direct-connect interrupts to the GIC.
+	 * Disabling the interrupt line at the PDC does not prevent
+	 * the interrupt from being latched at the GIC. The state at
+	 * GIC needs to be cleared before enabling.
+	 */
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		irq_set_irqchip_state(dir_conn_irq,
+				IRQCHIP_STATE_PENDING, 0);
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
+	}
+
+	if (d->parent_data) {
+		irq_chip_set_parent_state(d, IRQCHIP_STATE_PENDING, 0);
 		irq_chip_enable_parent(d);
+	}
 
-	if (!test_bit(d->hwirq, pctrl->skip_wake_irqs))
-		msm_gpio_irq_unmask(d);
+	if (test_bit(d->hwirq, pctrl->skip_wake_irqs))
+		return;
+
+	msm_gpio_irq_clear_unmask(d, true);
 }
 
 static void msm_gpio_irq_disable(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
+
+	if (is_gpio_dual_edge(d, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		dir_conn_data->chip->irq_mask(dir_conn_data);
+	}
 
 	if (d->parent_data)
 		irq_chip_disable_parent(d);
 
-	if (!test_bit(d->hwirq, pctrl->skip_wake_irqs))
-		msm_gpio_irq_mask(d);
+	if (test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
+		if (pctrl->mpm_wake_ctl)
+			msm_gpio_mpm_wake_set(d->hwirq, false);
+		return;
+	}
 
-	gpiochip_disable_irq(gc, d->hwirq);
+	msm_gpio_irq_mask(d);
 }
 
 /**
@@ -2277,3 +2388,4 @@ EXPORT_SYMBOL(msm_pinctrl_remove);
 MODULE_SOFTDEP("pre: qcom-pdc");
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. pinctrl-msm driver");
 MODULE_LICENSE("GPL v2");
+
