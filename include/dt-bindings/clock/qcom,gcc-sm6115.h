@@ -173,6 +173,7 @@
 #define GCC_CAMSS_CPHY_2_CLK					164
 #define GCC_UFS_CLKREF_CLK					165
 #define GCC_DISP_GPLL0_CLK_SRC					166
+#define GCC_LPASS_SWAY_CLK					167
 
 /* GCC resets */
 #define GCC_QUSB2PHY_PRIM_BCR					0
