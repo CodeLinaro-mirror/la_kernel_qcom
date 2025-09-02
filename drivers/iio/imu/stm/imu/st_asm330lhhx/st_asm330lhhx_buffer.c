@@ -349,22 +349,16 @@ static inline void st_asm330lhhx_sync_hw_ts(struct st_asm330lhhx_hw *hw, s64 ts)
 static int st_asm330lhhx_enable_irqline(struct st_asm330lhhx_hw *hw,
 					bool enable)
 {
-	int err;
-
-	/* disable FIFO watermak interrupt */
-	err = st_asm330lhhx_write_locked(hw, hw->drdy_reg,
-					enable ?
-					ST_ASM330LHHX_REG_INT_FIFO_TH_MASK : 0);
-	if (err < 0)
-		return err;
-
-	/* disable embedded function interrupt */
-	if (st_asm330lhhx_events_enabled(hw)) {
-		err = st_asm330lhhx_write_locked(hw,
-				      hw->embfunc_pg0_irq_reg,
-				      enable ? hw->interrupt_enable : 0);
-		if (err < 0)
-			return err;
+	if (hw->irq_edge) {
+		int err;
+		/* disable embedded function interrupt */
+		if (st_asm330lhhx_events_enabled(hw)) {
+			err = st_asm330lhhx_write_locked(hw,
+					      hw->embfunc_pg0_irq_reg,
+					      enable ? hw->interrupt_enable : 0);
+			if (err < 0)
+				return err;
+		}
 	}
 
 	return 0;
@@ -376,7 +370,7 @@ int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw, int notify)
 		   sizeof(s64) + sizeof(s64)];
 	u8 buf[32 * ST_ASM330LHHX_FIFO_SAMPLE_SIZE], tag, *ptr;
 	struct iio_dev *iio_dev, *iio_dev_mlc_fifo_acc;
-	int i, err, word_len, fifo_len, read_len;
+	int i, err, word_len, fifo_len, read_len = 0;
 	bool already_updated = false;
 	__le64 hw_timestamp_push;
 	__le16 fifo_status;
@@ -404,16 +398,23 @@ int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw, int notify)
 
 	err = st_asm330lhhx_read_locked(hw, ST_ASM330LHHX_REG_FIFO_STATUS1_ADDR,
 					&fifo_status, sizeof(fifo_status));
+	if (hw->irq_edge) {
+		int ret;
+
+		ret = st_asm330lhhx_enable_irqline(hw, !!hw->interrupt_enable);
+		if (ret < 0)
+			return ret;
+	}
+
 	if (err < 0)
-		goto enable_fifo;
+		return err;
 
 	fifo_depth = le16_to_cpu(fifo_status) &
 		     ST_ASM330LHHX_REG_FIFO_STATUS_DIFF;
 	if (!fifo_depth)
-		goto enable_fifo;
+		return 0;
 
 	fifo_len = fifo_depth * ST_ASM330LHHX_FIFO_SAMPLE_SIZE;
-	read_len = 0;
 	delta = div_s64(hw->delta_ts, fifo_depth);
 
 	if (hw->resuming && notify) {
@@ -429,7 +430,7 @@ int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw, int notify)
 			       ST_ASM330LHHX_REG_FIFO_DATA_OUT_TAG_ADDR,
 			       buf, word_len);
 		if (err < 0)
-			goto enable_fifo;
+			return err;
 
 		for (i = 0; i < word_len; i += ST_ASM330LHHX_FIFO_SAMPLE_SIZE) {
 			ptr = &buf[i + ST_ASM330LHHX_TAG_SIZE];
@@ -530,14 +531,6 @@ int st_asm330lhhx_read_fifo(struct st_asm330lhhx_hw *hw, int notify)
 		read_len += word_len;
 	}
 
-enable_fifo:
-	if (hw->irq_edge) {
-		/* enable interrupt line */
-		err = st_asm330lhhx_enable_irqline(hw, true);
-		if (err < 0)
-			return err;
-	}
-
 	return read_len;
 }
 
@@ -598,8 +591,13 @@ st_asm330lhhx_flush_fifo_during_resume(struct st_asm330lhhx_hw *hw)
 {
 	int count;
 
+	/* if irq line is the same of FIFO manage it */
+	if (hw->irq_emb == hw->irq)
+		st_asm330lhhx_event_handler(hw);
+
 	mutex_lock(&hw->fifo_lock);
 	count = st_asm330lhhx_read_fifo(hw, 0);
+	clear_bit(ST_ASM330LHHX_HW_FLUSH, &hw->state);
 	mutex_unlock(&hw->fifo_lock);
 
 	return count;
@@ -779,6 +777,10 @@ static irqreturn_t st_asm330lhhx_handler_thread(int irq, void *private)
 	if (hw->settings->st_mlc_probe)
 		notify = st_asm330lhhx_mlc_check_status(hw);
 
+	if (hw->irq_edge)
+		/* disable FIFO watermak interrupt */
+		st_asm330lhhx_write_locked(hw, hw->drdy_reg, 0);
+
 	mutex_lock(&hw->fifo_lock);
 	st_asm330lhhx_read_fifo(hw, notify);
 	clear_bit(ST_ASM330LHHX_HW_FLUSH, &hw->state);
@@ -787,6 +789,12 @@ static irqreturn_t st_asm330lhhx_handler_thread(int irq, void *private)
 	/* if irq line is the same of FIFO manage it */
 	if (hw->irq_emb == hw->irq)
 		st_asm330lhhx_event_handler(hw);
+
+	if (hw->irq_edge)
+		/* restore FIFO watermak interrupt */
+		st_asm330lhhx_write_locked(hw, hw->drdy_reg,
+					   ST_ASM330LHHX_REG_INT_FIFO_TH_MASK);
+
 	mutex_unlock(&hw->handler_lock);
 
 	return IRQ_HANDLED;
