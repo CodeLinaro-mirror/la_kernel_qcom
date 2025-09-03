@@ -2,6 +2,7 @@ pikachu_perf_config = {
     # keep sorted
     "CONFIG_ARCH_QCOM": "y",
     "CONFIG_ARCH_PIKACHU": "y",
+    "CONFIG_COMMON_CLK_QCOM": "m",
     "CONFIG_HWSPINLOCK_QCOM": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_PIKACHU": "m",
