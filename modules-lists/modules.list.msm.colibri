@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+#
+pinctrl-msm.ko
+pinctrl-colibri.ko
+qcom-scm.ko
+qcom_tzmem.ko
