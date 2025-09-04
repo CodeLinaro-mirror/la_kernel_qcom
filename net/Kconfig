@@ -597,6 +597,16 @@ config ENABLE_SFE
 	  Changes to support Shortcut Forward Engine.
 	  Add bridge API to access the bridge slave port.
 
+config CHANDEF_NO_PUNCTURE
+	bool "Enable legacy chandef without puncture_bitmap field"
+	default n
+	help
+	  Select this option to enable support for legacy chandef definition
+	  without puncture bitmap support.
+	  This is useful for maintaining compatibility with older kernel or
+	  driver implementations that do not yet support the puncture_bitmap
+	  field introduced in newer channel definition structures.
+
 config PKT_THRESHOLD
 	bool "Enable accounting with packet threshold tracking"
 	help
