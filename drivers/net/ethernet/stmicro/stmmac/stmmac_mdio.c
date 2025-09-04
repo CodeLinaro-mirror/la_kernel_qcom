@@ -46,7 +46,7 @@
 #define MII_XGMAC_PA_SHIFT		16
 #define MII_XGMAC_DA_SHIFT		21
 
-#define STMMAC_MDIO_DOWN_RETRY_CNT_MAX		(4)
+#define STMMAC_MDIO_DOWN_RETRY_CNT_MAX		(100)
 #define STMMAC_MDIO_BUSY_RETRY_CNT_MAX		(2)
 
 static int stmmac_virtio_mdio_read(struct mii_bus *bus, int addr, int regnum)
