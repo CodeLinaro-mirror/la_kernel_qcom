@@ -3330,6 +3330,21 @@ static bool nl80211_can_set_dev_channel(struct wireless_dev *wdev)
 		wdev->iftype == NL80211_IFTYPE_P2P_GO;
 }
 
+static int nl80211_parse_punct_bitmap(struct cfg80211_registered_device *rdev,
+				      struct genl_info *info,
+				      const struct cfg80211_chan_def *chandef,
+				      u16 *punct_bitmap)
+{
+	if (!wiphy_ext_feature_isset(&rdev->wiphy, NL80211_EXT_FEATURE_PUNCT))
+		return -EINVAL;
+
+	*punct_bitmap = nla_get_u32(info->attrs[NL80211_ATTR_PUNCT_BITMAP]);
+	if (!cfg80211_valid_disable_subchannel_bitmap(punct_bitmap, chandef))
+		return -EINVAL;
+
+	return 0;
+}
+
 int nl80211_parse_chandef(struct cfg80211_registered_device *rdev,
 			  struct genl_info *info,
 			  struct cfg80211_chan_def *chandef)
@@ -3436,17 +3451,18 @@ int nl80211_parse_chandef(struct cfg80211_registered_device *rdev,
 		chandef->edmg.bw_config = 0;
 		chandef->edmg.channels = 0;
 	}
+	if (!IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+		if (info->attrs[NL80211_ATTR_PUNCT_BITMAP]) {
+			chandef->punctured =
+				nla_get_u32(info->attrs[NL80211_ATTR_PUNCT_BITMAP]);
 
-	if (info->attrs[NL80211_ATTR_PUNCT_BITMAP]) {
-		chandef->punctured =
-			nla_get_u32(info->attrs[NL80211_ATTR_PUNCT_BITMAP]);
-
-		if (chandef->punctured &&
-		    !wiphy_ext_feature_isset(&rdev->wiphy,
-					     NL80211_EXT_FEATURE_PUNCT)) {
-			NL_SET_ERR_MSG(extack,
-				       "driver doesn't support puncturing");
-			return -EINVAL;
+			if (chandef->punctured &&
+			    !wiphy_ext_feature_isset(&rdev->wiphy,
+						     NL80211_EXT_FEATURE_PUNCT)) {
+				NL_SET_ERR_MSG(extack,
+					       "driver doesn't support puncturing");
+				return -EINVAL;
+			}
 		}
 	}
 
@@ -3939,9 +3955,11 @@ int nl80211_send_chandef(struct sk_buff *msg, const struct cfg80211_chan_def *ch
 	if (chandef->center_freq2 &&
 	    nla_put_u32(msg, NL80211_ATTR_CENTER_FREQ2, chandef->center_freq2))
 		return -ENOBUFS;
-	if (chandef->punctured &&
-	    nla_put_u32(msg, NL80211_ATTR_PUNCT_BITMAP, chandef->punctured))
-		return -ENOBUFS;
+	if (!IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+		if (chandef->punctured &&
+		    nla_put_u32(msg, NL80211_ATTR_PUNCT_BITMAP, chandef->punctured))
+			return -ENOBUFS;
+	}
 
 	return 0;
 }
@@ -6312,6 +6330,16 @@ static int nl80211_start_ap(struct sk_buff *skb, struct genl_info *info)
 	} else if (!nl80211_get_ap_channel(rdev, params)) {
 		err = -EINVAL;
 		goto out;
+	}
+
+	if (IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+		if (info->attrs[NL80211_ATTR_PUNCT_BITMAP]) {
+			err = nl80211_parse_punct_bitmap(rdev, info,
+							 &params->chandef,
+							 &params->punct_bitmap);
+			if (err)
+				goto out;
+		}
 	}
 
 	if (!cfg80211_reg_can_beacon_relax(&rdev->wiphy, &params->chandef,
@@ -10513,6 +10541,16 @@ skip_beacons:
 
 	if (info->attrs[NL80211_ATTR_CH_SWITCH_BLOCK_TX])
 		params.block_tx = true;
+
+	if (IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+		if (info->attrs[NL80211_ATTR_PUNCT_BITMAP]) {
+			err = nl80211_parse_punct_bitmap(rdev, info,
+							 &params.chandef,
+							 &params.punct_bitmap);
+			if (err)
+				goto free;
+		}
+	}
 
 	wdev_lock(wdev);
 	params.link_id = link_id;
@@ -19883,7 +19921,7 @@ static void nl80211_ch_switch_notify(struct cfg80211_registered_device *rdev,
 				     struct cfg80211_chan_def *chandef,
 				     gfp_t gfp,
 				     enum nl80211_commands notif,
-				     u8 count, bool quiet)
+				     u8 count, bool quiet, u16 punct_bitmap)
 {
 	struct wireless_dev *wdev = netdev->ieee80211_ptr;
 	struct sk_buff *msg;
@@ -19917,6 +19955,9 @@ static void nl80211_ch_switch_notify(struct cfg80211_registered_device *rdev,
 			goto nla_put_failure;
 	}
 
+	if (IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE))
+		if (nla_put_u32(msg, NL80211_ATTR_PUNCT_BITMAP, punct_bitmap))
+			goto nla_put_failure;
 	genlmsg_end(msg, hdr);
 
 	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(&rdev->wiphy), msg, 0,
@@ -19929,7 +19970,7 @@ static void nl80211_ch_switch_notify(struct cfg80211_registered_device *rdev,
 
 void cfg80211_ch_switch_notify(struct net_device *dev,
 			       struct cfg80211_chan_def *chandef,
-			       unsigned int link_id)
+			       unsigned int link_id, u16 punct_bitmap)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct wiphy *wiphy = wdev->wiphy;
@@ -19938,7 +19979,7 @@ void cfg80211_ch_switch_notify(struct net_device *dev,
 	ASSERT_WDEV_LOCK(wdev);
 	WARN_INVALID_LINK_ID(wdev, link_id);
 
-	trace_cfg80211_ch_switch_notify(dev, chandef, link_id);
+	trace_cfg80211_ch_switch_notify(dev, chandef, link_id, punct_bitmap);
 
 	switch (wdev->iftype) {
 	case NL80211_IFTYPE_STATION:
@@ -19966,14 +20007,15 @@ void cfg80211_ch_switch_notify(struct net_device *dev,
 	cfg80211_sched_dfs_chan_update(rdev);
 
 	nl80211_ch_switch_notify(rdev, dev, link_id, chandef, GFP_KERNEL,
-				 NL80211_CMD_CH_SWITCH_NOTIFY, 0, false);
+				 NL80211_CMD_CH_SWITCH_NOTIFY, 0, false,
+				 punct_bitmap);
 }
 EXPORT_SYMBOL(cfg80211_ch_switch_notify);
 
 void cfg80211_ch_switch_started_notify(struct net_device *dev,
 				       struct cfg80211_chan_def *chandef,
 				       unsigned int link_id, u8 count,
-				       bool quiet)
+				       bool quiet, u16 punct_bitmap)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct wiphy *wiphy = wdev->wiphy;
@@ -19982,12 +20024,12 @@ void cfg80211_ch_switch_started_notify(struct net_device *dev,
 	ASSERT_WDEV_LOCK(wdev);
 	WARN_INVALID_LINK_ID(wdev, link_id);
 
-	trace_cfg80211_ch_switch_started_notify(dev, chandef, link_id);
-
+	trace_cfg80211_ch_switch_started_notify(dev, chandef, link_id,
+						punct_bitmap);
 
 	nl80211_ch_switch_notify(rdev, dev, link_id, chandef, GFP_KERNEL,
 				 NL80211_CMD_CH_SWITCH_STARTED_NOTIFY,
-				 count, quiet);
+				 count, quiet, punct_bitmap);
 }
 EXPORT_SYMBOL(cfg80211_ch_switch_started_notify);
 

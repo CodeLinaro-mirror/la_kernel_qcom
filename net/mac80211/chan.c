@@ -506,15 +506,22 @@ static void _ieee80211_change_chanctx(struct ieee80211_local *local,
 
 	WARN_ON(!cfg80211_chandef_compatible(&ctx->conf.def, chandef));
 
-	if (ctx->conf.def.width != chandef->width)
-		changed |= IEEE80211_CHANCTX_CHANGE_WIDTH;
-	if (ctx->conf.def.punctured != chandef->punctured)
-		changed |= IEEE80211_CHANCTX_CHANGE_PUNCTURING;
+	if (!IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+		if (ctx->conf.def.width != chandef->width)
+			changed |= IEEE80211_CHANCTX_CHANGE_WIDTH;
+		if (ctx->conf.def.punctured != chandef->punctured)
+			changed |= IEEE80211_CHANCTX_CHANGE_PUNCTURING;
+	}
 
 	ctx->conf.def = *chandef;
 
 	/* check if min chanctx also changed */
-	changed |= _ieee80211_recalc_chanctx_min_def(local, ctx, rsvd_for);
+	if (IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+		changed = IEEE80211_CHANCTX_CHANGE_WIDTH |
+			  _ieee80211_recalc_chanctx_min_def(local, ctx, rsvd_for);
+	} else {
+		changed |= _ieee80211_recalc_chanctx_min_def(local, ctx, rsvd_for);
+	}
 	drv_change_chanctx(local, ctx, changed);
 
 	if (!local->use_chanctx) {

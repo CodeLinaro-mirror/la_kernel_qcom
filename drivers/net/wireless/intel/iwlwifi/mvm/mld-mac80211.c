@@ -624,7 +624,9 @@ iwl_mvm_mld_link_info_changed_station(struct iwl_mvm *mvm,
 	}
 
 	/* if associated, maybe puncturing changed - we'll check later */
-	if (vif->cfg.assoc)
+	if ((IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE) &&
+	     (changes & BSS_CHANGED_EHT_PUNCTURING && vif->cfg.assoc)) ||
+	    vif->cfg.assoc)
 		link_changes |= LINK_CONTEXT_MODIFY_EHT_PARAMS;
 
 	if (link_changes) {
