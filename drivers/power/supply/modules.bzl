@@ -1,4 +1,8 @@
+load(":drivers/power/supply/qcom/modules.bzl", register_qcom = "register_modules")
+
 def register_modules(registry):
+    register_qcom(registry)
+
     registry.register(
         name = "drivers/power/supply/qti_battery_charger",
         out = "qti_battery_charger.ko",
