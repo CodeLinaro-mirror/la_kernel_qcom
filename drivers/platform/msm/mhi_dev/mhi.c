@@ -2257,6 +2257,9 @@ static int mhi_dev_send_completion_event(struct mhi_dev_channel *ch,
 						GFP_KERNEL);
 	struct mhi_dev *mhi = ch->ring->mhi_dev;
 
+	if (!compl_event)
+		return -ENOMEM;
+
 	compl_event->evt_tr_comp.chid = ch->ch_id;
 	compl_event->evt_tr_comp.type =
 				MHI_DEV_RING_EL_TRANSFER_COMPLETION_EVENT;
@@ -2280,6 +2283,9 @@ int mhi_dev_send_state_change_event(struct mhi_dev *mhi,
 	union mhi_dev_ring_element_type *event = kzalloc(sizeof(union mhi_dev_ring_element_type),
 						GFP_KERNEL);
 
+	if (!event)
+		return -ENOMEM;
+
 	event->evt_state_change.type = MHI_DEV_RING_EL_MHI_STATE_CHG;
 	event->evt_state_change.mhistate = state;
 
@@ -2296,6 +2302,9 @@ int mhi_dev_send_ee_event(struct mhi_dev *mhi, enum mhi_dev_execenv exec_env)
 
 	union mhi_dev_ring_element_type *event = kzalloc(sizeof(union mhi_dev_ring_element_type),
 						GFP_KERNEL);
+
+	if (!event)
+		return -ENOMEM;
 
 	event->evt_ee_state.type = MHI_DEV_RING_EL_EE_STATE_CHANGE_NOTIFY;
 	event->evt_ee_state.execenv = exec_env;
@@ -2349,6 +2358,9 @@ static int mhi_dev_send_cmd_comp_event(struct mhi_dev *mhi,
 
 	union mhi_dev_ring_element_type *event = kzalloc(sizeof(union mhi_dev_ring_element_type),
 						GFP_KERNEL);
+
+	if (!event)
+		return -ENOMEM;
 
 	if (code > MHI_CMD_COMPL_CODE_RES) {
 		mhi_log(mhi->vf_id, MHI_MSG_ERROR,
@@ -3741,7 +3753,7 @@ free_ereqs:
 static int mhi_dev_alloc_evt_buf_evt_req(struct mhi_dev *mhi,
 		struct mhi_dev_channel *ch, struct mhi_dev_ring *evt_ring)
 {
-	int rc;
+	int rc = 0;
 	uint32_t size, i;
 	struct event_req *req, *tmp;
 
@@ -3800,8 +3812,10 @@ static int mhi_dev_alloc_evt_buf_evt_req(struct mhi_dev *mhi,
 	/* Allocate event requests */
 	for (i = 0; i < ch->evt_req_size; ++i) {
 		req = kzalloc(sizeof(struct event_req), GFP_KERNEL);
-		if (!req)
+		if (!req) {
+			rc = -ENOMEM;
 			goto free_ereqs;
+		}
 		list_add_tail(&req->list, &ch->event_req_buffers);
 	}
 
@@ -3818,7 +3832,7 @@ static int mhi_dev_alloc_evt_buf_evt_req(struct mhi_dev *mhi,
 	ch->evt_buf_rp = 0;
 	ch->evt_buf_wp = ch->evt_buf_size - 1;
 
-	return 0;
+	return rc;
 
 free_ereqs:
 	if (!list_empty(&ch->event_req_buffers)) {
