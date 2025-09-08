@@ -1,6 +1,10 @@
 virtio_mmio.ko
 virtio_blk.ko
 virtio_console.ko
+virtio_dma_buf.ko
+virtio-gpu.ko
+virtio_snd.ko
+virtio_input.ko
 msm_hab.ko
 qcom_hgsl.ko
 qcom_scm_hab.ko
