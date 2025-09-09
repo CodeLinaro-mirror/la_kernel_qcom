@@ -38,6 +38,7 @@
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/list.h>
+#include <uapi/linux/sched/types.h>
 
 #include "zram_drv.h"
 #include "../../soc/qcom/qpace/qpace.h"
@@ -1548,6 +1549,14 @@ struct qpace_request_meta {
 	struct kref num_pages;
 };
 
+/*
+ * Support (1<<14)*4k=64MB of compression requests at the same time.
+ * The mempool does not consume its member if they can get obtained directly.
+ */
+#define ZMETA_POOL_SIZE (1 << 14)
+static mempool_t zmeta_pool;
+static mempool_t zlist_pool;
+
 struct qpace_request_data {
 	struct qpace_request_meta *zmeta;
 	struct page *page;
@@ -1603,6 +1612,8 @@ static struct qpace_request_queue copy_out_queue = {
 	.request_arr = copy_out_arr,
 };
 
+static DECLARE_WAIT_QUEUE_HEAD(qpace_compress_wait);
+
 static struct task_struct *comp_thread;
 static void signal_comp_work_available(struct timer_list *unused);
 static int comp_request_submit(const struct qpace_request_data *zdata);
@@ -1625,6 +1636,31 @@ struct qpace_control comp_control = {
 	.work_available_timer = __TIMER_INITIALIZER(signal_comp_work_available, 0),
 };
 
+static long qpace_congestion_wait(unsigned long timeout)
+{
+	long ret;
+	DEFINE_WAIT(wait);
+	wait_queue_head_t *qwh = &qpace_compress_wait;
+
+	/* to ensure precise control of wakeup count */
+	prepare_to_wait_exclusive(qwh, &wait, TASK_UNINTERRUPTIBLE);
+	ret = io_schedule_timeout(timeout);
+	finish_wait(qwh, &wait);
+
+	return ret;
+}
+
+/* after enqueue_from_overflow_list, we get hw slot */
+static void clear_qpace_congested(int overflow_consumed)
+{
+	/*
+	 * avoid wake_up*() when no waiters, safe because missing wakeup
+	 * one time is fine.
+	 */
+	if (waitqueue_active(&qpace_compress_wait))
+		wake_up_nr(&qpace_compress_wait, overflow_consumed);
+}
+
 static inline void do_end_bio(struct bio *bio,
 			      unsigned long start_time)
 {
@@ -1641,7 +1677,7 @@ static void put_qpace_request_meta(struct kref *kref)
 
 	do_end_bio(zmeta->bio, zmeta->start_time);
 
-	kfree(zmeta);
+	mempool_free(zmeta, &zmeta_pool);
 }
 
 static int zram_write_finish(struct qpace_request_data *zdata,
@@ -1765,7 +1801,8 @@ static inline int _zram_req_queue(struct qpace_control *qpace_ctl,
 static int _zram_req_queue_overflow_list_insert(struct qpace_control *qpace_ctl,
 						const struct qpace_request_data *zdata)
 {
-	struct qpace_request_queue_overflow_list_entry *entry = kzalloc(sizeof(*entry), GFP_NOIO);
+	struct qpace_request_queue_overflow_list_entry *entry =
+					mempool_alloc(&zlist_pool, GFP_NOWAIT);
 
 	if (!entry) {
 		pr_err_ratelimited("%s: mem-alloc failure\n", __func__);
@@ -1821,14 +1858,15 @@ static void zram_abandon_requests(struct qpace_control *qpace_ctl)
 		list_del(&qpace_req->list_node);
 		qpace_ctl->overflow_list_count--;
 		zram_qpace_req_err_handler(qpace_req->zdata.zmeta);
-		kfree(qpace_req);
+		mempool_free(qpace_req, &zlist_pool);
 	}
 	mutex_unlock(&qpace_ctl->queue_overflow_list_lock);
 }
 
-static void enqueue_from_overflow_list(struct qpace_control *qpace_ctl)
+static int enqueue_from_overflow_list(struct qpace_control *qpace_ctl)
 {
 	lockdep_assert_held(&qpace_ctl->queue_lock);
+	int consumed = 0;
 	/*
 	 * Check overflow list. Grab its contents and queue it up, oldest
 	 * submissions are at the tail of the list.
@@ -1847,10 +1885,13 @@ static void enqueue_from_overflow_list(struct qpace_control *qpace_ctl)
 			list_del(&qpace_req->list_node);
 			qpace_ctl->overflow_list_count--;
 			_zram_req_queue(qpace_ctl, &qpace_req->zdata);
-			kfree(qpace_req);
+			mempool_free(qpace_req, &zlist_pool);
+			consumed++;
 		}
 	}
 	mutex_unlock(&qpace_ctl->queue_overflow_list_lock);
+
+	return consumed;
 }
 
 static inline void zram_copy_queue(struct qpace_request_data *zdata,
@@ -1972,6 +2013,14 @@ static int zram_qpace_comp(void *unused)
 {
 	bool triggered_compress;
 	int n_entries_consumed;
+	int overflow_consumed;
+
+	struct sched_attr attr = {
+		.sched_policy = SCHED_NORMAL,
+		.sched_nice = -10,
+	};
+
+	WARN_ON_ONCE(sched_setattr_nocheck(current, &attr) != 0);
 
 	while (!kthread_should_stop()) {
 		pr_debug("waiting for comp work\n");
@@ -2014,8 +2063,12 @@ static int zram_qpace_comp(void *unused)
 		*/
 		mutex_lock(&comp_control.queue_lock);
 		comp_control.queue_size -= n_entries_consumed;
-		enqueue_from_overflow_list(&comp_control);
+		overflow_consumed = enqueue_from_overflow_list(&comp_control);
 		mutex_unlock(&comp_control.queue_lock);
+
+		/* get sw slots in overflow_list now, wake up */
+		if (overflow_consumed)
+			clear_qpace_congested(overflow_consumed);
 
 wait_for_comp_request:
 		put_qpace();
@@ -2033,13 +2086,17 @@ static int qpace_zram_submit_bio(struct zram *zram, struct bio *bio,
 	struct qpace_request_meta *zmeta;
 	int ret = 0;
 
-	zmeta = zdata.zmeta = kmalloc(sizeof(struct qpace_request_meta), GFP_KERNEL);
-	if (!zmeta) {
-		atomic64_inc(&zram->stats.failed_writes);
-		bio->bi_status = BLK_STS_IOERR;
-
-		do_end_bio(bio, start_time);
-		return -ENOMEM;
+	/*
+	 * GFP_NOWAIT disallows use of the mempool waitqueue.
+	 * We have implemented exclusive waitqueue to precisely control
+	 * the number of tasks which need to be waken up.
+	 * mempool_alloc() also sets __GFP_NOMEMALLOC, so it will not
+	 * deplete low memory reserves if called from direct reclaim.
+	 */
+	while (!(zmeta = zdata.zmeta =
+		    mempool_alloc(&zmeta_pool, GFP_NOWAIT))) {
+		atomic64_inc(&zram->stats.writestall);
+		qpace_congestion_wait(HZ/10);
 	}
 
 	zmeta->zram = zram;
@@ -2809,6 +2866,23 @@ static int zram_add(void)
 	if (use_qpace) {
 		zram->qpace = true;
 		lim.features &= ~BLK_FEAT_SYNCHRONOUS;
+		/*
+		 * only for qpace.. to use the mempool to ensure memory
+		 * allocation success.
+		 */
+		if (mempool_init_kmalloc_pool(&zmeta_pool, ZMETA_POOL_SIZE,
+			sizeof(struct qpace_request_meta))) {
+			pr_err("zmeta mempool create failed\n");
+			kfree(zram);
+			return -ENOMEM;
+		}
+		if (mempool_init_kmalloc_pool(&zlist_pool, ZMETA_POOL_SIZE,
+		sizeof(struct qpace_request_queue_overflow_list_entry))) {
+			pr_err("zlist mempool created failed\n");
+			mempool_exit(&zmeta_pool);
+			kfree(zram);
+			return -ENOMEM;
+		}
 		use_qpace = false;
 	}
 
@@ -2856,6 +2930,10 @@ out_cleanup_disk:
 out_free_idr:
 	idr_remove(&zram_index_idr, device_id);
 out_free_dev:
+	if (zram->qpace) {
+		mempool_exit(&zmeta_pool);
+		mempool_exit(&zlist_pool);
+	}
 	kfree(zram);
 	return ret;
 }
@@ -2887,6 +2965,12 @@ static int zram_remove(struct zram *zram)
 		/* Make sure all the pending I/O are finished */
 		sync_blockdev(zram->disk->part0);
 		zram_reset_device(zram);
+	}
+
+	/* In contrast, clean mempool if use qpace */
+	if (zram->qpace) {
+		mempool_exit(&zmeta_pool);
+		mempool_exit(&zlist_pool);
 	}
 
 	pr_info("Removed device: %s\n", zram->disk->disk_name);
