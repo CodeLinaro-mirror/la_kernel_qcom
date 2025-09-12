@@ -782,17 +782,21 @@ static int dwc3_qcom_of_register_core(struct platform_device *pdev)
 	return ret;
 }
 
-static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
+static int dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
 {
 	char	regulator_name[20];
 	int	i;
 
 	qcom->vbus_reg[0] = devm_regulator_get_optional(qcom->dev, "vbus_dwc3");
-	if (!IS_ERR_OR_NULL(qcom->vbus_reg[0])) {
-		dev_err(qcom->dev, "Failed to get vbus regulator(vbus_dwc3) err: %d\n",
-							PTR_ERR(qcom->vbus_reg[0]));
-		return;
-	}
+	if (!IS_ERR(qcom->vbus_reg[0]))
+		return 0;
+
+	/* regulators may not be ready, so retry again later */
+	if (PTR_ERR(qcom->vbus_reg[0]) == -EPROBE_DEFER)
+		return -EPROBE_DEFER;
+
+	qcom->vbus_reg[0] = NULL;
+
 	/* If the vbus_dwc3 regulator is not obtained,
 	 * proceed to check for vbus_dwc3_* regulators
 	 */
@@ -801,11 +805,14 @@ static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
 							"vbus_dwc3_%d", i);
 		qcom->vbus_reg[i] = devm_regulator_get_optional(
 						qcom->dev, regulator_name);
-		if (!IS_ERR_OR_NULL(qcom->vbus_reg[i])) {
-			dev_err(qcom->dev, "Failed to get vbus regulator err: %d index:%d\n",
-								PTR_ERR(qcom->vbus_reg[i]), i);
+		if (IS_ERR(qcom->vbus_reg[i])) {
+			/* regulators may not be ready, so retry again later */
+			if (PTR_ERR(qcom->vbus_reg[i]) == -EPROBE_DEFER)
+				return -EPROBE_DEFER;
+			qcom->vbus_reg[i] = NULL;
 		}
 	}
+	return 0;
 }
 
 static int dwc3_qcom_probe(struct platform_device *pdev)
@@ -893,7 +900,10 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	if (ret)
 		goto interconnect_exit;
 
-	dwc3_qcom_vbus_regulator_get(qcom);
+	ret = dwc3_qcom_vbus_regulator_get(qcom);
+	if (ret)
+		goto interconnect_exit;
+
 	dwc3_qcom_vbus_regulator_enable(qcom, true);
 
 	wakeup_source = of_property_read_bool(dev->of_node, "wakeup-source");
