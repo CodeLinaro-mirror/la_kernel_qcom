@@ -7217,6 +7217,10 @@ static int qcom_ethqos_bring_up_phy_if(struct device *dev)
 		ETHQOSERR("priv is NULL\n");
 		return -EINVAL;
 	}
+	if (!priv->phydev) {
+		ETHQOSERR("phydev is NULL\n");
+		return -ENODEV;
+	}
 	ethqos = priv->plat->bsp_priv;
 	if (!ethqos) {
 		ETHQOSERR("ethqos is NULL\n");
