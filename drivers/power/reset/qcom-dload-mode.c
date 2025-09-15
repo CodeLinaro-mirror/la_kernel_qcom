@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2020, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -17,10 +17,6 @@
 #include <linux/panic_notifier.h>
 #include <linux/qcom_scm.h>
 #include <soc/qcom/minidump.h>
-#ifdef CONFIG_INPUT_QPNP_POWER_ON
-#include <linux/input/qpnp-power-on.h>
-#endif
-
 
 enum qcom_download_dest {
 	QCOM_DOWNLOAD_DEST_UNKNOWN = -1,
@@ -264,9 +260,6 @@ static int qcom_dload_panic(struct notifier_block *this, unsigned long event,
 {
 	struct qcom_dload *poweroff = container_of(this, struct qcom_dload,
 						     panic_nb);
-	#ifdef CONFIG_INPUT_QPNP_POWER_ON
-		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
-	#endif
 	poweroff->in_panic = true;
 	if (enable_dump)
 		msm_enable_dump_mode(true);
@@ -297,12 +290,9 @@ static int qcom_dload_reboot(struct notifier_block *this, unsigned long event,
 	poweroff->in_reboot = true;
 	set_download_mode(QCOM_DOWNLOAD_NODUMP);
 	if (cmd) {
-		if (!strcmp(cmd, "edl")) {
-			#ifdef CONFIG_INPUT_QPNP_POWER_ON
-			qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
-			#endif
+		if (!strcmp(cmd, "edl"))
 			set_download_mode(QCOM_DOWNLOAD_EDL);
-		} else if (!strcmp(cmd, "qcom_dload"))
+		else if (!strcmp(cmd, "qcom_dload"))
 			msm_enable_dump_mode(true);
 	}
 
