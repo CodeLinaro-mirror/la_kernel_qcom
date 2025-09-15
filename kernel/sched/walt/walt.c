@@ -3593,10 +3593,6 @@ static void _set_preferred_cluster(struct walt_related_thread_group *grp, u64 wa
 
 	list_for_each_entry(wts, &grp->tasks, grp_list) {
 		p = wts_to_ts(wts);
-
-		if (task_on_scx(p))
-			continue;
-
 		if (task_boost_policy(p) == SCHED_BOOST_ON_BIG) {
 			group_boost = true;
 			break;
@@ -3704,8 +3700,7 @@ static void remove_task_from_group(struct task_struct *p)
 
 	rq = __task_rq_lock(p, &rf);
 	wallclock = walt_sched_clock();
-	if (!task_on_scx(p))
-		transfer_busy_time(rq, wts->grp, p, REM_TASK, wallclock);
+	transfer_busy_time(rq, wts->grp, p, REM_TASK, wallclock);
 	list_del_init(&wts->grp_list);
 	rcu_assign_pointer(wts->grp, NULL);
 	__task_rq_unlock(rq, &rf);
@@ -3742,8 +3737,7 @@ add_task_to_group(struct task_struct *p, struct walt_related_thread_group *grp)
 	 */
 	rq = __task_rq_lock(p, &rf);
 	wallclock = walt_sched_clock();
-	if (!task_on_scx(p))
-		transfer_busy_time(rq, grp, p, ADD_TASK, wallclock);
+	transfer_busy_time(rq, grp, p, ADD_TASK, wallclock);
 	list_add(&wts->grp_list, &grp->tasks);
 	rcu_assign_pointer(wts->grp, grp);
 	__task_rq_unlock(rq, &rf);
@@ -4346,7 +4340,7 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 		for_each_cpu(cpu, &cluster->cpus) {
 			rq = cpu_rq(cpu);
 			wrq = &per_cpu(walt_rq, cpu_of(rq));
-			if (rq->curr && !task_on_scx(rq->curr)) {
+			if (rq->curr) {
 				/* only update ravg for locked cpus */
 				if (cpumask_intersects(lock_cpus, &cluster->cpus)) {
 					if (unlikely(!raw_spin_is_locked(&rq->__lock))) {
@@ -5047,9 +5041,6 @@ static void android_rvh_sched_cpu_dying(void *unused, int cpu)
 
 static void android_rvh_set_task_cpu(void *unused, struct task_struct *p, unsigned int new_cpu)
 {
-	if (task_on_scx(p))
-		return;
-
 	if (unlikely(walt_disabled))
 		return;
 
@@ -5128,9 +5119,6 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	bool double_enqueue = false;
 	int mid_cluster_cpu;
-
-	if (task_on_scx(p))
-		return;
 
 	if (unlikely(walt_disabled))
 		return;
@@ -5231,9 +5219,6 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	bool double_dequeue = false;
-
-	if (task_on_scx(p))
-		return;
 
 	if (unlikely(walt_disabled))
 		return;
