@@ -5866,10 +5866,14 @@ static void android_vh_freq_qos_remove_request(void *unused, struct freq_qos_req
 
 static void android_vh_scx_ops_enable_state(void *unused, int state)
 {
-	if (state == 1) //SCX_OPS_ENABLED
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
+
+	if (state == 1) {//SCX_OPS_ENABLED
 		walt_quiet_state = true;
-	else if (state == 2) //SCX_OPS_DISABLING
+		core_ctl_check(wrq->window_start, WALT_NR_CPUS);
+	} else if (state == 2) {//SCX_OPS_DISABLING
 		walt_quiet_state = false;
+	}
 }
 
 static void register_walt_hooks(void)

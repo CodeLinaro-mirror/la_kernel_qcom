@@ -1099,7 +1099,7 @@ static unsigned int apply_task_need(const struct cluster_data *cluster)
 static unsigned int apply_limits(const struct cluster_data *cluster,
 				 unsigned int need_cpus)
 {
-	if (!cluster->enable)
+	if (!cluster->enable || walt_quiet_state)
 		return cluster->num_cpus;
 
 	return min(max(cluster->min_cpus, need_cpus), cluster->max_cpus);
@@ -1485,7 +1485,7 @@ void core_ctl_check(u64 window_start, u32 wakeup_ctr_sum)
 		return;
 	}
 
-	if (window_start == core_ctl_check_timestamp)
+	if ((window_start == core_ctl_check_timestamp) && !walt_quiet_state)
 		return;
 
 	core_ctl_check_timestamp = window_start;
