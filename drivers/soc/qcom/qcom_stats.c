@@ -990,7 +990,6 @@ static void qcom_create_soc_sleep_stat_files(struct dentry *root, void __iomem *
 					     struct stats_data *d,
 					     const struct stats_config *config)
 {
-#ifdef CONFIG_DEBUG_FS
 	char stat_type[sizeof(u32) + 1] = {0};
 	size_t stats_offset = config->stats_offset;
 	u32 offset = 0, type;
@@ -1020,14 +1019,15 @@ static void qcom_create_soc_sleep_stat_files(struct dentry *root, void __iomem *
 		 */
 		type = readl(d[i].base);
 		get_sleep_stat_name(type, stat_type);
+#ifdef CONFIG_DEBUG_FS
 		debugfs_create_file(stat_type, 0400, root, &d[i],
 				    &qcom_soc_sleep_stats_fops);
+#endif
 
 		offset += sizeof(struct sleep_stats);
 		if (d[i].appended_stats_avail)
 			offset += sizeof(struct appended_stats);
 	}
-#endif
 }
 
 static void qcom_create_subsystem_stat_files(struct dentry *root,
