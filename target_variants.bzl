@@ -25,6 +25,7 @@ le_targets = [
     # keep sorted
     #"sun-allyes",
     "autogvm",
+    "canoe-le",
     "vienna-le",
 ]
 
