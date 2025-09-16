@@ -7,3 +7,4 @@ qcom_hwspinlock.ko
 smem.ko
 socinfo.ko
 qcom_tzmem.ko
+stub-regulator.ko

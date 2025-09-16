@@ -9,4 +9,5 @@ pikachu_perf_config = {
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SOCINFO": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_REGULATOR_STUB": "m",
 }
