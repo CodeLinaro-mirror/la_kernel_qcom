@@ -114,8 +114,19 @@ static struct ufs_qcom_host *rcdev_to_ufs_host(struct reset_controller_dev *rcd)
 
 static inline void ufs_qcom_ice_enable(struct ufs_qcom_host *host)
 {
-	if (host->hba->caps & UFSHCD_CAP_CRYPTO)
-		qcom_ice_enable(host->ice);
+	int err;
+
+	if (host->hba->caps & UFSHCD_CAP_CRYPTO) {
+		err = qcom_ice_enable(host->ice);
+
+		if (err) {
+			dev_warn(
+				host->hba->dev,
+				"ICE could not be enabled err=%d. Disabling inline encryption support.\n",
+				err);
+			host->hba->caps &= ~UFSHCD_CAP_CRYPTO;
+		}
+	}
 }
 
 static int ufs_qcom_ice_init(struct ufs_qcom_host *host)
@@ -143,8 +154,20 @@ static int ufs_qcom_ice_init(struct ufs_qcom_host *host)
 
 static inline int ufs_qcom_ice_resume(struct ufs_qcom_host *host)
 {
-	if (host->hba->caps & UFSHCD_CAP_CRYPTO)
-		return qcom_ice_resume(host->ice);
+	int err;
+
+	if (host->hba->caps & UFSHCD_CAP_CRYPTO) {
+		err = qcom_ice_resume(host->ice);
+
+		if (err) {
+			dev_warn(
+				host->hba->dev,
+				"ICE could not be resumed err=%d. Disabling inline encryption support.\n",
+				err);
+			host->hba->caps &= ~UFSHCD_CAP_CRYPTO;
+		}
+		return err;
+	}
 
 	return 0;
 }
@@ -524,10 +547,9 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 		dev_warn(hba->dev, "%s: host reset returned %d\n",
 				  __func__, ret);
 
-	if (phy->power_count) {
+	if (phy->power_count)
 		phy_power_off(phy);
-		phy_exit(phy);
-	}
+
 
 	/* phy initialization - calibrate the phy */
 	ret = phy_init(phy);

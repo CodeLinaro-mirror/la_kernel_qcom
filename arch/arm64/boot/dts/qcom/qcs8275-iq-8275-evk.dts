@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /dts-v1/;
@@ -8,6 +8,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "qcs8300.dtsi"
+#include "qcs8300-thermal.dtsi"
 #include "qcs8300-pmics.dtsi"
 
 /delete-node/ &usb_1_dwc3;
@@ -20,8 +21,10 @@
 	qcom,board-id = <0x00010020 0>, <0x00010019 0>;
 
 	aliases {
+		i2c1 = &i2c1;
 		serial0 = &uart7;
 		serial1 = &uart2;
+		serial2 = &uart6;
 	};
 
 	chosen {
@@ -228,6 +231,8 @@
 	snps,mtl-rx-config = <&mtl_rx_setup>;
 	snps,mtl-tx-config = <&mtl_tx_setup>;
 	snps,ps-speed = <1000>;
+	nvmem-cells = <&mac_addr0>;
+	nvmem-cell-names = "mac-address";
 
 	status = "okay";
 
@@ -306,6 +311,19 @@
 	};
 };
 
+&eud {
+	usb-role-switch;
+	status = "okay";
+};
+
+&eud_con {
+	remote-endpoint = <&hd3ss3220_ep>;
+};
+
+&eud_ep {
+	remote-endpoint = <&usb_role_switch>;
+};
+
 &i2c0 {
 	pinctrl-0 = <&qup_i2c0_default>;
 	pinctrl-names = "default";
@@ -330,9 +348,34 @@
 				port@0 {
 					reg = <0>;
 					hd3ss3220_ep: endpoint {
-						remote-endpoint = <&usb_role_switch>;
+						remote-endpoint = <&eud_con>;
 					};
 				};
+			};
+		};
+	};
+};
+
+&i2c1 {
+	pinctrl-0 = <&qup_i2c1_default>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	eeprom0: eeprom@50 {
+		compatible = "atmel,24c256";
+		reg = <0x50>;
+		pagesize = <64>;
+
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mac_addr0: mac-addr@0 {
+				reg = <0x0 0x6>;
 			};
 		};
 	};
@@ -390,6 +433,7 @@
 		#gpio-cells = <2>;
 		gpio-controller;
 		reg = <0x3d>;
+		vcc-supply = <&vreg_s4a>;
 	};
 
 	expander6: pca953x@3e {
@@ -408,9 +452,25 @@
 	status = "okay";
 };
 
+&mdss {
+	status = "okay";
+};
+
+&mdss_dp0 {
+	status = "okay";
+};
+
+&mdss_dp_out {
+	data-lanes = <0 1 2 3>;
+	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
+};
+
+&mdss_edp_phy {
+	status = "okay";
+};
+
 &pcie0 {
 	perst-gpios = <&tlmm 2 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_default_state>;
@@ -420,7 +480,6 @@
 
 &pcie1 {
 	perst-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 21 GPIO_ACTIVE_HIGH>;
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie1_default_state>;
@@ -442,6 +501,14 @@
 	status = "okay";
 };
 
+&pcieport0 {
+	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
+};
+
+&pcieport1 {
+	wake-gpios = <&tlmm 21 GPIO_ACTIVE_HIGH>;
+};
+
 &pmm8620au_0_gpios {
 	usb2_id_det_default: usb2-id-det-default {
 		pins = "gpio9";
@@ -453,10 +520,12 @@
 };
 
 &qupv3_id_0 {
+	firmware-name = "qcom/qcs8300/qupv3fw.elf";
 	status = "okay";
 };
 
 &qupv3_id_1 {
+	firmware-name = "qcom/qcs8300/qupv3fw.elf";
 	status = "okay";
 };
 
@@ -473,6 +542,40 @@
 &remoteproc_gpdsp {
 	firmware-name = "qcom/qcs8300/gpdsp0.mbn";
 	status = "okay";
+};
+
+&sdc1_clk {
+	bias-disable;
+	drive-strength = <16>;
+};
+
+&sdc1_cmd {
+	bias-pull-up;
+	drive-strength = <10>;
+};
+
+&sdc1_data {
+	bias-pull-up;
+	drive-strength = <10>;
+};
+
+&sdc1_rclk {
+	bias-pull-down;
+};
+
+&sdhc_1 {
+	vmmc-supply = <&vreg_l8a>;
+	vqmmc-supply = <&vreg_s4a>;
+
+	no-sd;
+	no-sdio;
+	non-removable;
+
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&sdc1_clk>, <&sdc1_cmd>, <&sdc1_data>;
+	pinctrl-1 = <&sdc1_clk_sleep>, <&sdc1_cmd_sleep>, <&sdc1_data_sleep>;
+
+	status = "disabled";
 };
 
 &sdhc_2 {
@@ -553,7 +656,9 @@
 &tlmm {
 
 	dp_hot_plug_det: dp-hot-plug-det-state {
-	/* TODO: Add the required nodes once mdss_dp0 is available.*/
+		pins = "gpio94";
+		function = "edp0_hot";
+		bias-disable;
 	};
 
 	ethernet0_default: ethernet0-default-state {
@@ -625,6 +730,13 @@
 		bias-pull-up;
 	};
 
+	qup_i2c1_default: qup-i2c1-state {
+		pins = "gpio19", "gpio20";
+		function = "qup0_se1";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+
 	qup_i2c15_default: qup-i2c15-state {
 		pins = "gpio91", "gpio92";
 		function = "qup1_se7";
@@ -687,6 +799,10 @@
 	};
 };
 
+&uart6 {
+	status = "okay";
+};
+
 &uart7 {
 	status = "okay";
 };
@@ -744,7 +860,7 @@
 		port@0 {
 			reg = <0>;
 			usb_role_switch: endpoint {
-				remote-endpoint = <&hd3ss3220_ep>;
+				remote-endpoint = <&eud_ep>;
 			};
 		};
 

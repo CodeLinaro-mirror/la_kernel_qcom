@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
  * Copyright (c) 2024, 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 /dts-v1/;
 
@@ -22,16 +23,26 @@
 
 	aliases {
 		ethernet0 = &ethernet0;
+		i2c18 = &i2c18;
+		mmc0 = &sdhc_1; /* SDC1 eMMC slot */
+		mmc1 = &sdhc_2; /* SDC2 SD card slot */
 		serial0 = &uart10;
 		serial1 = &uart17;
 		serial2 = &uart0;
 		spi16 = &spi16;
 		ufshc1 = &ufs_mem_hc;
-		mmc0 = &sdhc_1; /* SDC1 SD card slot */
 	};
 
 	chosen {
 		stdout-path = "serial0:115200n8";
+	};
+
+	vreg_cam1_1p8: vreg_cam1_1p8 {
+		compatible = "regulator-fixed";
+		regulator-name = "vreg_cam1_1p8";
+		startup-delay-us = <10000>;
+		enable-active-high;
+		gpio = <&pmm8654au_0_gpios 8 GPIO_ACTIVE_HIGH>;
 	};
 
 	wcn6855-pmu {
@@ -324,6 +335,65 @@
 	};
 };
 
+&camcc {
+	status = "okay";
+};
+
+&camss {
+	vdda-pll-supply = <&vreg_l1c>;
+	vdda-phy-supply = <&vreg_l4a>;
+
+	status = "okay";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@1 {
+			reg = <1>;
+			csiphy1_ep: endpoint {
+				clock-lanes = <7>;
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&imx577_ep1>;
+			};
+		};
+	};
+};
+
+&cci1 {
+	pinctrl-0 = <&cci1_0_default>;
+	pinctrl-1 = <&cci1_0_sleep>;
+
+	status = "okay";
+};
+
+&cci1_i2c0 {
+	camera@1a {
+		compatible = "sony,imx577";
+		reg = <0x1a>;
+
+		reset-gpios = <&tlmm 133 GPIO_ACTIVE_LOW>;
+		pinctrl-0 = <&cam1_default>;
+		pinctrl-names = "default";
+
+		clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clocks = <&camcc CAM_CC_MCLK1_CLK>;
+		assigned-clock-rates = <24000000>;
+
+		dovdd-supply = <&vreg_s4a>;
+		avdd-supply = <&vreg_cam1_1p8>;
+
+		port {
+			imx577_ep1: endpoint {
+				clock-lanes = <7>;
+				link-frequencies = /bits/ 64 <600000000>;
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&csiphy1_ep>;
+			};
+		};
+	};
+};
+
 &ethernet0 {
 	phy-handle = <&sgmii_phy0>;
 	phy-mode = "sgmii";
@@ -334,6 +404,8 @@
 	snps,mtl-rx-config = <&mtl_rx_setup>;
 	snps,mtl-tx-config = <&mtl_tx_setup>;
 	snps,ps-speed = <1000>;
+	nvmem-cells = <&mac_addr0>;
+	nvmem-cell-names = "mac-address";
 
 	status = "okay";
 
@@ -413,63 +485,19 @@
 };
 
 &eud {
+	usb-role-switch;
 	status = "okay";
 };
 
-&i2c0 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
+&eud_con {
+	remote-endpoint = <&hd3ss3220_ep>;
 };
 
-&i2c1 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c2 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c3 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c4 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c5 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c7 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c8 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c9 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c10 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
+&eud_ep {
+	remote-endpoint = <&usb_role_switch>;
 };
 
 &i2c11 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-
 	pinctrl-0 = <&qup_i2c11_default>, <&usb0_intr_state>;
 	pinctrl-names = "default";
 	status = "okay";
@@ -494,7 +522,7 @@
 				port@0 {
 					reg = <0>;
 					hd3ss3220_ep: endpoint {
-						remote-endpoint = <&usb_role_switch>;
+						remote-endpoint = <&eud_con>;
 					};
 				};
 			};
@@ -502,39 +530,7 @@
 	};
 };
 
-&i2c12 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c13 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c14 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c15 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c16 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&i2c17 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
 &i2c18 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
 	pinctrl-0 = <&qup_i2c18_default>;
 	pinctrl-names = "default";
 	status = "okay";
@@ -580,11 +576,28 @@
 		gpio-controller;
 		reg = <0x3b>;
 	};
+
+	eeprom0: eeprom@50 {
+		compatible = "atmel,24c256";
+		reg = <0x50>;
+		pagesize = <64>;
+
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mac_addr0: mac-addr@0 {
+				reg = <0x0 0x6>;
+			};
+		};
+	};
 };
 
 &i2c19 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
 	pinctrl-0 = <&qup_i2c19_default>;
 	pinctrl-names = "default";
 	status = "okay";
@@ -740,96 +753,6 @@
 	clock-frequency = <32768>;
 };
 
-&spi0 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi1 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi2 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi3 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi4 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi5 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi7 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi8 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi9 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi10 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi11 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi12 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi14 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi15 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi16 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi17 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi18 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&spi19 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
 &tlmm {
 	dp_hot_plug_det: dp-hot-plug-det-state {
 		pins = "gpio101";
@@ -936,37 +859,37 @@
 		bias-pull-up;
 	};
 
-	sdc1_clk: sdc1-clk-state {
+	sdc2_clk: sdc2-clk-state {
 		pins = "sdc1_clk";
 		bias-disable;
 		drive-strength = <16>;
 	};
 
-	sdc1_cmd: sdc1-cmd-state {
+	sdc2_cmd: sdc2-cmd-state {
 		pins = "sdc1_cmd";
 		bias-pull-up;
 		drive-strength = <10>;
 	};
 
-	sdc1_data: sdc1-data-state {
+	sdc2_data: sdc2-data-state {
 		pins = "sdc1_data";
 		bias-pull-up;
 		drive-strength = <10>;
 	};
 
-	sdc1_clk_sleep: sdc1-clk-sleep-state {
+	sdc2_clk_sleep: sdc2-clk-sleep-state {
 		pins = "sdc1_clk";
 		drive-strength = <2>;
 		bias-bus-hold;
 	};
 
-	sdc1_cmd_sleep: sdc1-cmd-sleep-state {
+	sdc2_cmd_sleep: sdc2-cmd-sleep-state {
 		pins = "sdc1_cmd";
 		drive-strength = <2>;
 		bias-bus-hold;
 	};
 
-	sdc1_data_sleep: sdc1-data-sleep-state {
+	sdc2_data_sleep: sdc2-data-sleep-state {
 		pins = "sdc1_data";
 		drive-strength = <2>;
 		bias-bus-hold;
@@ -988,7 +911,6 @@
 
 &pcie0 {
 	perst-gpios = <&tlmm 2 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_default_state>;
@@ -998,7 +920,6 @@
 
 &pcie1 {
 	perst-gpios = <&tlmm 4 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 5 GPIO_ACTIVE_HIGH>;
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie1_default_state>;
@@ -1021,6 +942,9 @@
 };
 
 &pcieport0 {
+
+	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
+
 	wifi@0 {
 		compatible = "qcom,wcn6855-wifi";
 		reg = <0x10000 0x0 0x0 0x0 0x0>;
@@ -1037,6 +961,10 @@
 	};
 };
 
+&pcieport1 {
+	wake-gpios = <&tlmm 5 GPIO_ACTIVE_HIGH>;
+};
+
 &pmm8654au_0_pon_resin {
 	linux,code = <KEY_VOLUMEDOWN>;
 	status = "okay";
@@ -1046,49 +974,7 @@
 /delete-node/ &qup_uart0_cts;
 
 &uart0 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
 	status = "okay";
-};
-
-&uart1 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart2 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart3 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart4 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart5 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart7 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart8 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart9 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
 };
 
 &uart10 {
@@ -1096,34 +982,7 @@
 	status = "okay";
 };
 
-&uart11 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart12 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart14 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart15 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart16 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
 &uart17 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
 	status = "okay";
 
 	/* HS UART Instance */
@@ -1132,16 +991,6 @@
 		pinctrl-names = "default";
 		max-speed = <3200000>;
 	};
-};
-
-&uart18 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-};
-
-&uart19 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
 };
 
 &ufs_mem_hc {
@@ -1300,7 +1149,7 @@
 		port@0 {
 			reg = <0>;
 			usb_role_switch: endpoint {
-				remote-endpoint = <&hd3ss3220_ep>;
+				remote-endpoint = <&eud_ep>;
 			};
 		};
 
@@ -1428,13 +1277,13 @@
 	clock-frequency = <38400000>;
 };
 
-&sdhc_1 {
+&sdhc_2 {
 	vmmc-supply = <&dummy_reg>;
 	vqmmc-supply = <&vreg_sdc>;
 
 	pinctrl-names = "default", "sleep";
-	pinctrl-0 = <&sdc1_clk>, <&sdc1_cmd>, <&sdc1_data>, <&sd_cd>;
-	pinctrl-1 = <&sdc1_clk_sleep>, <&sdc1_cmd_sleep>, <&sdc1_data_sleep>, <&sd_cd>;
+	pinctrl-0 = <&sdc2_clk>, <&sdc2_cmd>, <&sdc2_data>, <&sd_cd>;
+	pinctrl-1 = <&sdc2_clk_sleep>, <&sdc2_cmd_sleep>, <&sdc2_data_sleep>, <&sd_cd>;
 
 	cd-gpios = <&tlmm 36 GPIO_ACTIVE_LOW>;
 

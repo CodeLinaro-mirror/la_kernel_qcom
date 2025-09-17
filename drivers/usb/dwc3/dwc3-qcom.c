@@ -96,7 +96,6 @@ struct dwc3_qcom {
 	struct icc_path		*icc_path_ddr;
 	struct icc_path		*icc_path_apps;
 
-	bool			enable_rt;
 	enum usb_role		current_role;
 	struct notifier_block	xhci_nb;
 };
@@ -886,8 +885,14 @@ static int dwc3_qcom_probe_core(struct platform_device *pdev, struct dwc3_qcom *
 		.ignore_resets  = true,
 	};
 
-	ret = dwc3_probe(&qcom->dwc,
-			 qcom->enable_rt ? &qcom_glue_data : NULL);
+	/*
+	 * Always pass glue data to dwc3_probe as the runtime PM support is now
+	 * required for all platforms using the flattened implementation of this
+	 * driver. The conditional flag enable_rt was removed as it's no longer
+	 * needed.
+	 */
+
+	ret = dwc3_probe(&qcom->dwc, &qcom_glue_data);
 	if (ret)
 		return ret;
 
@@ -1075,13 +1080,13 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	ret = reset_control_deassert(qcom->resets);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to deassert resets, err=%d\n", ret);
-		goto reset_assert;
+		return ret;
 	}
 
 	ret = dwc3_qcom_clk_init(qcom, of_clk_get_parent_count(np));
 	if (ret) {
 		dev_err_probe(dev, ret, "failed to get clocks\n");
-		goto reset_assert;
+		return ret;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1117,8 +1122,6 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	if (ignore_pipe_clk)
 		dwc3_qcom_select_utmi_clk(qcom);
 
-	qcom->enable_rt = device_property_read_bool(dev,
-				"qcom,enable-rt");
 	if (!legacy_binding) {
 		/*
 		 * If we are enabling runtime, then we are using flattened
@@ -1195,8 +1198,6 @@ clk_disable:
 		clk_disable_unprepare(qcom->clks[i]);
 		clk_put(qcom->clks[i]);
 	}
-reset_assert:
-	reset_control_assert(qcom->resets);
 
 	return ret;
 }
@@ -1229,7 +1230,6 @@ static void dwc3_qcom_remove(struct platform_device *pdev)
 	qcom->num_clocks = 0;
 
 	dwc3_qcom_interconnect_exit(qcom);
-	reset_control_assert(qcom->resets);
 
 	if (qcom->dwc_dev) {
 		pm_runtime_allow(dev);
@@ -1262,7 +1262,6 @@ static void dwc3_qcom_shutdown(struct platform_device *pdev)
 	qcom->num_clocks = 0;
 
 	dwc3_qcom_interconnect_exit(qcom);
-	reset_control_assert(qcom->resets);
 
 	pm_runtime_allow(qcom->dev);
 	pm_runtime_disable(qcom->dev);

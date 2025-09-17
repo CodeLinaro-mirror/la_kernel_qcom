@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
  * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /dts-v1/;
 
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
-#include <dt-bindings/spmi/spmi.h>
 
 #include "qcs8300.dtsi"
 #include "qcs8300-pmics.dtsi"
+
+/delete-node/ &usb_1_dwc3;
 
 / {
 	model = "Qualcomm Technologies, Inc. QCS8300 Ride";
@@ -20,8 +22,10 @@
 	qcom,board-id = <0x00010019 0>, <0x01010019 1>;
 
 	aliases {
+		i2c15 = &i2c15;
 		serial0 = &uart7;
 		serial1 = &uart2;
+		spi10 = &spi10;
 	};
 
 	chosen {
@@ -113,6 +117,16 @@
 				regulator-name = "vreg_pmu_pcie_1p8";
 			};
 		};
+	};
+
+	regulator-usb2-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "USB2_VBUS";
+		gpio = <&pmm8650au_1_gpios 7 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&usb1_en_state>;
+		pinctrl-names = "default";
+		enable-active-high;
+		regulator-always-on;
 	};
 };
 
@@ -383,7 +397,20 @@
 };
 
 &eud {
+	usb-role-switch;
 	status = "okay";
+};
+
+&eud_ep {
+	remote-endpoint = <&usb_role_switch>;
+};
+
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	firmware-name = "qcom/qcs8300/a623_zap.mbn";
 };
 
 &i2c8 {
@@ -540,25 +567,6 @@
 
 &mdss_edp_phy {
 	status = "okay";
-};
-
-&spmi_bus {
-	pmm8654au_2: pmic@2 {
-		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
-		reg = <2 SPMI_USID>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		pmm8654au_2_gpios: gpio@8800 {
-			compatible = "qcom,pmm8654au-gpio", "qcom,spmi-gpio";
-			reg = <0x8800>;
-			gpio-controller;
-			gpio-ranges = <&pmm8654au_2_gpios 0 0 12>;
-			#gpio-cells = <2>;
-			interrupt-controller;
-			#interrupt-cells = <2>;
-		};
-	};
 };
 
 &tlmm {
@@ -760,7 +768,7 @@
 	status = "okay";
 };
 
-&pmm8654au_2_gpios {
+&pmm8650au_1_gpios {
 	usb1_en_state: usb1-en-state {
 		pins = "gpio7";
 		function = "normal";
@@ -793,21 +801,52 @@
 };
 
 &usb_1 {
-	status = "okay";
-};
+	reg = <0x0 0x0a600000 0x0 0x20000>;
 
-&usb_1_dwc3 {
+	interrupts-extended = <&intc GIC_SPI 292 IRQ_TYPE_LEVEL_HIGH>,
+			      <&intc GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>,
+			      <&pdc 14 IRQ_TYPE_EDGE_BOTH>,
+			      <&pdc 15 IRQ_TYPE_EDGE_BOTH>,
+			      <&pdc 12 IRQ_TYPE_LEVEL_HIGH>;
+	interrupt-names = "dwc_usb3",
+			  "pwr_event",
+			  "dp_hs_phy_irq",
+			  "dm_hs_phy_irq",
+			  "ss_phy_irq";
+
+	iommus = <&apps_smmu 0x80 0x0>;
+
 	snps,dis-u2-entry-quirk;
 	snps,dis-u1-entry-quirk;
 	snps,dis_u2_susphy_quirk;
 	snps,dis_u3_susphy_quirk;
+	snps,dis_enblslpm_quirk;
+
+	phys = <&usb_1_hsphy>, <&usb_qmpphy>;
+	phy-names = "usb2-phy", "usb3-phy";
+	maximum-speed = "super-speed-plus";
 
 	dr_mode = "peripheral";
+	wakeup-source;
+
+	status = "okay";
+
+	ports {
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			usb_role_switch: endpoint {
+				remote-endpoint = <&eud_ep>;
+			};
+		};
+
+	};
 };
 
 &usb_2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&usb1_en_state>;
 	status = "okay";
 };
 

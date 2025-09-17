@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2017-2018, The Linux foundation. All rights reserved.
-// Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/clk.h>
 #include <linux/dmaengine.h>
@@ -77,7 +77,7 @@
 #define GSI_CPOL		BIT(5)
 
 #define CREATE_TRACE_POINTS
-#include <trace/events/qup_buses_trace.h>
+#include <trace/events/qup_spi_trace.h>
 
 void spi_trace_log(struct device *dev, const char *fmt, ...)
 {
@@ -89,7 +89,7 @@ void spi_trace_log(struct device *dev, const char *fmt, ...)
 
 	va_start(args, fmt);
 	vaf.va = &args;
-	trace_buses_log_info(dev_name(dev), &vaf);
+	trace_spi_log_info(dev_name(dev), &vaf);
 	va_end(args);
 }
 
@@ -695,12 +695,15 @@ static int spi_geni_init(struct spi_geni_master *mas)
 			goto out_pm;
 		}
 		spi_slv_setup(mas);
-	} else if (proto != GENI_SE_SPI) {
+	} else if (proto == GENI_SE_INVALID_PROTO) {
 		ret = geni_load_se_firmware(se, GENI_SE_SPI);
 		if (ret) {
-			dev_err(mas->dev, "Cannot load firmware from linux error: %d\n", ret);
+			dev_err(mas->dev, "spi master firmware load failed ret: %d\n", ret);
 			goto out_pm;
 		}
+	} else if (proto != GENI_SE_SPI) {
+		dev_err(mas->dev, "Invalid proto %d\n", proto);
+		goto out_pm;
 	}
 	mas->tx_fifo_depth = geni_se_get_tx_fifo_depth(se);
 

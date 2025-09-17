@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
@@ -667,7 +668,9 @@ static int msm_dp_display_usbpd_attention_cb(struct device *dev)
 		}
 	}
 
-	msm_dp_mst_display_hpd_irq(&dp->msm_dp_display);
+	/* let MST specific IRQ events be handled by its callback */
+	if (msm_dp_display->mst_active)
+		msm_dp_mst_display_hpd_irq(&dp->msm_dp_display);
 	return rc;
 }
 
@@ -1843,7 +1846,7 @@ void msm_dp_display_disable_helper(struct msm_dp *dp, struct msm_dp_panel *msm_d
 		return;
 	}
 
-	msm_dp_ctrl_push_vcpf(msm_dp_display->ctrl, msm_dp_panel);
+	msm_dp_ctrl_push_idle(msm_dp_display->ctrl, msm_dp_panel);
 	msm_dp_ctrl_mst_stream_channel_slot_setup(msm_dp_display->ctrl, msm_dp_display->max_stream);
 	msm_dp_ctrl_mst_send_act(msm_dp_display->ctrl);
 }
@@ -1854,7 +1857,7 @@ void msm_dp_display_atomic_disable(struct msm_dp *msm_dp)
 
 	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
 
-	msm_dp_ctrl_push_idle(msm_dp_display->ctrl);
+	msm_dp_ctrl_push_idle(msm_dp_display->ctrl, msm_dp_display->panel);
 }
 
 void msm_dp_display_unprepare(struct msm_dp *msm_dp)
