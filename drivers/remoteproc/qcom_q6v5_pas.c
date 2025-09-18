@@ -31,6 +31,7 @@
 #include <linux/soc/qcom/smem_state.h>
 #include <linux/soc/qcom/qcom_aoss.h>
 #include <soc/qcom/secure_buffer.h>
+#include <linux/pm_wakeirq.h>
 
 #include <trace/events/rproc_qcom.h>
 #include <soc/qcom/qcom_ramdump.h>
@@ -56,6 +57,8 @@ static DEFINE_MUTEX(q6v5_pas_mutex);
 bool timeout_disabled;
 static bool global_sync_mem_setup;
 static bool recovery_set_cb;
+bool power_state_enter_into_hibernate;
+EXPORT_SYMBOL_GPL(power_state_enter_into_hibernate);
 
 #define to_rproc(d) container_of(d, struct rproc, dev)
 
@@ -161,6 +164,7 @@ struct qcom_adsp {
 	const struct firmware *dtb_firmware;
 	bool subsys_recovery_disabled;
 
+	bool hyp_assign_mem;
 	bool ssr_hyp_assign_mem;
 	phys_addr_t *hyp_assign_phy;
 	size_t *hyp_assign_mem_size;
@@ -182,6 +186,9 @@ struct qcom_adsp {
 	bool ready_irq;
 	bool crash_irq;
 };
+
+
+static int setup_global_sync_mem(struct qcom_adsp *adsp);
 
 static ssize_t txn_id_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -705,6 +712,14 @@ static int adsp_start(struct rproc *rproc)
 
 	qcom_q6v5_prepare(&adsp->q6v5);
 
+	if (adsp->hyp_assign_mem && !global_sync_mem_setup) {
+		ret = setup_global_sync_mem(adsp);
+		if (ret) {
+			dev_err(adsp->dev, "failed to setup global sync mem\n");
+			goto disable_irqs;
+		}
+	}
+
 	if (is_mss_ssr_hyp_assign_en(adsp)) {
 		ret = mpss_dsm_hyp_assign_control(adsp, true);
 		if (ret) {
@@ -1136,6 +1151,47 @@ static void qcom_pas_handover(struct qcom_q6v5 *q6v5)
 	do_bus_scaling(adsp, false);
 }
 
+static void adsp_unassign_memory_region(struct qcom_adsp *adsp)
+{
+	struct qcom_scm_vmperm newvm[1];
+	struct device_node *node;
+	struct resource res;
+	phys_addr_t mem_phys;
+	u64 curr_perm;
+	u64 mem_size;
+	int ret;
+
+	if (!adsp->hyp_assign_mem || !power_state_enter_into_hibernate)
+		return;
+
+	curr_perm = BIT(QCOM_SCM_VMID_HLOS) | BIT(QCOM_SCM_VMID_CDSP);
+	newvm[0].vmid = QCOM_SCM_VMID_HLOS;
+	newvm[0].perm = QCOM_SCM_PERM_RW;
+
+	node = of_parse_phandle(adsp->dev->of_node, "global-sync-mem-reg", 0);
+	if (!node) {
+		dev_err(adsp->dev, "global sync mem region is missing\n");
+		return;
+	}
+
+	ret = of_address_to_resource(node, 0, &res);
+	if (ret) {
+		dev_err(adsp->dev, "address to resource failed for global sync mem\n");
+		return;
+	}
+
+	mem_phys = res.start;
+	mem_size = resource_size(&res);
+	ret = qcom_scm_assign_mem(mem_phys, mem_size, &curr_perm, newvm, ARRAY_SIZE(newvm));
+	if (ret) {
+		dev_err(adsp->dev, "hyp assign for global sync mem failed\n");
+		return;
+	}
+
+	global_sync_mem_setup = false;
+
+}
+
 static int adsp_stop(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = (struct qcom_adsp *)rproc->priv;
@@ -1184,6 +1240,7 @@ static int adsp_stop(struct rproc *rproc)
 			dev_err(adsp->dev, "failed to reclaim mpss dsm mem\n");
 	}
 
+	adsp_unassign_memory_region(adsp);
 	adsp->q6v5.seq++;
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_stop", "exit");
 
@@ -1526,15 +1583,15 @@ static int adsp_pds_attach(struct device *dev, struct device **devs,
 	if (!pd_names)
 		return 0;
 
+	while (pd_names[num_pds])
+		num_pds++;
+
 	/* Handle single power domain */
-	if (dev->pm_domain) {
+	if (num_pds == 1 && dev->pm_domain) {
 		devs[0] = dev;
 		pm_runtime_enable(dev);
 		return 1;
 	}
-
-	while (pd_names[num_pds])
-		num_pds++;
 
 	for (i = 0; i < num_pds; i++) {
 		devs[i] = dev_pm_domain_attach_by_name(dev, pd_names[i]);
@@ -1560,7 +1617,7 @@ static void adsp_pds_detach(struct qcom_adsp *adsp, struct device **pds,
 	int i;
 
 	/* Handle single power domain */
-	if (dev->pm_domain && pd_count) {
+	if (pd_count == 1 && dev->pm_domain) {
 		pm_runtime_disable(dev);
 		return;
 	}
@@ -1642,7 +1699,8 @@ out:
 	return ret;
 }
 
-static int setup_global_sync_mem(struct platform_device *pdev)
+
+static int setup_global_sync_mem(struct qcom_adsp *adsp)
 {
 	struct qcom_scm_vmperm newvm[2];
 	struct device_node *node;
@@ -1658,15 +1716,15 @@ static int setup_global_sync_mem(struct platform_device *pdev)
 	newvm[1].vmid = QCOM_SCM_VMID_CDSP;
 	newvm[1].perm = QCOM_SCM_PERM_RW;
 
-	node = of_parse_phandle(pdev->dev.of_node, "global-sync-mem-reg", 0);
+	node = of_parse_phandle(adsp->dev->of_node, "global-sync-mem-reg", 0);
 	if (!node) {
-		dev_err(&pdev->dev, "global sync mem region is missing\n");
+		dev_err(adsp->dev, "global sync mem region is missing\n");
 		return -EINVAL;
 	}
 
 	ret = of_address_to_resource(node, 0, &res);
 	if (ret) {
-		dev_err(&pdev->dev, "address to resource failed for global sync mem\n");
+		dev_err(adsp->dev, "address to resource failed for global sync mem\n");
 		return ret;
 	}
 
@@ -1674,11 +1732,12 @@ static int setup_global_sync_mem(struct platform_device *pdev)
 	mem_size = resource_size(&res);
 	ret = qcom_scm_assign_mem(mem_phys, mem_size, &curr_perm, newvm, ARRAY_SIZE(newvm));
 	if (ret) {
-		dev_err(&pdev->dev, "hyp assign for global sync mem failed\n");
+		dev_err(adsp->dev, "hyp assign for global sync mem failed\n");
 		return ret;
 	}
 
 	global_sync_mem_setup = true;
+
 	return 0;
 }
 
@@ -1714,6 +1773,28 @@ void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable)
 }
 EXPORT_SYMBOL(qcom_rproc_update_recovery_status);
 
+static int adsp_setup_wakeup(struct qcom_adsp *adsp)
+{
+	int ret;
+
+	if (!adsp) {
+		dev_err(adsp->dev, "Invalid adsp or q6v5\n");
+		return -EINVAL;
+	}
+	ret = device_init_wakeup(adsp->dev, true);
+	if (ret) {
+		dev_err(adsp->dev, "failed to set device for wakeup\n");
+		return ret;
+	}
+	ret = dev_pm_set_wake_irq(adsp->dev, adsp->q6v5.wdog_irq);
+	if (ret) {
+		dev_err(adsp->dev, "failed to set wake_irq for wdog\n");
+		device_init_wakeup(adsp->dev, false);
+	}
+
+	return ret;
+}
+
 static int adsp_probe(struct platform_device *pdev)
 {
 	const struct adsp_data *desc;
@@ -1738,15 +1819,6 @@ static int adsp_probe(struct platform_device *pdev)
 	if (ret < 0 && ret != -EINVAL)
 		return ret;
 
-	if (desc->hyp_assign_mem && !global_sync_mem_setup &&
-			!strcmp(fw_name, "cdsp.mdt")) {
-		ret = setup_global_sync_mem(pdev);
-		if (ret) {
-			dev_err(&pdev->dev, "failed to setup global sync mem\n");
-			return -EINVAL;
-		}
-	}
-
 	if (desc->minidump_id)
 		ops = &adsp_minidump_ops;
 
@@ -1770,6 +1842,7 @@ static int adsp_probe(struct platform_device *pdev)
 	adsp->minidump_id = desc->minidump_id;
 	adsp->pas_id = desc->pas_id;
 	adsp->dtb_pas_id = desc->dtb_pas_id;
+	adsp->hyp_assign_mem = desc->hyp_assign_mem;
 	ret = qcom_rproc_alloc_dtb_firmware(adsp, desc->dtb_firmware_name);
 	if (ret)
 		goto free_rproc;
@@ -1799,32 +1872,28 @@ static int adsp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, adsp);
 
-	ret = device_init_wakeup(adsp->dev, true);
+	ret = adsp_alloc_memory_region(adsp);
 	if (ret)
 		goto free_dtb_firmware;
 
-	ret = adsp_alloc_memory_region(adsp);
-	if (ret)
-		goto deinit_wakeup_source;
-
 	ret = adsp_setup_32b_dma_allocs(adsp);
 	if (ret)
-		goto deinit_wakeup_source;
+		goto free_dtb_firmware;
 
 	ret = adsp_init_clock(adsp);
 	if (ret)
-		goto deinit_wakeup_source;
+		goto free_dtb_firmware;
 
 	ret = adsp_init_regulator(adsp);
 	if (ret)
-		goto deinit_wakeup_source;
+		goto free_dtb_firmware;
 
 	adsp_init_bus_scaling(adsp);
 
 	ret = adsp_pds_attach(&pdev->dev, adsp->active_pds,
 			      desc->active_pd_names);
 	if (ret < 0)
-		goto deinit_wakeup_source;
+		goto free_dtb_firmware;
 	adsp->active_pd_count = ret;
 
 	ret = adsp_pds_attach(&pdev->dev, adsp->proxy_pds,
@@ -1848,21 +1917,25 @@ static int adsp_probe(struct platform_device *pdev)
 	if (ret)
 		goto detach_proxy_pds;
 
+	ret = adsp_setup_wakeup(adsp);
+	if (ret)
+		goto deinit_wakeup_source;
+
 	if (adsp->check_status) {
 		if (rproc_find_status_register(adsp))
-			goto detach_proxy_pds;
+			goto deinit_wakeup_source;
 		adsp->wake_state = devm_qcom_smem_state_get(&pdev->dev, "wakeup", &adsp->wake_bit);
 
 		if (IS_ERR(adsp->wake_state)) {
 			dev_err(&pdev->dev, "failed to acquire wake state\n");
-			goto detach_proxy_pds;
+			goto deinit_wakeup_source;
 		}
 
 		adsp->sleep_state = devm_qcom_smem_state_get(&pdev->dev, "sleep", &adsp->sleep_bit);
 
 		if (IS_ERR(adsp->sleep_state)) {
 			dev_err(&pdev->dev, "failed to acquire sleep state\n");
-			goto detach_proxy_pds;
+			goto deinit_wakeup_source;
 		}
 
 		mutex_init(&adsp->adsp_lock);
@@ -1884,7 +1957,7 @@ static int adsp_probe(struct platform_device *pdev)
 					      desc->ssctl_id);
 	if (IS_ERR(adsp->sysmon)) {
 		ret = PTR_ERR(adsp->sysmon);
-		goto detach_proxy_pds;
+		goto deinit_wakeup_source;
 	}
 
 	qcom_add_ssr_subdev(rproc, &adsp->ssr_subdev, desc->ssr_name);
@@ -1946,17 +2019,17 @@ destroy_minidump_dev:
 	device_remove_file(adsp->dev, &dev_attr_txn_id);
 remove_subdevs:
 	qcom_remove_sysmon_subdev(adsp->sysmon);
+deinit_wakeup_source:
+	dev_pm_clear_wake_irq(adsp->dev);
+	device_init_wakeup(adsp->dev, false);
 detach_proxy_pds:
 	adsp_pds_detach(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
 detach_active_pds:
 	adsp_pds_detach(adsp, adsp->active_pds, adsp->active_pd_count);
-deinit_wakeup_source:
-	device_init_wakeup(adsp->dev, false);
 free_dtb_firmware:
 	if (adsp->dtb_fw_name)
 		kfree_const(adsp->dtb_fw_name);
 free_rproc:
-	device_init_wakeup(adsp->dev, false);
 	rproc_free(rproc);
 
 	return ret;
@@ -1980,6 +2053,7 @@ static int adsp_remove(struct platform_device *pdev)
 	if (adsp->check_status)
 		atomic_notifier_chain_unregister(&panic_notifier_list, &adsp->panic_blk);
 	adsp_pds_detach(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
+	dev_pm_clear_wake_irq(adsp->dev);
 	device_init_wakeup(adsp->dev, false);
 	rproc_free(adsp->rproc);
 
@@ -3005,10 +3079,13 @@ static const struct adsp_data niobe_soccp_resource = {
 static const struct adsp_data seraph_soccp_resource = {
 	.crash_reason_smem = 656,
 	.firmware_name = "soccp.mbn",
+	.dtb_firmware_name = "soccp_dtb.mbn",
 	.pas_id = 51,
+	.dtb_pas_id = 0x41,
+	.minidump_id = 24,
+	.uses_elf64 = true,
 	.ssr_name = "soccp",
 	.sysmon_name = "soccp",
-	.check_status = true,
 	.early_boot = true,
 	.auto_boot = true,
 };
