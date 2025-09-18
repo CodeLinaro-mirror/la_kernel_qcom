@@ -91,6 +91,12 @@ hermetic_genrule(
 )
 
 filegroup(
+    name = "soc_repo_sources",
+    srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
     name = "dt_bindings_headers",
     srcs = glob([
         "include/dt-bindings/**/*.h",
