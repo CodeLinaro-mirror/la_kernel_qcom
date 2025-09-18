@@ -623,8 +623,9 @@ static int ufs_qcom_ice_program_key(struct ufs_hba *hba,
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	union ufs_crypto_cap_entry cap;
-	bool config_enable =
-		cfg->config_enable & UFS_CRYPTO_CONFIGURATION_ENABLE;
+
+	if (!(cfg->config_enable & UFS_CRYPTO_CONFIGURATION_ENABLE))
+		return qcom_ice_evict_key(host->ice, slot);
 
 	/* Only AES-256-XTS has been tested so far. */
 	cap = hba->crypto_cap_array[cfg->crypto_cap_idx];
@@ -632,14 +633,11 @@ static int ufs_qcom_ice_program_key(struct ufs_hba *hba,
 	    cap.key_size != UFS_CRYPTO_KEY_SIZE_256)
 		return -EOPNOTSUPP;
 
-	if (config_enable)
-		return qcom_ice_program_key(host->ice,
-					    QCOM_ICE_CRYPTO_ALG_AES_XTS,
-					    QCOM_ICE_CRYPTO_KEY_SIZE_256,
-					    cfg->crypto_key,
-					    cfg->data_unit_size, slot);
-	else
-		return qcom_ice_evict_key(host->ice, slot);
+	return qcom_ice_program_key(host->ice,
+				    QCOM_ICE_CRYPTO_ALG_AES_XTS,
+				    QCOM_ICE_CRYPTO_KEY_SIZE_256,
+				    cfg->crypto_key,
+				    cfg->data_unit_size, slot);
 }
 
 #else
@@ -901,11 +899,11 @@ static void ufs_qcom_select_unipro_mode(struct ufs_qcom_host *host)
 
 	if (host->hw_ver.major >= 0x05) {
 		ufshcd_rmwl(host->hba, QUNIPRO_G4_SEL, 0, REG_UFS_CFG0);
-		ufshcd_rmwl(host->hba, HCI_UAWM_OOO_DIS, 0, REG_UFS_CFG0);
+		/* By default, AXI Write OOO is disabled. Keep it disabled on rumi */
+		if (!host->disable_lpm)
+			ufshcd_rmwl(host->hba, HCI_UAWM_OOO_DIS, 0, REG_UFS_CFG0);
 	}
 
-	/* make sure above configuration is applied before we return */
-	mb();
 }
 
 static int ufs_qcom_phy_power_on(struct ufs_hba *hba)
@@ -1104,7 +1102,7 @@ static int ufs_qcom_enable_hw_clk_gating(struct ufs_hba *hba)
 			UNUSED_UNIPRO_CLK_GATED, UFS_AH8_CFG);
 
 	/* Ensure that HW clock gating is enabled before next operations */
-	mb();
+	ufshcd_readl(hba, REG_UFS_CFG2);
 
 	/* Enable Qunipro internal clock gating if supported */
 	if (!ufs_qcom_cap_qunipro_clk_gating(host))
@@ -1292,7 +1290,7 @@ static int __ufs_qcom_cfg_timers(struct ufs_hba *hba, u32 gear,
 		 * make sure above write gets applied before we return from
 		 * this function.
 		 */
-		mb();
+		ufshcd_readl(hba, REG_UFS_SYS1CLK_1US);
 	}
 
 	if (ufs_qcom_cap_qunipro(host))

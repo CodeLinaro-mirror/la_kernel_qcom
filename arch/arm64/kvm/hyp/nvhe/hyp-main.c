@@ -648,6 +648,10 @@ static void sync_debug_state(struct pkvm_hyp_vcpu *hyp_vcpu)
 		return;
 
 	__vcpu_restore_guest_debug_regs(vcpu);
+	vcpu_write_sys_reg(host_vcpu, vcpu_read_sys_reg(vcpu, MDSCR_EL1),
+						   MDSCR_EL1);
+	*vcpu_cpsr(host_vcpu) = *vcpu_cpsr(vcpu);
+
 	vcpu->arch.debug_ptr = &host_vcpu->arch.vcpu_debug_state;
 }
 
@@ -666,9 +670,6 @@ static void flush_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 	struct kvm_vcpu *host_vcpu = hyp_vcpu->host_vcpu;
 	hyp_entry_exit_handler_fn ec_handler;
 	u8 esr_ec;
-
-	if (READ_ONCE(hyp_vcpu->power_state) == PSCI_0_2_AFFINITY_LEVEL_ON_PENDING)
-		pkvm_reset_vcpu(hyp_vcpu);
 
 	/*
 	 * If we deal with a non-protected guest and the state is potentially
@@ -928,29 +929,37 @@ static struct kvm_vcpu *__get_host_hyp_vcpus(struct kvm_vcpu *arg,
 		__get_host_hyp_vcpus(__vcpu, hyp_vcpup);			\
 	})
 
+static bool is_vcpu_runnable(struct pkvm_hyp_vcpu *hyp_vcpu)
+{
+	return (!pkvm_hyp_vcpu_is_protected(hyp_vcpu) ||
+		hyp_vcpu->power_state == PSCI_0_2_AFFINITY_LEVEL_ON);
+}
+
 static void handle___kvm_vcpu_run(struct kvm_cpu_context *host_ctxt)
 {
 	struct pkvm_hyp_vcpu *hyp_vcpu;
 	struct kvm_vcpu *host_vcpu;
-	int ret;
+	int ret = ARM_EXCEPTION_IL;
 
 	host_vcpu = get_host_hyp_vcpus(host_ctxt, 1, &hyp_vcpu);
-	if (!host_vcpu) {
-		ret = -EINVAL;
+	if (!host_vcpu)
 		goto out;
-	}
 
 	/*
 	 * KVM (and pKVM) doesn't support SME guests, and ensures that SME
 	 * features aren't enabled in pstate when loading a vcpu. Therefore,
 	 * if SME features enabled it's either a bug or a malicious host.
 	 */
-	if (unlikely(system_supports_sme() && read_sysreg_s(SYS_SVCR))) {
-		ret = -EINVAL;
+	if (unlikely(system_supports_sme() && read_sysreg_s(SYS_SVCR)))
 		goto out;
-	}
 
 	if (unlikely(hyp_vcpu)) {
+		if (hyp_vcpu->power_state == PSCI_0_2_AFFINITY_LEVEL_ON_PENDING)
+			pkvm_reset_vcpu(hyp_vcpu);
+
+		if (unlikely(!is_vcpu_runnable(hyp_vcpu)))
+			goto out;
+
 		flush_hyp_vcpu(hyp_vcpu);
 
 		ret = __kvm_vcpu_run(&hyp_vcpu->vcpu);
@@ -1411,7 +1420,7 @@ static void handle___pkvm_enable_tracing(struct kvm_cpu_context *host_ctxt)
 
 static void handle___pkvm_swap_reader_tracing(struct kvm_cpu_context *host_ctxt)
 {
-	DECLARE_REG(int, cpu, host_ctxt, 1);
+	DECLARE_REG(unsigned int, cpu, host_ctxt, 1);
 
 	cpu_reg(host_ctxt, 1) = __pkvm_swap_reader_tracing(cpu);
 }
@@ -1540,7 +1549,8 @@ static void handle___pkvm_host_iommu_detach_dev(struct kvm_cpu_context *host_ctx
 
 static void handle___pkvm_host_iommu_map_pages(struct kvm_cpu_context *host_ctxt)
 {
-	unsigned long ret;
+	int ret;
+	unsigned long mapped;
 	DECLARE_REG(pkvm_handle_t, domain, host_ctxt, 1);
 	DECLARE_REG(unsigned long, iova, host_ctxt, 2);
 	DECLARE_REG(phys_addr_t, paddr, host_ctxt, 3);
@@ -1549,8 +1559,9 @@ static void handle___pkvm_host_iommu_map_pages(struct kvm_cpu_context *host_ctxt
 	DECLARE_REG(unsigned int, prot, host_ctxt, 6);
 
 	ret = kvm_iommu_map_pages(domain, iova, paddr,
-				  pgsize, pgcount, prot);
-	hyp_reqs_smccc_encode(ret, host_ctxt, this_cpu_ptr(&host_hyp_reqs));
+				  pgsize, pgcount, prot, &mapped);
+	cpu_reg(host_ctxt, 0) = ret;
+	hyp_reqs_smccc_encode(mapped, host_ctxt, this_cpu_ptr(&host_hyp_reqs));
 }
 
 static void handle___pkvm_host_iommu_unmap_pages(struct kvm_cpu_context *host_ctxt)
