@@ -162,4 +162,5 @@ autogvm_perf_config = {
     "CONFIG_QCOM_RUN_QUEUE_STATS": "m",
     "CONFIG_RPMSG_QCOM_GLINK_CMA": "m",
     "CONFIG_AQUANTIA_PHY": "m",
+    "CONFIG_QCOM_FORCE_WDOG_BITE_ON_PANIC": "y",
 }
