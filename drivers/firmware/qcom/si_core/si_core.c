@@ -20,6 +20,7 @@
 
 #include "si_core.h"
 #include "si_core_adci.h"
+#include "si_core_irq.h"
 
 #include "mem-object.h"
 
@@ -1205,6 +1206,8 @@ int process_doorbell_msg(void *buf)
 		errno = object->ops->dispatch(0,
 			/* .dispatch(Object, Operation, Arguments). */
 			object, msg->op, args);
+
+		put_si_object(object);
 	}
 
 	kfree(args);
@@ -1412,8 +1415,15 @@ static int si_core_probe(struct platform_device *pdev)
 		goto err_mem_obj_init;
 
 	adci_start();
+
+	ret = si_core_doorbell_setup(pdev);
+	if (ret)
+		goto err_irq_setup;
+
 	return 0;
 
+err_irq_setup:
+	adci_shutdown();
 err_mem_obj_init:
 	qtee_ffa_shm_deinit(pdev);
 err_dma_mask:
@@ -1428,6 +1438,7 @@ err_kobj_create:
 static void si_core_remove(struct platform_device *pdev)
 {
 	/* TODO. Prevent unloading if 'xa_si_objects' is not empty. */
+	si_core_doorbell_cleanup(pdev);
 	adci_shutdown();
 	qtee_ffa_shm_deinit(pdev);
 	sysfs_remove_group(si_core_kobj, &attr_group);
