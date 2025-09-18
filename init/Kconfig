@@ -2041,4 +2041,10 @@ if 64BIT
 source "init/Kconfig.gki"
 
 endif
+
+if !64BIT
+source "init/Kconfig.qcom32bit"
+
+endif
+
 source "init/Kconfig.gki-debug"
