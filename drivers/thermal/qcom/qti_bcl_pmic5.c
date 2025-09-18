@@ -168,7 +168,7 @@ void bcl_pmic5_notifier_unregister(struct notifier_block *n)
 }
 
 static int bcl_read_multi_register(struct bcl_device *bcl_perph, int16_t reg_offset,
-				unsigned int *data, size_t len)
+				void *data, size_t len)
 {
 	int ret = 0;
 
@@ -183,9 +183,9 @@ static int bcl_read_multi_register(struct bcl_device *bcl_perph, int16_t reg_off
 		pr_err("Error reading reg base:0x%04x len:%ld err:%d\n",
 				bcl_perph->fg_bcl_addr + reg_offset, len, ret);
 	else
-		pr_debug("Read register:0x%04x value:0x%02x len:%ld\n",
+		pr_debug("Read register:0x%04x len:%ld\n",
 				bcl_perph->fg_bcl_addr + reg_offset,
-				*data, len);
+				len);
 
 	return ret;
 }
@@ -265,6 +265,7 @@ static void convert_vbat_to_vcmp_val(int vbat, int *val)
 		vbat = BCL_VBAT_MAX_MV;
 	else if (vbat < BCL_VBAT_THRESH_BASE)
 		vbat = BCL_VBAT_THRESH_BASE;
+
 	*val = (vbat - BCL_VBAT_THRESH_BASE) / BCL_VBAT_INC_MV;
 }
 
@@ -358,6 +359,7 @@ static int bcl_set_ibat(struct thermal_zone_device *tz, int low, int high)
 		convert_ibat_to_adc_val(bat_data->dev, &thresh_value,
 				BCL_IBAT_SCALING_UA *
 				bat_data->dev->ibat_ext_range_factor);
+
 	val = (int8_t)thresh_value;
 	switch (bat_data->type) {
 	case BCL_IBAT_LVL0:
@@ -407,6 +409,7 @@ static int bcl_read_ibat(struct thermal_zone_device *tz, int *adc_value)
 	unsigned int val = 0;
 	struct bcl_peripheral_data *bat_data =
 		(struct bcl_peripheral_data *)tz->devdata;
+	struct bcl_device *bcl_perph = (struct bcl_device *)bat_data->dev;
 
 	*adc_value = val;
 	if (bat_data->dev->dig_major < BCL_GEN4_MAJOR_REV)
@@ -453,6 +456,11 @@ static int bcl_read_ibat(struct thermal_zone_device *tz, int *adc_value)
 	pr_debug("ibat:%d mA ADC:0x%02x\n", bat_data->last_val, val);
 	BCL_IPC(bat_data->dev, "ibat:%d mA ADC:0x%02x\n",
 		 bat_data->last_val, val);
+
+	if (!bcl_perph->enable_bpm)
+		return ret;
+
+	ret = get_bpm_stats(bcl_perph, &bcl_perph->bpm_stats);
 
 	return ret;
 }
@@ -613,6 +621,7 @@ static int bcl_set_lbat(struct thermal_zone_device *tz, int low, int high)
 		disable_irq_nosync(bat_data->irq_num);
 		disable_irq_wake(bat_data->irq_num);
 		bat_data->irq_enabled = false;
+
 		pr_debug("lbat[%d]: disable irq:%d low: %d high: %d\n",
 				bat_data->type,
 				bat_data->irq_num,
@@ -679,60 +688,50 @@ static int bcl_read_lbat(struct thermal_zone_device *tz, int *adc_value)
 	BCL_IPC(bcl_perph, "LVLbat:%d irq_status:%d val:%d\n", bat_data->type,
 			val, bat_data->last_val);
 
+	if (!bcl_perph->enable_bpm)
+		return ret;
+
+	ret = get_bpm_stats(bcl_perph, &bcl_perph->bpm_stats);
+
 bcl_read_exit:
 	return ret;
 }
 
 int get_bpm_stats(struct bcl_device *bcl_dev,
-			 struct bcl_bpm *bpm_stats)
+			 struct bcl_bpm_stats *bpm_stats)
 {
-	unsigned int val = 0;
 	int ret = 0;
 
 	mutex_lock(&bcl_dev->stats_lock);
 	ret = bcl_write_register(bcl_dev, BPM_EN_OFFSET, BPM_HOLD);
 	if (ret)
 		goto bpm_exit;
-	ret = bcl_read_register(bcl_dev, BCL_LVL0_CNT_OFFSET, &bpm_stats->lvl0_cnt);
+	ret = bcl_read_multi_register(bcl_dev, BPM_MAX_IBAT_OFFSET, bpm_stats, 11);
 	if (ret)
 		goto bpm_exit;
-	ret = bcl_read_register(bcl_dev, BCL_LVL1_CNT_OFFSET, &bpm_stats->lvl1_cnt);
-	if (ret)
-		goto bpm_exit;
-	ret = bcl_read_register(bcl_dev, BCL_LVL2_CNT_OFFSET, &bpm_stats->lvl2_cnt);
-	if (ret)
-		goto bpm_exit;
-	ret = bcl_read_multi_register(bcl_dev, BPM_MAX_IBAT_OFFSET, &val, 2);
-	if (ret)
-		goto bpm_exit;
-	bpm_stats->max_ibat  = sign_extend32(val, EXTEND_BIT);
-	convert_adc_nu_to_mu_val(&bpm_stats->max_ibat,
-			BCL_IBAT_COTTID_SCALING);
-
-	ret = bcl_read_multi_register(bcl_dev, BPM_SYNC_VBAT_OFFSET, &val, 2);
-	if (ret)
-		goto bpm_exit;
-	bpm_stats->sync_vbat =  sign_extend32(val, EXTEND_BIT);
-	convert_adc_nu_to_mu_val(&bpm_stats->sync_vbat,
-			BCL_VBAT_SCALING_REV5_NV);
-
-	ret = bcl_read_multi_register(bcl_dev, BPM_MIN_VBAT_OFFSET, &val, 2);
-	if (ret)
-		goto bpm_exit;
-	bpm_stats->min_vbat =  sign_extend32(val, EXTEND_BIT);
-	convert_adc_nu_to_mu_val(&bpm_stats->min_vbat,
-			BCL_VBAT_SCALING_REV5_NV);
-
-	ret = bcl_read_multi_register(bcl_dev, BPM_SYNC_IBAT_OFFSET, &val, 2);
-	if (ret)
-		goto bpm_exit;
-	bpm_stats->sync_ibat = sign_extend32(val, EXTEND_BIT);
-	convert_adc_nu_to_mu_val(&bpm_stats->sync_ibat,
-			BCL_IBAT_COTTID_SCALING);
 
 	ret = bcl_write_register(bcl_dev, BPM_EN_OFFSET, BPM_CLR);
 	if (ret)
 		goto bpm_exit;
+
+	bcl_dev->last_bpm_read_ts = sched_clock();
+
+	bpm_stats->max_ibat = sign_extend32(bpm_stats->max_ibat, EXTEND_BIT);
+	convert_adc_nu_to_mu_val((unsigned int *)&bpm_stats->max_ibat,
+			bcl_dev->desc->ibat_scaling_factor);
+
+	bpm_stats->sync_vbat = sign_extend32(bpm_stats->sync_vbat, EXTEND_BIT);
+	convert_adc_nu_to_mu_val((unsigned int *)&bpm_stats->sync_vbat,
+			BCL_VBAT_SCALING_REV5_NV);
+
+	bpm_stats->min_vbat = sign_extend32(bpm_stats->min_vbat, EXTEND_BIT);
+	convert_adc_nu_to_mu_val((unsigned int *)&bpm_stats->min_vbat,
+			BCL_VBAT_SCALING_REV5_NV);
+
+	bpm_stats->sync_ibat = sign_extend32(bpm_stats->sync_ibat, EXTEND_BIT);
+	convert_adc_nu_to_mu_val((unsigned int *)&bpm_stats->sync_ibat,
+			bcl_dev->desc->ibat_scaling_factor);
+
 	mutex_unlock(&bcl_dev->stats_lock);
 
 	pr_debug(
@@ -752,13 +751,11 @@ static irqreturn_t bcl_handle_irq(int irq, void *data)
 	struct bcl_peripheral_data *perph_data =
 		(struct bcl_peripheral_data *)data;
 	unsigned int irq_status = 0;
-	int ibat = 0, vbat = 0;
+	int ibat = 0, vbat = 0, ret = 0;
 	uint32_t bcl_lvl = 0;
 	struct bcl_device *bcl_perph;
-	struct bcl_bpm bpm_stat;
 	unsigned long long start_ts = 0, end_ts = 0;
 
-	memset(&bpm_stat, 0, sizeof(bpm_stat));
 	if (!perph_data->tz_dev)
 		return IRQ_HANDLED;
 	bcl_perph = perph_data->dev;
@@ -789,14 +786,13 @@ static irqreturn_t bcl_handle_irq(int irq, void *data)
 		"Irq:%d triggered for bcl type:%s. status:%u ibat=%d vbat=%d\n",
 			irq, bcl_int_names[perph_data->type],
 			irq_status, ibat, vbat);
-
 		if (bcl_perph->enable_bpm) {
-			get_bpm_stats(bcl_perph, &bpm_stat);
 			BCL_IPC(bcl_perph,
-				"bpm. lvl0:%d lvl1:%d lvl2:%d max_ibat:%d sync_vbat:%d min_vbat:%d sync_ibat:%d\n",
-				bpm_stat.lvl0_cnt, bpm_stat.lvl1_cnt, bpm_stat.lvl2_cnt,
-				bpm_stat.max_ibat, bpm_stat.sync_vbat,
-				bpm_stat.min_vbat, bpm_stat.sync_ibat);
+			"BPM:lvl0:%d lvl1:%d lvl2:%d max_ibat:%d sync_vbat:%d min_vbat:%d sync_ibat:%d,ret:%d\n",
+				bcl_perph->bpm_stats.lvl0_cnt, bcl_perph->bpm_stats.lvl1_cnt,
+				bcl_perph->bpm_stats.lvl2_cnt,
+				bcl_perph->bpm_stats.max_ibat, bcl_perph->bpm_stats.sync_vbat,
+				bcl_perph->bpm_stats.min_vbat, bcl_perph->bpm_stats.sync_ibat, ret);
 		}
 
 		bcl_update_trigger_stats(&bcl_perph->stats[bcl_lvl], ibat, vbat, start_ts);
@@ -809,6 +805,8 @@ static irqreturn_t bcl_handle_irq(int irq, void *data)
 			++bcl_perph->stats[bcl_lvl].self_cleared_counter;
 	} else {
 		++bcl_perph->stats[bcl_lvl].self_cleared_counter;
+		if (bcl_perph->enable_bpm)
+			ret = get_bpm_stats(bcl_perph, &bcl_perph->bpm_stats);
 	}
 
 	return IRQ_HANDLED;
@@ -955,6 +953,7 @@ static void bcl_vbat_init(struct platform_device *pdev,
 		if (ret || !val)
 			return;
 	}
+
 	vbat->ops = vbat_tzd_ops;
 	vbat->tz_dev = devm_thermal_of_zone_register(&pdev->dev,
 				type, vbat, &vbat->ops);

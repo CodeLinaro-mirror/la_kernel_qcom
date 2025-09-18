@@ -39,14 +39,14 @@ struct bcl_data_history {
 	unsigned long long clear_ts;
 };
 
-struct bcl_bpm {
-	int lvl0_cnt;
-	int lvl1_cnt;
-	int lvl2_cnt;
-	int max_ibat;
-	int sync_vbat;
-	int min_vbat;
-	int sync_ibat;
+struct bcl_bpm_stats {
+	uint16_t max_ibat;
+	uint16_t sync_vbat;
+	uint16_t min_vbat;
+	uint16_t sync_ibat;
+	uint8_t lvl0_cnt;
+	uint8_t lvl1_cnt;
+	uint8_t lvl2_cnt;
 };
 
 struct bcl_lvl_stats {
@@ -92,6 +92,9 @@ struct bcl_device {
 	bool				no_bit_shift;
 	uint32_t			ibat_ext_range_factor;
 	struct mutex			stats_lock;
+	struct bcl_bpm_stats		bpm_stats;
+	unsigned long long		last_bpm_read_ts;
+	unsigned long long		last_bpm_reset_ts;
 	struct bcl_peripheral_data	param[BCL_TYPE_MAX];
 	struct bcl_lvl_stats		stats[MAX_BCL_LVL_COUNT];
 	const struct bcl_desc		*desc;
@@ -105,4 +108,4 @@ void bcl_update_clear_stats(struct bcl_lvl_stats *bcl_stat);
 
 void bcl_update_trigger_stats(struct bcl_lvl_stats *bcl_stat,
 			int ibat, int vbat, unsigned long long trigger_ts);
-int get_bpm_stats(struct bcl_device *bcl_dev, struct bcl_bpm *bpm_stats);
+int get_bpm_stats(struct bcl_device *bcl_dev, struct bcl_bpm_stats *bpm_stats);

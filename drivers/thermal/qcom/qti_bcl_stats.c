@@ -101,7 +101,6 @@ DEFINE_SHOW_ATTRIBUTE(bcl_lvl);
 static int bpm_stats_show(struct seq_file *s, void *data)
 {
 	struct bcl_device *bcl_perph = s->private;
-	struct bcl_bpm bpm_stat;
 
 	if (bcl_perph == NULL) {
 		pr_err("NULL\n");
@@ -111,19 +110,15 @@ static int bpm_stats_show(struct seq_file *s, void *data)
 	if (!bcl_perph->enable_bpm)
 		return 0;
 
-	memset(&bpm_stat, 0, sizeof(bpm_stat));
-	get_bpm_stats(bcl_perph, &bpm_stat);
+	get_bpm_stats(bcl_perph, &bcl_perph->bpm_stats);
 
 	seq_printf(s, "Max Ibat\t: %d \tSynchronus Vbat\t: %d\n",
-				bpm_stat.max_ibat, bpm_stat.sync_vbat);
+		bcl_perph->bpm_stats.max_ibat, bcl_perph->bpm_stats.sync_vbat);
 	seq_printf(s, "Min Vbat\t: %d \tSynchronus Ibat\t: %d\n",
-				bpm_stat.min_vbat, bpm_stat.sync_ibat);
-	seq_printf(s, "%-30s: %d\n",
-				"lvl0 Alarm counter", bpm_stat.lvl0_cnt);
-	seq_printf(s, "%-30s: %d\n",
-				"lvl1 Alarm counter", bpm_stat.lvl1_cnt);
-	seq_printf(s, "%-30s: %d\n",
-				"lvl2 Alarm counter", bpm_stat.lvl2_cnt);
+		bcl_perph->bpm_stats.min_vbat, bcl_perph->bpm_stats.sync_ibat);
+	seq_printf(s, "lvl0 count\t: %d\n", bcl_perph->bpm_stats.lvl0_cnt);
+	seq_printf(s, "lvl1 count\t: %d\n", bcl_perph->bpm_stats.lvl1_cnt);
+	seq_printf(s, "lvl2 count\t: %d\n", bcl_perph->bpm_stats.lvl2_cnt);
 
 	return 0;
 }
@@ -141,13 +136,17 @@ static int bpm_reset(void *data, u64 val)
 		return 0;
 	}
 
+	mutex_lock(&bcl_perph->stats_lock);
 	base = bcl_perph->fg_bcl_addr;
 	ret = regmap_write(bcl_perph->regmap, (base + BPM_CLR_OFFSET), reset);
 	if (ret < 0) {
 		pr_err("Error reading register:0x%04x val:0x%02x err:%d\n",
 			(base + BPM_CLR_OFFSET), reset, ret);
+		mutex_unlock(&bcl_perph->stats_lock);
 		return ret;
 	}
+	bcl_perph->last_bpm_reset_ts = sched_clock();
+	mutex_unlock(&bcl_perph->stats_lock);
 
 	return 0;
 }
@@ -170,8 +169,10 @@ void bcl_stats_init(char *bcl_name, struct bcl_device *bcl_perph, uint32_t stats
 				&bcl_stats[idx], &bcl_lvl_fops);
 	}
 
-	debugfs_create_file("bpm_stats", 0444, bcl_dev_parent,
-				bcl_perph, &bpm_stats_fops);
-	debugfs_create_file("reset", 0200, bcl_dev_parent,
-				bcl_perph, &bpm_reset_fops);
+	if (bcl_perph->enable_bpm) {
+		debugfs_create_file("bpm_stats", 0444, bcl_dev_parent,
+					bcl_perph, &bpm_stats_fops);
+		debugfs_create_file("reset", 0200, bcl_dev_parent,
+					bcl_perph, &bpm_reset_fops);
+	}
 }
