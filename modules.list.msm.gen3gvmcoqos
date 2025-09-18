@@ -45,3 +45,4 @@ qcom-spmi-pmic.ko
 pinctrl-spmi-gpio.ko
 pinctrl-spmi-mpp.ko
 rtc-pm8xxx.ko
+vmw_vsock_virtio_transport.ko
