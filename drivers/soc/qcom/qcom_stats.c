@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <asm/arch_timer.h>
@@ -430,22 +430,22 @@ static long qcom_stats_device_ioctl(struct file *file, unsigned int cmd,
 		subsystem = &subsystems[3];
 		break;
 	case SLPI_IOCTL:
-		subsystem = &subsystems[4];
-		break;
-	case GPU_IOCTL:
-		subsystem = &subsystems[5];
-		break;
-	case DISPLAY_IOCTL:
-		subsystem = &subsystems[6];
-		break;
-	case ADSP_ISLAND_IOCTL:
 		subsystem = &subsystems[7];
 		break;
-	case SLPI_ISLAND_IOCTL:
+	case GPU_IOCTL:
 		subsystem = &subsystems[8];
 		break;
-	case APSS_IOCTL:
+	case DISPLAY_IOCTL:
 		subsystem = &subsystems[9];
+		break;
+	case ADSP_ISLAND_IOCTL:
+		subsystem = &subsystems[10];
+		break;
+	case SLPI_ISLAND_IOCTL:
+		subsystem = &subsystems[11];
+		break;
+	case APSS_IOCTL:
+		subsystem = &subsystems[12];
 		break;
 	case AOSD_IOCTL:
 		stats_id = 0;
@@ -959,16 +959,19 @@ static void qcom_create_island_stat_files(struct dentry *root, void __iomem *reg
 					  struct stats_data *d,
 					  const struct stats_config *config)
 {
+#ifdef CONFIG_DEBUG_FS
 	if (!config->island_stats_avail)
 		return;
 
 	debugfs_create_file("island_stats", 0400, root, NULL, &island_stats_fops);
+#endif
 }
 
 static void qcom_create_ddr_stat_files(struct dentry *root, void __iomem *reg,
 					     struct stats_data *d,
 					     const struct stats_config *config)
 {
+#ifdef CONFIG_DEBUG_FS
 	size_t stats_offset;
 	u32 key;
 
@@ -980,6 +983,7 @@ static void qcom_create_ddr_stat_files(struct dentry *root, void __iomem *reg,
 	key = readl_relaxed(reg + stats_offset + DDR_STATS_MAGIC_KEY_ADDR);
 	if (key == DDR_STATS_MAGIC_KEY)
 		debugfs_create_file("ddr_stats", 0400, root, reg + stats_offset, &ddr_stats_fops);
+#endif
 }
 
 static void qcom_create_soc_sleep_stat_files(struct dentry *root, void __iomem *reg,
@@ -1015,8 +1019,10 @@ static void qcom_create_soc_sleep_stat_files(struct dentry *root, void __iomem *
 		 */
 		type = readl(d[i].base);
 		get_sleep_stat_name(type, stat_type);
+#ifdef CONFIG_DEBUG_FS
 		debugfs_create_file(stat_type, 0400, root, &d[i],
 				    &qcom_soc_sleep_stats_fops);
+#endif
 
 		offset += sizeof(struct sleep_stats);
 		if (d[i].appended_stats_avail)
@@ -1028,6 +1034,7 @@ static void qcom_create_subsystem_stat_files(struct dentry *root,
 					     const struct stats_config *config,
 					     struct device_node *node)
 {
+#ifdef CONFIG_DEBUG_FS
 	int i, j, n_subsystems;
 	const char *name;
 
@@ -1050,12 +1057,13 @@ static void qcom_create_subsystem_stat_files(struct dentry *root,
 			}
 		}
 	}
+#endif
 }
 
 static int qcom_stats_probe(struct platform_device *pdev)
 {
 	void __iomem *reg;
-	struct dentry *root;
+	struct dentry *root = NULL;
 	const struct stats_config *config;
 	struct stats_data *d;
 	int i;
@@ -1081,7 +1089,9 @@ static int qcom_stats_probe(struct platform_device *pdev)
 	for (i = 0; i < config->num_records; i++)
 		d[i].appended_stats_avail = config->appended_stats_avail;
 
+#ifdef CONFIG_DEBUG_FS
 	root = debugfs_create_dir("qcom_stats", NULL);
+#endif
 
 	qcom_create_subsystem_stat_files(root, config, pdev->dev.of_node);
 	qcom_create_soc_sleep_stat_files(root, reg, d, config);
@@ -1091,7 +1101,9 @@ static int qcom_stats_probe(struct platform_device *pdev)
 	drv->d = d;
 	drv->config = config;
 	drv->base = reg;
+#ifdef CONFIG_DEBUG_FS
 	drv->root = root;
+#endif
 	drv->ddr_freqsync_msg_time = 0;
 	mutex_init(&drv->lock);
 
@@ -1146,7 +1158,9 @@ fail:
 	cdev_del(&drv->stats_cdev);
 	unregister_chrdev_region(drv->dev_no, 1);
 fail_create_stats_device:
+#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(drv->root);
+#endif
 	return ret;
 }
 
@@ -1159,7 +1173,9 @@ static int qcom_stats_remove(struct platform_device *pdev)
 	cdev_del(&drv->stats_cdev);
 	unregister_chrdev_region(drv->dev_no, 1);
 
+#ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(drv->root);
+#endif
 
 	return 0;
 }

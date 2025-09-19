@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 /*
  * Debugging enhancement in MSM PCIe endpoint driver.
  */
@@ -35,6 +35,8 @@
 #define LINK_STATUS_REG_LANES_SHFT              0x14
 #define POSITIVE_SEQUENCE                       1
 #define NEGATIVE_SEQUENCE                       0
+#define TO_LTSSM_STR(state)			((state) >= ARRAY_SIZE(ep_pcie_ltssm_str) ? \
+						"LTSSM_INVALID" : ep_pcie_ltssm_str[state])
 
 static const char * const
 	ep_pcie_debugfs_option_desc[EP_PCIE_MAX_DEBUGFS_OPTION] = {
@@ -75,6 +77,7 @@ static struct ep_pcie_dev_t *dev;
 
 static void ep_pcie_check_link_state(struct ep_pcie_dev_t *dev)
 {
+	int idx = 0;
 	u32 val = 0;
 
 	if (!dev->power_on) {
@@ -86,8 +89,9 @@ static void ep_pcie_check_link_state(struct ep_pcie_dev_t *dev)
 	EP_PCIE_DBG_FS("PCIe V%d: ********** PCIe LTSSM State **********", dev->rev);
 	val = readl_relaxed(dev->parf + PCIE20_PARF_LTSSM);
 	EP_PCIE_DBG_FS("PARF_LTSSM: 0x%x\n", val);
-	EP_PCIE_DBG_FS("LTSSM State: %s\n",
-		ep_pcie_ltssm_str[val & PCIE20_PARF_LTSSM_STATE_MASK]);
+
+	idx = val & PCIE20_PARF_LTSSM_STATE_MASK;
+	EP_PCIE_DBG_FS("LTSSM State: %s\n", TO_LTSSM_STR(idx));
 
 	EP_PCIE_DBG_FS("PCIe V%d: *********** PCIe PM Status ***********", dev->rev);
 	val = readl_relaxed(dev->parf + PCIE20_PARF_PM_STTS);

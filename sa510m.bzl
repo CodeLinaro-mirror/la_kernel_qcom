@@ -16,7 +16,6 @@ def define_sa510m():
         "drivers/char/hw_random/arm_smccc_trng.ko",
         "drivers/hwtracing/coresight/coresight.ko",
         "drivers/hwtracing/coresight/coresight-catu.ko",
-        "drivers/hwtracing/coresight/coresight-cpu-debug.ko",
         "drivers/hwtracing/coresight/coresight-csr.ko",
         "drivers/hwtracing/coresight/coresight-cti.ko",
         "drivers/hwtracing/coresight/coresight-dummy.ko",
@@ -38,8 +37,15 @@ def define_sa510m():
         "drivers/mtd/ubi/gluebi.ko",
     ]
 
+    _sa510m_debug_le_in_tree_modules = _sa510m_le_in_tree_modules + [
+        "drivers/hwtracing/coresight/coresight-cpu-debug.ko",
+    ]
+
     for variant in le_32_variants:
-        mod_list = _sa510m_le_in_tree_modules
+        if variant == "debug-defconfig":
+            mod_list = _sa510m_debug_le_in_tree_modules
+        else:
+            mod_list = _sa510m_le_in_tree_modules
 
         define_msm_le_32(
             msm_target = target_name,

@@ -93,6 +93,28 @@ struct kmem_cache *skbuff_cache __ro_after_init;
 
 struct kmem_cache *skb_data_cache;
 
+#if defined(CONFIG_SKB_CUSTOM_SLAB)
+struct kmem_cache *skb_data_cache_1984;
+struct kmem_cache *skb_data_cache_2200;
+struct kmem_cache *skb_data_cache_2304;
+struct kmem_cache *skb_data_cache_2350;
+
+#define SKB_DATA_CACHE_SIZE_1984 \
+	(SKB_DATA_ALIGN(1984 + NET_SKB_PAD) + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+
+#define SKB_DATA_CACHE_SIZE_2200 \
+	(SKB_DATA_ALIGN(2200 + NET_SKB_PAD) + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+
+#define SKB_DATA_CACHE_SIZE_2304 \
+	(SKB_DATA_ALIGN(2304 + NET_SKB_PAD) + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+
+#define SKB_DATA_CACHE_SIZE_2350 \
+	(SKB_DATA_ALIGN(2350 + NET_SKB_PAD) + \
+	SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
+#else /* CONFIG_SKB_CUSTOM_SLAB */
 /* For low memory profile, NSS_SKB_FIXED_SIZE_2K is enabled and
  * CONFIG_SKB_RECYCLER is disabled. For premium and enterprise profile
  * CONFIG_SKB_RECYCLER is enabled and NSS_SKB_FIXED_SIZE_2K is disabled.
@@ -119,6 +141,7 @@ struct kmem_cache *skb_data_cache;
 			)
 #endif
 #endif
+#endif /* CONFIG_SKB_CUSTOM_SLAB */
 
 #include "skbuff_recycle.h"
 #include "skbuff_debug.h"
@@ -597,6 +620,38 @@ static void *kmalloc_reserve(unsigned int *size, gfp_t flags, int node,
 	struct kmem_cache *skb_cache;
 
 	obj_size = SKB_HEAD_ALIGN(*size);
+#if defined(CONFIG_SKB_CUSTOM_SLAB)
+	if ((obj_size <= SKB_SMALL_HEAD_CACHE_SIZE &&
+	     !(flags & KMALLOC_NOT_NORMAL_BITS)) ||
+	     (obj_size > SZ_2K && obj_size <= SKB_DATA_CACHE_SIZE_2350)) {
+		if (obj_size <= SKB_SMALL_HEAD_CACHE_SIZE) {
+			skb_cache = skb_small_head_cache;
+			*size = SKB_SMALL_HEAD_CACHE_SIZE;
+		} else if (obj_size <= SKB_DATA_CACHE_SIZE_1984) {
+			skb_cache = skb_data_cache_1984;
+			*size = SKB_DATA_CACHE_SIZE_1984;
+		} else if (obj_size <= SKB_DATA_CACHE_SIZE_2200) {
+			skb_cache = skb_data_cache_2200;
+			*size = SKB_DATA_CACHE_SIZE_2200;
+		} else if (obj_size <= SKB_DATA_CACHE_SIZE_2304) {
+			skb_cache = skb_data_cache_2304;
+			*size = SKB_DATA_CACHE_SIZE_2304;
+		} else {
+			skb_cache = skb_data_cache_2350;
+			*size = SKB_DATA_CACHE_SIZE_2350;
+		}
+		obj = kmem_cache_alloc_node(skb_cache,
+					    flags | __GFP_NOMEMALLOC | __GFP_NOWARN,
+					    node);
+
+		if (obj || !(gfp_pfmemalloc_allowed(flags)))
+			goto out;
+		/* Try again but now we are using pfmemalloc reserves */
+		ret_pfmemalloc = true;
+		obj = kmem_cache_alloc_node(skb_cache, flags, node);
+		goto out;
+	}
+#else  /* CONFIG_SKB_CUSTOM_SLAB */
 	if ((obj_size <= SKB_SMALL_HEAD_CACHE_SIZE &&
 	     !(flags & KMALLOC_NOT_NORMAL_BITS)) ||
 	     (obj_size > SZ_2K && obj_size <= SKB_DATA_CACHE_SIZE)) {
@@ -617,6 +672,7 @@ static void *kmalloc_reserve(unsigned int *size, gfp_t flags, int node,
 		obj = kmem_cache_alloc_node(skb_cache, flags, node);
 		goto out;
 	}
+#endif /* CONFIG_SKB_CUSTOM_SLAB */
 
 	obj_size = kmalloc_size_roundup(obj_size);
 	/* The following cast might truncate high-order bits of obj_size, this
@@ -846,6 +902,110 @@ skb_fail:
 }
 EXPORT_SYMBOL(__netdev_alloc_skb);
 
+/**
+ *	__netdev_alloc_skb_fast - allocate an skbuff for rx on a specific device
+ *	@dev: network device to receive on
+ *	@length: length to allocate
+ *	@gfp_mask: get_free_pages mask, passed to alloc_skb
+ *
+ *	Allocate a new &sk_buff and assign it a usage count of one. The
+ *	buffer has NET_SKB_PAD headroom built in. Users should allocate
+ *	the headroom they think they need without accounting for the
+ *	built in space. The built in space is used for optimisations.
+ *
+ *	%NULL is returned if there is no free memory.
+ */
+struct sk_buff *__netdev_alloc_skb_fast(struct net_device *dev,
+					unsigned int length, gfp_t gfp_mask)
+{
+	struct sk_buff *skb;
+	unsigned int len = length;
+
+#ifdef CONFIG_SKB_RECYCLER
+	bool reset_skb = true;
+
+	skb = skb_recycler_alloc(dev, length, reset_skb);
+	if (likely(skb)) {
+		skb->recycled_for_ds = 0;
+		return skb;
+	}
+
+	len = SKB_RECYCLE_SIZE;
+	if (unlikely(length > SKB_RECYCLE_SIZE))
+		len = length;
+
+	skb = __alloc_skb(len + NET_SKB_PAD, gfp_mask,
+			  SKB_ALLOC_RX, NUMA_NO_NODE);
+	if (!skb)
+		goto skb_fail;
+
+	goto skb_success;
+#else
+	struct page_frag_cache *nc;
+	bool pfmemalloc;
+	bool page_frag_alloc_enable = true;
+	void *data;
+
+	len += NET_SKB_PAD;
+
+#ifdef CONFIG_ALLOC_SKB_PAGE_FRAG_DISABLE
+	page_frag_alloc_enable = false;
+#endif
+	/* If requested length is either too small or too big,
+	 * we use kmalloc() for skb->head allocation.
+	 */
+	if (len <= SKB_WITH_OVERHEAD(1024) ||
+	    len > SKB_WITH_OVERHEAD(PAGE_SIZE) ||
+	    (gfp_mask & (__GFP_DIRECT_RECLAIM | GFP_DMA)) ||
+		!page_frag_alloc_enable) {
+		skb = __alloc_skb(len, gfp_mask, SKB_ALLOC_RX, NUMA_NO_NODE);
+		if (!skb)
+			goto skb_fail;
+		goto skb_success;
+	}
+
+	len += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	len = SKB_DATA_ALIGN(len);
+
+	if (sk_memalloc_socks())
+		gfp_mask |= __GFP_MEMALLOC;
+
+	if (in_irq() || irqs_disabled()) {
+		nc = this_cpu_ptr(&netdev_alloc_cache);
+		data = page_frag_alloc(nc, len, gfp_mask);
+		pfmemalloc = nc->pfmemalloc;
+	} else {
+		local_bh_disable();
+		nc = this_cpu_ptr(&napi_alloc_cache.page);
+		data = page_frag_alloc(nc, len, gfp_mask);
+		pfmemalloc = nc->pfmemalloc;
+		local_bh_enable();
+	}
+
+	if (unlikely(!data))
+		return NULL;
+
+	skb = __build_skb(data, len);
+	if (unlikely(!skb)) {
+		skb_free_frag(data);
+		return NULL;
+	}
+
+	/* use OR instead of assignment to avoid clearing of bits in mask */
+	if (pfmemalloc)
+		skb->pfmemalloc = 1;
+	skb->head_frag = 1;
+#endif
+
+skb_success:
+	skb_reserve(skb, NET_SKB_PAD);
+	skb->dev = dev;
+
+skb_fail:
+	return skb;
+}
+EXPORT_SYMBOL_GPL(__netdev_alloc_skb_fast);
+
 #ifdef CONFIG_SKB_RECYCLER
 /* __netdev_alloc_skb_no_skb_reset - allocate an skbuff for rx on a specific device
  *	@dev: network device to receive on
@@ -919,8 +1079,58 @@ struct sk_buff *__netdev_alloc_skb_no_skb_reset(struct net_device *dev,
 EXPORT_SYMBOL_GPL(__netdev_alloc_skb_no_skb_reset);
 #endif
 
-/**
- *	__napi_alloc_skb - allocate skbuff for rx in a specific NAPI instance
+/* __napi_alloc_skb_fast - allocate skbuff for rx in a specific NAPI instance
+ *	when CONFIG_RECYCLER is enabled
+ *	@napi: napi instance this buffer was allocated for
+ *	@len: length to allocate
+ *	@gfp_mask: get_free_pages mask, passed to alloc_skb and alloc_pages
+ *
+ *	Allocate a new sk_buff for use in NAPI receive.  This buffer will
+ *	attempt to allocate the head from a special reserved region used
+ *	only for NAPI Rx allocation.  By doing this we can save several
+ *	CPU cycles by avoiding having to disable and re-enable IRQs.
+ *
+ *	%NULL is returned if there is no free memory.
+ */
+
+struct sk_buff *__napi_alloc_skb_fast(struct napi_struct *napi,
+				      unsigned int len, gfp_t gfp_mask)
+{
+	struct sk_buff *skb;
+	bool reset_skb = true;
+
+#ifdef CONFIG_SKB_RECYCLER
+	skb = skb_recycler_alloc(napi->dev, len, reset_skb);
+	if (likely(skb)) {
+		skb->recycled_for_ds = 0;
+#ifdef CONFIG_DEBUG_KMEMLEAK
+		kmemleak_update_trace(skb);
+		kmemleak_restore(skb, 1);
+		kmemleak_update_trace(skb->head);
+		kmemleak_restore(skb->head, 1);
+#endif
+		return skb;
+	}
+
+	if (likely(len <= SKB_RECYCLE_SIZE))
+		len = SKB_RECYCLE_SIZE;
+
+	skb = __alloc_skb(len + NET_SKB_PAD, gfp_mask, SKB_ALLOC_RX,
+			  NUMA_NO_NODE);
+	if (!skb)
+		goto skb_fail;
+	goto skb_success;
+#endif
+skb_success:
+	skb_reserve(skb, NET_SKB_PAD);
+	skb->dev = napi->dev;
+
+skb_fail:
+	return skb;
+}
+EXPORT_SYMBOL_GPL(__napi_alloc_skb_fast);
+
+/*        __napi_alloc_skb - allocate skbuff for rx in a specific NAPI instance
  *	@napi: napi instance this buffer was allocated for
  *	@len: length to allocate
  *	@gfp_mask: get_free_pages mask, passed to alloc_skb and alloc_pages
@@ -935,32 +1145,11 @@ EXPORT_SYMBOL_GPL(__netdev_alloc_skb_no_skb_reset);
 struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 				 gfp_t gfp_mask)
 {
-	struct sk_buff *skb;
-
 #ifdef CONFIG_SKB_RECYCLER
-	bool reset_skb = true;
-
-	skb = skb_recycler_alloc(napi->dev, len, reset_skb);
-	if (likely(skb)) {
-		skb_recycler_clear_flags(skb);
-#ifdef CONFIG_DEBUG_KMEMLEAK
-		kmemleak_update_trace(skb);
-		kmemleak_restore(skb, 1);
-		kmemleak_update_trace(skb->head);
-		kmemleak_restore(skb->head, 1);
-#endif
-		return skb;
-	}
-
-	if (likely(len < SKB_RECYCLE_SIZE))
-		len = SKB_RECYCLE_SIZE;
-
-	skb = __alloc_skb(len + NET_SKB_PAD, gfp_mask,
-			  SKB_ALLOC_RX, NUMA_NO_NODE);
-	if (!skb)
-		goto skb_fail;
-	goto skb_success;
+	return __napi_alloc_skb_fast(napi, len, gfp_mask);
 #else
+	struct sk_buff *skb;
+	// Existing slow path remains here
 	struct napi_alloc_cache *nc;
 	bool pfmemalloc;
 	void *data;
@@ -1022,7 +1211,6 @@ struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 	if (pfmemalloc)
 		skb->pfmemalloc = 1;
 	skb->head_frag = 1;
-#endif
 
 skb_success:
 	skb_reserve(skb, NET_SKB_PAD + NET_IP_ALIGN);
@@ -1030,6 +1218,7 @@ skb_success:
 
 skb_fail:
 	return skb;
+#endif
 }
 EXPORT_SYMBOL(__napi_alloc_skb);
 
@@ -5106,10 +5295,31 @@ static void skb_extensions_init(void) {}
 
 void __init skb_init(void)
 {
+#if defined(CONFIG_SKB_CUSTOM_SLAB)
+	skb_data_cache_1984 = kmem_cache_create_usercopy("skb_data_cache_1984",
+							 SKB_DATA_CACHE_SIZE_1984,
+							 0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE_1984,
+							 NULL);
+
+	skb_data_cache_2200 = kmem_cache_create_usercopy("skb_data_cache_2200",
+							 SKB_DATA_CACHE_SIZE_2200,
+							 0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE_2200,
+							 NULL);
+
+	skb_data_cache_2304 = kmem_cache_create_usercopy("skb_data_cache_2304",
+							 SKB_DATA_CACHE_SIZE_2304,
+							 0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE_2304,
+							 NULL);
+	skb_data_cache_2350 = kmem_cache_create_usercopy("skb_data_cache_2350",
+							 SKB_DATA_CACHE_SIZE_2350,
+							 0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE_2350,
+							 NULL);
+#else /* !CONFIG_SKB_CUSTOM_SLAB */
 	skb_data_cache = kmem_cache_create_usercopy("skb_data_cache",
 						     SKB_DATA_CACHE_SIZE,
 						     0, SLAB_PANIC, 0, SKB_DATA_CACHE_SIZE,
 						     NULL);
+#endif /* CONFIG_SKB_CUSTOM_SLAB */
 
 	skbuff_cache = kmem_cache_create_usercopy("skbuff_head_cache",
 					      sizeof(struct sk_buff),

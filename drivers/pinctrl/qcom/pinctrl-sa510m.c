@@ -110,7 +110,7 @@
 	}
 
 
-static const struct pinctrl_pin_desc sa510_pins[] = {
+static const struct pinctrl_pin_desc sa510m_pins[] = {
 	PINCTRL_PIN(0, "GPIO_0"),
 	PINCTRL_PIN(1, "GPIO_1"),
 	PINCTRL_PIN(2, "GPIO_2"),
@@ -337,7 +337,7 @@ DECLARE_MSM_GPIO_PINS(108);
 DECLARE_MSM_GPIO_PINS(109);
 
 
-enum sa510_functions {
+enum sa510m_functions {
 	msm_mux_gpio,
 	msm_mux_adsp_ext_vfr,
 	msm_mux_atest_bbrx_or0,
@@ -1203,7 +1203,7 @@ static const char * const vsense_trigger_mirnat_groups[] = {
 	"gpio52",
 };
 
-static const struct pinfunction sa510_functions[] = {
+static const struct pinfunction sa510m_functions[] = {
 	FUNCTION(gpio),
 	FUNCTION(adsp_ext_vfr),
 	FUNCTION(atest_bbrx_or0),
@@ -1422,7 +1422,7 @@ static const struct pinfunction sa510_functions[] = {
  * pin descriptor registered with pinctrl core.
  * Clients would not be able to request these dummy pin groups.
  */
-static const struct msm_pingroup sa510_groups[] = {
+static const struct msm_pingroup sa510m_groups[] = {
 	[0] = PINGROUP(0, uim1_data, etdac_calib_data0, NA, NA, NA, NA, NA, NA,
 		       NA, 0, -1),
 	[1] = PINGROUP(1, uim1_present, NA, etdac_calib_data1, NA, NA, NA, NA,
@@ -1605,10 +1605,10 @@ static const struct msm_pingroup sa510_groups[] = {
 	[108] = PINGROUP(108, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0, -1),
 	[109] = PINGROUP(109, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0x6E008, 21),
 };
-static struct pinctrl_qup sa510_qup_regs[] = {
+static struct pinctrl_qup sa510m_qup_regs[] = {
 };
 
-static const struct msm_gpio_wakeirq_map sa510_pdc_map[] = {
+static const struct msm_gpio_wakeirq_map sa510m_pdc_map[] = {
 	{ 1, 62 }, { 2, 83 }, { 4, 59 }, { 5, 107 }, { 6, 112 }, { 7, 119 },
 	{ 8, 123 }, { 10, 52 }, { 11, 73 }, { 12, 74 }, { 13, 75 }, { 14, 76 },
 	{ 15, 77 }, { 16, 81 }, { 17, 82 }, { 18, 80 }, { 19, 100 }, { 21, 88 },
@@ -1624,51 +1624,51 @@ static const struct msm_gpio_wakeirq_map sa510_pdc_map[] = {
 	{ 105, 69 }, { 106, 55 }, { 107, 56 }, { 109, 72 },
 };
 
-static const struct msm_pinctrl_soc_data sa510_pinctrl = {
-	.pins = sa510_pins,
-	.npins = ARRAY_SIZE(sa510_pins),
-	.functions = sa510_functions,
-	.nfunctions = ARRAY_SIZE(sa510_functions),
-	.groups = sa510_groups,
-	.ngroups = ARRAY_SIZE(sa510_groups),
+static const struct msm_pinctrl_soc_data sa510m_pinctrl = {
+	.pins = sa510m_pins,
+	.npins = ARRAY_SIZE(sa510m_pins),
+	.functions = sa510m_functions,
+	.nfunctions = ARRAY_SIZE(sa510m_functions),
+	.groups = sa510m_groups,
+	.ngroups = ARRAY_SIZE(sa510m_groups),
 	.ngpios = 110,
-	.qup_regs = sa510_qup_regs,
-	.nqup_regs = ARRAY_SIZE(sa510_qup_regs),
-	.wakeirq_map = sa510_pdc_map,
-	.nwakeirq_map = ARRAY_SIZE(sa510_pdc_map),
+	.qup_regs = sa510m_qup_regs,
+	.nqup_regs = ARRAY_SIZE(sa510m_qup_regs),
+	.wakeirq_map = sa510m_pdc_map,
+	.nwakeirq_map = ARRAY_SIZE(sa510m_pdc_map),
 };
 
-static int sa510_pinctrl_probe(struct platform_device *pdev)
+static int sa510m_pinctrl_probe(struct platform_device *pdev)
 {
-	return msm_pinctrl_probe(pdev, &sa510_pinctrl);
+	return msm_pinctrl_probe(pdev, &sa510m_pinctrl);
 }
 
-static const struct of_device_id sa510_pinctrl_of_match[] = {
-	{.compatible = "qcom,sa510-pinctrl", },
+static const struct of_device_id sa510m_pinctrl_of_match[] = {
+	{.compatible = "qcom,sa510m-pinctrl", },
 	{ },
 };
 
-static struct platform_driver sa510_pinctrl_driver = {
+static struct platform_driver sa510m_pinctrl_driver = {
 	.driver = {
-		.name = "sa510-pinctrl",
-		.of_match_table = sa510_pinctrl_of_match,
+		.name = "sa510m-pinctrl",
+		.of_match_table = sa510m_pinctrl_of_match,
 	},
-	.probe = sa510_pinctrl_probe,
+	.probe = sa510m_pinctrl_probe,
 	.remove = msm_pinctrl_remove,
 };
 
-static int __init sa510_pinctrl_init(void)
+static int __init sa510m_pinctrl_init(void)
 {
-	return platform_driver_register(&sa510_pinctrl_driver);
+	return platform_driver_register(&sa510m_pinctrl_driver);
 }
-arch_initcall(sa510_pinctrl_init);
+arch_initcall(sa510m_pinctrl_init);
 
-static void __exit sa510_pinctrl_exit(void)
+static void __exit sa510m_pinctrl_exit(void)
 {
-	platform_driver_unregister(&sa510_pinctrl_driver);
+	platform_driver_unregister(&sa510m_pinctrl_driver);
 }
-module_exit(sa510_pinctrl_exit);
+module_exit(sa510m_pinctrl_exit);
 
-MODULE_DESCRIPTION("QTI sa510 pinctrl driver");
+MODULE_DESCRIPTION("QTI sa510m pinctrl driver");
 MODULE_LICENSE("GPL");
-MODULE_DEVICE_TABLE(of, sa510_pinctrl_of_match);
+MODULE_DEVICE_TABLE(of, sa510m_pinctrl_of_match);

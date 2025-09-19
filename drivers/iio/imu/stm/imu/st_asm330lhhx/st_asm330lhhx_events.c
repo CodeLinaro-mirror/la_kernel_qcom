@@ -644,6 +644,7 @@ int st_asm330lhhx_event_handler(struct st_asm330lhhx_hw *hw)
 
 	if ((reg_src[0] & ST_ASM330LHHX_WAKE_UP_SRC_WU_IA_MASK) &&
 	    ST_ASM330LHHX_IS_EVENT_ENABLED(ST_ASM330LHHX_EVENT_WAKEUP)) {
+		hw->wakeup_status = reg_src[0] & ST_ASM330LHHX_WAKE_UP_EVENT_MASK;
 		iio_dev = hw->iio_devs[ST_ASM330LHHX_ID_ACC];
 		pm_wakeup_ws_event(hw->ws, ST_ASM330LHHX_WAKEUP_MS, true);
 		if (reg_src[0] & ST_ASM330LHHX_Z_WU_MASK) {

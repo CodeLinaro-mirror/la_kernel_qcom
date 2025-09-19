@@ -349,6 +349,9 @@ MODULE_PARM_DESC(eiface, "Interface type from ethernet partition");
 static char *eqos;
 module_param(eqos, charp, 0600);
 MODULE_PARM_DESC(eqos, "QOS Config support from ethernet partition");
+static char *ewait_switch_rdy;
+module_param(ewait_switch_rdy, charp, 0600);
+MODULE_PARM_DESC(ewait_switch_rdy, "Link up delay option from ethernet partition");
 #endif
 
 static bool qos_use_skprio;
@@ -800,6 +803,17 @@ static int set_ethernet_qos_cfg(char *qoscfg)
 	return 0;
 }
 
+static int set_ethernet_wait_switch_rdy(char *eth_wait_switch_rdy)
+{
+	if (!eth_wait_switch_rdy || strlen(eth_wait_switch_rdy) == 0)
+		return -EINVAL;
+
+	if (kstrtobool(eth_wait_switch_rdy, &mparams.wait_switch_rdy))
+		return -EINVAL;
+
+	return 0;
+}
+
 #ifndef MODULE
 static int __init set_early_ethernet_ipv4_static(char *ipv4_addr_in)
 {
@@ -874,6 +888,17 @@ static int __init set_ethernet_qoscfg_static(char *eth_qos)
 
 __setup("eqos=", set_ethernet_qoscfg_static);
 
+static int __init set_ethernet_wait_switch_rdy_static(char *eth_wait_switch_rdy)
+{
+	int ret = -EINVAL;
+
+	ret = set_ethernet_wait_switch_rdy(eth_wait_switch_rdy);
+	if (ret)
+		mparams.wait_switch_rdy = false;
+	return 0;
+}
+
+__setup("ewait_switch_rdy=", set_ethernet_wait_switch_rdy_static);
 #endif
 
 static int qcom_ethqos_add_ipaddr(struct ip_params *ip_info,
@@ -3569,6 +3594,11 @@ static int phy_digital_loopback_v3_1(struct qcom_ethqos *ethqos, int speed, int 
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct stmmac_priv *priv = netdev_priv(dev);
 
+	if (!priv || !priv->phydev) {
+		ETHQOSERR("Invalid  PHY device\n");
+		return -ENODEV;
+	}
+
 	if (config == 1) {
 		ETHQOSINFO("Request for phy digital loopback enable\n");
 		if (speed != SPEED_1000 && speed != SPEED_100 &&
@@ -4834,6 +4864,12 @@ static ssize_t loopback_handling_config_sysfs(struct device *dev,
 		return -EINVAL;
 	}
 
+	if (config == ENABLE_PHY_LOOPBACK &&
+	    (plat_dat->fixed_phy_mode || plat_dat->mac2mac_en)) {
+		ETHQOSERR("PHY loopback is not supported in MAC2MAC mode\n");
+		return -EINVAL;
+	}
+
 	switch (config) {
 	case DISABLE_LOOPBACK:
 		ETHQOSINFO("Disabled loopback, config = %d\n", config);
@@ -5312,15 +5348,20 @@ static ssize_t write_ethqos_rx_clock(struct device *dev,
 	if (kstrtos8(user_buffer, 0, &input))
 		return -EFAULT;
 
-	if (input != 1) {
+	if (input != 0 && input != 1) {
 		ETHQOSERR("invalid input\n");
 		return -EINVAL;
 	}
 
-	if (!plat->rx_clk_rdy) {
+	if (input && !plat->rx_clk_rdy) {
 		plat->rx_clk_rdy = true;
 		rtnl_lock();
 		phylink_resume(priv->phylink);
+		rtnl_unlock();
+	} else if (!input && plat->rx_clk_rdy) {
+		plat->rx_clk_rdy = false;
+		rtnl_lock();
+		phylink_stop(priv->phylink);
 		rtnl_unlock();
 	}
 
@@ -6744,9 +6785,14 @@ static int ethqos_fixed_link_check(struct platform_device *pdev)
 	}
 
 out:
-	if (plat_dat->fixed_phy_mode)
+	if (plat_dat->fixed_phy_mode) {
+		/* Set plat_wait_for_emac_rx_clk_en,
+		 * dtsi will overwrite configuration from emac partition
+		 */
+		plat_dat->plat_wait_for_emac_rx_clk_en = mparams.wait_switch_rdy;
 		plat_dat->fixed_phy_mode_needs_mdio = of_property_read_bool(pdev->dev.of_node,
 									    "fixed-link-needs-mdio-bus");
+	}
 
 	of_node_put(fixed_phy_node);
 	return 0;
@@ -7201,6 +7247,10 @@ static int qcom_ethqos_bring_up_phy_if(struct device *dev)
 		ETHQOSERR("priv is NULL\n");
 		return -EINVAL;
 	}
+	if (!priv->phydev) {
+		ETHQOSERR("phydev is NULL\n");
+		return -ENODEV;
+	}
 	ethqos = priv->plat->bsp_priv;
 	if (!ethqos) {
 		ETHQOSERR("ethqos is NULL\n");
@@ -7633,6 +7683,9 @@ static int ethqos_set_early_eth_params(void)
 
 	if (eqos)
 		ret = set_ethernet_qos_cfg(eqos);
+
+	if (ewait_switch_rdy)
+		ret = set_ethernet_wait_switch_rdy(ewait_switch_rdy);
 
 	return ret;
 }

@@ -521,7 +521,7 @@ config QCOM_SPM
 
 config QCOM_STATS
 	tristate "Qualcomm Technologies, Inc. (QTI) Sleep stats driver"
-	depends on (ARCH_QCOM && DEBUG_FS) || COMPILE_TEST
+	depends on ARCH_QCOM || COMPILE_TEST
 	depends on QCOM_SMEM
 	help
 	  Qualcomm Technologies, Inc. (QTI) Sleep stats driver to read
@@ -870,6 +870,16 @@ config QCOM_RAMDUMP
 	  provides APIs to collect ramdumps which can be extracted from
 	  userspace. Say 'Y' here to enable this driver. It's safe to say
 	  'N' here if you don't plan on collecting ramdumps.
+
+config QCOM_MICRODUMP
+	tristate "Qualcomm Technologies, Inc. Microdump Support"
+	depends on QCOM_RAMDUMP
+	depends on QCOM_SMEM
+	help
+	 This enables microdump feature. It collects
+	 crash data from SMEM whenever modem subsytem
+	 crashes and stores it under /devcd to expose
+	 to user space.
 
 config QCOM_MINIDUMP
 	tristate "QCOM Minidump Support"

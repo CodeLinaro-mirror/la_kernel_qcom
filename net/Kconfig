@@ -597,6 +597,16 @@ config ENABLE_SFE
 	  Changes to support Shortcut Forward Engine.
 	  Add bridge API to access the bridge slave port.
 
+config CHANDEF_NO_PUNCTURE
+	bool "Enable legacy chandef without puncture_bitmap field"
+	default n
+	help
+	  Select this option to enable support for legacy chandef definition
+	  without puncture bitmap support.
+	  This is useful for maintaining compatibility with older kernel or
+	  driver implementations that do not yet support the puncture_bitmap
+	  field introduced in newer channel definition structures.
+
 config PKT_THRESHOLD
 	bool "Enable accounting with packet threshold tracking"
 	help
@@ -606,4 +616,15 @@ config PKT_THRESHOLD
 	  track number of packets over specific thresholds which
 	  helps in identifying traffic anomalies and optimizing
 	  performance.it is useful for network diagnostics and performance.
+
+config SKB_CUSTOM_SLAB
+	bool "Enable custom slabs for skb allocation"
+	default n
+	help
+	  This profile applies custom configurations aimed at reducing
+	  memory usage, making it suitable for memory-constrained environments.
+	  When enabled, the network stack will use multiple specialized SKB
+	  data caches with different sizes (1984, 2200, 2304, and 2350 bytes)
+	  instead of a single cache size, allowing for more efficient memory
+	  allocation that better matches actual packet sizes.
 endif   # if NET

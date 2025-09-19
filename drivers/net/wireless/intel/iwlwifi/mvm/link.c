@@ -190,20 +190,29 @@ int iwl_mvm_link_changed(struct iwl_mvm *mvm, struct ieee80211_vif *vif,
 	}
 
 	if (changes & LINK_CONTEXT_MODIFY_EHT_PARAMS) {
-		struct ieee80211_chanctx_conf *ctx;
-		struct cfg80211_chan_def *def = NULL;
+		if (IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
+			if (iwlwifi_mod_params.disable_11be ||
+			    !link_conf->eht_support)
+				changes &= ~LINK_CONTEXT_MODIFY_EHT_PARAMS;
+			else
+				cmd.puncture_mask =
+					cpu_to_le16(link_conf->eht_puncturing);
+		} else {
+			struct ieee80211_chanctx_conf *ctx;
+			struct cfg80211_chan_def *def = NULL;
 
-		rcu_read_lock();
-		ctx = rcu_dereference(link_conf->chanctx_conf);
-		if (ctx)
-			def = iwl_mvm_chanctx_def(mvm, ctx);
+			rcu_read_lock();
+			ctx = rcu_dereference(link_conf->chanctx_conf);
+			if (ctx)
+				def = iwl_mvm_chanctx_def(mvm, ctx);
 
-		if (iwlwifi_mod_params.disable_11be ||
-		    !link_conf->eht_support || !def)
-			changes &= ~LINK_CONTEXT_MODIFY_EHT_PARAMS;
-		else
-			cmd.puncture_mask = cpu_to_le16(def->punctured);
-		rcu_read_unlock();
+			if (iwlwifi_mod_params.disable_11be ||
+			    !link_conf->eht_support || !def)
+				changes &= ~LINK_CONTEXT_MODIFY_EHT_PARAMS;
+			else
+				cmd.puncture_mask = cpu_to_le16(def->punctured);
+			rcu_read_unlock();
+		}
 	}
 
 	cmd.bss_color = link_conf->he_bss_color.color;
