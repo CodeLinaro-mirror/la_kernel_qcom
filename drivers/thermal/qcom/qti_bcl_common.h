@@ -40,14 +40,18 @@ struct bcl_data_history {
 };
 
 struct bcl_bpm_stats {
-	uint16_t max_ibat;
-	uint16_t sync_vbat;
-	uint16_t min_vbat;
-	uint16_t sync_ibat;
+	int16_t max_ibat_adc;
+	int16_t sync_vbat_adc;
+	int16_t min_vbat_adc;
+	int16_t sync_ibat_adc;
 	uint8_t lvl0_cnt;
 	uint8_t lvl1_cnt;
 	uint8_t lvl2_cnt;
-};
+	int32_t max_ibat;
+	int32_t sync_vbat;
+	int32_t min_vbat;
+	int32_t sync_ibat;
+} __packed;
 
 struct bcl_lvl_stats {
 	uint32_t counter;
