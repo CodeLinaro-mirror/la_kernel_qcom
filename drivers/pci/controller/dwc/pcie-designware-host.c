@@ -546,7 +546,7 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	if (pp->ops->host_post_init)
 		pp->ops->host_post_init(pp);
 
-	dwc_pcie_debugfs_init(pci);
+	dwc_pcie_debugfs_init(pci, DW_PCIE_RC_TYPE);
 
 	return 0;
 
