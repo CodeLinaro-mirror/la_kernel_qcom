@@ -7,7 +7,7 @@ def define_abl_dist(target, msm_target, variant):
     Args:
       target: name of main Bazel target (e.g. `kalama_gki`)
     """
-    if msm_target == "autogvm":
+    if msm_target == "autogvm" or msm_target == "gen3gvmcoqos":
         return
     native.alias(
         name = "{}_abl".format(target),
