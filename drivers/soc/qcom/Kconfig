@@ -1307,4 +1307,14 @@ config QCOM_KERNEL_BASED_RESTORE
 	  Kernel assists in restoring system state after hibernation.
 	  Requires hibernation support in the kernel.
 
+config QCOM_SC_TCM_MEM
+	tristate "Add SC TCM memory management"
+	select GENERIC_ALLOCATOR
+	help
+	  Support management of Tightly Coupled Memory(TCM)
+	  in the System Cache(SC). This driver manages the
+	  registered SC TCM memory in granularity of the
+	  PAGE_SIZE bytes.
+
+          If not sure, say N.
 endmenu
