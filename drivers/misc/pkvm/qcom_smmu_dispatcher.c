@@ -47,6 +47,8 @@ static int qcom_smmu_nesting_init(void)
 	/* For io-pgtable struct*/
 	__pkvm_topup_hyp_alloc(1);
 
+	smmuv2_nesting_init();
+
 #ifdef MODULE
 	ret = pkvm_load_el2_module(kvm_nvhe_sym(qcom_smmu_nesting_init_module),
 				   &pkvm_module_token);

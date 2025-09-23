@@ -74,45 +74,14 @@ struct smmu_v2_nested {
 	u32 num_s2cr; /* S2CR allocation for NS */
 	u32 num_cbar; /* CBAR allocation for NS */
 	u32 num_cb;   /* CB allocation for NS */
+	u32 numpage;
+	u32 host_s2_cb_idx;  /* Index of reserved host S2 context bank */
 	struct smmu_v2_smr_info smr_pool[SMMU_V2_MAX_POOL_SIZE];
 	struct smmu_v2_s2cr_info s2cr_pool[SMMU_V2_MAX_POOL_SIZE];
 	struct smmu_v2_cbar_info cbar_pool[SMMU_V2_MAX_POOL_SIZE];
 };
 
-#if defined(__KVM_NVHE_HYPERVISOR__) && defined(MODULE)
-
-#include <asm/kvm_pkvm_module.h>
-
-extern const struct pkvm_module_ops *smmu_v2_ops;
-extern const struct pkvm_module_ops *smmu_v2_ops;
-
-#undef memset
-#undef memcpy
-#undef kern_hyp_va
-
-#define CALL_FROM_OPS(fn, ...)		(smmu_v2_ops->(fn)(__VA_ARGS__))
-
-#define hyp_virt_to_phys(x)		CALL_FROM_OPS(hyp_pa, x)
-#define hyp_phys_to_virt(x)		CALL_FROM_OPS(hyp_va, x)
-#define memcpy(x, y, z)			CALL_FROM_OPS(memcpy, x, y, z)
-#define pkvm_udelay(x)			CALL_FROM_OPS(udelay, x)
-#define ___pkvm_host_donate_hyp(x, y, z) \
-	CALL_FROM_OPS(host_donate_hyp, x, y, z)
-#define kern_hyp_va(x) \
-	((void *)CALL_FROM_OPS(kern_hyp_va, (unsigned long)x))
-#define __pkvm_host_donate_hyp(x, y) \
-	CALL_FROM_OPS(host_donate_hyp, x, y, false)
-#define kvm_iommu_donate_pages_atomic(x) \
-	CALL_FROM_OPS(iommu_donate_pages_atomic, x)
-#define kvm_iommu_reclaim_pages_atomic(x, y) \
-	CALL_FROM_OPS(iommu_reclaim_pages_atomic, x, y)
-#define kvm_iommu_snapshot_host_stage2(x) \
-	CALL_FROM_OPS(iommu_snapshot_host_stage2, x)
-#define __pkvm_host_share_hyp(x) \
-	CALL_FROM_OPS(host_share_hyp, x)
-#define __pkvm_host_unshare_hyp(x) \
-	CALL_FROM_OPS(host_unshare_hyp, x)
-
-#endif /* defined(__KVM_NVHE_HYPERVISOR__) && defined(MODULE) */
+int smmuv2_hyp_nesting_init(void);
+int smmuv2_nesting_init(void);
 
 #endif /* _SMMUV2_NESTING_H */

@@ -6,11 +6,9 @@
 #include <nvhe/trace.h>
 #include "smmuv2_nesting.h"
 #include "arm-smmuv2-defs.h"
+#include "qcom_smmu_dispatcher.h"
 
-#ifdef MODULE
-const struct pkvm_module_ops *smmu_v2_ops;
-#endif
-
+static struct smmu_vendor_data data;
 unsigned long smmu_v2_nested_count;
 struct smmu_v2_nested *smmu_v2_nested_base;
 
@@ -36,34 +34,34 @@ static void trace___hyp_printk(u8 fmt_id, u64 a, u64 b, u64 c, u64 d)
 static void smmuv2_cbar_read(struct smmu_v2_nested *smmu, u32 offset, u64 *buf)
 {
 	/* TBD need to maskout "nested" here. */
-	*buf = arm_smmu_gr1_read(smmu->base_va, offset);
+	*buf = arm_smmu_gr1_read(smmu, offset);
 	smmu_v2_debug_print("smmu_v2_cbar_read: regoffset: %llx, buf: %llx\n",
 			    smmu->base_pa + offset, *buf);
 }
 
 static int smmuv2_smr_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 {
-	arm_smmu_gr0_write(smmu->base_va, offset, val);
+	arm_smmu_gr0_write(smmu, offset, val);
 	smmu_v2_debug_print("smmu_v2_virt_smr_write: write to is: %llx, val is: %llx\n",
-			    arm_smmu_gr0_read(smmu->base_va, offset), val);
+			    (u64)arm_smmu_gr0_read(smmu, offset), (u64)val);
 	return 0;
 }
 
 static int smmuv2_s2cr_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 {
 	/* TBD need to write "nested" here. */
-	arm_smmu_gr0_write(smmu->base_va, offset, val);
+	arm_smmu_gr0_write(smmu, offset, val);
 	smmu_v2_debug_print("smmu_v2_virt_s2cr_write: write to is: %llx, val is: %llx\n",
-			    arm_smmu_gr0_read(smmu->base_va, offset), val);
+			    (u64)arm_smmu_gr0_read(smmu, offset), (u64)val);
 	return 0;
 }
 
 static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 {
 	/* TBD need to attach "nested" here. */
-	arm_smmu_gr1_write(smmu->base_va, offset, val);
+	arm_smmu_gr1_write(smmu, offset, val);
 	smmu_v2_debug_print("smmu_v2_virt_cbar_write: write to is: %llx, val is: %llx\n",
-			    arm_smmu_gr1_read(smmu->base_va, offset), val);
+			    (u64)arm_smmu_gr1_read(smmu, offset), (u64)val);
 	return 0;
 }
 
@@ -71,7 +69,7 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, u32 len, u64 *buf)
 {
 	/* Read the register value first, then handle specific cases */
-	*buf = arm_smmu_gr0_read(smmu->base_va, offset);
+	*buf = arm_smmu_gr0_read(smmu, offset);
 	/* Use specific log messages for special registers */
 	if (offset == ARM_SMMU_GR0_ID0) {
 		*buf = (*buf & ~ARM_SMMU_ID0_NUMSMRG) | (smmu->num_smr & ARM_SMMU_ID0_NUMSMRG);
@@ -100,7 +98,7 @@ static int smmuv2_read_global_region_1(struct smmu_v2_nested *smmu, u64 offset, 
 		/* TBD need to maskout "nested" here. */
 		smmuv2_cbar_read(smmu, offset, buf);
 	} else {
-		*buf = arm_smmu_gr1_read(smmu->base_va, offset);
+		*buf = arm_smmu_gr1_read(smmu, offset);
 		smmu_v2_debug_print("smmu_v2_read_global_region_1, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
 	}
@@ -249,7 +247,7 @@ static int update_smr_profile(struct smmu_v2_nested *smmu)
 	u32 smr_val;
 
 	for (i = smmu->num_smr - 1; i >= 0; i--) {
-		smr_val = arm_smmu_gr0_read(smmu->base_va, ARM_SMMU_GR0_SMR(i));
+		smr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(i));
 
 		/* reset value is 0x0*/
 		if (smr_val == 0) {
@@ -274,13 +272,11 @@ static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 	u32 s2cr_val;
 
 	for (i = smmu->num_s2cr - 1; i >= 0; i--) {
-		s2cr_val = arm_smmu_gr0_read(smmu->base_va, ARM_SMMU_GR0_S2CR(i));
-
-		/* reset value is 0x0*/
-		if (s2cr_val == 0) {
+		s2cr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_S2CR(i));
+		if ((s2cr_val & ARM_SMMU_S2CR_TYPE) >> 16 == S2CR_TYPE_FAULT) {
 			continue;; /* Skip invalid entries */
 		} else {
-			smmu->num_smr = i + 1;
+			smmu->num_s2cr = i + 1;
 		}
 
 		smmu->s2cr_pool[i].idx = i;
@@ -297,13 +293,13 @@ static int update_cbar_profile(struct smmu_v2_nested *smmu)
 {
 	int i;
 	/* Get available number of context banks from cbar register */
-	for (i = smmu->num_cb - 1; i >= 0; i--) {
-		u32 cbar_val = arm_smmu_gr1_read(smmu->base_va, ARM_SMMU_GR1_CBAR(i));
+	for (i = smmu->num_cbar - 1; i >= 0; i--) {
+		u32 cbar_val = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBAR(i));
 
 		if (((cbar_val & ARM_SMMU_CBAR_TYPE) >> 16) == CBAR_TYPE_S1_TRANS_S2_FAULT)
 			continue; /* Skip invalid entries */
 		else
-			smmu->num_cb = i + 1;
+			smmu->num_cbar = i + 1;
 		smmu->cbar_pool[i].idx = i;
 		smmu->cbar_pool[i].val = cbar_val;
 		smmu_v2_debug_print("CBAR[%d]: val: %llx\n",
@@ -312,21 +308,116 @@ static int update_cbar_profile(struct smmu_v2_nested *smmu)
 	return 0;
 }
 
+static int smmu_attach_stage_2(void)
+{
+	if (!data.vdomain)
+		return -EINVAL;
+
+	struct smmu_v2_nested *smmu;
+	struct io_pgtable_cfg *pt_cfg =  &data.vdomain->pgtable->cfg;
+	u64 vttbr;
+	u32 vtcr;
+
+	for_each_smmu(smmu) {
+		/* Extract stage-2 configuration from idmapped domain */
+		vttbr = pt_cfg->arm_lpae_s2_cfg.vttbr;
+
+		/* Build VTCR from page table configuration */
+		vtcr = ARM_SMMU_VTCR_RES1 |
+		       FIELD_PREP(ARM_SMMU_VTCR_PS, pt_cfg->arm_lpae_s2_cfg.vtcr.ps) |
+		       FIELD_PREP(ARM_SMMU_VTCR_TG0, pt_cfg->arm_lpae_s2_cfg.vtcr.tg) |
+		       FIELD_PREP(ARM_SMMU_VTCR_SH0, pt_cfg->arm_lpae_s2_cfg.vtcr.sh) |
+		       FIELD_PREP(ARM_SMMU_VTCR_ORGN0, pt_cfg->arm_lpae_s2_cfg.vtcr.orgn) |
+		       FIELD_PREP(ARM_SMMU_VTCR_IRGN0, pt_cfg->arm_lpae_s2_cfg.vtcr.irgn) |
+		       FIELD_PREP(ARM_SMMU_VTCR_SL0, pt_cfg->arm_lpae_s2_cfg.vtcr.sl) |
+		       FIELD_PREP(ARM_SMMU_VTCR_T0SZ, pt_cfg->arm_lpae_s2_cfg.vtcr.tsz);
+
+		/* Program context bank registers using host_s2_cb_idx as page number */
+		arm_smmu_cb_writeq(smmu, smmu->host_s2_cb_idx, ARM_SMMU_CB_TTBR0, vttbr);
+		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx, ARM_SMMU_CB_TCR, vtcr);
+	}
+	/* Do NOT enable stage-2 translation yet - just configure the registers */
+
+	smmu_v2_debug_print("Configured stage-2 for CB[%d]: VTCR=0x%x, VTTBR=0x%llx\n",
+			    smmu->host_s2_cb_idx, vtcr, vttbr);
+
+	return 0;
+}
+
+static int reserve_host_s2_context_bank(struct smmu_v2_nested *smmu)
+{
+	int i;
+	u32 cbar_val;
+	u32 cbar_type;
+
+	/* Search from the last context bank downward */
+	for (i = smmu->num_cbar - 1; i >= 0; i--) {
+		cbar_val = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBAR(i));
+		cbar_type = (cbar_val & ARM_SMMU_CBAR_TYPE) >> 16;
+
+		if (cbar_type == CBAR_TYPE_S1_TRANS_S2_FAULT) {
+			/* Found a suitable context bank - reserve it for host S2 */
+			smmu->host_s2_cb_idx = i;
+			smmu->num_cbar-- ; /* Reduce available CBARs for host */
+			smmu->num_cb = smmu->num_cbar; /* Reduce available CBs for host */
+
+			/* Configure the reserved context bank for stage-2 translation */
+			smmu_v2_debug_print("Reserved & configured CB[%d] for host S2,CBAR:0x%x\n",
+					    i, cbar_val);
+			return 0;
+		}
+	}
+
+	/* No suitable context bank found */
+	smmu_v2_debug_print("No S1+S2fault context bank found for host S2\n");
+	return 0;
+}
+
 static int hw_profile_init(void)
 {
 	struct smmu_v2_nested *smmu;
+	int ret;
 
 	for_each_smmu(smmu) {
-		u32 id0 = arm_smmu_gr0_read(smmu->base_va, ARM_SMMU_GR0_ID0);
-		u32 id1 = arm_smmu_gr0_read(smmu->base_va, ARM_SMMU_GR0_ID1);
+		u32 id0 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID0);
+		u32 id1 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID1);
 
 		smmu->num_smr = id0 & ARM_SMMU_ID0_NUMSMRG;
 		smmu->num_s2cr = smmu->num_smr; /* smr == s2cr */
-		smmu->num_cbar = id1 & ARM_SMMU_ID1_NUMCB;
-		smmu->num_cb = smmu->num_cbar; /* cbar == cb */
+		smmu->num_cb = id1 & ARM_SMMU_ID1_NUMCB;
+		smmu->num_cbar = smmu->num_cb; /* cbar == cb */
+		smmu->numpage = 1 << (FIELD_GET(ARM_SMMU_ID1_NUMPAGENDXB, id1) + 1);
+
+		smmu_v2_debug_print("SMMU ID0: %llx, ID1: %llx, num_smr: %d\n",
+				    id0, id1, smmu->num_smr);
+		smmu_v2_debug_print("SMMU num_cb: %d, numpage: %d\n",
+				    smmu->num_cb, smmu->numpage);
+
+		ret = update_s2cr_profile(smmu);
+		if (ret) {
+			smmu_v2_debug_print("Failed to update S2CR profile!\n");
+			return ret;
+		}
+
+		ret = update_cbar_profile(smmu);
+		if (ret) {
+			smmu_v2_debug_print("Failed to update CBAR profile!\n");
+			return ret;
+		}
+
 		smmu_v2_debug_print("num_smr: %d, num_cb: %d\n",
 				    smmu->num_smr, smmu->num_cb);
-}
+
+		/* Reserve the bottom available context bank for host S2 */
+		ret = reserve_host_s2_context_bank(smmu);
+		if (ret) {
+			smmu_v2_debug_print("Failed to reserve host S2 context bank: %d\n", ret);
+			return ret;
+		}
+
+		smmu_v2_debug_print("After reservation, available CBs for guests: %d, CBARs: %d\n",
+				    smmu->num_cb, smmu->num_cbar);
+	}
 
 	return 0;
 }
@@ -338,33 +429,38 @@ static int sw_profile_init(void)
 
 	for_each_smmu(smmu) {
 		/* update profile permitted stream id and mask */
+		/* TBD: check s2cr == smr?*/
 		ret = update_smr_profile(smmu);
-		if (ret)
-			return ret;
-
-		ret = update_s2cr_profile(smmu);
-		if (ret)
-			return ret;
-
-		ret = update_cbar_profile(smmu);
 		if (ret)
 			return ret;
 	}
 	return 0;
 }
-static int smmuv2_nesting_init(void)
+
+const struct smmu_vendor_callbacks v2callbacks = {
+	.tlb_ops = NULL, /* fix me */
+	.get_cfg = NULL, /* fix me */
+	.post_init = smmu_attach_stage_2,
+};
+
+static struct smmu_vendor_driver smmuv2_driver = {
+	.name = "smmuv2_nesting",
+	.callbacks = &v2callbacks,
+	.vdata = &data,
+};
+
+int smmuv2_hyp_nesting_init(void)
 {
 	int smmu_arr_size = PAGE_ALIGN(sizeof(*smmu_v2_nested_base) * smmu_v2_nested_count);
 	int ret;
 
-	smmu_v2_debug_print("smmu_v2_nested_base: %llx\n", (u64)smmu_v2_nested_base);
 	smmu_v2_nested_base = kern_hyp_va(smmu_v2_nested_base);
 
 	ret = __pkvm_host_donate_hyp(hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT,
 				     smmu_arr_size >> PAGE_SHIFT);
-	smmu_v2_debug_print("smmu_v2_nested_base hyp va: %llx\n", (u64)smmu_v2_nested_base);
 	if (ret)
 		return ret;
+
 	ret = take_over_smmus();
 	if (ret)
 		return ret;
@@ -375,75 +471,11 @@ static int smmuv2_nesting_init(void)
 	ret = sw_profile_init();
 	if (ret)
 		return ret;
-	return 0;
+
+	/* Register this driver with the common vendor module */
+	ret = smmu_vendor_register_driver(&smmuv2_driver);
+
+	data.vops->register_host_dabt_fault_handler(smmuv2_nesting_dabt_handler);
+
+	return ret;
 }
-
-#ifdef MODULE
-int smmuv2_nesting_init_module(const struct pkvm_module_ops *ops)
-{
-	if (!ops)
-		return -EINVAL;
-	smmu_v2_ops = ops;
-	smmu_v2_ops->register_host_dabt_fault_handler(smmuv2_nesting_dabt_handler);
-
-	return 0;
-}
-#endif
-
-/* Empty/stub functions - placed at bottom per requirements */
-static struct kvm_hyp_iommu *smmuv2_nesting_id_to_iommu(pkvm_handle_t smmu_id)
-{
-	return NULL;
-}
-
-static int smmuv2_nesting_alloc_domain(struct kvm_hyp_iommu_domain *domain, int type)
-{
-	return 0;
-}
-
-static void smmuv2_nesting_free_domain(struct kvm_hyp_iommu_domain *domain)
-{
-}
-
-static int smmuv2_nesting_attach_dev(struct kvm_hyp_iommu *iommu,
-				     struct kvm_hyp_iommu_domain *domain,
-				     u32 endpoint_id, u32 pasid, u32 pasid_bits,
-				     unsigned long flags)
-{
-	return 0;
-}
-
-static int smmuv2_nesting_detach_dev(struct kvm_hyp_iommu *iommu,
-				     struct kvm_hyp_iommu_domain *domain,
-				     u32 sid, u32 pasid)
-{
-	return 0;
-}
-
-static int smmuv2_nesting_suspend(struct kvm_hyp_iommu *iommu)
-{
-	return 0;
-}
-
-static int smmuv2_nesting_resume(struct kvm_hyp_iommu *iommu)
-{
-	return 0;
-}
-
-static void smmuv2_nesting_idmap(struct kvm_hyp_iommu_domain *domain,
-				 phys_addr_t start, phys_addr_t end, int prot)
-{
-}
-
-/* Public interface operations structure - at the very bottom */
-struct kvm_iommu_ops smmuv2_hyp_nesting_ops = {
-	.init				= smmuv2_nesting_init,
-	.get_iommu_by_id		= smmuv2_nesting_id_to_iommu,
-	.alloc_domain			= smmuv2_nesting_alloc_domain,
-	.free_domain			= smmuv2_nesting_free_domain,
-	.attach_dev			= smmuv2_nesting_attach_dev,
-	.detach_dev			= smmuv2_nesting_detach_dev,
-	.suspend			= smmuv2_nesting_suspend,
-	.resume				= smmuv2_nesting_resume,
-	.host_stage2_idmap		= smmuv2_nesting_idmap,
-};
