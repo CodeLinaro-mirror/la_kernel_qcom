@@ -74,7 +74,6 @@ autogvmlv_config = {
     "CONFIG_QCOM_SECURE_BUFFER": "m",
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
     "CONFIG_QCOM_SI_CORE": "m",
-    "CONFIG_QCOM_SI_CORE_MEM_OBJECT": "m",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SOC_WATCHDOG": "m",

@@ -5,8 +5,6 @@
 
 #define pr_fmt(fmt) "si-mo: %s: " fmt, __func__
 
-#include <linux/module.h>
-#include <linux/device.h>
 #include <linux/platform_device.h>
 #include <linux/dma-buf.h>
 #include <linux/mem-buf.h>
@@ -14,6 +12,7 @@
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/si_core_xts.h>
 
+#include "mem-object.h"
 /* Memory object operations. */
 /* ... */
 
@@ -483,45 +482,6 @@ struct si_object *init_si_mem_object_user(struct dma_buf *dma_buf,
 }
 EXPORT_SYMBOL_GPL(init_si_mem_object_user);
 
-struct si_object *init_si_mem_object(phys_addr_t paddr, size_t size,
-	void (*release)(void *), void *private)
-{
-	struct mem_object *mo;
-
-	if (size != ALIGN(size, PAGE_SIZE)) {
-		pr_err("size = %zu is not page aligned\n", size);
-		return NULL_SI_OBJECT;
-	}
-
-	if (!mem_ops.release) {
-		pr_err("memory object type is unknown.\n");
-		return NULL_SI_OBJECT;
-	}
-
-	mo = kzalloc(sizeof(*mo), GFP_KERNEL);
-	if (!mo)
-		return NULL_SI_OBJECT;
-
-	mutex_init(&mo->map.lock);
-
-	mo->private = private;
-	mo->release = release;
-
-	mo->mapping_info.p_addr = paddr;
-	mo->mapping_info.p_addr_len = size;
-	mo->mapping_info.perms = QCOM_SCM_PERM_RW;
-
-	init_si_object_user(&mo->object, SI_OT_CB_OBJECT, &mem_ops,
-		"kernel-mem-object-%pa", &paddr);
-
-	mutex_lock(&mo_list_mutex);
-	list_add_tail(&mo->node, &mo_list);
-	mutex_unlock(&mo_list_mutex);
-
-	return &mo->object;
-}
-EXPORT_SYMBOL_GPL(init_si_mem_object);
-
 struct dma_buf *mem_object_to_dma_buf(struct si_object *object)
 {
 	if (is_mem_object(object))
@@ -542,7 +502,7 @@ int is_mem_object(struct si_object *object)
 }
 EXPORT_SYMBOL_GPL(is_mem_object);
 
-static ssize_t mem_objects_show(struct device *dev, struct device_attribute *attr, char *buf)
+ssize_t mem_objects_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	size_t len = 0;
 	struct mem_object *mo;
@@ -559,28 +519,7 @@ static ssize_t mem_objects_show(struct device *dev, struct device_attribute *att
 	return len;
 }
 
-/* 'struct device_attribute dev_attr_mem_objects'. */
-/* Use device attribute rather than driver attribute in case we want to support
- * multiple types of memory objects as different devices.
- */
-
-static DEVICE_ATTR_RO(mem_objects);
-
-static struct attribute *attrs[] = {
-	&dev_attr_mem_objects.attr,
-	NULL
-};
-
-static struct attribute_group attr_group = {
-	.attrs = attrs,
-};
-
-static const struct attribute_group *attr_groups[] = {
-	&attr_group,
-	NULL
-};
-
-static int mem_object_probe(struct platform_device *pdev)
+int mem_object_init(struct platform_device *pdev)
 {
 	int ret;
 
@@ -600,21 +539,3 @@ static int mem_object_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static const struct of_device_id mem_object_match[] = {
-	{ .compatible = "qcom,mem-object", }, {}
-};
-
-static struct platform_driver mem_object_plat_driver = {
-	.probe = mem_object_probe,
-	.driver = {
-		.name = "mem-object",
-		.dev_groups = attr_groups,
-		.of_match_table = mem_object_match,
-	},
-};
-
-module_platform_driver(mem_object_plat_driver);
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Memory object driver");
-MODULE_IMPORT_NS(DMA_BUF);

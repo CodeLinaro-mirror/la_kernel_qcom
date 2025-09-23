@@ -8,13 +8,20 @@
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/module.h>
+#include <linux/device.h>
+#include <linux/dma-buf.h>
+#include <linux/platform_device.h>
+#include <linux/of_platform.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/xarray.h>
+#include <linux/version.h>
 
 #include "si_core.h"
 #include "si_core_adci.h"
+
+#include "mem-object.h"
 
 #define CREATE_TRACE_POINTS
 #include "trace_si_core.h"
@@ -1335,10 +1342,12 @@ ssize_t release_show(struct kobject *kobj, struct kobj_attribute *attr, char *bu
 static struct kobj_attribute ot = __ATTR_RO(ot);
 static struct kobj_attribute po = __ATTR_RO(po);
 static struct kobj_attribute release = __ATTR_RO(release);
+static struct kobj_attribute mo = __ATTR_RO(mem_objects);
 static struct attribute *attrs[] = {
 	&ot.attr,
 	&po.attr,
 	&release.attr,
+	&mo.attr,
 	NULL
 };
 
@@ -1347,7 +1356,8 @@ static struct attribute_group attr_group = {
 };
 
 static struct kobject *si_core_kobj;
-static int __init si_core_init(void)
+
+static int si_core_probe(struct platform_device *pdev)
 {
 	int ret;
 
@@ -1358,30 +1368,66 @@ static int __init si_core_init(void)
 	/* Create '/sys/kernel/si_core'. */
 	si_core_kobj = kobject_create_and_add("si_core", kernel_kobj);
 	if (!si_core_kobj) {
-		destroy_si_core_wq();
-
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_kobj_create;
 	}
 
 	ret = sysfs_create_group(si_core_kobj, &attr_group);
-	if (ret) {
-		kobject_put(si_core_kobj);
-		destroy_si_core_wq();
-	}
+	if (ret)
+		goto err_sysfs_create;
+
+	ret = mem_object_init(pdev);
+	if (ret)
+		goto err_mem_obj_init;
 
 	adci_start();
+	return 0;
 
+err_mem_obj_init:
+	sysfs_remove_group(si_core_kobj, &attr_group);
+err_sysfs_create:
+	kobject_put(si_core_kobj);
+err_kobj_create:
+	destroy_si_core_wq();
 	return ret;
 }
 
-static void __exit si_core_exit(void)
+static void si_core_remove(struct platform_device *pdev)
 {
-	/* TODO. Prevent unloading if 'xa_si_objects' is not empty. */
-
 	adci_shutdown();
 	sysfs_remove_group(si_core_kobj, &attr_group);
 
 	kobject_put(si_core_kobj);
+	destroy_si_core_wq();
+}
+
+static const struct of_device_id si_core_match[] = {
+	{ .compatible = "qcom,mem-object", }, {}
+};
+
+static struct platform_driver si_core_plat_driver = {
+	.probe = si_core_probe,
+	.remove = si_core_remove,
+	.driver = {
+		.name = "si-core",
+		.of_match_table = si_core_match,
+	},
+};
+
+static int __init si_core_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&si_core_plat_driver);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static void __exit si_core_exit(void)
+{
+	platform_driver_unregister(&si_core_plat_driver);
 }
 
 module_init(si_core_init);
@@ -1389,3 +1435,4 @@ module_exit(si_core_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("SI CORE driver");
+MODULE_IMPORT_NS(DMA_BUF);

@@ -255,12 +255,18 @@ extern int qcom_scm_query_tz_time(u64 *ticks, u32 *frequency);
 extern int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
 		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
 		u64 *response_type, unsigned int *data);
+extern int qcom_scm_invoke_smc_ffa(uint64_t ffa_handle, size_t offset,
+		size_t in_buf_size, size_t out_buf_size, int32_t *result,
+		u64 *response_type, unsigned int *data);
 extern int qcom_scm_invoke_smc_legacy(phys_addr_t in_buf, size_t in_buf_size,
 		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
 		u64 *response_type, unsigned int *data);
 extern int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 		size_t out_buf_size, int32_t *result, u64 *response_type,
 		unsigned int *data);
+extern int qcom_scm_invoke_callback_response_ffa(uint64_t ffa_handle,
+		size_t out_offset, size_t out_buf_size, int32_t *result,
+		u64 *response_type, unsigned int *data);
 extern int qcom_scm_invoke_ack_doorbell(u32 doorbell_id, u32 msg_id);
 
 extern void __qcom_scm_init(void);

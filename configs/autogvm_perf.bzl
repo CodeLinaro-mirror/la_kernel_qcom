@@ -13,7 +13,6 @@ autogvm_perf_config = {
     "CONFIG_MSM_HAB": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SI_CORE": "m",
-    "CONFIG_QCOM_SI_CORE_MEM_OBJECT": "m",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
     "CONFIG_MSM_VHOST_HAB": "y",
     "CONFIG_PINCTRL_MSM": "m",

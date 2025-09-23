@@ -2750,6 +2750,40 @@ int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
 }
 EXPORT_SYMBOL(qcom_scm_invoke_smc);
 
+int qcom_scm_invoke_smc_ffa(uint64_t ffa_handle, size_t offset,
+		size_t in_buf_size, size_t out_buf_size, int32_t *result,
+		u64 *response_type, unsigned int *data)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMCINVOKE,
+		.cmd = QCOM_SCM_SMCINVOKE_INVOKE_FFA,
+		.owner = ARM_SMCCC_OWNER_TRUSTED_OS,
+		.args[0] = ffa_handle,
+		.args[1] = offset,
+		.args[2] = in_buf_size,
+		.args[3] = out_buf_size,
+		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_VAL, QCOM_SCM_VAL,
+					QCOM_SCM_VAL, QCOM_SCM_VAL),
+		.multicall_allowed = true,
+	};
+	struct qcom_scm_res res;
+
+	ret = qcom_scm_call_noretry(__scm->dev, &desc, &res);
+
+	if (result)
+		*result = res.result[1];
+
+	if (response_type)
+		*response_type = res.result[0];
+
+	if (data)
+		*data = res.result[2];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_invoke_smc_ffa);
+
 int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 	size_t out_buf_size, int32_t *result, u64 *response_type,
 	unsigned int *data)
@@ -2780,6 +2814,39 @@ int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 	return ret;
 }
 EXPORT_SYMBOL(qcom_scm_invoke_callback_response);
+
+int qcom_scm_invoke_callback_response_ffa(uint64_t ffa_handle,
+	size_t out_offset, size_t out_buf_size, int32_t *result,
+	u64 *response_type, unsigned int *data)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMCINVOKE,
+		.cmd = QCOM_SCM_SMCINVOKE_CB_RSP_FFA,
+		.owner = ARM_SMCCC_OWNER_TRUSTED_OS,
+		.args[0] = ffa_handle,
+		.args[1] = out_offset,
+		.args[2] = out_buf_size,
+		.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_VAL,
+					QCOM_SCM_VAL),
+		.multicall_allowed = true,
+	};
+	struct qcom_scm_res res;
+
+	ret = qcom_scm_call_noretry(__scm->dev, &desc, &res);
+
+	if (result)
+		*result = res.result[1];
+
+	if (response_type)
+		*response_type = res.result[0];
+
+	if (data)
+		*data = res.result[2];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_invoke_callback_response_ffa);
 
 int qcom_scm_invoke_ack_doorbell(u32 doorbell_id, u32 msg_id)
 {
