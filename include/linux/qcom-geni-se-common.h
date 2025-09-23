@@ -256,6 +256,10 @@ static inline int geni_common_reg_dma_addr(struct device *dev, dma_addr_t *iova,
 	wrapper_pdev = to_platform_device(wrapper_dev);
 
 	wrapper_res = platform_get_resource(wrapper_pdev, IORESOURCE_MEM, 0);
+	if (!wrapper_res) {
+		dev_err(&pdev->dev, "Failed to get memory resource\n");
+		return -ENODEV;
+	}
 	reg_phys_addr = wrapper_res->start + offset;
 	*iova = dma_map_resource(wrapper_dev, reg_phys_addr, size, DMA_TO_DEVICE, 0);
 	if (dma_mapping_error(wrapper_dev, *iova)) {
