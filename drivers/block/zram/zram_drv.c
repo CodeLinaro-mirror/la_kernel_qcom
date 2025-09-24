@@ -1913,8 +1913,7 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 
 	no_reclaim = memalloc_noreclaim_save();
 	handle = zs_malloc(zmeta->zram->mem_pool, comp_len,
-			   __GFP_KSWAPD_RECLAIM |
-			   __GFP_NOWARN |
+			   GFP_NOIO |
 			   __GFP_HIGHMEM |
 			   __GFP_MOVABLE);
 	memalloc_noreclaim_restore(no_reclaim);
