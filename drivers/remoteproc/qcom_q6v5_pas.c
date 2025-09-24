@@ -1984,6 +1984,7 @@ static const struct adsp_data sa510_mpss_resource = {
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
 	.auto_boot = false,
+	.uses_elf64 = true,
 };
 
 static const struct adsp_data sun_adsp_resource = {
