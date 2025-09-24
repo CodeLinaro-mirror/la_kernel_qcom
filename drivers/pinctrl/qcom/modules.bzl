@@ -302,3 +302,22 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+    registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-pikachu",
+        out = "pinctrl-pikachu.ko",
+        config = "CONFIG_PINCTRL_PIKACHU",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-pikachu.c",
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
