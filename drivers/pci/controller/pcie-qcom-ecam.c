@@ -563,12 +563,10 @@ static int qcom_pci_ecam_runtime_resume(struct device *dev)
 static void qcom_pcie_ecam_shutdown(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	int ret = 0;
+	int ret;
 
-	if (atomic_read(&dev->power.usage_count) > 1)
-		pm_runtime_put_noidle(dev);
-
-	ret = pm_runtime_put_sync(dev);
+	/* Put PCIe into D3cold to avoid any access while rebooting device */
+	ret = qcom_pcie_ecam_suspend(dev);
 	if (ret)
 		dev_err(dev, "fail to shutdown pcie controller: %d\n", ret);
 }
