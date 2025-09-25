@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved. */
-
+/*
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
 #include <linux/atomic.h>
 #include <linux/completion.h>
 #include <linux/ctype.h>
@@ -91,8 +93,6 @@ enum debug_log_lvl {
 #define EDMA_DRV_NAME "edma"
 #define DEFAULT_KLOG_LVL (LOG_LVL_ERROR)
 
-static struct edma_dev *e_dev_info;
-
 #ifdef CONFIG_QCOM_PCI_EDMA_DEBUG
 #define DEFAULT_IPC_LOG_LVL (LOG_LVL_VERBOSE)
 #define IPC_LOG_PAGES (40)
@@ -124,12 +124,11 @@ static struct edma_dev *e_dev_info;
 #define IPC_LOG_PAGES (2)
 #define DEFAULT_IPC_LOG_LVL (LOG_LVL_ERROR)
 #define EDMA_IRQ(e_dev, ec_ch, fmt, ...)
-#define EDMAC_REG(ec_dev, ev_ch, fmt, ...)
 #define EDMAC_VERB(ec_dev, ev_ch, fmt, ...)
 #endif
 
-#define WR_CH_BASE (0x200)
-#define RD_CH_BASE (0x300)
+#define WR_CH_BASE				(0x200)
+#define RD_CH_BASE				(0x300)
 #define DMA_CH_BASE(d, n) ((d == EDMA_WR_CH ? WR_CH_BASE : RD_CH_BASE) +\
 				(n * 0x200))
 
@@ -137,44 +136,44 @@ static struct edma_dev *e_dev_info;
 #define DMA_LLP_LOW_OFF_DIR_CH_N(d, n) (DMA_CH_BASE(d, n) + 0x1c)
 #define DMA_LLP_HIGH_OFF_DIR_CH_N(d, n) (DMA_CH_BASE(d, n) + 0x20)
 
-#define DMA_WRITE_ENGINE_EN_OFF (0xc)
-#define DMA_WRITE_DOORBELL_OFF (0x10)
-#define DMA_WRITE_INT_STATUS_OFF (0x4c)
-#define DMA_WRITE_INT_MASK_OFF (0x54)
-#define DMA_WRITE_INT_CLEAR_OFF (0x58)
-#define DMA_WRITE_LINKED_LIST_ERR_EN_OFF (0x90)
+#define DMA_WRITE_ENGINE_EN_OFF			(0xc)
+#define DMA_WRITE_DOORBELL_OFF			(0x10)
+#define DMA_WRITE_INT_STATUS_OFF		(0x4c)
+#define DMA_WRITE_INT_MASK_OFF			(0x54)
+#define DMA_WRITE_INT_CLEAR_OFF			(0x58)
+#define DMA_WRITE_LINKED_LIST_ERR_EN_OFF	(0x90)
 
-#define DMA_READ_ENGINE_EN_OFF (0x2c)
-#define DMA_READ_DOORBELL_OFF (0x30)
-#define DMA_READ_INT_STATUS_OFF (0xa0)
-#define DMA_READ_INT_MASK_OFF (0xa8)
-#define DMA_READ_INT_CLEAR_OFF (0xac)
-#define DMA_READ_LINKED_LIST_ERR_EN_OFF (0xc4)
+#define DMA_READ_ENGINE_EN_OFF			(0x2c)
+#define DMA_READ_DOORBELL_OFF			(0x30)
+#define DMA_READ_INT_STATUS_OFF			(0xa0)
+#define DMA_READ_INT_MASK_OFF			(0xa8)
+#define DMA_READ_INT_CLEAR_OFF			(0xac)
+#define DMA_READ_LINKED_LIST_ERR_EN_OFF		(0xc4)
 
-#define DMA_CTRL_OFF (0x8)
-#define DMA_CTRL_NUM_CH_MASK (0xf)
-#define DMA_CTRL_NUM_WR_CH_SHIFT (0)
-#define DMA_CTRL_NUM_RD_CH_SHIFT (16)
+#define DMA_CTRL_OFF				(0x8)
+#define DMA_CTRL_NUM_CH_MASK			(0xf)
+#define DMA_CTRL_NUM_WR_CH_SHIFT		(0)
+#define DMA_CTRL_NUM_RD_CH_SHIFT		(16)
 
-#define EDMA_LABEL_SIZE (256)
-#define EDMA_DESC_LIST_SIZE (256)
-#define EDMA_NUM_MAX_EV_CH (32)
-#define EDMA_NUM_TL_INIT (2)
-#define EDMA_NUM_TL_ELE (1024)
+#define EDMA_LABEL_SIZE				(256)
+#define EDMA_DESC_LIST_SIZE			(256)
+#define EDMA_NUM_MAX_EV_CH			(32)
+#define EDMA_NUM_TL_INIT			(2)
+#define EDMA_NUM_TL_ELE				(1024)
 
-#define EDMA_CH_CONTROL1_LLE BIT(9) /* Linked List Enable */
-#define EDMA_CH_CONTROL1_CCS BIT(8) /* Consumer Cycle Status */
-#define EDMA_CH_CONTROL1_LIE BIT(3) /* Local Interrupt Enable */
-#define EDMA_CH_CONTROL1_LLP BIT(2) /* Load Link Pointer */
-#define EDMA_CH_CONTROL1_CB BIT(0) /* Cycle bit */
+#define EDMA_CH_CONTROL1_LLE			BIT(9) /* Linked List Enable */
+#define EDMA_CH_CONTROL1_CCS			BIT(8) /* Consumer Cycle Status */
+#define EDMA_CH_CONTROL1_LIE			BIT(3) /* Local Interrupt Enable */
+#define EDMA_CH_CONTROL1_LLP			BIT(2) /* Load Link Pointer */
+#define EDMA_CH_CONTROL1_CB			BIT(0) /* Cycle bit */
 
 #define EDMA_CH_CONTROL1_INIT (EDMA_CH_CONTROL1_LLE | EDMA_CH_CONTROL1_CCS)
-#define EDMA_HW_STATUS_MASK (BIT(6) | BIT(5))
-#define EDMA_HW_STATUS_SHIFT (5)
-#define EDMA_INT_ERR_MASK (0xff00)
-#define EDMA_MAX_SIZE 0x2000
+#define EDMA_HW_STATUS_MASK			(BIT(6) | BIT(5))
+#define EDMA_HW_STATUS_SHIFT			(5)
+#define EDMA_INT_ERR_MASK			(0xff00)
+#define EDMA_MAX_SIZE				0x2000
 
-#define REQ_OF_DMA_ARGS (2) /* # of arguments required from client */
+#define REQ_OF_DMA_ARGS				(2) /* # of arguments required from client */
 
 /*
  * EDMAV CH ID = EDMA CH ID * EDMAV_BASE_CH_ID + EDMAV index
@@ -186,8 +185,8 @@ static struct edma_dev *e_dev_info;
  *	physical channel 1: virtual base = 100
  *	physical channel 2: virtual base = 200
  */
-#define EDMAV_BASE_CH_ID (100)
-#define EDMAV_NO_CH_ID (99) /* RESERVED CH ID for no virtual channel */
+#define EDMAV_BASE_CH_ID			(100)
+#define EDMAV_NO_CH_ID				(99) /* RESERVED CH ID for no virtual channel */
 
 enum edma_dir_ch {
 	EDMA_WR_CH,
@@ -310,8 +309,8 @@ struct edmac_dev {
 	/* # of available DE in current TL (excludes LE) */
 	u32	n_de_avail;
 	/* processing tasklet */
-	struct workqueue_struct		*pending_process_wq;
-	struct work_struct		pending_work;
+	struct workqueue_struct	*pending_process_wq;
+	struct work_struct	pending_work;
 	char	label[EDMA_LABEL_SIZE];
 	void	*ipc_log;
 	enum	debug_log_lvl ipc_log_lvl;
@@ -410,10 +409,11 @@ static dma_cookie_t edma_submit(struct dma_async_tx_descriptor *desc)
 
 	EDMAC_VERB(ev_dev->ec_dev, ev_dev->ch_id, "exit\n");
 	spin_unlock(&ec_dev->edma_lock);
+
 	return cookie;
 }
 
-static void edma_submit_pending_transfers(struct edmav_dev *ev_dev)
+static void edma_submit_pending_transfers(struct edma_dev *e_dev, struct edmav_dev *ev_dev)
 {
 	struct edmac_dev *ec_dev = ev_dev->ec_dev;
 	struct edma_desc *desc;
@@ -442,7 +442,7 @@ static void edma_submit_pending_transfers(struct edmav_dev *ev_dev)
 		edma_issue_descriptor(ec_dev, desc);
 	list_del_init(&ev_dev->dl);
 
-	if (e_dev_info->is_reset_wa_req) {
+	if (e_dev->is_reset_wa_req) {
 		/* Disable Engine and enable it back */
 		writel_relaxed(false, ec_dev->engine_en_reg);
 		writel_relaxed(true, ec_dev->engine_en_reg);
@@ -455,15 +455,12 @@ static void edma_submit_pending_transfers(struct edmav_dev *ev_dev)
 		 * From spec, when channel is stopped,
 		 * require to write llp reg to start edma transaction
 		 */
-		writel_relaxed(
-			readl_relaxed(ec_dev->llp_low_reg),
-			ec_dev->llp_low_reg);
-		writel_relaxed(
-			readl_relaxed(ec_dev->llp_high_reg),
-			ec_dev->llp_high_reg);
+		writel_relaxed(readl_relaxed(ec_dev->llp_low_reg), ec_dev->llp_low_reg);
+		writel_relaxed(readl_relaxed(ec_dev->llp_high_reg), ec_dev->llp_high_reg);
 		/* Ensure LLP registers are properly updated */
 		mb();
 	}
+
 	/* To start the edma transaction, ring channel doorbell */
 	EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID, "ringing doorbell\n");
 	writel_relaxed(ec_dev->ch_id, ec_dev->db_reg);
@@ -474,7 +471,6 @@ static void edma_submit_pending_transfers(struct edmav_dev *ev_dev)
 
 static void edmac_process_workqueue(struct work_struct *work)
 {
-
 	struct edmac_dev *ec_dev = container_of(work, struct edmac_dev, pending_work);
 	struct edma_dev *e_dev = ec_dev->e_dev;
 	dma_addr_t llp_low, llp_high, llp;
@@ -491,7 +487,6 @@ static void edmac_process_workqueue(struct work_struct *work)
 	EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID, "Start: DMA_LLP = %pad\n", &llp);
 
 	while (ec_dev->tl_dma_rd_p != llp) {
-
 		/* current element is a link element. Need to jump and free */
 		if (ec_dev->tl_rd_p->ch_ctrl & EDMA_CH_CONTROL1_LLP) {
 			struct edma_desc *ldesc = *ec_dev->dl_rd_p;
@@ -509,15 +504,13 @@ static void edmac_process_workqueue(struct work_struct *work)
 			continue;
 		}
 
-		EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID, "TL_DMA_RD_P: %pad\n",
-			&ec_dev->tl_dma_rd_p);
+		EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID, "TL_DMA_RD_P: %pad\n", &ec_dev->tl_dma_rd_p);
 
 		desc = *ec_dev->dl_rd_p;
 		ec_dev->tl_dma_rd_p += sizeof(struct data_element);
 		ec_dev->tl_rd_p++;
 		ec_dev->dl_rd_p++;
 		if (desc) {
-
 			/*
 			 * struct edmav_dev address is taken from edma_desc
 			 * structure. And if it is update for first time is
@@ -537,10 +530,8 @@ static void edmac_process_workqueue(struct work_struct *work)
 			/* Acquire spinlock again to continue edma operations */
 			spin_lock(&ec_dev->edma_lock);
 			kfree(desc);
-		} else {
-			EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID,
-				"edma desc is NULL\n");
-		}
+		} else
+			EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID, "edma desc is NULL\n");
 	}
 
 
@@ -549,13 +540,12 @@ static void edmac_process_workqueue(struct work_struct *work)
 		goto exit;
 	}
 
-	edma_submit_pending_transfers(ev_dev);
+	edma_submit_pending_transfers(e_dev, ev_dev);
 
 exit:
 	EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID, "exit\n");
 	edma_set_clear(ec_dev->int_mask_reg, 0, BIT(ec_dev->ch_id));
 	spin_unlock(&ec_dev->edma_lock);
-	return;
 }
 
 static irqreturn_t handle_edma_irq(int irq, void *data)
@@ -583,8 +573,7 @@ static irqreturn_t handle_edma_irq(int irq, void *data)
 		if (wr_int_status & 0x1) {
 			struct edmac_dev *ec_dev = &e_dev->ec_wr_devs[i];
 
-			edma_set_clear(ec_dev->int_mask_reg,
-					BIT(ec_dev->ch_id), 0);
+			edma_set_clear(ec_dev->int_mask_reg, BIT(ec_dev->ch_id), 0);
 			queue_work(ec_dev->pending_process_wq, &ec_dev->pending_work);
 		}
 		wr_int_status >>= 1;
@@ -596,8 +585,7 @@ static irqreturn_t handle_edma_irq(int irq, void *data)
 		if (rd_int_status & 0x1) {
 			struct edmac_dev *ec_dev = &e_dev->ec_rd_devs[i];
 
-			edma_set_clear(ec_dev->int_mask_reg,
-					BIT(ec_dev->ch_id), 0);
+			edma_set_clear(ec_dev->int_mask_reg, BIT(ec_dev->ch_id), 0);
 			queue_work(ec_dev->pending_process_wq, &ec_dev->pending_work);
 		}
 		rd_int_status >>= 1;
@@ -617,7 +605,7 @@ static struct dma_chan *edma_of_dma_xlate(struct of_phandle_args *args,
 
 	if (args->args_count < REQ_OF_DMA_ARGS) {
 		EDMA_ERR(e_dev,
-			"EDMA requires atleast %d arguments, client passed:%d\n",
+			"EDMA requires at least %d arguments, client passed:%d\n",
 			REQ_OF_DMA_ARGS, args->args_count);
 		return NULL;
 	}
@@ -628,7 +616,6 @@ static struct dma_chan *edma_of_dma_xlate(struct of_phandle_args *args,
 	}
 
 	ev_dev = &e_dev->ev_devs[e_dev->cur_ev_ch_idx++];
-
 	ev_dev->dir = args->args[0] ? EDMA_RD_CH : EDMA_WR_CH;
 	ev_dev->priority = args->args[1];
 
@@ -664,8 +651,7 @@ static int edma_alloc_transfer_list(struct edmac_dev *ec_dev)
 
 	EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID, "enter\n");
 
-	tl = dma_alloc_coherent(e_dev->dev, sizeof(*tl) * n_tl_ele,
-				&tl_dma, GFP_ATOMIC);
+	tl = dma_alloc_coherent(e_dev->dev, sizeof(*tl) * n_tl_ele, &tl_dma, GFP_ATOMIC);
 	if (!tl)
 		return -ENOMEM;
 
@@ -677,8 +663,7 @@ static int edma_alloc_transfer_list(struct edmac_dev *ec_dev)
 	if (!ldesc)
 		goto free_descriptor_list;
 
-	EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID,
-		"allocated transfer list dma: %pad\n", &tl_dma);
+	EDMAC_VERB(ec_dev, EDMAV_NO_CH_ID, "allocated transfer list dma: %pad\n", &tl_dma);
 
 	dl[n_tl_ele - 1] = ldesc;
 
@@ -780,10 +765,8 @@ static int edma_alloc_chan_resources(struct dma_chan *chan)
 		writel_relaxed(0, ec_dev->int_mask_reg);
 		writel_relaxed(true, ec_dev->ll_err_en_reg);
 		writel_relaxed(EDMA_CH_CONTROL1_INIT, ec_dev->ch_ctrl1_reg);
-		writel_relaxed(lower_32_bits(ec_dev->tl_dma_rd_p),
-				ec_dev->llp_low_reg);
-		writel_relaxed(upper_32_bits(ec_dev->tl_dma_rd_p),
-				ec_dev->llp_high_reg);
+		writel_relaxed(lower_32_bits(ec_dev->tl_dma_rd_p), ec_dev->llp_low_reg);
+		writel_relaxed(upper_32_bits(ec_dev->tl_dma_rd_p), ec_dev->llp_high_reg);
 		ec_dev->n_de_avail = e_dev->n_tl_ele - 1;
 	}
 	ec_dev->n_ev++;
@@ -791,6 +774,7 @@ static int edma_alloc_chan_resources(struct dma_chan *chan)
 	return 0;
 out:
 	edma_free_chan_resources(chan);
+
 	return ret;
 }
 
@@ -814,8 +798,7 @@ static struct edma_desc *edma_alloc_descriptor(struct edmav_dev *ev_dev)
 {
 	struct edma_desc *desc;
 
-	desc = kzalloc(sizeof(*desc) + sizeof(*desc->de),
-			GFP_ATOMIC);
+	desc = kzalloc(sizeof(*desc) + sizeof(*desc->de), GFP_ATOMIC);
 	if (!desc)
 		return NULL;
 
@@ -853,6 +836,7 @@ err:
 	EDMAC_VERB(ev_dev->ec_dev, ev_dev->ch_id,
 		"edma alloc descriptor failed for channel:%d\n", ev_dev->ch_id);
 	spin_unlock(&ev_dev->ec_dev->edma_lock);
+
 	return NULL;
 }
 
@@ -907,15 +891,15 @@ static void edma_issue_pending(struct dma_chan *chan)
 {
 	struct edmav_dev *ev_dev = to_edmav_dev(chan);
 	struct edmac_dev *ec_dev = ev_dev->ec_dev;
+	struct edma_dev *e_dev = ec_dev->e_dev;
 
 	spin_lock(&ec_dev->edma_lock);
 	EDMAC_VERB(ec_dev, ev_dev->ch_id, "enter\n");
 
-	edma_submit_pending_transfers(ev_dev);
+	edma_submit_pending_transfers(e_dev, ev_dev);
 
 	EDMAC_VERB(ec_dev, ev_dev->ch_id, "exit\n");
 	spin_unlock(&ec_dev->edma_lock);
-	return;
 }
 
 static int edma_config(struct dma_chan *chan, struct dma_slave_config *config)
@@ -945,10 +929,11 @@ static enum dma_status edma_tx_status(struct dma_chan *chan,
 	spin_lock(&ec_dev->edma_lock);
 
 	if (unlikely(list_empty(&ev_dev->dl)) &&
-		((hw_state ==  EDMA_HW_STATE_INIT) ||
-			(hw_state ==  EDMA_HW_STATE_STOPPED)))
+	    ((hw_state ==  EDMA_HW_STATE_INIT) || (hw_state ==  EDMA_HW_STATE_STOPPED)))
 		status =  DMA_COMPLETE;
+
 	spin_unlock(&ec_dev->edma_lock);
+
 	return status;
 }
 
@@ -990,10 +975,8 @@ static void edma_init_log(struct edma_dev *e_dev, struct edmac_dev *ec_dev)
 
 		e_dev->ipc_log_lvl = DEFAULT_IPC_LOG_LVL;
 		e_dev->klog_lvl = DEFAULT_KLOG_LVL;
-		e_dev->ipc_log = ipc_log_context_create(IPC_LOG_PAGES,
-							e_dev->label, 0);
-		e_dev->ipc_log_irq = ipc_log_context_create(IPC_LOG_PAGES,
-							e_dev->label, 0);
+		e_dev->ipc_log = ipc_log_context_create(IPC_LOG_PAGES, e_dev->label, 0);
+		e_dev->ipc_log_irq = ipc_log_context_create(IPC_LOG_PAGES, e_dev->label, 0);
 	} else {
 		snprintf(ec_dev->label, EDMA_LABEL_SIZE, "%s_%llx_%s_ch_%u",
 			EDMA_DRV_NAME, (u64)e_dev->base_phys,
@@ -1061,6 +1044,18 @@ static int edma_init_channels(struct edma_dev *e_dev)
 		ec_dev->pending_process_wq = alloc_workqueue(wq_name, WQ_HIGHPRI | WQ_UNBOUND, 1);
 		if (!ec_dev->pending_process_wq) {
 			ret = -ENOMEM;
+			/* Clean up previously allocated workqueues */
+			for (i = i - 1; i >= 0; i--) {
+				struct edmac_dev *temp_ec_dev;
+
+				if (i < e_dev->n_wr_ch)
+					temp_ec_dev = &e_dev->ec_wr_devs[i];
+				else
+					temp_ec_dev = &e_dev->ec_rd_devs[i - e_dev->n_wr_ch];
+
+				if (temp_ec_dev->pending_process_wq)
+					destroy_workqueue(temp_ec_dev->pending_process_wq);
+			}
 			return ret;
 		}
 
@@ -1087,11 +1082,11 @@ static int edma_init_channels(struct edma_dev *e_dev)
 		INIT_LIST_HEAD(&ev_dev->dl);
 		ev_dev->dma_ch.device = &e_dev->dma_device;
 
-		list_add_tail(&ev_dev->dma_ch.device_node,
-				&e_dev->dma_device.channels);
+		list_add_tail(&ev_dev->dma_ch.device_node, &e_dev->dma_device.channels);
 
 		EDMA_LOG(e_dev, "EV_INDEX: %d EV_ADDR: 0x%pK\n", i, ev_dev);
 	}
+
 	return ret;
 }
 
@@ -1115,24 +1110,134 @@ static void edma_init_dma_device(struct edma_dev *e_dev)
 	e_dev->dma_device.device_tx_status = edma_tx_status;
 }
 
-void edma_dump(void)
+/*
+ * Common function to get eDMA base address from device
+ * Returns mapped base address on success, NULL on failure
+ */
+static bool qcom_edma_get_base_from_dev(struct device *dev,
+				    struct device_node **of_node,
+				    phys_addr_t *base_phys,
+				    void __iomem **base)
 {
+	const __be32 *prop_val;
+	struct device_node *node;
+	size_t base_size;
+
+	if (!dev || !dev->of_node) {
+		pr_err("EDMA: invalid %s\n", dev ? "of_node" : "dev");
+		return false;
+	}
+
+	node = of_parse_phandle(dev->of_node, "edma-parent", 0);
+	if (!node) {
+		pr_err("EDMA: no phandle for eDMA found\n");
+		return false;
+	}
+
+	if (!of_device_is_compatible(node, "qcom,pci-edma")) {
+		pr_err("EDMA: no compatible qcom,pci-edma found\n");
+		of_node_put(node);
+		return false;
+	}
+
+	prop_val = of_get_address(node, 0, NULL, NULL);
+	if (!prop_val) {
+		pr_err("EDMA: missing 'reg' devicetree\n");
+		of_node_put(node);
+		return false;
+	}
+
+	*base_phys = be32_to_cpup(prop_val);
+	if (!*base_phys) {
+		pr_err("EDMA: failed to get eDMA base register address\n");
+		of_node_put(node);
+		return false;
+	}
+
+	base_size = be32_to_cpup(&prop_val[1]);
+	if (!base_size) {
+		pr_err("EDMA: failed to get the size of eDMA register space\n");
+		of_node_put(node);
+		return false;
+	}
+
+	*base = devm_ioremap(dev, *base_phys, base_size);
+	if (!*base) {
+		pr_err("EDMA: failed to ioremap eDMA base address\n");
+		of_node_put(node);
+		return false;
+	}
+
+	*of_node = node;
+
+	return true;
+}
+
+void edma_dump(struct device *dev)
+{
+	void __iomem *edma_base;
+	struct device_node *of_node;
+	phys_addr_t edma_base_phys;
 	int i;
+
+	if (!qcom_edma_get_base_from_dev(dev, &of_node, &edma_base_phys, &edma_base)) {
+		pr_err("EDMA: failed to get base address for dump\n");
+		return;
+	}
 
 	for (i = 0; i < EDMA_MAX_SIZE; i += 32) {
 		pr_err("EDMA Reg : 0x%04x %08x %08x %08x %08x %08x %08x %08x %08x\n",
 			i,
-			readl_relaxed(e_dev_info->base + i),
-			readl_relaxed(e_dev_info->base + (i + 4)),
-			readl_relaxed(e_dev_info->base + (i + 8)),
-			readl_relaxed(e_dev_info->base + (i + 12)),
-			readl_relaxed(e_dev_info->base + (i + 16)),
-			readl_relaxed(e_dev_info->base + (i + 20)),
-			readl_relaxed(e_dev_info->base + (i + 24)),
-			readl_relaxed(e_dev_info->base + (i + 28)));
+			readl_relaxed(edma_base + i),
+			readl_relaxed(edma_base + (i + 4)),
+			readl_relaxed(edma_base + (i + 8)),
+			readl_relaxed(edma_base + (i + 12)),
+			readl_relaxed(edma_base + (i + 16)),
+			readl_relaxed(edma_base + (i + 20)),
+			readl_relaxed(edma_base + (i + 24)),
+			readl_relaxed(edma_base + (i + 28)));
 	}
 }
-EXPORT_SYMBOL(edma_dump);
+EXPORT_SYMBOL_GPL(edma_dump);
+
+static void qcom_edma_ch_cleanup(struct edma_dev *e_dev)
+{
+	int i;
+
+	/* Destroy workqueues for all initialized channels */
+	for (i = 0; i < e_dev->n_max_ec_ch; i++) {
+		struct edmac_dev *ec_dev;
+
+		if (i < e_dev->n_wr_ch)
+			ec_dev = &e_dev->ec_wr_devs[i];
+		else
+			ec_dev = &e_dev->ec_rd_devs[i - e_dev->n_wr_ch];
+
+		if (ec_dev->pending_process_wq) {
+			destroy_workqueue(ec_dev->pending_process_wq);
+			ec_dev->pending_process_wq = NULL;
+		}
+	}
+}
+
+static int qcom_edma_hw_init(struct edma_dev *e_dev)
+{
+	int ret;
+
+	ret = edma_init_channels(e_dev);
+	if (ret)
+		return ret;
+
+	ret = edma_init_irq(e_dev);
+	if (ret) {
+		qcom_edma_ch_cleanup(e_dev);
+		return ret;
+	}
+
+	edma_init_dma_device(e_dev);
+
+	return ret;
+}
 
 /*
  * Initializes and enables eDMA driver and H/W block for PCIe controllers.
@@ -1143,83 +1248,38 @@ int qcom_edma_init(struct device *dev)
 {
 	int ret;
 	struct edma_dev *e_dev;
-	struct device_node *of_node;
-	const __be32 *prop_val;
-
-	if (!dev || !dev->of_node) {
-		pr_err("EDMA: invalid %s\n", dev ? "of_node" : "dev");
-		return -EINVAL;
-	}
-
-	of_node = of_parse_phandle(dev->of_node, "edma-parent", 0);
-	if (!of_node) {
-		pr_info("EDMA: no phandle for eDMA found\n");
-		return -ENODEV;
-	}
-
-	if (!of_device_is_compatible(of_node, "qcom,pci-edma")) {
-		pr_info("EDMA: no compatible qcom,pci-edma found\n");
-		return -ENODEV;
-	}
 
 	e_dev = devm_kzalloc(dev, sizeof(*e_dev), GFP_KERNEL);
 	if (!e_dev)
 		return -ENOMEM;
 
 	e_dev->dev = dev;
-	e_dev->of_node = of_node;
 
-	prop_val = of_get_address(e_dev->of_node, 0, NULL, NULL);
-	if (!prop_val) {
-		pr_err("EDMA: missing 'reg' devicetree\n");
-		return -EINVAL;
-	}
-
-	e_dev->base_phys = be32_to_cpup(prop_val);
-	if (!e_dev->base_phys) {
-		pr_err("EDMA: failed to get eDMA base register address\n");
-		return -EINVAL;
-	}
-
-	e_dev->base_size = be32_to_cpup(&prop_val[1]);
-	if (!e_dev->base_size) {
-		pr_err("EDMA: failed to get the size of eDMA register space\n");
-		return -EINVAL;
-	}
-
-	e_dev->base = devm_ioremap(e_dev->dev, e_dev->base_phys,
-					e_dev->base_size);
-	if (!e_dev->base) {
-		pr_err("EDMA: failed to remap eDMA base register\n");
-		return -EFAULT;
+	if (!qcom_edma_get_base_from_dev(dev, &e_dev->of_node, &e_dev->base_phys, &e_dev->base)) {
+		pr_err("EDMA: failed to get base address\n");
+		return -ENODEV;
 	}
 
 	edma_init_log(e_dev, NULL);
 
 	e_dev->n_wr_ch = (readl_relaxed(e_dev->base + DMA_CTRL_OFF) >>
 			DMA_CTRL_NUM_WR_CH_SHIFT) & DMA_CTRL_NUM_CH_MASK;
-	EDMA_LOG(e_dev, "number of write channels: %d\n",
-		e_dev->n_wr_ch);
+	EDMA_LOG(e_dev, "number of write channels: %d\n", e_dev->n_wr_ch);
 
 	e_dev->n_rd_ch = (readl_relaxed(e_dev->base + DMA_CTRL_OFF) >>
 			DMA_CTRL_NUM_RD_CH_SHIFT) & DMA_CTRL_NUM_CH_MASK;
-	EDMA_LOG(e_dev, "number of read channels: %d\n",
-		e_dev->n_rd_ch);
+	EDMA_LOG(e_dev, "number of read channels: %d\n", e_dev->n_rd_ch);
 
 	e_dev->n_max_ec_ch = e_dev->n_wr_ch + e_dev->n_rd_ch;
-	EDMA_LOG(e_dev, "number of eDMA physical channels: %d\n",
-		e_dev->n_max_ec_ch);
+	EDMA_LOG(e_dev, "number of eDMA physical channels: %d\n", e_dev->n_max_ec_ch);
 
-	ret = of_property_read_u32(e_dev->of_node, "qcom,n-max-ev-ch",
-				&e_dev->n_max_ev_ch);
+	ret = of_property_read_u32(e_dev->of_node, "qcom,n-max-ev-ch", &e_dev->n_max_ev_ch);
 	if (ret)
 		e_dev->n_max_ev_ch = EDMA_NUM_MAX_EV_CH;
 
-	EDMA_LOG(e_dev, "number of eDMA virtual channels: %d\n",
-		e_dev->n_max_ev_ch);
+	EDMA_LOG(e_dev, "number of eDMA virtual channels: %d\n", e_dev->n_max_ev_ch);
 
-	ret = of_property_read_u32(e_dev->of_node, "qcom,n-tl-init",
-				&e_dev->n_tl_init);
+	ret = of_property_read_u32(e_dev->of_node, "qcom,n-tl-init", &e_dev->n_tl_init);
 	if (ret)
 		e_dev->n_tl_init = EDMA_NUM_TL_INIT;
 
@@ -1227,8 +1287,7 @@ int qcom_edma_init(struct device *dev)
 		"number of initial transfer and descriptor lists: %d\n",
 		e_dev->n_tl_init);
 
-	ret = of_property_read_u32(e_dev->of_node, "qcom,n-tl-ele",
-				&e_dev->n_tl_ele);
+	ret = of_property_read_u32(e_dev->of_node, "qcom,n-tl-ele", &e_dev->n_tl_ele);
 	if (ret)
 		e_dev->n_tl_ele = EDMA_NUM_TL_ELE;
 
@@ -1244,34 +1303,39 @@ int qcom_edma_init(struct device *dev)
 
 	e_dev->ec_wr_devs = devm_kcalloc(e_dev->dev, e_dev->n_wr_ch,
 				sizeof(*e_dev->ec_wr_devs), GFP_KERNEL);
-	if (!e_dev->ec_wr_devs)
+	if (!e_dev->ec_wr_devs) {
+		of_node_put(e_dev->of_node);
 		return -ENOMEM;
+	}
 
 	e_dev->ec_rd_devs = devm_kcalloc(e_dev->dev, e_dev->n_rd_ch,
 				sizeof(*e_dev->ec_rd_devs), GFP_KERNEL);
-	if (!e_dev->ec_rd_devs)
+	if (!e_dev->ec_rd_devs) {
+		of_node_put(e_dev->of_node);
 		return -ENOMEM;
+	}
 
 	e_dev->ev_devs = devm_kcalloc(e_dev->dev, e_dev->n_max_ev_ch,
 				sizeof(*e_dev->ev_devs), GFP_KERNEL);
-	if (!e_dev->ev_devs)
+	if (!e_dev->ev_devs) {
+		of_node_put(e_dev->of_node);
 		return -ENOMEM;
+	}
 
 	INIT_LIST_HEAD(&e_dev->dma_device.channels);
-	ret = edma_init_channels(e_dev);
-	if (ret)
-		return ret;
 
-	ret = edma_init_irq(e_dev);
-	if (ret)
+	ret = qcom_edma_hw_init(e_dev);
+	if (ret) {
+		EDMA_ERR(e_dev, "Edma hw init failed with err: %d\n", ret);
+		of_node_put(e_dev->of_node);
 		return ret;
-
-	edma_init_dma_device(e_dev);
-	e_dev_info = e_dev;
+	}
 
 	ret = dma_async_device_register(&e_dev->dma_device);
 	if (ret) {
 		EDMA_ERR(e_dev, "failed to register device: %d\n", ret);
+		qcom_edma_ch_cleanup(e_dev);
+		of_node_put(e_dev->of_node);
 		return ret;
 	}
 
@@ -1280,22 +1344,23 @@ int qcom_edma_init(struct device *dev)
 	if (ret) {
 		EDMA_ERR(e_dev, "failed to register controller %d\n", ret);
 		dma_async_device_unregister(&e_dev->dma_device);
+		qcom_edma_ch_cleanup(e_dev);
+		of_node_put(e_dev->of_node);
 		return ret;
 	}
 
 	return 0;
 }
-EXPORT_SYMBOL(qcom_edma_init);
+EXPORT_SYMBOL_GPL(qcom_edma_init);
 
+/*
+ * We can't invoke EDMA-specific initialization until the reference clock
+ * (refclk) is available from the host. Therefore, we use a dummy probe here.
+ * The actual initialization will be performed in qcom_edma_init, which is
+ * invoked by the PCIe driver only after the reference clock becomes available.
+ */
 static int edma_dev_probe(struct platform_device *pdev)
 {
-	pr_debug("%s\n", __func__);
-	return 0;
-}
-
-static int edma_dev_remove(struct platform_device *pdev)
-{
-	platform_set_drvdata(pdev, NULL);
 	return 0;
 }
 
@@ -1310,22 +1375,19 @@ static struct platform_driver edma_dev_driver = {
 		.of_match_table = edma_dev_match_table,
 	},
 	.probe		= edma_dev_probe,
-	.remove		= edma_dev_remove,
 };
 
 static int __init edma_dev_init(void)
 {
-	pr_debug("%s\n", __func__);
 	return platform_driver_register(&edma_dev_driver);
 }
 subsys_initcall(edma_dev_init);
 
 static void __exit edma_dev_exit(void)
 {
-	pr_debug("%s\n", __func__);
 	platform_driver_unregister(&edma_dev_driver);
 }
 module_exit(edma_dev_exit);
 
 MODULE_DESCRIPTION("QTI PCIe eDMA driver");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");

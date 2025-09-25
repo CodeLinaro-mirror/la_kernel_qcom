@@ -9,6 +9,7 @@ def define_seraph():
         # keep sorted
         # TODO: Need to add GKI modules
         "arch/arm64/gunyah/gh_arm_drv.ko",
+        "drivers/base/regmap/qti-regmap-debugfs.ko",
         "drivers/bus/mhi/devices/mhi_dev_uci.ko",
         "drivers/bus/mhi/host/mhi.ko",
         "drivers/char/rdbg.ko",
@@ -164,6 +165,7 @@ def define_seraph():
         "drivers/soc/qcom/qcom_wdt_core.ko",
         "drivers/soc/qcom/qfprom-sys.ko",
         "drivers/soc/qcom/qmi_helpers.ko",
+        "drivers/soc/qcom/sc_tcm.ko",
         "drivers/soc/qcom/secure_buffer.ko",
         "drivers/soc/qcom/smem.ko",
         "drivers/soc/qcom/smp2p.ko",
