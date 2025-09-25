@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/clk.h>
 #include <linux/dmaengine.h>
@@ -1198,6 +1198,11 @@ static int spi_geni_probe(struct platform_device *pdev)
 	mas->se.base = base;
 
 	mas->dev_data = device_get_match_data(&pdev->dev);
+
+	if (!mas->dev_data) {
+		dev_err(dev, "No match data found for device\n");
+		return -ENODEV;
+	}
 
 	ret = mas->dev_data->geni_spi_pwr_rsc_init(dev);
 	if (ret)
