@@ -6,6 +6,7 @@ targets = [
     "bengal",
     "hamoa",
     "lahaina",
+    "pikachu",
     "sun",
     "vienna",
 ]
