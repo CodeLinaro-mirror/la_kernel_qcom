@@ -4401,6 +4401,9 @@ err:
 /* This function will initialize gdsc core and gdsc phy regulators */
 static int msm_pcie_gdsc_init(struct msm_pcie_dev_t *dev)
 {
+	/* switch pipe clock mux to xo before turning on gdsc-core */
+	if (dev->pipe_clk_mux && dev->ref_clk_src)
+		clk_set_parent(dev->pipe_clk_mux, dev->ref_clk_src);
 	/*
 	 * Either gdsc_pd_core/phy will be set or the
 	 * gdsc_core/phy pointers will be set so not checking
