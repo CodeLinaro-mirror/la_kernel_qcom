@@ -2858,7 +2858,7 @@ static int spi_geni_transfer_one_message(struct spi_controller *spi, struct spi_
 		}
 		msg->actual_length += xfer->len;
 
-		if (mas->is_tx_rx) {
+		if (mas->is_tx_rx && xfer_tx_rx) {
 			msg->actual_length += xfer_tx_rx->len;
 			xfer = xfer_tx_rx;
 		}
