@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2014, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/acpi.h>
@@ -889,6 +889,7 @@ static void etm4_disable_hw(void *info)
 	int i;
 
 	etm4_cs_unlock(drvdata, csa);
+	etm4_os_unlock(drvdata);
 	etm4_disable_arch_specific(drvdata);
 
 	if (!drvdata->skip_power_up) {
