@@ -40,6 +40,12 @@ def register_modules(registry):
                     "drivers/firmware/qcom/qcom_tzmem.c",
                 ],
             },
+            "CONFIG_QCOM_TZMEM_FFA": {
+                True: [
+                    # do not sort
+                    "drivers/firmware/qcom/qcom_tzmem_ffa.c",
+                ],
+            },
         },
         deps = [
             # do not sort

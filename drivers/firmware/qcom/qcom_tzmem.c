@@ -5,6 +5,8 @@
  * Copyright (C) 2023-2024 Linaro Ltd.
  */
 
+#define pr_fmt(fmt) "qcom_tzmem: [%s][%d]: " fmt, __func__, __LINE__
+
 #include <linux/bug.h>
 #include <linux/cleanup.h>
 #include <linux/dma-mapping.h>
@@ -37,6 +39,7 @@ struct qcom_tzmem_pool {
 	size_t increment;
 	size_t max_size;
 	spinlock_t lock;
+	bool is_cached;
 };
 
 struct qcom_tzmem_chunk {
@@ -47,6 +50,12 @@ struct qcom_tzmem_chunk {
 static struct device *qcom_tzmem_dev;
 static RADIX_TREE(qcom_tzmem_chunks, GFP_ATOMIC);
 static DEFINE_SPINLOCK(qcom_tzmem_chunks_lock);
+static bool qcom_tzmem_using_shm_bridge;
+
+bool qcom_tzmem_get_status(void)
+{
+	return qcom_tzmem_using_shm_bridge;
+}
 
 #if IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_GENERIC)
 
@@ -55,7 +64,7 @@ static int qcom_tzmem_init(void)
 	return 0;
 }
 
-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+static int qcom_tzmem_init_area(struct qcom_tzmem_area *area, bool is_cached)
 {
 	return 0;
 }
@@ -73,7 +82,19 @@ static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
 #define QCOM_SHM_BRIDGE_NUM_VM_SHIFT 9
 #define QCOM_SHM_BRIDGE_SELF_OWNER_BIT 1
 
-static bool qcom_tzmem_using_shm_bridge;
+struct bridge_list {
+	struct list_head head;
+	struct mutex lock;
+};
+
+struct bridge_list_entry {
+	struct list_head list;
+	phys_addr_t paddr;
+	uint64_t handle;
+	int32_t ref_count;
+};
+
+static struct bridge_list bridge_list_head;
 
 /* List of machines that are known to not support SHM bridge correctly. */
 static const char *const qcom_tzmem_blacklist[] = {
@@ -101,11 +122,219 @@ static int qcom_tzmem_init(void)
 	if (!ret)
 		qcom_tzmem_using_shm_bridge = true;
 
+	pr_debug("Bridge enable scm call done!, qcom_tzmem_using_shm_bridge: %d\n",
+		qcom_tzmem_using_shm_bridge);
+	mutex_init(&bridge_list_head.lock);
+	INIT_LIST_HEAD(&bridge_list_head.head);
 	return ret;
 
 notsupp:
 	dev_info(qcom_tzmem_dev, "SHM Bridge not supported\n");
 	return 0;
+}
+
+static int32_t qcom_tzmem_list_add_locked(phys_addr_t paddr,
+						uint64_t handle)
+{
+	struct bridge_list_entry *entry;
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry)
+		return -ENOMEM;
+	entry->handle = handle;
+	entry->paddr = paddr;
+	entry->ref_count = 0;
+
+	list_add_tail(&entry->list, &bridge_list_head.head);
+	return 0;
+}
+
+static void qcom_tzmem_list_del_locked(uint64_t handle)
+{
+	struct bridge_list_entry *entry;
+
+	list_for_each_entry(entry, &bridge_list_head.head, list) {
+		if (entry->handle == handle) {
+			list_del(&entry->list);
+			kfree(entry);
+			break;
+		}
+	}
+}
+
+/**
+ * qcom_tzmem_list_dec_refcount_locked() - Decrease refcount on shmbridge
+ * @handle: Handle to shmbridge
+ *
+ * Decrement the reference count of registered shmbridge and if refcount
+ * reached to zero, delete the shmbridge (i.e send a scm call to tz and remove
+ * that from our local list too.
+ * Must call API in a locked enviorment.
+ *
+ * Return: On success, returns 0; on failure, returns < 0.
+ */
+static int32_t qcom_tzmem_list_dec_refcount_locked(uint64_t handle)
+{
+	struct bridge_list_entry *entry;
+	int32_t ret = -EINVAL;
+
+	list_for_each_entry(entry, &bridge_list_head.head, list) {
+		if (entry->handle == handle) {
+			if (entry->ref_count > 0) {
+				/* decrement reference count. */
+				entry->ref_count--;
+				pr_debug("bridge on handle: %llx exists decrease refcount :%d\n",
+					 handle, entry->ref_count);
+
+				if (entry->ref_count == 0) {
+					qcom_scm_shm_bridge_delete(handle);
+					qcom_tzmem_list_del_locked(handle);
+				}
+				ret = 0;
+			} else {
+				pr_err("ref_count should not be negative, handle %llx , refcount: %d\n",
+					handle, entry->ref_count);
+			}
+			break;
+		}
+	}
+
+	if (ret == -EINVAL)
+		pr_err("Not able to find bridge handle %llx in map\n", handle);
+
+	return ret;
+}
+
+/**
+ * qcom_tzmem_list_inc_refcount_locked() - Increase refcount on shmbridge
+ * @paddr: Physical address of the memory to share
+ * @handle: Handle to shmbridge
+ *
+ * Increment the ref count in case if we try to register a pre-registered
+ * phyaddr with shmbridge and provide a valid handle to the caller API which
+ * was passed by caller as a pointer.
+ *
+ * Must call API in a locked enviorment.
+ *
+ * Return: On success, returns 0; on failure, returns < 0.
+ */
+static int32_t qcom_tzmem_list_inc_refcount_locked(phys_addr_t paddr, uint64_t *handle)
+{
+	struct bridge_list_entry *entry;
+	int32_t ret = -EINVAL;
+
+	list_for_each_entry(entry, &bridge_list_head.head, list) {
+		if (entry->paddr == paddr) {
+
+			entry->ref_count++;
+			pr_debug("bridge on paddr %llx exists increase refcount :%d, handle: %llx\n",
+				 (uint64_t)paddr, entry->ref_count, entry->handle);
+
+			/* update handle in case we found paddr already exist */
+			*handle = entry->handle;
+			ret = 0;
+			break;
+		}
+	}
+	if (ret)
+		pr_err("Not able to find bridge paddr %llx in map\n", (uint64_t)paddr);
+	return ret;
+}
+
+static int32_t qcom_tzmem_query_locked(phys_addr_t paddr)
+{
+	struct bridge_list_entry *entry;
+
+	list_for_each_entry(entry, &bridge_list_head.head, list) {
+		if (entry->paddr == paddr) {
+			pr_debug("A bridge on paddr: %llx exists\n", (uint64_t)paddr);
+			return -EEXIST;
+		}
+	}
+	return 0;
+}
+
+int32_t qcom_tzmem_query(phys_addr_t paddr)
+{
+	int32_t ret = 0;
+
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	return 0;
+#endif
+
+	if (!qcom_tzmem_using_shm_bridge)
+		return 0;
+
+	mutex_lock(&bridge_list_head.lock);
+	ret = qcom_tzmem_query_locked(paddr);
+	mutex_unlock(&bridge_list_head.lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_tzmem_query);
+
+/**
+ * qcom_tzmem_shm_bridge_create_with_vmid() - Create a SHM bridge.
+ * @paddr: Physical address of the memory to share.
+ * @size: Size of the memory to share.
+ * @handle: Handle to the SHM bridge.
+ * @vmid: Register bridge with vmid passed as argument
+ *
+ * On platforms that support SHM bridge, this function creates a SHM bridge
+ * for the given memory region with QTEE. The handle returned by this function
+ * must be passed to qcom_tzmem_shm_bridge_delete() to free the SHM bridge.
+ *
+ * Return: On success, returns 0; on failure, returns < 0.
+ */
+int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 vmid, u64 *handle)
+{
+	u64 pfn_and_ns_perm, ipfn_and_s_perm, size_and_flags;
+	int ret;
+
+	if (!qcom_tzmem_using_shm_bridge)
+		return 0;
+
+	size = PAGE_ALIGN(size);
+
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	return qcom_tzmem_ffa_mem_share(phys_to_virt(paddr), 0, size, handle);
+#endif
+
+	mutex_lock(&bridge_list_head.lock);
+	ret = qcom_tzmem_query_locked(paddr);
+	if (ret) {
+		pr_debug("found %pa already exist with shmbridge\n", &paddr);
+		goto bridge_exist;
+	}
+
+	pfn_and_ns_perm = paddr | QCOM_SCM_PERM_RW;
+	ipfn_and_s_perm = paddr | QCOM_SCM_PERM_RW;
+
+	if (vmid)
+		size_and_flags = size | (1 << QCOM_SHM_BRIDGE_NUM_VM_SHIFT);
+	else
+		size_and_flags  = size  | (QCOM_SHM_BRIDGE_SELF_OWNER_BIT << 1)
+					| (QCOM_SCM_PERM_RW << 2);
+
+	pr_debug("paddr|PERM: %#llx, size: %#zx, size|flags: %#llx, vmid: %#x\n",
+		 pfn_and_ns_perm, size, size_and_flags, vmid);
+	ret = qcom_scm_shm_bridge_create(pfn_and_ns_perm, ipfn_and_s_perm,
+					 size_and_flags, vmid, handle);
+
+	if (ret) {
+		dev_err(qcom_tzmem_dev,
+			"SHM Bridge failed: ret %d paddr 0x%pa, size %zu\n",
+			ret, &paddr, size);
+
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	ret = qcom_tzmem_list_add_locked(paddr, *handle);
+bridge_exist:
+	ret = qcom_tzmem_list_inc_refcount_locked(paddr, handle);
+exit:
+	mutex_unlock(&bridge_list_head.lock);
+	return ret;
 }
 
 /**
@@ -122,30 +351,7 @@ notsupp:
  */
 int qcom_tzmem_shm_bridge_create(phys_addr_t paddr, size_t size, u64 *handle)
 {
-	u64 pfn_and_ns_perm, ipfn_and_s_perm, size_and_flags;
-	int ret;
-
-	if (!qcom_tzmem_using_shm_bridge)
-		return 0;
-
-	pfn_and_ns_perm = paddr | QCOM_SCM_PERM_RW;
-	ipfn_and_s_perm = paddr | QCOM_SCM_PERM_RW;
-	size_and_flags = size
-			 | (QCOM_SHM_BRIDGE_SELF_OWNER_BIT << 1)
-			 | (QCOM_SCM_PERM_RW << 2);
-
-
-	ret = qcom_scm_shm_bridge_create(pfn_and_ns_perm, ipfn_and_s_perm,
-					 size_and_flags, 0, handle);
-	if (ret) {
-		dev_err(qcom_tzmem_dev,
-			"SHM Bridge failed: ret %d paddr 0x%pa, size %zu\n",
-			ret, &paddr, size);
-
-		return ret;
-	}
-
-	return 0;
+	return qcom_tzmem_shm_bridge_create_with_vmid(paddr, size, 0, handle);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_create);
 
@@ -159,12 +365,20 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_create);
  */
 void qcom_tzmem_shm_bridge_delete(u64 handle)
 {
-	if (qcom_tzmem_using_shm_bridge)
-		qcom_scm_shm_bridge_delete(handle);
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	qcom_tzmem_ffa_mem_reclaim(handle);
+	return;
+#endif
+	if (!qcom_tzmem_using_shm_bridge)
+		return;
+
+	mutex_lock(&bridge_list_head.lock);
+	qcom_tzmem_list_dec_refcount_locked(handle);
+	mutex_unlock(&bridge_list_head.lock);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_delete);
 
-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+static int qcom_tzmem_init_area(struct qcom_tzmem_area *area, bool is_cached)
 {
 	int ret;
 
@@ -172,7 +386,19 @@ static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
 	if (!handle)
 		return -ENOMEM;
 
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	/*
+	 * Need to generate scattergatherlist later, so 2 options:
+	 * if cached, pass 0 in paddr
+	 * if uncached, pass dma_addr
+	 */
+	if (is_cached)
+		ret = qcom_tzmem_ffa_mem_share(area->vaddr, 0, area->size, handle);
+	else
+		ret = qcom_tzmem_ffa_mem_share(area->vaddr, area->paddr, area->size, handle);
+#else
 	ret = qcom_tzmem_shm_bridge_create(area->paddr, area->size, handle);
+#endif
 	if (ret)
 		return ret;
 
@@ -203,24 +429,38 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 
 	area->size = PAGE_ALIGN(size);
 
-	area->vaddr = dma_alloc_coherent(qcom_tzmem_dev, area->size,
-					 &area->paddr, gfp);
-	if (!area->vaddr)
-		return -ENOMEM;
+	if (pool->is_cached) {
+		area->vaddr = (void *)__get_free_pages(gfp, get_order(area->size));
+		if (!area->vaddr)
+			return -ENOMEM;
 
-	ret = qcom_tzmem_init_area(area);
+		area->paddr = dma_map_single(qcom_tzmem_dev, area->vaddr,
+					     area->size, DMA_TO_DEVICE);
+		if (dma_mapping_error(qcom_tzmem_dev, area->paddr)) {
+			dev_err(qcom_tzmem_dev,
+				"dma_map_single failed: vaddr: %p, size: %#zx failed\n",
+				area->vaddr, area->size);
+			free_pages((unsigned long)area->vaddr, get_order(area->size));
+			return -ENOMEM;
+		}
+	} else {
+		area->vaddr = dma_alloc_coherent(qcom_tzmem_dev, area->size, &area->paddr, gfp);
+		if (!area->vaddr)
+			return -ENOMEM;
+	}
+
+	ret = qcom_tzmem_init_area(area, pool->is_cached);
 	if (ret) {
-		dma_free_coherent(qcom_tzmem_dev, area->size,
-				  area->vaddr, area->paddr);
-		return ret;
+		pr_err("Failed to init area, ret: %d\n", ret);
+		goto exit_free_mem;
 	}
 
 	ret = gen_pool_add_virt(pool->genpool, (unsigned long)area->vaddr,
 				(phys_addr_t)area->paddr, size, -1);
 	if (ret) {
-		dma_free_coherent(qcom_tzmem_dev, area->size,
-				  area->vaddr, area->paddr);
-		return ret;
+		pr_err("Failed to create pool, ret: %d\n", ret);
+		qcom_tzmem_cleanup_area(area);
+		goto exit_free_mem;
 	}
 
 	scoped_guard(spinlock_irqsave, &pool->lock)
@@ -228,6 +468,14 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 
 	area = NULL;
 	return 0;
+
+exit_free_mem:
+	if (pool->is_cached) {
+		dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
+		free_pages((unsigned long)area->vaddr, get_order(area->size));
+	} else
+		dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
+	return ret;
 }
 
 /**
@@ -276,6 +524,7 @@ qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
 	pool->policy = config->policy;
 	pool->increment = config->increment;
 	pool->max_size = config->max_size;
+	pool->is_cached = config->is_cached;
 	INIT_LIST_HEAD(&pool->areas);
 	spin_lock_init(&pool->lock);
 
@@ -327,8 +576,11 @@ void qcom_tzmem_pool_free(struct qcom_tzmem_pool *pool)
 	list_for_each_entry_safe(area, next, &pool->areas, list) {
 		list_del(&area->list);
 		qcom_tzmem_cleanup_area(area);
-		dma_free_coherent(qcom_tzmem_dev, area->size,
-				  area->vaddr, area->paddr);
+		if (pool->is_cached) {
+			dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
+			free_pages((unsigned long)area->vaddr, get_order(area->size));
+		} else
+			dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
 		kfree(area);
 	}
 
@@ -508,6 +760,20 @@ phys_addr_t qcom_tzmem_to_phys(void *vaddr)
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_to_phys);
 
+/* cache clean operation for buffer sub-allocated from pool */
+void qcom_tzmem_flush_shm_buf(phys_addr_t paddr, size_t size)
+{
+	dma_sync_single_for_cpu(qcom_tzmem_dev, paddr, size, DMA_FROM_DEVICE);
+}
+EXPORT_SYMBOL_GPL(qcom_tzmem_flush_shm_buf);
+
+/* cache invalidation operation for buffer sub-allocated from pool */
+void qcom_tzmem_inv_shm_buf(phys_addr_t paddr, size_t size)
+{
+	dma_sync_single_for_device(qcom_tzmem_dev, paddr, size, DMA_TO_DEVICE);
+}
+EXPORT_SYMBOL_GPL(qcom_tzmem_inv_shm_buf);
+
 int qcom_tzmem_enable(struct device *dev)
 {
 	if (qcom_tzmem_dev)
@@ -515,6 +781,14 @@ int qcom_tzmem_enable(struct device *dev)
 
 	qcom_tzmem_dev = dev;
 
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+	if (qcom_tzmem_ffa_register(qcom_tzmem_dev)) {
+		dev_err(qcom_tzmem_dev, "Failed to register qcom_tzmem with FFA\n");
+		return -EINVAL;
+	}
+	qcom_tzmem_using_shm_bridge = true;
+	return 0;
+#endif
 	return qcom_tzmem_init();
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_enable);
