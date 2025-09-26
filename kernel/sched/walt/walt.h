@@ -50,6 +50,7 @@
 
 extern bool walt_disabled;
 extern bool waltgov_disabled;
+extern bool walt_quiet_state;
 
 enum task_event {
 	PUT_PREV_TASK	= 0,

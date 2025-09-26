@@ -5847,6 +5847,14 @@ static void android_vh_freq_qos_remove_request(void *unused, struct freq_qos_req
 	trace_freq_qos_request("remove", __builtin_return_address(2), req->type, -1);
 }
 
+static void android_vh_scx_ops_enable_state(void *unused, int state)
+{
+	if (state == 1) //SCX_OPS_ENABLED
+		walt_quiet_state = true;
+	else if (state == 2) //SCX_OPS_DISABLING
+		walt_quiet_state = false;
+}
+
 static void register_walt_hooks(void)
 {
 	register_trace_android_rvh_wake_up_new_task(android_rvh_wake_up_new_task, NULL);
@@ -5878,10 +5886,12 @@ static void register_walt_hooks(void)
 	register_trace_android_vh_freq_qos_add_request(android_vh_freq_qos_add_request, NULL);
 	register_trace_android_vh_freq_qos_update_request(android_vh_freq_qos_update_request, NULL);
 	register_trace_android_vh_freq_qos_remove_request(android_vh_freq_qos_remove_request, NULL);
+	register_trace_android_vh_scx_ops_enable_state(android_vh_scx_ops_enable_state, NULL);
 }
 
 atomic64_t walt_irq_work_lastq_ws;
 bool walt_disabled = true;
+bool walt_quiet_state;
 
 static int walt_init_stop_handler(void *data)
 {
