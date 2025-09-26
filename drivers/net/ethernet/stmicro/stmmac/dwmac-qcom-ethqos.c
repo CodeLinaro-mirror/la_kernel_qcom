@@ -7288,7 +7288,7 @@ static int qcom_ethqos_bring_up_phy_if(struct device *dev)
 		phylink_connect_phy(priv->phylink, priv->phydev);
 		rtnl_unlock();
 
-		if (phydev->drv->phy_id == ETH_RTK_PHY_ID_RTL8261N) {
+		if (phydev && phydev->drv->phy_id == ETH_RTK_PHY_ID_RTL8261N) {
 			if (phydev->interface == PHY_INTERFACE_MODE_USXGMII) {
 				ETHQOSDBG("set_max_speed 10G\n");
 				phy_set_max_speed(phydev, SPEED_10000);
@@ -7335,7 +7335,7 @@ static int qcom_ethqos_bring_up_phy_if(struct device *dev)
 
 	ret = stmmac_resume(&ethqos->pdev->dev);
 
-	if (!priv->plat->mac2mac_en) {
+	if (!priv->plat->mac2mac_en && phydev) {
 		if (phydev->interface == PHY_INTERFACE_MODE_USXGMII)
 			speed = SPEED_10000;
 		else if (phydev->interface == PHY_INTERFACE_MODE_SGMII)
