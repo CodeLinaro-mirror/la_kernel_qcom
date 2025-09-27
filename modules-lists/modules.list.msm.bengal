@@ -39,6 +39,7 @@ proxy-consumer.ko
 bam_dma.ko
 stub-regulator.ko
 clk-smd-rpm.ko
+gcc-khaje.ko
 icc-rpm.ko
 qnoc-qos-rpm.ko
 qnoc-bengal.ko
