@@ -30,7 +30,9 @@
 #define TSCSS_TSC_SLEEP_INCR_VAL_HI		0x28
 #define TSCSS_TSC_DRIFT_CORRECT_INCR_VAL	0x2C
 #define TSCSS_TSC_DRIFT_CORRECT_DURATION	0x30
-#define TSCSS_TSC_DRIFT_CORRECT_CMD		0x34
+#define TSCSS_TSC_DRIFT_CORRECT_DURATION2	0x34
+#define TSCSS_TSC_DRIFT_CORRECT_CMD		0x38
+#define TSCSS_TSC_DRIFT_CORRECT_CMD2		0x3C
 #define TSCSS_TSC_ROLLOVER_VAL			0x3C
 #define TSCSS_TSC_SPARE				0x40
 #define TSCSS_TSC_OFFSET_LO			0x50
@@ -58,10 +60,15 @@
 #define TSCSS_TSC_TIMER_PPS			0x8
 #define TSCSS_TSC_TIMER_CFG			0xC
 #define TSCSS_TSC_TIMER_PHASE_OFFSET		0x10
+#define TSCSS_TSC_TIMER_FUSA_STATUS		0xF4
+#define TSCSS_TIMER_COUNT			16
 #define TSCSS_RESOLUTION			4
 #define TSCSS_TSC_TIMER_BASE(base, idx, offset) \
 			(base + idx * 0x100 + offset)
 
+#define TSCSS_DRIFT_CORR_PPM			1000000L
+#define TSCSS_MIN_SUBPERIOD			6
+#define INCR_VAL				0x8
 #define TSC_PRELOAD_POLLING_DELAY_MS		100
 #define NSEC_SHFT				32
 #define NSEC_MASK				GENMASK_ULL(31, 0)
@@ -103,8 +110,8 @@ struct qcom_ptp_tsc {
 	struct qcom_etu_slice etu_slice[MAX_ETU_SLICE];
 	int pps_enable;
 	int total_etu_cnt;
-	u32 incval;
 	u32 pulse_gen_ref_cnt;
+	bool is_jump;
 	bool tsc_nsec_update;
 	bool tsc_hw_preload;
 	bool frame_pulse_gen;
@@ -257,25 +264,64 @@ static void qcom_ptp_update_tsc_offset(struct qcom_ptp_tsc *timer,
 /*
  * PTP clock operations
  */
-static int qcom_ptp_adjfreq(struct ptp_clock_info *ptp, long ppb)
+static int qcom_ptp_enable_drift_corr(struct qcom_ptp_tsc *timer, bool neg_adj,
+					u32 status, u64 subperiod)
+{
+	u32 cfg;
+
+	cfg = readl_relaxed(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION);
+	if (!neg_adj) {
+		cfg |= BIT(31);
+		timer->is_jump = true;
+	} else {
+		cfg &= ~BIT(31);
+		timer->is_jump = false;
+	}
+	writel_relaxed(cfg, timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION);
+	writel_relaxed(INCR_VAL, timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_INCR_VAL);
+	writel_relaxed(subperiod, timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION2);
+	status |= BIT(2);
+	writel_relaxed(status, timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD);
+	return 0;
+}
+
+static int qcom_ptp_adjfreq(struct ptp_clock_info *ptp, long ppm)
 {
 	struct qcom_ptp_tsc *timer = container_of(ptp, struct qcom_ptp_tsc,
 			ptp_clock_info);
+	bool neg_adj = false;
+	u32 status, cfg;
+	u64 subperiod;
 
-	int neg_adj = 0;
-	u64 freq;
-	u32 diff, incval = timer->incval;
-
-	if (ppb < 0) {
-		neg_adj = 1;
-		ppb = -ppb;
+	if (ppm < 0) {
+		neg_adj = true;
+		ppm = -ppm;
 	}
 
-	freq = incval;
-	freq *= ppb;
-	diff = div_u64(freq, NSEC);
+	/*
+	 * ppm is the no. of cycles drifting per 1000000 cycles
+	 * One cycle drift happens every N cycles
+	 * N is calculated as N = 1 cycle * 1000000 / ppm
+	 * So for every N cycles, 1 cycle correction should be applied,
+	 * which is the subperiod.
+	 */
+	subperiod = TSCSS_DRIFT_CORR_PPM / ppm;
+	subperiod = (subperiod < TSCSS_MIN_SUBPERIOD) ? TSCSS_MIN_SUBPERIOD : subperiod;
 
-	incval = neg_adj ? (incval - diff) : (incval + diff);
+	status = readl_relaxed(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD);
+	if (!(status & BIT(1))) {
+		qcom_ptp_enable_drift_corr(timer, neg_adj, status, subperiod);
+		return 0;
+	}
+
+	if ((timer->is_jump && !neg_adj) || (!timer->is_jump && neg_adj)) {
+		writel_relaxed(subperiod, timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION2);
+	} else {
+		status &= ~BIT(2);
+		writel_relaxed(status, timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD);
+		qcom_ptp_enable_drift_corr(timer, neg_adj, status, subperiod);
+		return 0;
+	}
 
 	return 0;
 }
@@ -439,6 +485,43 @@ static irqreturn_t qcom_etu_irq_handler(int irq, void *data)
 
 		writel_relaxed(regval, TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
 					etu->extts_slice_num, TSCSS_TSC_SLICE_ETU_CFG));
+	}
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t qcom_fusa_irq_handler(int irq, void *data)
+{
+	struct qcom_ptp_tsc *timer = data;
+	u32 regval, cfg;
+	int i;
+
+	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT);
+
+	/* Check if counter error or valid error */
+	if (regval & BIT(1) || regval & BIT(2)) {
+		regval |= BIT(0);
+		writel_relaxed(regval, timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT);
+		regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT);
+		regval &= ~BIT(0);
+		writel_relaxed(regval, timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT);
+	}
+
+	/* Check all the timers and clear the error */
+	for (i = 0; i < TSCSS_TIMER_COUNT; i++) {
+		regval = readl_relaxed(TSCSS_TSC_TIMER_BASE(timer->timer_baseaddr,
+					i, TSCSS_TSC_TIMER_FUSA_STATUS));
+		/* Check if pulse width, pps or approx error occurred */
+		if (regval & BIT(0) || regval & BIT(1) || regval & BIT(2)) {
+			cfg = readl_relaxed(TSCSS_TSC_TIMER_BASE(timer->timer_baseaddr,
+					    i, TSCSS_TSC_TIMER_CFG));
+			cfg |= BIT(31);
+			writel_relaxed(cfg, TSCSS_TSC_TIMER_BASE(timer->timer_baseaddr,
+					i, TSCSS_TSC_TIMER_CFG));
+			cfg &= ~BIT(31);
+			writel_relaxed(cfg, TSCSS_TSC_TIMER_BASE(timer->timer_baseaddr,
+					i, TSCSS_TSC_TIMER_CFG));
+		}
 	}
 
 	return IRQ_HANDLED;
@@ -756,7 +839,7 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 	struct qcom_ptp_tsc *timer;
 	struct resource *r_mem;
 	u32 cntr_val;
-	int ret;
+	int fusa_irq, ret;
 
 	timer = devm_kzalloc(&pdev->dev, sizeof(*timer), GFP_KERNEL);
 	if (!timer)
@@ -854,6 +937,18 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 		writel_relaxed(0x3B9AC9FF, timer->baseaddr + TSCSS_TSC_ROLLOVER_VAL);
 	} else {
 		cntr_val = 0x1CC;
+		fusa_irq = platform_get_irq_byname(pdev, "tscss_fusa_irq");
+		if (fusa_irq < 0) {
+			dev_warn(&pdev->dev, "FUSA IRQ not available: %d\n", fusa_irq);
+		} else {
+			ret = devm_request_irq(timer->dev, fusa_irq, qcom_fusa_irq_handler,
+						IRQF_TRIGGER_RISING, "tscss_fusa_irq",
+						timer);
+			if (ret)
+				pr_debug("Failed to request fusa IRQ\n");
+			else
+				pr_debug("Fusa IRQ registered ret%d\n", ret);
+		}
 	}
 
 	writel_relaxed(cntr_val, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
