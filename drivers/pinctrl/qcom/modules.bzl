@@ -184,6 +184,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-monaco",
+        out = "pinctrl-monaco.ko",
+        config = "CONFIG_PINCTRL_MONACO",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-monaco.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/pinctrl/qcom/pinctrl-malabar",
         out = "pinctrl-malabar.ko",
         config = "CONFIG_PINCTRL_MALABAR",
