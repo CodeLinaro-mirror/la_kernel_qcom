@@ -283,6 +283,9 @@ void early_walt_config(void)
 {
 	const char *name = socinfo_get_id_string();
 
+	if (!name)
+		return;
+
 	memset(soc_cluster_freq_table_size, 0, sizeof(soc_cluster_freq_table_size));
 	memset(soc_cluster_freq_table, 0, sizeof(soc_cluster_freq_table));
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP")) {
