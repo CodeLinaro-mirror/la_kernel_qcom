@@ -473,24 +473,40 @@ static int shmem_alloc(struct si_object_invoke_ctx *oic, struct si_arg u[])
 
 	size = PAGE_ALIGN(size);
 
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	int rc;
+
+	rc = qtee_ffa_shm_alloc(size, OUT_BUFFER_SIZE, &oic->shm);
+	if (rc)
+		return rc;
+
+	oic->in.msg.addr = oic->shm.in_vaddr;
+	oic->in.msg.size = oic->shm.in_size;
+	oic->in.paddr = oic->shm.paddr;
+
+	oic->out.msg.addr = oic->shm.out_vaddr;
+	oic->out.msg.size = oic->shm.out_size;
+	oic->out.paddr = oic->shm.paddr + oic->shm.in_size;
+#else
 	/* Get inbound buffer. */
-	if (qtee_shmbridge_allocate_shm(size, &oic->in.shm))
+	if (qtee_shmbridge_allocate_shm(size, &oic->in_shm))
 		return -ENOMEM;
 
 	/* Get outbound buffer. */
-	if (qtee_shmbridge_allocate_shm(OUT_BUFFER_SIZE, &oic->out.shm)) {
-		qtee_shmbridge_free_shm(&oic->in.shm);
+	if (qtee_shmbridge_allocate_shm(OUT_BUFFER_SIZE, &oic->out_shm)) {
+		qtee_shmbridge_free_shm(&oic->in_shm);
 
 		return -ENOMEM;
 	}
 
-	oic->in.msg.addr = oic->in.shm.vaddr;
+	oic->in.msg.addr = oic->in_shm.vaddr;
 	oic->in.msg.size = size;
-	oic->in.paddr = oic->in.shm.paddr;
+	oic->in.paddr = oic->in_shm.paddr;
 
-	oic->out.msg.addr = oic->out.shm.vaddr;
+	oic->out.msg.addr = oic->out_shm.vaddr;
 	oic->out.msg.size = OUT_BUFFER_SIZE;
-	oic->out.paddr = oic->out.shm.paddr;
+	oic->out.paddr = oic->out_shm.paddr;
+#endif
 
 	/* QTEE assume unused buffers are zeroed; Do it now! */
 	memset(oic->in.msg.addr, 0, oic->in.msg.size);
@@ -528,8 +544,12 @@ static void si_object_invoke_ctx_uninit(struct si_object_invoke_ctx *oic)
 {
 	ida_free(&si_object_invoke_ctxs_ida, oic->context_id);
 
-	qtee_shmbridge_free_shm(&oic->in.shm);
-	qtee_shmbridge_free_shm(&oic->out.shm);
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	qtee_ffa_shm_free(oic->shm);
+#else
+	qtee_shmbridge_free_shm(&oic->in_shm);
+	qtee_shmbridge_free_shm(&oic->out_shm);
+#endif
 }
 
 /* For X_msg functions, on failure we do the cleanup. Because, we could not
@@ -1376,6 +1396,13 @@ static int si_core_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_sysfs_create;
 
+	ret = qtee_ffa_shm_init(pdev);
+	if (ret) {
+		if (ret == -ENODEV)
+			ret = -EPROBE_DEFER;
+		goto err_ffa_shm_init;
+	}
+
 	ret = mem_object_init(pdev);
 	if (ret)
 		goto err_mem_obj_init;
@@ -1384,6 +1411,8 @@ static int si_core_probe(struct platform_device *pdev)
 	return 0;
 
 err_mem_obj_init:
+	qtee_ffa_shm_deinit(pdev);
+err_ffa_shm_init:
 	sysfs_remove_group(si_core_kobj, &attr_group);
 err_sysfs_create:
 	kobject_put(si_core_kobj);
@@ -1394,7 +1423,9 @@ err_kobj_create:
 
 static void si_core_remove(struct platform_device *pdev)
 {
+	/* TODO. Prevent unloading if 'xa_si_objects' is not empty. */
 	adci_shutdown();
+	qtee_ffa_shm_deinit(pdev);
 	sysfs_remove_group(si_core_kobj, &attr_group);
 
 	kobject_put(si_core_kobj);
@@ -1418,9 +1449,15 @@ static int __init si_core_init(void)
 {
 	int ret;
 
-	ret = platform_driver_register(&si_core_plat_driver);
+	ret = si_core_ffa_driver_register();
 	if (ret)
 		return ret;
+
+	ret = platform_driver_register(&si_core_plat_driver);
+	if (ret) {
+		si_core_ffa_driver_unregister();
+		return ret;
+	}
 
 	return 0;
 }
@@ -1428,6 +1465,7 @@ static int __init si_core_init(void)
 static void __exit si_core_exit(void)
 {
 	platform_driver_unregister(&si_core_plat_driver);
+	si_core_ffa_driver_unregister();
 }
 
 module_init(si_core_init);

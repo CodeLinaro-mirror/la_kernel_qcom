@@ -38,3 +38,15 @@ config QCOM_SI_CORE_ADCI
 	  hosted only by primary VM.
 
 	  Disable this option to avoid ADCI thread management in guest VMs.
+
+config QCOM_SI_CORE_MEM_FFA
+	bool "Use FFA ABI for memory sharing with QTEE"
+	depends on QCOM_SI_CORE && ARM_FFA_TRANSPORT
+	help
+	 Uses the FFA driver to share memory with QTEE using the FFA ABI.
+	 When this option is enabled, memory object as well as direct
+	 invocation request and response buffer memory is shared with QTEE
+	 via FFA.
+
+	 Enable this option only if QTEE supports FFA memory ABIs.
+
