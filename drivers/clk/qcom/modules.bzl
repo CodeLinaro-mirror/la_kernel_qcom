@@ -210,6 +210,34 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+    registry.register(
+        name = "drivers/clk/qcom/camcc-chora",
+        out = "camcc-chora.ko",
+        config = "CONFIG_SM_CAMCC_CHORA",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/camcc-chora.c",
+            "drivers/clk/qcom/clk-alpha-pll.h",
+            "drivers/clk/qcom/clk-branch.h",
+            "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-rcg.h",
+            "drivers/clk/qcom/clk-regmap-divider.h",
+            "drivers/clk/qcom/clk-regmap-mux.h",
+            "drivers/clk/qcom/clk-regmap.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/gdsc.h",
+            "drivers/clk/qcom/reset.h",
+            "drivers/clk/qcom/vdd-class.h",
+            "drivers/clk/qcom/vdd-level.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-qcom",
+            "drivers/clk/qcom/gdsc",
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
+        ],
+    )
 
     registry.register(
         name = "drivers/clk/qcom/camcc-seraph",

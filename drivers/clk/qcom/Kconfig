@@ -849,4 +849,13 @@ config SXR_DEBUGCC_SERAPH
 	  Say Y if you want to support the debug clocks such as clock
 	  measurement functionality.
 
+config SM_CAMCC_CHORA
+	tristate "Chora Camera Clock Controller"
+	depends on SM_GCC_CHORA
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  Chora devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 endif
