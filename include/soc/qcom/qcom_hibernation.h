@@ -41,6 +41,6 @@ struct hib_bio_batch {
 };
 
 extern struct block_device *hiber_bdev;
-extern int get_key_for_hib_exp(void);
+extern int get_key_for_hib(void);
 
 #endif /* __SOC_QCOM_HIBERNATION_H__ */
