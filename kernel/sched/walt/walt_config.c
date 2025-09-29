@@ -126,7 +126,8 @@ void walt_config(void)
 
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP") || !strcmp(name, "CANOE")
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
-			|| !strcmp(name, "WHALE") || !strcmp(name, "WHALEP")) {
+			|| !strcmp(name, "WHALE") || !strcmp(name, "WHALEP")
+			|| !strcmp(name, "CANOEPSG")) {
 		sysctl_sched_suppress_region2		= 1;
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
@@ -325,7 +326,7 @@ void early_walt_config(void)
 		soc_cluster_freq_table[1][13] = 5087;
 		soc_cluster_freq_table[1][14] = 5390;
 		soc_cluster_freq_table[1][15] = 5516;
-	} else if (!strcmp(name, "CANOE")) {
+	} else if (!strcmp(name, "CANOE") || !strcmp(name, "CANOEPSG")) {
 		soc_cluster_freq_table_size[0] = 32;
 		soc_cluster_freq_table_size[1] = 32;
 
