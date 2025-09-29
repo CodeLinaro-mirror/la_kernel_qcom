@@ -282,6 +282,7 @@ static long ps_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case ENTER_HIBERNATE:
 	case POWER_STATE_ENTER_HIBERNATE:
 		pr_debug("Enter Hibernate\n");
+		power_state_enter_into_hibernate = true;
 		ret = subsystem_suspend(drv, SUBSYS_HIBERNATE);
 		drv->current_state = HIBERNATE;
 		break;
@@ -295,6 +296,7 @@ static long ps_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case EXIT_HIBERNATE_STATE:
 	case POWER_STATE_EXIT_HIBERNATE_STATE:
 		pr_debug("Exit Hibernate\n");
+		power_state_enter_into_hibernate = false;
 		ret = subsystem_resume(drv, SUBSYS_HIBERNATE);
 		break;
 

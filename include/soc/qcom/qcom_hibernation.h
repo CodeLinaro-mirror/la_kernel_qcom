@@ -42,5 +42,16 @@ struct hib_bio_batch {
 
 extern struct block_device *hiber_bdev;
 extern int get_key_for_hib(void);
+#if IS_ENABLED(CONFIG_QCOM_KERNEL_BASED_RESTORE)
+int kernel_based_restore = 1;
+#else
+int kernel_based_restore = 0;
+#endif
+
+#if !IS_ENABLED(CONFIG_QCOM_HIB_SEC_KEY)
+int ta_based_key = 1;
+#else
+int ta_based_key = 0;
+#endif
 
 #endif /* __SOC_QCOM_HIBERNATION_H__ */
