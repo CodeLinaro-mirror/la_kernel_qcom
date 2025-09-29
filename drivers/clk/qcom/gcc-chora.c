@@ -3013,6 +3013,8 @@ static struct gdsc gcc_pcie_0_gdsc = {
 	.en_rest_wait_val = 0x2,
 	.en_few_wait_val = 0x2,
 	.clk_dis_wait_val = 0xf,
+	.collapse_ctrl = 0x5214c,
+	.collapse_mask = BIT(0),
 	.pd = {
 		.name = "gcc_pcie_0_gdsc",
 	},
@@ -3026,6 +3028,8 @@ static struct gdsc gcc_pcie_0_phy_gdsc = {
 	.en_rest_wait_val = 0x2,
 	.en_few_wait_val = 0x2,
 	.clk_dis_wait_val = 0x2,
+	.collapse_ctrl = 0x5214c,
+	.collapse_mask = BIT(1),
 	.pd = {
 		.name = "gcc_pcie_0_phy_gdsc",
 	},
