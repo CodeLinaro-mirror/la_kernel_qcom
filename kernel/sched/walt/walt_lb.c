@@ -245,8 +245,12 @@ static inline bool _walt_can_migrate_task(struct task_struct *p, int dst_cpu,
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, task_cpu(p));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+	struct rq *rq = task_rq(p);
 
 	if (p->se.sched_delayed)
+		return false;
+
+	if (task_is_blocked(p) || (task_current_donor(rq, p) ^ task_current(rq, p)))
 		return false;
 
 	/* Don't detach task if it is under active migration */
@@ -749,6 +753,11 @@ void walt_lb_tick(struct rq *rq)
 
 	/* Confirm task is still running */
 	if (READ_ONCE(p->__state) != TASK_RUNNING) {
+		raw_spin_unlock(&rq->__lock);
+		goto out_unlock;
+	}
+
+	if (task_current_donor(rq, p) ^ task_current(rq, p)) {
 		raw_spin_unlock(&rq->__lock);
 		goto out_unlock;
 	}
