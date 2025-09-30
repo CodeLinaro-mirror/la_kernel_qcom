@@ -53,6 +53,14 @@ static const char *default_compressor = CONFIG_ZRAM_DEF_COMP;
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
 /*
+ * Support (1<<14)*4k=64MB of compression requests at the same time.
+ * The mempool does not consume its member if they can get obtained directly.
+ */
+static unsigned int qpace_pool_size = (1 << 14);
+
+static mempool_t zmeta_pool;
+static mempool_t zlist_pool;
+/*
  * Pages that compress to sizes equals or greater than this are stored
  * uncompressed in memory.
  */
@@ -1549,14 +1557,6 @@ struct qpace_request_meta {
 	struct kref num_pages;
 };
 
-/*
- * Support (1<<14)*4k=64MB of compression requests at the same time.
- * The mempool does not consume its member if they can get obtained directly.
- */
-#define ZMETA_POOL_SIZE (1 << 14)
-static mempool_t zmeta_pool;
-static mempool_t zlist_pool;
-
 struct qpace_request_data {
 	struct qpace_request_meta *zmeta;
 	struct page *page;
@@ -2879,20 +2879,29 @@ static int zram_add(void)
 		/*
 		 * only for qpace.. to use the mempool to ensure memory
 		 * allocation success.
+		 * align the pool size with qpace_pool_size.
 		 */
-		if (mempool_init_kmalloc_pool(&zmeta_pool, ZMETA_POOL_SIZE,
+		if (mempool_init_kmalloc_pool(&zmeta_pool, qpace_pool_size,
 			sizeof(struct qpace_request_meta))) {
 			pr_err("zmeta mempool create failed\n");
 			kfree(zram);
 			return -ENOMEM;
 		}
-		if (mempool_init_kmalloc_pool(&zlist_pool, ZMETA_POOL_SIZE,
+		if (mempool_init_kmalloc_pool(&zlist_pool, qpace_pool_size,
 		sizeof(struct qpace_request_queue_overflow_list_entry))) {
 			pr_err("zlist mempool created failed\n");
 			mempool_exit(&zmeta_pool);
 			kfree(zram);
 			return -ENOMEM;
 		}
+		/*
+		 * qpace case is asynchronous, need to allocate bio. Increase
+		 * bio pool to qpace_pool_size to mitigate bio allocation
+		 * delay/pending.
+		 */
+		if (mempool_resize(&fs_bio_set.bio_pool, qpace_pool_size))
+			pr_warn("Failed to resize fs_bio_set pool, continuing with default size\n");
+
 		use_qpace = false;
 	}
 
@@ -3183,6 +3192,9 @@ module_exit(zram_exit);
 
 module_param(num_devices, uint, 0);
 MODULE_PARM_DESC(num_devices, "Number of pre-created zram devices");
+
+module_param(qpace_pool_size, uint, 0);
+MODULE_PARM_DESC(qpace_pool_size, "fs_bio_set pool size used by QPaCE");
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Nitin Gupta <ngupta@vflare.org>");
