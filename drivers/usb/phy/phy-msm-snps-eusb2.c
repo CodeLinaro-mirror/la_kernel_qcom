@@ -151,8 +151,9 @@
 #define USB_HSPHY_1P2_HPM_LOAD		5905	/* uA */
 #define USB_HSPHY_VDD_HPM_LOAD		7757	/* uA */
 
-/* Maximum power domains */
-#define MIN_PD				2
+#define UTXR				0 /* USB Trasnfer */
+#define UCORE				1 /* USB Core */
+#define MIN_PD				2 /* Minimum power domains */
 
 struct msm_eusb2_phy {
 	struct usb_phy		phy;
@@ -197,6 +198,7 @@ struct msm_eusb2_phy {
 	bool			fw_managed_pwr;
 	int			pd_count;
 	struct device		**pd_devs;
+	bool			pd_refcnt[MIN_PD];
 };
 
 static void msm_eusb2_phy_modeled_domain_detach(struct msm_eusb2_phy *phy)
@@ -239,6 +241,8 @@ static int msm_eusb2_phy_modeled_domain_attach(struct msm_eusb2_phy *phy)
 		if (IS_ERR(phy->pd_devs[i]))
 			goto pd_err;
 	}
+	phy->pd_refcnt[UCORE] = false;
+	phy->pd_refcnt[UTXR] = false;
 	return 0;
 
 pd_err:
@@ -249,16 +253,30 @@ pd_err:
 /* d3_to_d0 transition by turning on all the suppliers */
 static int msm_eusb2_phy_modeled_d3_to_d0(struct msm_eusb2_phy *phy)
 {
-	int ret;
+	int ret = 0;
 
 	if (!phy->fw_managed_pwr)
 		return 0;
 
-	ret = pm_runtime_resume_and_get(phy->pd_devs[0]);
-	if (ret)
-		return ret;
+	if (!phy->pd_refcnt[UTXR]) {
+		ret = pm_runtime_resume_and_get(phy->pd_devs[UTXR]);
+		if (ret) {
+			dev_err(phy->phy.dev, "Failed to resume transfer pd\n");
+			return ret;
+		}
+		phy->pd_refcnt[UTXR] = true;
+	}
 
-	ret = pm_runtime_resume_and_get(phy->pd_devs[1]);
+	if (!phy->pd_refcnt[UCORE]) {
+		ret = pm_runtime_resume_and_get(phy->pd_devs[UCORE]);
+		if (ret) {
+			dev_err(phy->phy.dev, "Failed to resume core pd\n");
+			pm_runtime_put_sync(phy->pd_devs[UTXR]);
+			phy->pd_refcnt[UTXR] = false;
+			return ret;
+		}
+		phy->pd_refcnt[UCORE] = true;
+	}
 
 	return ret;
 }
@@ -269,8 +287,15 @@ static void msm_eusb2_phy_modeled_d0_to_d3(struct msm_eusb2_phy *phy)
 	if (!phy->fw_managed_pwr)
 		return;
 
-	pm_runtime_put_sync(phy->pd_devs[0]);
-	pm_runtime_put_sync(phy->pd_devs[1]);
+	if (phy->pd_refcnt[UTXR]) {
+		pm_runtime_put_sync(phy->pd_devs[UTXR]);
+		phy->pd_refcnt[UTXR] = false;
+	}
+
+	if (phy->pd_refcnt[UCORE]) {
+		pm_runtime_put_sync(phy->pd_devs[UCORE]);
+		phy->pd_refcnt[UCORE] = false;
+	}
 }
 
 /* d0_to_d1 transition by turning off all the suppliers */
@@ -279,7 +304,11 @@ static void msm_eusb2_phy_modeled_d0_to_d1(struct msm_eusb2_phy *phy)
 	if (!phy->fw_managed_pwr)
 		return;
 
-	pm_runtime_put_sync(phy->pd_devs[0]);
+	if (phy->pd_refcnt[UTXR]) {
+		pm_runtime_put_sync(phy->pd_devs[UTXR]);
+		phy->pd_refcnt[UTXR] = false;
+	}
+
 }
 
 static inline bool is_eud_debug_mode_active(struct msm_eusb2_phy *phy)
