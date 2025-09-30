@@ -1654,7 +1654,7 @@ static struct platform_driver sa510m_pinctrl_driver = {
 		.of_match_table = sa510m_pinctrl_of_match,
 	},
 	.probe = sa510m_pinctrl_probe,
-	.remove = msm_pinctrl_remove,
+	.remove_new = msm_pinctrl_remove,
 };
 
 static int __init sa510m_pinctrl_init(void)
