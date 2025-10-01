@@ -1,0 +1,23 @@
+colibri_perf_config = {
+    # keep sorted
+    "CONFIG_ARCH_COLIBRI": "y",
+    "CONFIG_ARM_SMMU": "m",
+    "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
+    "CONFIG_ARM_SMMU_QCOM": "m",
+    "CONFIG_ARM_SMMU_SELFTEST": "n",
+    "CONFIG_EDAC_KRYO_ARM64": "m",
+    "CONFIG_EDAC_KRYO_ARM64_PANIC_ON_UE": "y",
+    "CONFIG_EDAC_QCOM": "m",
+    "CONFIG_GIC_INTERRUPT_ROUTING": "m",
+    "CONFIG_IOMMU_IO_PGTABLE_FAST": "y",
+    "CONFIG_MFD_SPMI_PMIC": "m",
+    "CONFIG_MSM_PERFORMANCE": "m",
+    "CONFIG_PINCTRL_COLIBRI": "m",
+    "CONFIG_PINCTRL_MSM": "m",
+    "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
+    "CONFIG_QCOM_IOMMU_DEBUG": "n",
+    "CONFIG_QCOM_IOMMU_UTIL": "m",
+    "CONFIG_QCOM_LLCC": "m",
+    "CONFIG_QCOM_SCM": "m",
+    "CONFIG_QCOM_TZMEM": "m",
+}
