@@ -1474,7 +1474,8 @@ static void migrate_busy_time_addition(struct task_struct *p, int new_cpu, u64 w
 	if (wts->enqueue_after_migration == 2) {
 		src_wrq->notif_pending = true;
 		dest_wrq->notif_pending = true;
-		walt_irq_work_queue(&walt_migration_irq_work);
+		if (!walt_quiet_state)
+			walt_irq_work_queue(&walt_migration_irq_work);
 	}
 
 	if (is_ed_enabled() && is_ed_task(p, wallclock))
@@ -1501,6 +1502,9 @@ static void migrate_busy_time_addition(struct task_struct *p, int new_cpu, u64 w
 static inline void bucket_increase(u8 *buckets, u16 *bucket_bitmask, int idx)
 {
 	int i, step;
+
+	if (walt_quiet_state)
+		return;
 
 	for (i = 0; i < NUM_BUSY_BUCKETS; i++) {
 		if (idx != i) {
@@ -1568,6 +1572,9 @@ static u32 get_pred_busy(struct task_struct *p,
 	u16 next_mask = bucket_bitmask >> start;
 	u16 *hist_util = wts->sum_history_util;
 	int i;
+
+	if (walt_quiet_state)
+		return 0;
 
 	/* skip prediction for new tasks due to lack of history */
 	if (unlikely(is_new_task(p)))
@@ -2724,6 +2731,10 @@ static inline int run_walt_irq_work_rollover(u64 old_window_start, struct rq *rq
 
 	result = atomic64_cmpxchg(&walt_irq_work_lastq_ws, old_window_start,
 				   wrq->window_start);
+
+	if (walt_quiet_state)
+		return 0;
+
 	if (result == old_window_start) {
 		walt_irq_work_queue(&walt_cpufreq_irq_work);
 		trace_walt_window_rollover(wrq->window_start);
@@ -4278,6 +4289,9 @@ static void walt_update_irqload(struct rq *rq)
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	u64 last_irq_window = READ_ONCE(wrq->last_irq_window);
 
+	if (walt_quiet_state)
+		return;
+
 	if (wrq->window_start > last_irq_window)
 		nr_windows = div64_u64(wrq->window_start - last_irq_window,
 				       sched_ravg_window);
@@ -4788,6 +4802,9 @@ void walt_rotation_checkpoint(u64 window_start, int nr_giant)
 	int i;
 	static u64 high_perf_state_hyst_start_ts;
 	bool prev = plenty_giant_tasks;
+
+	if (walt_quiet_state)
+		return;
 
 	if (!hmp_capable())
 		return;
@@ -5849,10 +5866,14 @@ static void android_vh_freq_qos_remove_request(void *unused, struct freq_qos_req
 
 static void android_vh_scx_ops_enable_state(void *unused, int state)
 {
-	if (state == 1) //SCX_OPS_ENABLED
+	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
+
+	if (state == 1) {//SCX_OPS_ENABLED
 		walt_quiet_state = true;
-	else if (state == 2) //SCX_OPS_DISABLING
+		core_ctl_check(wrq->window_start, WALT_NR_CPUS);
+	} else if (state == 2) {//SCX_OPS_DISABLING
 		walt_quiet_state = false;
+	}
 }
 
 static void register_walt_hooks(void)
