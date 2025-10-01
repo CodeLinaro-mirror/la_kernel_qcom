@@ -27,3 +27,6 @@ smem.ko
 qcom-apcs-ipc-mailbox.ko
 qcom_glink.ko
 qcom_glink_rpm.ko
+clk-qcom.ko
+clk-dummy.ko
+icc-clk.ko
