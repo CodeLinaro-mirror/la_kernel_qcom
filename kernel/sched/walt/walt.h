@@ -50,6 +50,7 @@
 
 extern bool walt_disabled;
 extern bool waltgov_disabled;
+extern bool walt_quiet_state;
 
 enum task_event {
 	PUT_PREV_TASK	= 0,
@@ -706,6 +707,9 @@ static inline void waltgov_remove_callback(int cpu)
 static inline void waltgov_run_callback(struct rq *rq, unsigned int flags)
 {
 	struct waltgov_callback *cb;
+
+	if (walt_quiet_state)
+		return;
 
 	cb = rcu_dereference_sched(*per_cpu_ptr(&waltgov_cb_data, cpu_of(rq)));
 	if (cb)
