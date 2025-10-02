@@ -3185,6 +3185,9 @@ out_error:
 static void __exit zram_exit(void)
 {
 	destroy_devices();
+	complete_all(&comp_control.work_available);
+	kthread_stop(comp_thread);
+	comp_thread = NULL;
 }
 
 module_init(zram_init);
