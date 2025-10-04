@@ -292,5 +292,8 @@ monaco_perf_config = {
     "CONFIG_WILC1000_SDIO": "n",
     "CONFIG_WILC1000_SPI": "n",
     "CONFIG_ZRAM": "m",
+    "CONFIG_ZRAM_BACKEND_ZSTD": "n",
+    "CONFIG_ZRAM_MULTI_COMP": "n",
+    "CONFIG_ZRAM_WRITEBACK": "n",
     "CONFIG_ZSMALLOC": "m",
 }
