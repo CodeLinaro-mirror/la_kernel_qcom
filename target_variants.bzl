@@ -7,6 +7,7 @@ targets = [
     "hamoa",
     "lahaina",
     "malabar",
+    "monaco",
     "pikachu",
     "sun",
     "vienna",
