@@ -8886,7 +8886,11 @@ static void __exit qcom_ethqos_exit_module(void)
  * to do something with the code that the module provides.
  */
 
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+device_initcall(qcom_ethqos_init_module)
+#else
 fs_initcall(qcom_ethqos_init_module)
+#endif
 
 /*!
  * \brief Macro to register the driver un-registration function.
