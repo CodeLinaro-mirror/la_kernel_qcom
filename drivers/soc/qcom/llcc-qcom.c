@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/bitmap.h>
@@ -13,6 +13,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/of_address.h>
 #include <linux/regmap.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
@@ -81,9 +82,12 @@
 #define LLCC_TRP_ALGO_CFG7            0x21F28 // ALLOC_OTHER_LP_OC_ON_OC
 #define LLCC_TRP_ALGO_CFG8            0x21F30 // ALLOC_VICTIM_PL_ON_UC
 
-#define SLC_SCT_MEM_LAYOUT_VERSION      (0) /* SCT Memory layout version */
+#define SLC_SCT_MEM_LAYOUT_V0           (0) /* SCT Memory layout version 0 */
+#define SLC_SCT_MEM_LAYOUT_V1           (1) /* SCT Memory layout version 1 */
+#define SLC_SCT_MEM_LAYOUT_VERSION      SLC_SCT_MEM_LAYOUT_V0 /* SCT Memory layout version */
 #define SLC_SCT_DONE                    (0x00534354444f4e45) /* SCT programming OK */
 #define SLC_SCT_FAIL                    (0x005343544641494c) /* SCT programming failed */
+#define SLC_SCT_NAME_LEN                (15)
 
 
 /**
@@ -195,6 +199,26 @@ struct slc_sct_status {
 };
 
 /**
+ * slc_sct_details - SCT tables details
+ * @revision:  revision of the SCT table
+ * @name: name of the SCT table
+ */
+struct slc_sct_details {
+	uint8_t revision;
+	char name[SLC_SCT_NAME_LEN];
+};
+
+/**
+ * tcm_mem_details - SC TCM Shared memory details
+ * @is_present: is TCM regions present
+ * @offset: offset of TCM shared memory details
+ */
+struct slc_tcm_mem_info {
+	uint32_t is_present;
+	uint32_t offset;
+};
+
+/**
  * slc_sct_slice_desc - Slice descriptor definition used in shmem
  * @slice_id:  SCID of the slice
  * @usecase_id: Usecase ID of the slice
@@ -215,6 +239,24 @@ struct slc_sct_slice_desc {
  */
 struct slc_sct_mem {
 	struct slc_sct_status sct_status;
+	uint32_t slice_descs_count;
+	uint32_t scid_max;
+	struct slc_sct_slice_desc slice_descs[];
+};
+
+/**
+ * slc_sct_mem_v1 - Shared memory structure V1
+ * @sct_status: Status of SCT programming
+ * @sct_details: Sct revision and name details
+ * @tcm_mem_info: TCM shared memory presence & offset info
+ * @slice_descs_count: Number of slice desc present in SCT
+ * @scid_max: Maximum no. of SCIDs supported
+ * @slice_descs: Array of SCT slice desc
+ */
+struct slc_sct_mem_v1 {
+	struct slc_sct_status sct_status;
+	struct slc_sct_details sct_details;
+	struct slc_tcm_mem_info tcm_mem_info;
 	uint32_t slice_descs_count;
 	uint32_t scid_max;
 	struct slc_sct_slice_desc slice_descs[];
@@ -251,6 +293,11 @@ static u32 llcc_offsets_v41[] = {
 	0x200000,
 	0x400000,
 	0x600000
+};
+
+static u32 llcc_offsets_v51[] = {
+	0x0,
+	0x400000,
 };
 
 enum {
@@ -762,6 +809,218 @@ static const struct qcom_llcc_config neo_cfg[] = {
 
 static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
 static DEFINE_MUTEX(dev_avail);
+
+struct llcc_tcm_drv_data {
+	struct device *dev;
+	struct llcc_slice_desc *tcm_slice;
+	struct llcc_tcm_data *tcm_data;
+	bool is_active;
+	bool activate_on_init;
+	struct mutex lock;
+};
+
+static struct llcc_tcm_drv_data *tcm_drv_data = (void *) -EPROBE_DEFER;
+
+/**
+ * qcom_llcc_tcm_init - Initiates the tcm manager
+ * @pdev: the platform device for the llcc driver
+ * @table: the llcc slice table
+ * @size: the size of the llcc slice table
+ * @node: the memory-regions node in the llcc device tree entry
+ *
+ * Returns 0 on success and a negative error code on failure
+ */
+static int qcom_llcc_tcm_init(struct platform_device *pdev,
+		const struct llcc_slice_config *table, size_t size,
+		struct device_node *node, struct llcc_drv_data *drv_data)
+{
+	u32 i;
+	int ret;
+	struct resource r;
+
+	tcm_drv_data = devm_kzalloc(&pdev->dev, sizeof(struct llcc_tcm_drv_data),
+			GFP_KERNEL);
+
+	if (!tcm_drv_data) {
+		pr_err("Failed to allocate tcm driver data\n");
+		ret = -ENOMEM;
+		goto cfg_err;
+	}
+
+	tcm_drv_data->tcm_data = devm_kzalloc(&pdev->dev,
+			sizeof(struct llcc_tcm_data), GFP_KERNEL);
+
+	if (!tcm_drv_data->tcm_data) {
+		pr_err("Failed to allocate tcm user data\n");
+		ret = -ENOMEM;
+		goto cfg_err;
+	}
+
+	tcm_drv_data->dev = &pdev->dev;
+
+	ret = of_address_to_resource(node, 0, &r);
+	if (ret)
+		goto cfg_err;
+	of_node_put(node);
+
+	tcm_drv_data->tcm_data->phys_addr = r.start;
+
+	if (!drv_data->sct_initialized) {
+		tcm_drv_data->tcm_slice = llcc_slice_getd(LLCC_APTCM);
+		if (IS_ERR_OR_NULL(tcm_drv_data->tcm_slice)) {
+			pr_err("Failed to get tcm slice from llcc driver\n");
+			ret = -ENODEV;
+			goto cfg_err;
+		}
+
+		for (i = 0; i < size; i++) {
+			if (table[i].usecase_id == LLCC_APTCM) {
+				tcm_drv_data->activate_on_init = table[i].activate_on_init;
+				break;
+			}
+		}
+		tcm_drv_data->tcm_data->mem_size = tcm_drv_data->tcm_slice->slice_size * SZ_1K;
+	} else {
+		tcm_drv_data->tcm_slice = llcc_slice_getd(LLCC_TCM_WIFI);
+		if (IS_ERR_OR_NULL(tcm_drv_data->tcm_slice)) {
+			pr_err("Failed to get tcm slice from llcc driver\n");
+			ret = -ENODEV;
+			goto cfg_err;
+		}
+		tcm_drv_data->tcm_data->mem_size = resource_size(&r);
+	}
+	tcm_drv_data->tcm_data->virt_addr = ioremap(tcm_drv_data->tcm_data->phys_addr,
+			tcm_drv_data->tcm_data->mem_size);
+	if (IS_ERR_OR_NULL(tcm_drv_data->tcm_data->virt_addr)) {
+		ret = -ENOMEM;
+		goto slice_cfg_err;
+	}
+
+	mutex_init(&tcm_drv_data->lock);
+
+	return 0;
+
+slice_cfg_err:
+	llcc_slice_putd(tcm_drv_data->tcm_slice);
+cfg_err:
+	tcm_drv_data = ERR_PTR(-ENODEV);
+	return ret;
+}
+
+/**
+ * llcc_tcm_activate - Activate the TCM slice and give exclusive access
+ *
+ * A valid pointer to a struct llcc_tcm_data will be returned on success
+ * and error pointer on failure
+ */
+struct llcc_tcm_data *llcc_tcm_activate(void)
+{
+	int ret;
+
+	if (IS_ERR(tcm_drv_data))
+		return ERR_PTR(-EPROBE_DEFER);
+
+	mutex_lock(&tcm_drv_data->lock);
+	if (IS_ERR_OR_NULL(tcm_drv_data->tcm_slice) ||
+			IS_ERR_OR_NULL(tcm_drv_data->tcm_data) ||
+			tcm_drv_data->is_active) {
+		ret = -EBUSY;
+		goto act_err;
+	}
+
+	/* Should go through anyways if slice is already activated, */
+	/* but if not already activated through the TCM manager */
+	ret = llcc_slice_activate(tcm_drv_data->tcm_slice);
+	if (ret) {
+		if (tcm_drv_data->activate_on_init)
+			goto act_err;
+		else
+			goto act_err_deact;
+	}
+
+	tcm_drv_data->is_active = true;
+
+	mutex_unlock(&tcm_drv_data->lock);
+	return tcm_drv_data->tcm_data;
+
+act_err_deact:
+	llcc_slice_deactivate(tcm_drv_data->tcm_slice);
+act_err:
+	mutex_unlock(&tcm_drv_data->lock);
+	return ERR_PTR(ret);
+}
+EXPORT_SYMBOL_GPL(llcc_tcm_activate);
+
+/**
+ * llcc_tcm_deactivate - Deactivate the TCM slice and revoke exclusive access
+ * @tcm_data: Pointer to the tcm data descriptor
+ */
+void llcc_tcm_deactivate(struct llcc_tcm_data *tcm_data)
+{
+	if (IS_ERR(tcm_drv_data) || IS_ERR_OR_NULL(tcm_data))
+		return;
+
+	mutex_lock(&tcm_drv_data->lock);
+	if (IS_ERR_OR_NULL(tcm_drv_data->tcm_slice) ||
+			IS_ERR_OR_NULL(tcm_drv_data->tcm_data) ||
+			!tcm_drv_data->is_active) {
+		mutex_unlock(&tcm_drv_data->lock);
+		return;
+	}
+
+	if (!tcm_drv_data->activate_on_init)
+		llcc_slice_deactivate(tcm_drv_data->tcm_slice);
+
+	tcm_drv_data->is_active = false;
+
+	mutex_unlock(&tcm_drv_data->lock);
+}
+EXPORT_SYMBOL_GPL(llcc_tcm_deactivate);
+
+/**
+ * llcc_tcm_get_phys_addr - Gets the physical address of the tcm slice
+ * @tcm_data: Pointer to the tcm data descriptor
+ *
+ * Returns the physical address on success and 0 on failure
+ */
+phys_addr_t llcc_tcm_get_phys_addr(struct llcc_tcm_data *tcm_data)
+{
+	if (IS_ERR_OR_NULL(tcm_data))
+		return 0;
+
+	return tcm_data->phys_addr;
+}
+EXPORT_SYMBOL_GPL(llcc_tcm_get_phys_addr);
+
+/**
+ * llcc_tcm_get_virt_addr - Gets the virtual address of the tcm slice
+ * @tcm_data: Pointer to the tcm data descriptor
+ *
+ * Returns the virtual address on success and NULL on failure
+ */
+void __iomem *llcc_tcm_get_virt_addr(struct llcc_tcm_data *tcm_data)
+{
+	if (IS_ERR_OR_NULL(tcm_data))
+		return NULL;
+
+	return tcm_data->virt_addr;
+}
+EXPORT_SYMBOL_GPL(llcc_tcm_get_virt_addr);
+
+/**
+ * llcc_tcm_get_slice_size - Gets the size of the tcm slice
+ * @tcm_data: Pointer to the tcm data descriptor
+ *
+ * Returns the size of the slice on success and 0 on failure
+ */
+size_t llcc_tcm_get_slice_size(struct llcc_tcm_data *tcm_data)
+{
+	if (IS_ERR_OR_NULL(tcm_data))
+		return 0;
+
+	return tcm_data->mem_size;
+}
+EXPORT_SYMBOL_GPL(llcc_tcm_get_slice_size);
 
 /**
  * is_llcc_device_available - checks for llcc device support
@@ -1345,33 +1604,47 @@ static int qcom_llcc_cfg_program(struct platform_device *pdev)
 static int _qcom_llcc_mem_verification(struct device *dev, struct slc_sct_mem *slc_mem)
 {
 	const struct slc_sct_status *slc_status = &slc_mem->sct_status;
+	const struct slc_sct_mem_v1 *slc_mem_v1 = (struct slc_sct_mem_v1 *)slc_mem;
 
 	if (!slc_status->program_status)
 		return -EPROBE_DEFER;
 
 	if (slc_status->program_status == SLC_SCT_DONE) {
-		if (slc_mem->slice_descs_count <= slc_mem->scid_max) {
+		if ((slc_status->version == SLC_SCT_MEM_LAYOUT_VERSION) &&
+		    slc_mem->slice_descs_count <= slc_mem->scid_max) {
 			dev_info(dev, "SCT initialized with slice descriptor : %d\n",
 					slc_mem->slice_descs_count);
+			return 0;
+		} else if ((slc_status->version == SLC_SCT_MEM_LAYOUT_V1) &&
+			   slc_mem_v1->slice_descs_count <= slc_mem_v1->scid_max) {
+			dev_info(dev, "SCT initialized with slice descriptor : %d\n",
+					slc_mem_v1->slice_descs_count);
 			return 0;
 		}
 
 	} else if (slc_status->program_status == SLC_SCT_FAIL) {
-		if (slc_status->version == SLC_SCT_MEM_LAYOUT_VERSION)
+		switch (slc_status->version) {
+		case SLC_SCT_MEM_LAYOUT_VERSION:
+		case SLC_SCT_MEM_LAYOUT_V1:
 			dev_err(dev, "SCT Initialization failed with error : %d and param: %d\n",
 					slc_status->error.code, slc_status->error.param);
-		else
+			break;
+		default:
 			dev_err(dev, "Error Undefined version\n");
-	} else
+			break;
+		}
+	} else {
 		dev_err(dev, "Unknown SCT Initialization error\n");
+	}
 
+	dev_err(dev, "LLCC memory based init memory verification failed\n");
 	return -EINVAL;
 }
 
 static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 {
 	int ret = -EINVAL;
-	u32 i, sz;
+	u32 i, sz, scid_max;
 	struct slc_sct_slice_desc *memslice;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
@@ -1392,7 +1665,28 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 	if (ret)
 		goto end;
 
-	sz = slc_mem->slice_descs_count;
+	switch (slc_mem->sct_status.version) {
+	case SLC_SCT_MEM_LAYOUT_VERSION:
+		sz = slc_mem->slice_descs_count;
+		scid_max = slc_mem->scid_max;
+		memslice = &slc_mem->slice_descs[0];
+		break;
+	case SLC_SCT_MEM_LAYOUT_V1:
+		sz = ((struct slc_sct_mem_v1 *)slc_mem)->slice_descs_count;
+		scid_max = ((struct slc_sct_mem_v1 *)slc_mem)->scid_max;
+		memslice = &((struct slc_sct_mem_v1 *)slc_mem)->slice_descs[0];
+
+		dev_dbg(dev, "SCT Table revision: %i\n",
+				((struct slc_sct_mem_v1 *)slc_mem)->sct_details.revision);
+		dev_dbg(dev, "SCT Table name: %s\n",
+				((struct slc_sct_mem_v1 *)slc_mem)->sct_details.name);
+		break;
+	default:
+		dev_err(dev, "Invalid slc_sct_mem version\n");
+		ret = -EINVAL;
+		goto end;
+
+	}
 
 	drv_data->desc = devm_kzalloc(dev, sizeof(struct llcc_slice_desc)*sz, GFP_KERNEL);
 	drv_data->uid_slice_lookup = devm_kzalloc(dev, sizeof(struct llcc_uid_slice_pair)*sz,
@@ -1404,7 +1698,6 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < sz; i++) {
-		memslice = &slc_mem->slice_descs[i];
 
 		/* Assign slice desc info from shared mem */
 		drv_data->desc[i].slice_id = memslice->slice_id;
@@ -1415,9 +1708,11 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 
 		/* Add uid slice lookup entry */
 		drv_data->uid_slice_lookup[i].desc = &drv_data->desc[i];
+
+		memslice++;
 	}
 
-	drv_data->bitmap = devm_kcalloc(dev, BITS_TO_LONGS(slc_mem->scid_max),
+	drv_data->bitmap = devm_kcalloc(dev, BITS_TO_LONGS(scid_max),
 					sizeof(unsigned long), GFP_KERNEL);
 	if (!drv_data->bitmap) {
 		ret = -ENOMEM;
@@ -1426,7 +1721,7 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 
 	drv_data->cfg = NULL;
 	drv_data->cfg_size = sz;
-	drv_data->max_slices = slc_mem->scid_max;
+	drv_data->max_slices = scid_max;
 
 	dev_warn(dev, "llcc slice size not supported and is set to 0\n");
 end:
@@ -1468,6 +1763,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	struct platform_device *llcc_edac;
 	const struct qcom_llcc_config *cfg;
 	const struct llcc_slice_config *llcc_cfg;
+	struct device_node *tcm_memory_node;
 	struct resource *res;
 	void __iomem *ch_reg = NULL;
 	u32 sz, max_banks, ch_reg_sz, ch_reg_off, ch_num;
@@ -1500,6 +1796,8 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	if (of_property_match_string(dev->of_node,
 				"compatible", "qcom,llcc-v51") >= 0) {
 		drv_data->llcc_ver = 51;
+		drv_data->offsets = llcc_offsets_v51;
+		drv_data->num_banks = ARRAY_SIZE(llcc_offsets_v51);
 	} else if (of_property_match_string(dev->of_node,
 				"compatible", "qcom,llcc-v50") >= 0) {
 		drv_data->llcc_ver = 50;
@@ -1633,6 +1931,13 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 
 	if (of_platform_populate(dev->of_node, NULL, NULL, dev) < 0)
 		dev_err(dev, "llcc populate failed!!\n");
+
+	tcm_memory_node = of_parse_phandle(dev->of_node, "memory-region", 0);
+	if (tcm_memory_node) {
+		ret = qcom_llcc_tcm_init(pdev, llcc_cfg, sz, tcm_memory_node, drv_data);
+		if (ret)
+			dev_err(dev, "Failed to probe TCM manager\n");
+	}
 
 	return 0;
 err:
