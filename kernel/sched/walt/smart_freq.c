@@ -744,7 +744,7 @@ void smart_freq_init(const char *name)
 
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP") || !strcmp(name, "CANOE")
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "WHALE")
-			|| !strcmp(name, "WHALEP")) {
+			|| !strcmp(name, "WHALEP") || !strcmp(name, "CANOEPSG")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
