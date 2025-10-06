@@ -38,4 +38,6 @@ config QTI_CHARGER_NFC_VREG
 	  to manage their power supply requirements through the charger’s
 	  reverse boost regulator.
 
+source "$(KCONFIG_EXT_PREFIX)drivers/power/supply/qcom/Kconfig"
+
 endif # POWER_SUPPLY
