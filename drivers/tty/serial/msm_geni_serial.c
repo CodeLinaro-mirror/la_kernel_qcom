@@ -157,6 +157,24 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 #define DATA_BYTES_PER_LINE	(32)
 #define MAX_LEN			(20)
 
+/* TX Instances of DMA transmit for timestamp register */
+#define TX_TRE_INSTANCES_1	1
+#define TX_TRE_INSTANCES_2	2
+#define TX_TRE_MAX_INSTANCES	3
+
+/* RX Instance of DMA transmit for timestamp register */
+#define RX_TRE_INSTANCES	5
+
+/* Tx-Rx scatterlist instances */
+#define TX_SG_INSTANCES		5
+#define RX_SG_INSTANCES		6
+
+/*Instances to store the DMA address for timestamp register*/
+#define TS_DMA_INSTANCES_0	0
+#define TS_DMA_INSTANCES_1	1
+#define TS_DMA_MAX_INSTANCES	2
+
+
 #define GENI_SE_DMA_DONE_EN		BIT(0)
 #define GENI_SE_DMA_EOT_EN		BIT(1)
 #define GENI_SE_DMA_IMMEDIATE_MODE	BIT(1)
@@ -366,14 +384,14 @@ struct uart_gsi {
 	struct msm_gpi_tre rx_cfg0_t;
 	struct msm_gpi_tre tx_go_t;
 	struct msm_gpi_tre rx_go_t;
-	struct msm_gpi_tre tx_t[3];
-	struct msm_gpi_tre rx_t[5];
+	struct msm_gpi_tre tx_t[TX_TRE_MAX_INSTANCES];
+	struct msm_gpi_tre rx_t[RX_TRE_INSTANCES];
 	dma_addr_t tx_ph;
 	dma_addr_t rx_ph;
 	struct msm_gpi_ctrl tx_ev;
 	struct msm_gpi_ctrl rx_ev;
-	struct scatterlist tx_sg[5];
-	struct scatterlist rx_sg[6];
+	struct scatterlist tx_sg[TX_SG_INSTANCES];
+	struct scatterlist rx_sg[RX_SG_INSTANCES];
 	struct dma_async_tx_descriptor *tx_desc;
 	struct dma_async_tx_descriptor *rx_desc;
 	struct msm_gpi_dma_async_tx_cb_param tx_cb;
@@ -484,7 +502,7 @@ struct msm_geni_serial_port {
 	struct uart_kpi_capture uart_kpi_tx[UART_KPI_TX_RX_INSTANCES];
 	struct uart_kpi_capture uart_kpi_rx[UART_KPI_TX_RX_INSTANCES];
 	struct uart_split_dma_tre split_dma_tre;
-	dma_addr_t ts_dma[2];
+	dma_addr_t ts_dma[TS_DMA_MAX_INSTANCES];
 	bool time_stamp;
 };
 
@@ -2407,6 +2425,39 @@ static int msm_geni_serial_gsi_xfer_split_tx(struct msm_geni_serial_port *msm_po
 	return ret;
 }
 
+static bool setup_timestamp_tre_pair(struct msm_geni_serial_port *msm_port,
+				    struct uart_port *uport, int *index)
+{
+	int ret;
+
+	/* First timestamp TRE */
+	ret = setup_timestamp_dma_tre(msm_port, &msm_port->gsi->tx_t[TX_TRE_INSTANCES_1], 0, 1,
+				      &msm_port->ts_dma[TS_DMA_INSTANCES_0]);
+	if (ret) {
+		dev_err(uport->dev, "Failed to set up first timestamp TRE ret: %d\n", ret);
+		msm_geni_deallocate_chan(uport);
+		return false;
+	}
+	sg_set_buf(&msm_port->gsi->tx_sg[(*index)++], &msm_port->gsi->tx_t[TX_TRE_INSTANCES_1],
+		   sizeof(msm_port->gsi->tx_t[TX_TRE_INSTANCES_1]));
+
+	/* Second timestamp TRE */
+	ret = setup_timestamp_dma_tre(msm_port, &msm_port->gsi->tx_t[TX_TRE_INSTANCES_2], 1, 0,
+				      &msm_port->ts_dma[TS_DMA_INSTANCES_1]);
+	if (ret) {
+		dev_err(uport->dev, "Failed to set up second timestamp TRE ret: %d\n", ret);
+		dma_unmap_resource(msm_port->wrapper_dev, msm_port->ts_dma[TS_DMA_INSTANCES_0],
+				   TIMESTAMP_DATA_SIZE, DMA_TO_DEVICE, 0);
+		msm_port->ts_dma[TS_DMA_INSTANCES_0] = 0;
+		msm_geni_deallocate_chan(uport);
+		return false;
+	}
+	sg_set_buf(&msm_port->gsi->tx_sg[(*index)++], &msm_port->gsi->tx_t[TX_TRE_INSTANCES_2],
+		   sizeof(msm_port->gsi->tx_t[TX_TRE_INSTANCES_2]));
+
+	return true;
+}
+
 /**
  * msm_geni_uart_gsi_xfer_tx() - Setup GSI TX transfer with optional timestamp
  * @work: Pointer to work structure
@@ -2505,31 +2556,10 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 	sg_set_buf(&msm_port->gsi->tx_sg[index++], &msm_port->gsi->tx_t[0],
 		   sizeof(msm_port->gsi->tx_t[0]));
 
-	if (msm_port->time_stamp && !skip_time_stamp) {
-		ret = setup_timestamp_dma_tre(msm_port, &msm_port->gsi->tx_t[1], 0, 1,
-					      &msm_port->ts_dma[0]);
-		if (ret) {
-			dev_err(uport->dev, "Error %d: failed to set up first timestamp TRE\n",
-				ret);
-			msm_geni_deallocate_chan(uport);
-			return;
-		}
-		sg_set_buf(&msm_port->gsi->tx_sg[index++], &msm_port->gsi->tx_t[1],
-			   sizeof(msm_port->gsi->tx_t[1]));
-		ret = setup_timestamp_dma_tre(msm_port, &msm_port->gsi->tx_t[2], 1, 0,
-					      &msm_port->ts_dma[1]);
-		if (ret) {
-			dev_err(uport->dev, "Error %d: failed to set up second timestamp TRE\n",
-				ret);
-			dma_unmap_resource(tx_dev, msm_port->ts_dma[0],
-					   TIMESTAMP_DATA_SIZE, DMA_TO_DEVICE, 0);
-			msm_port->ts_dma[0] = 0;
-			msm_geni_deallocate_chan(uport);
-			return;
-		}
-		sg_set_buf(&msm_port->gsi->tx_sg[index++], &msm_port->gsi->tx_t[2],
-			   sizeof(msm_port->gsi->tx_t[2]));
-	}
+	if (msm_port->time_stamp && !skip_time_stamp
+	    && !setup_timestamp_tre_pair(msm_port, uport, &index))
+		return;
+
 	msm_port->gsi->tx_desc = dmaengine_prep_slave_sg(msm_port->gsi->tx_c,
 							 msm_port->gsi->tx_sg,
 							 index, DMA_MEM_TO_DEV,
