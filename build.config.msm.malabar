@@ -5,7 +5,7 @@
 
 ################################################################################
 ## Variant setup
-MSM_ARCH=lahaina
+MSM_ARCH=malabar
 VARIANTS=(consolidate perf)
 [ -z "${VARIANT}" ] && VARIANT=consolidate
 
