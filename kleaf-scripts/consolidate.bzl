@@ -72,7 +72,7 @@ def define_consolidated_kernel(name = "kernel_aarch64_consolidate"):
         build_system_dlkm_flatten = True,
         system_dlkm_fs_types = ["erofs", "ext4"],
         # Keep in sync with build.config.gki* MODULES_LIST
-        modules_list = "//common:android/gki_system_dlkm_modules_arm64",
+        modules_list = "//common:gki_system_dlkm_modules_arm64",
     )
 
     gki_artifacts(
