@@ -538,6 +538,12 @@ struct dwc3_msm {
 	struct clk		*bus_aggr_clk;
 	struct clk		*noc_aggr_clk;
 	struct clk		*cfg_ahb_clk;
+	struct clk		*cfg_noc_clk;
+	struct clk		*noc_aggr_north_ahb_clk;
+	struct clk		*noc_aggr_south_ahb_clk;
+	struct clk		*noc_aggr_north_axi_clk;
+	struct clk		*noc_aggr_south_axi_clk;
+	struct clk		*noc_sys_clk;
 	struct reset_control	*core_reset;
 	struct regulator	*dwc3_gdsc;
 
@@ -649,7 +655,6 @@ struct dwc3_msm {
 	bool			wcd_usbss;
 	bool			dynamic_disable;
 	bool			read_u1u2;
-
 	struct dentry		*dbg_dir;
 #define PM_QOS_REQ_DYNAMIC	0
 #define PM_QOS_REQ_PERF		1
@@ -662,6 +667,7 @@ struct dwc3_msm {
 
 	int			repeater_rev;
 	bool			force_disconnect;
+	bool			dis_role_switch;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -4033,7 +4039,7 @@ static int dwc3_clk_enable_disable(struct dwc3_msm *mdwc, bool enable, bool togg
 	long core_clk_rate;
 
 	if (!enable)
-		goto disable_bus_aggr_clk;
+		goto disable_noc_sys_clk;
 
 	/* Vote for TCXO while waking up USB HSPHY */
 	ret = clk_prepare_enable(mdwc->xo_clk);
@@ -4091,9 +4097,56 @@ static int dwc3_clk_enable_disable(struct dwc3_msm *mdwc, bool enable, bool togg
 		goto disable_utmi_clk;
 	}
 
+	ret = clk_prepare_enable(mdwc->cfg_noc_clk);
+	if (ret < 0) {
+		dev_err(mdwc->dev, "%s: cfg_noc_clk enable failed\n", __func__);
+		goto disable_bus_aggr_clk;
+	}
+
+	ret = clk_prepare_enable(mdwc->noc_aggr_north_ahb_clk);
+	if (ret < 0) {
+		dev_err(mdwc->dev, "%s: noc_aggr_north_ahb_clk enable failed\n", __func__);
+		goto disable_cfg_noc_clk;
+	}
+
+	ret = clk_prepare_enable(mdwc->noc_aggr_south_ahb_clk);
+	if (ret < 0) {
+		dev_err(mdwc->dev, "%s: noc_aggr_south_ahb_clk enable failed\n", __func__);
+		goto disable_noc_aggr_north_ahb_clk;
+	}
+
+	ret = clk_prepare_enable(mdwc->noc_aggr_north_axi_clk);
+	if (ret < 0) {
+		dev_err(mdwc->dev, "%s: noc_aggr_north_axi_clk enable failed\n", __func__);
+		goto disable_noc_aggr_south_ahb_clk;
+	}
+
+	ret = clk_prepare_enable(mdwc->noc_aggr_south_axi_clk);
+	if (ret < 0) {
+		dev_err(mdwc->dev, "%s: noc_aggr_south_axi_clk enable failed\n", __func__);
+		goto disable_noc_aggr_north_axi_clk;
+	}
+
+	ret = clk_prepare_enable(mdwc->noc_sys_clk);
+	if (ret < 0) {
+		dev_err(mdwc->dev, "%s: noc_sys_clk enable failed\n", __func__);
+		goto disable_noc_aggr_south_axi_clk;
+	}
 	return 0;
 
 	/* Disable clocks */
+disable_noc_sys_clk:
+	clk_disable_unprepare(mdwc->noc_sys_clk);
+disable_noc_aggr_south_axi_clk:
+	clk_disable_unprepare(mdwc->noc_aggr_south_axi_clk);
+disable_noc_aggr_north_axi_clk:
+	clk_disable_unprepare(mdwc->noc_aggr_north_axi_clk);
+disable_noc_aggr_south_ahb_clk:
+	clk_disable_unprepare(mdwc->noc_aggr_south_ahb_clk);
+disable_noc_aggr_north_ahb_clk:
+	clk_disable_unprepare(mdwc->noc_aggr_north_ahb_clk);
+disable_cfg_noc_clk:
+	clk_disable_unprepare(mdwc->cfg_noc_clk);
 disable_bus_aggr_clk:
 	clk_disable_unprepare(mdwc->bus_aggr_clk);
 disable_utmi_clk:
@@ -4854,6 +4907,30 @@ static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 		}
 	}
 
+	mdwc->cfg_noc_clk = devm_clk_get(mdwc->dev, "cfg_noc_clk");
+	if (IS_ERR(mdwc->cfg_noc_clk))
+		mdwc->cfg_noc_clk = NULL;
+
+	mdwc->noc_aggr_north_ahb_clk = devm_clk_get(mdwc->dev, "noc_aggr_north_ahb_clk");
+	if (IS_ERR(mdwc->noc_aggr_north_ahb_clk))
+		mdwc->noc_aggr_north_ahb_clk = NULL;
+
+	mdwc->noc_aggr_south_ahb_clk = devm_clk_get(mdwc->dev, "noc_aggr_south_ahb_clk");
+	if (IS_ERR(mdwc->noc_aggr_south_ahb_clk))
+		mdwc->noc_aggr_south_ahb_clk = NULL;
+
+	mdwc->noc_aggr_north_axi_clk = devm_clk_get(mdwc->dev, "noc_aggr_north_axi_clk");
+	if (IS_ERR(mdwc->noc_aggr_north_axi_clk))
+		mdwc->noc_aggr_north_axi_clk = NULL;
+
+	mdwc->noc_aggr_south_axi_clk = devm_clk_get(mdwc->dev, "noc_aggr_south_axi_clk");
+	if (IS_ERR(mdwc->noc_aggr_south_axi_clk))
+		mdwc->noc_aggr_south_axi_clk = NULL;
+
+	mdwc->noc_sys_clk = devm_clk_get(mdwc->dev, "noc_sys_clk");
+	if (IS_ERR(mdwc->noc_sys_clk))
+		mdwc->noc_sys_clk = NULL;
+
 	return 0;
 }
 
@@ -4867,6 +4944,9 @@ static int dwc3_msm_id_notifier(struct notifier_block *nb,
 	enum dwc3_id_state id;
 
 	if (!edev || !mdwc)
+		return NOTIFY_DONE;
+
+	if (mdwc->dis_role_switch)
 		return NOTIFY_DONE;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
@@ -4904,6 +4984,9 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
+
+	if (mdwc->dis_role_switch)
+		return NOTIFY_DONE;
 
 	dbg_event(0xFF, "extcon idx", enb->idx);
 	dev_dbg(mdwc->dev, "vbus:%ld event received\n", event);
@@ -5098,6 +5181,9 @@ static enum usb_role dwc3_msm_usb_role_switch_get_role(struct usb_role_switch *s
 static int dwc3_msm_set_role(struct dwc3_msm *mdwc, enum usb_role role)
 {
 	enum usb_role cur_role;
+
+	if (mdwc->dis_role_switch)
+		return -EPERM;
 
 	if (!dwc3_msm_role_allowed(mdwc, role))
 		return -EINVAL;
@@ -6263,7 +6349,7 @@ static int dwc3_msm_register_interrupts(struct platform_device *pdev)
 	return 0;
 }
 
-static void vbus_regulator_get(struct dwc3_msm *mdwc)
+static int vbus_regulator_get(struct dwc3_msm *mdwc)
 {
 	/*
 	 * The vbus_reg pointer could have multiple values
@@ -6273,13 +6359,16 @@ static void vbus_regulator_get(struct dwc3_msm *mdwc)
 	 */
 	mdwc->vbus_reg = devm_regulator_get_optional(mdwc->dev,
 						"vbus_dwc3");
-	if (IS_ERR(mdwc->vbus_reg)) {
-		dev_err(mdwc->dev, "Unable to get vbus regulator err: %d\n",
-							PTR_ERR(mdwc->vbus_reg));
-		mdwc->vbus_reg = NULL;
-		return;
-	}
+	if (!IS_ERR(mdwc->vbus_reg))
+		return 0;
 
+	/* regulators may not be ready, so retry again later */
+	if (PTR_ERR(mdwc->vbus_reg) == -EPROBE_DEFER)
+		return -EPROBE_DEFER;
+
+	mdwc->vbus_reg = NULL;
+
+	return 0;
 }
 
 static int dwc3_msm_probe(struct platform_device *pdev)
@@ -6466,13 +6555,16 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	pm_runtime_use_autosuspend(mdwc->dev);
 	device_init_wakeup(mdwc->dev, 1);
 
-	vbus_regulator_get(mdwc);
+	ret = vbus_regulator_get(mdwc);
+	if (ret < 0)
+		goto err;
 
 	if (of_property_read_bool(node, "qcom,disable-dev-mode-pm"))
 		pm_runtime_get_noresume(mdwc->dev);
 
 	mutex_init(&mdwc->suspend_resume_mutex);
 	mutex_init(&mdwc->role_switch_mutex);
+	mdwc->dis_role_switch = false;
 
 	if (of_property_read_bool(node, "usb-role-switch")) {
 		struct usb_role_switch_desc role_desc = {
@@ -6675,6 +6767,16 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	kfree(mdwc->dwc3_pm_ops);
 
 	return 0;
+}
+
+static void dwc3_msm_shutdown(struct platform_device *pdev)
+{
+	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
+
+	dbg_log_string("Entry\n");
+	dwc3_msm_set_role(mdwc, USB_ROLE_NONE);
+	mdwc->dis_role_switch = true;
+	flush_workqueue(mdwc->sm_usb_wq);
 }
 
 static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
@@ -6986,7 +7088,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 		dev_dbg(mdwc->dev, "%s: turn on host\n", __func__);
 		ret = vbus_regulator_toggle(mdwc, true);
 		if (ret) {
-			dev_err(mdwc->dev, "unable to enable vbus_reg\n");
+			dev_err(mdwc->dev, "Failed to enable vbus, ret %d\n", ret);
 			return ret;
 		}
 		mdwc->hs_phy->flags |= PHY_HOST_MODE;
@@ -7764,6 +7866,7 @@ MODULE_DEVICE_TABLE(of, of_dwc3_matach);
 static struct platform_driver dwc3_msm_driver = {
 	.probe		= dwc3_msm_probe,
 	.remove		= dwc3_msm_remove,
+	.shutdown	= dwc3_msm_shutdown,
 	.driver		= {
 		.name	= "msm-dwc3",
 		.pm	= &dwc3_msm_dev_pm_ops,
