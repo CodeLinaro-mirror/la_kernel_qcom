@@ -8520,6 +8520,14 @@ static int qcom_ethqos_resume(struct device *dev)
 	if (!ethqos)
 		return -ENODEV;
 
+	ndev = dev_get_drvdata(dev);
+	priv = netdev_priv(ndev);
+
+	if (!ndev) {
+		ETHQOSERR(" Resume not possible\n");
+		return -EINVAL;
+	}
+
 	if (ethqos->gdsc_off_on_suspend) {
 		if (ethqos->gdsc_emac) {
 			ret = regulator_enable(ethqos->gdsc_emac);
@@ -8529,14 +8537,9 @@ static int qcom_ethqos_resume(struct device *dev)
 			}
 		}
 		ETHQOSDBG("Enabled <%s>\n", EMAC_GDSC_EMAC_NAME);
-	}
-
-	ndev = dev_get_drvdata(dev);
-	priv = netdev_priv(ndev);
-
-	if (!ndev) {
-		ETHQOSERR(" Resume not possible\n");
-		return -EINVAL;
+		if (ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME)
+			if (priv->mii)
+				priv->mii->reset(priv->mii);
 	}
 
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
