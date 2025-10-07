@@ -82,6 +82,7 @@ def define_qcom_le(
         srcs = [
             ":additional_msm_headers_aarch64_globs",
             "//common:kernel_aarch64_sources",
+            ":soc_repo_sources",
         ],
         build_config = ":{}.build.config.qcom.le".format(stem),
         dtstree = get_dtstree(target),
@@ -118,7 +119,10 @@ def define_base_kernel(name, base_kernel, defconfig, defconfig_fragments = None)
             out_list.remove(item)
     kernel_build(
         name = base_kernel,
-        srcs = ["//common:kernel_aarch64_sources"],
+        srcs = [
+            "//common:kernel_aarch64_sources",
+            ":soc_repo_sources",
+        ],
         outs = out_list,
         arch = "arm64",
         make_goals = [
