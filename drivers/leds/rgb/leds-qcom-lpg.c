@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2017-2022 Linaro Ltd
  * Copyright (c) 2010-2012, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/bits.h>
 #include <linux/bitfield.h>
@@ -1672,6 +1672,13 @@ static const struct lpg_data pm660l_lpg_data = {
 	},
 };
 
+static const struct lpg_data pm6125_pwm_data = {
+	.num_channels = 1,
+	.channels = (const struct lpg_channel_data[]) {
+		{ .base = 0xb300 },
+	},
+};
+
 static const struct lpg_data pm8916_pwm_data = {
 	.num_channels = 1,
 	.channels = (const struct lpg_channel_data[]) {
@@ -1807,8 +1814,6 @@ static const struct lpg_data pm8350c_pwm_data = {
 
 	.triled_base = 0xef00,
 
-	.lut_size = 122,
-
 	.num_channels = 4,
 	.channels = (const struct lpg_channel_data[]) {
 		{ .base = 0xe800, .triled_mask = BIT(7), .sdam_offset = 0x48 },
@@ -1827,6 +1832,7 @@ static const struct lpg_data pmk8550_pwm_data = {
 };
 
 static const struct of_device_id lpg_of_table[] = {
+	{ .compatible = "qcom,pm6125-pwm", .data = &pm6125_pwm_data },
 	{ .compatible = "qcom,pm660l-lpg", .data = &pm660l_lpg_data },
 	{ .compatible = "qcom,pm8150b-lpg", .data = &pm8150b_lpg_data },
 	{ .compatible = "qcom,pm8150l-lpg", .data = &pm8150l_lpg_data },
