@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause */
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __DT_BINDINGS_MAILBOX_IPCC_CANOE_H
@@ -20,6 +20,7 @@
 #define IPCC_MPROC_DCP			14
 #define IPCC_MPROC_WPSS			17
 
+#define IPCC_COMPUTE_L0_LPASS   1
 #define IPCC_COMPUTE_L0_CDSP	2
 #define IPCC_COMPUTE_L0_APSS	3
 #define IPCC_COMPUTE_L0_GPU		4
@@ -30,6 +31,7 @@
 #define IPCC_COMPUTE_L0_CAM1	10
 #define IPCC_COMPUTE_L0_DCP		11
 
+#define IPCC_COMPUTE_L1_LPASS   1
 #define IPCC_COMPUTE_L1_CDSP	2
 #define IPCC_COMPUTE_L1_APSS	3
 #define IPCC_COMPUTE_L1_GPU		4
@@ -45,6 +47,7 @@
 #define IPCC_PERIPH_PCIE0		4
 #define IPCC_PERIPH_PCIE1		5
 
+#define IPCC_FENCE_LPASS        1
 #define IPCC_FENCE_CDSP			2
 #define IPCC_FENCE_APSS			3
 #define IPCC_FENCE_GPU			4
