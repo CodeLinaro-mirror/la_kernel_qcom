@@ -1,9 +1,8 @@
-load("//build/kernel/kleaf:kernel.bzl", "kernel_module_group")
+load("//build/kernel/kleaf:kernel.bzl", "kernel_abi", "kernel_module_group")
 load(":configs/malabar_consolidate.bzl", "malabar_consolidate_config")
 load(":configs/malabar_perf.bzl", "malabar_perf_config")
 load(":kleaf-scripts/android_build.bzl", "define_typical_android_build")
 load(":kleaf-scripts/image_opts.bzl", "boot_image_opts")
-load(":kleaf-scripts/vm_build.bzl", "define_typical_vm_build")
 load(":target_variants.bzl", "la_variants")
 
 target_name = "malabar"
@@ -50,8 +49,22 @@ def define_malabar():
 
     define_typical_android_build(
         name = "malabar",
-        consolidate_config = malabar_perf_config | malabar_consolidate_config,
+        consolidate_config = malabar_consolidate_config,
         perf_config = malabar_perf_config,
         consolidate_build_img_opts = consolidate_build_img_opts,
         perf_build_img_opts = perf_build_img_opts,
+        consolidate_kwargs = {
+            "config_path": "configs/malabar_consolidate.bzl",
+        },
+        perf_kwargs = {
+            "config_path": "configs/malabar_perf.bzl",
+        },
+    )
+
+    kernel_abi(
+        name = "malabar_perf_abi",
+        kernel_build = "//common:kernel_aarch64",
+        kernel_modules = [
+            ":malabar_perf_all_modules",
+        ],
     )
