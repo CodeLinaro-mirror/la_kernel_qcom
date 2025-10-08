@@ -4,6 +4,7 @@ targets = [
     #"gen3auto",
     "autogvm",
     "bengal",
+    "colibri",
     "hamoa",
     "lahaina",
     "malabar",
