@@ -19,6 +19,7 @@ load(
     "define_canoe_tuivm",
 )
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
+load(":kleaf-scripts/targets/colibri.bzl", "define_colibri")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
 load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
 load(":kleaf-scripts/targets/malabar.bzl", "define_malabar")
@@ -331,3 +332,5 @@ define_hamoa()
 define_malabar()
 
 define_monaco()
+
+define_colibri()
