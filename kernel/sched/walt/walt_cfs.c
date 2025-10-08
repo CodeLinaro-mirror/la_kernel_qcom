@@ -1189,11 +1189,13 @@ walt_select_task_rq_fair(void *unused, struct task_struct *p, int prev_cpu,
 	if (walt_quiet_state)
 		return;
 
+	get_entry_instr(SELECT_TASK_RQ_FAIR);
 	sync = (wake_flags & WF_SYNC) && !(current->flags & PF_EXITING);
 	sibling_count_hint = p->wake_q_count;
 	p->wake_q_count = 0;
 
 	*target_cpu = walt_find_energy_efficient_cpu(p, prev_cpu, sync, sibling_count_hint);
+	update_instruction_data(SELECT_TASK_RQ_FAIR);
 }
 
 static void binder_set_priority_hook(void *data,
@@ -1209,13 +1211,14 @@ static void binder_set_priority_hook(void *data,
 	if (walt_quiet_state)
 		return;
 
+	get_entry_instr(BINDER_SET_PRIORITY_HOOK);
 	if (bndrtrans && bndrtrans->need_reply && current_wts->boost == TASK_BOOST_STRICT_MAX) {
 		bndrtrans->android_vendor_data1  = wts->boost;
 		wts->boost = TASK_BOOST_STRICT_MAX;
 	}
 
 	if (current == task)
-		return;
+		goto out;
 
 	if (task && ((task_in_related_thread_group(current) &&
 			task->group_leader->prio < MAX_RT_PRIO) ||
@@ -1234,7 +1237,8 @@ static void binder_set_priority_hook(void *data,
 		 * and the above condition to set flags is not satisfied.
 		 */
 		wts->low_latency &= ~WALT_LOW_LATENCY_BINDER_BIT;
-
+out:
+	update_instruction_data(BINDER_RESTORE_PRIORITY_HOOK);
 }
 
 static void binder_restore_priority_hook(void *data,
@@ -1248,8 +1252,10 @@ static void binder_restore_priority_hook(void *data,
 	if (walt_quiet_state)
 		return;
 
+	get_entry_instr(BINDER_RESTORE_PRIORITY_HOOK);
 	if (bndrtrans && wts->boost == TASK_BOOST_STRICT_MAX)
 		wts->boost = bndrtrans->android_vendor_data1;
+	update_instruction_data(BINDER_RESTORE_PRIORITY_HOOK);
 }
 
 /*
@@ -1508,6 +1514,7 @@ static void walt_cfs_check_preempt_wakeup_fair(void *unused, struct rq *rq, stru
 	if (walt_quiet_state)
 		return;
 
+	get_entry_instr(CHECK_PREEMPT_WAKEUP_FAIR);
 	p_is_mvp = !list_empty(&wts_p->mvp_list) && wts_p->mvp_list.next;
 	curr_is_mvp = !list_empty(&wts_c->mvp_list) && wts_c->mvp_list.next;
 
@@ -1518,6 +1525,7 @@ static void walt_cfs_check_preempt_wakeup_fair(void *unused, struct rq *rq, stru
 	if (!curr_is_mvp) {
 		if (p_is_mvp && !wrq->skip_mvp)
 			goto preempt;
+		update_instruction_data(CHECK_PREEMPT_WAKEUP_FAIR);
 		return; /* CFS decides preemption */
 	}
 
@@ -1543,10 +1551,12 @@ static void walt_cfs_check_preempt_wakeup_fair(void *unused, struct rq *rq, stru
 	/* current is the first in the queue, so no preemption */
 	*nopreempt = true;
 	trace_walt_cfs_mvp_wakeup_nopreempt(c, wts_c, walt_cfs_mvp_task_limit(c));
+	update_instruction_data(CHECK_PREEMPT_WAKEUP_FAIR);
 	return;
 preempt:
 	*preempt = true;
 	trace_walt_cfs_mvp_wakeup_preempt(p, wts_p, walt_cfs_mvp_task_limit(p));
+	update_instruction_data(CHECK_PREEMPT_WAKEUP_FAIR);
 }
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -1572,6 +1582,7 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 	if (walt_quiet_state)
 		return;
 
+	get_entry_instr(REPLACE_NEXT_TASK_FAIR);
 	if ((*p) && (*p) != prev && ((*p)->on_cpu == 1 || (*p)->on_rq == 0 ||
 				     (*p)->on_rq == TASK_ON_RQ_MIGRATING ||
 				     task_thread_info(*p)->cpu != cpu_of(rq)))
@@ -1583,11 +1594,11 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 
 	/* RQ is in MVP throttled state*/
 	if (wrq->skip_mvp)
-		return;
+		goto out;
 
 	if (list_empty(&wrq->mvp_tasks)) {
 		wrq->mvp_arrival_time = 0;
-		return;
+		goto out;
 	}
 
 	/* Return the first task from MVP queue */
@@ -1612,6 +1623,8 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 			 cpu_of(rq), ((*p)->flags & PF_KTHREAD));
 
 	trace_walt_cfs_mvp_pick_next(mvp, wts, walt_cfs_mvp_task_limit(mvp));
+out:
+	update_instruction_data(REPLACE_NEXT_TASK_FAIR);
 }
 
 void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
