@@ -89,6 +89,16 @@ config PHY_QCOM_SNPS_EUSB2
 	  platform that uses the SNPS eUSB2 PHY, or if you are performing
 	  compile testing for PHY drivers.
 
+config PHY_QCOM_UFS_V4_KHAJE
+	tristate "Qualcomm Technologies, Inc. UFS Khaje Phy Driver"
+	depends on PHY_QCOM_UFS
+	help
+	  This configuration option adds support for the UFS
+	  PHY present on QCOM Khaje chipsets.
+	  This is required to enable UFS on Khaje chipset.
+	  To compile this driver as a module, choose M here.
+	  This is good debug.
+
 endif
 
 config PHY_QCOM_EUSB2_REPEATER
