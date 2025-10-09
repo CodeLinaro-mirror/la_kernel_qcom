@@ -151,6 +151,7 @@ autogvm_perf_config = {
     "CONFIG_SERIAL_QCOM_GENI_MSM": "m",
     "CONFIG_SPI_QCOM_GENI_MSM": "m",
     "CONFIG_I2C_QCOM_GENI_MSM": "m",
+    "CONFIG_I2C_VIRTIO": "m",
     "CONFIG_PCS_XPCS": "m",
     "CONFIG_PHY_QCOM_UFS": "m",
     "CONFIG_PHY_QCOM_UFS_V4_WAIPIO": "m",

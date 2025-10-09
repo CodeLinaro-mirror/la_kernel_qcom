@@ -65,3 +65,17 @@ def register_modules(registry):
             "drivers/dma/qcom/gpi",
         ],
     )
+
+    registry.register(
+        name = "drivers/i2c/busses/i2c-virtio",
+        out = "i2c-virtio.ko",
+        config = "CONFIG_I2C_VIRTIO",
+        srcs = [
+            # do not sort
+            "drivers/i2c/busses/i2c-virtio.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/virtio/virtio_mmio",
+        ],
+    )
