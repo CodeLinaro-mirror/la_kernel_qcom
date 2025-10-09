@@ -10,6 +10,7 @@ targets = [
     "malabar",
     "monaco",
     "pikachu",
+    "seraph",
     "sun",
     "vienna",
 ]
