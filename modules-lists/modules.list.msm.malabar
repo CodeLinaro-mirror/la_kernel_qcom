@@ -13,6 +13,7 @@ midpoint.ko
 clk-scmi.ko
 sched-walt.ko
 sched-walt-debug.ko
+rpm-smd.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko

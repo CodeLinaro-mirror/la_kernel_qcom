@@ -12,6 +12,7 @@ malabar_consolidate_config = {
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_MHI_BUS_DEBUG": "y",
     "CONFIG_MSM_GPI_DMA_DEBUG": "y",
+    "CONFIG_MSM_RPM_SMD_DEBUG": "m",
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_QCOM_DYNAMIC_MEMORY_DUMP": "y",
     "CONFIG_QTI_PMIC_GLINK_CLIENT_DEBUG": "y",
