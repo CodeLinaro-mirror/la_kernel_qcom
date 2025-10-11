@@ -397,7 +397,7 @@
 		};
 
 		audio_config: audio-config-region@ac600000 {
-			reg = <0x0 0xac600000 0x0 0x00a0000>;
+			reg = <0x0 0xac600000 0x0 0x0a00000>;
 			no-map;
 		};
 
