@@ -6,8 +6,8 @@
  *
  * Copyright 2009	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
- * Copyright 2018-2024	Intel Corporation
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.​
+ * Copyright 2018-2025	Intel Corporation
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/export.h>
@@ -936,8 +936,23 @@ int cfg80211_chandef_dfs_required(struct wiphy *wiphy,
 	int width;
 	int ret;
 
-	if (WARN_ON(!cfg80211_chandef_valid(chandef)))
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+	    (!cfg80211_chandef_valid(chandef))) {
+		pr_err("%s chandef is Invalid - %p\n", __func__, chandef);
+		if (chandef->chan) {
+			pr_err("Band %d Freq %d Chan Flags %d DFS state %d\n",
+			       chandef->chan->band, chandef->chan->center_freq,
+			       chandef->chan->flags, chandef->chan->dfs_state);
+		}
+		pr_err("Width %d cf1 %d cf2 %d Freq Offset %d\n",
+		       chandef->width, chandef->center_freq1,
+		       chandef->center_freq2, chandef->freq1_offset);
+		BUG_ON(1);
 		return -EINVAL;
+	} else {
+		if (WARN_ON(!cfg80211_chandef_valid(chandef)))
+			return -EINVAL;
+	}
 
 	switch (iftype) {
 	case NL80211_IFTYPE_ADHOC:
@@ -1598,8 +1613,23 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 	struct ieee80211_channel *c;
 	int i;
 
-	if (WARN_ON(!cfg80211_chandef_valid(chandef)))
+	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+	    (!cfg80211_chandef_valid(chandef))) {
+		pr_err("%s chandef is Invalid - %p\n", __func__, chandef);
+		if (chandef->chan) {
+			pr_err("Band %d Freq %d Chan Flags %d DFS state %d\n",
+			       chandef->chan->band, chandef->chan->center_freq,
+			       chandef->chan->flags, chandef->chan->dfs_state);
+		}
+		pr_err("Width %d cf1 %d cf2 %d Freq Offset %d\n",
+		       chandef->width, chandef->center_freq1,
+		       chandef->center_freq2, chandef->freq1_offset);
+		BUG_ON(1);
 		return false;
+	} else {
+		if (WARN_ON(!cfg80211_chandef_valid(chandef)))
+			return false;
+	}
 
 	ht_cap = &wiphy->bands[chandef->chan->band]->ht_cap;
 	vht_cap = &wiphy->bands[chandef->chan->band]->vht_cap;
