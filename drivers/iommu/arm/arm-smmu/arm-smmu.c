@@ -14,7 +14,7 @@
  *	- Context fault reporting
  *	- Extended Stream ID (16 bit)
  *
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "arm-smmu: " fmt
@@ -99,6 +99,7 @@ static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ ARM_SMMU_OPT_CONTEXT_FAULT_RETRY, "qcom,context-fault-retry" },
 	{ ARM_SMMU_OPT_MULTI_MATCH_HANDOFF_SMR, "qcom,multi-match-handoff-smr" },
 	{ ARM_SMMU_OPT_IGNORE_NUMPAGENDXB, "qcom,ignore-numpagendxb" },
+	{ ARM_SMMU_OPT_DS_NOT_SUPPORTED, "qcom,ds-not-supported" },
 	{ 0, NULL},
 };
 
@@ -2432,8 +2433,17 @@ static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 			goto out_free;
 	} else if (fwspec && fwspec->ops == &arm_smmu_ops.iommu_ops) {
 		smmu = arm_smmu_get_by_fwnode(fwspec->iommu_fwnode);
+
+		/*
+		 * Defer probe if the relevant SMMU instance hasn't finished
+		 * probing yet. This is a fragile hack and we'd ideally
+		 * avoid this race in the core code. Until that's ironed
+		 * out, however, this is the most pragmatic option on the
+		 * table.
+		 */
 		if (!smmu)
-			return ERR_PTR(-ENODEV);
+			return ERR_PTR(dev_err_probe(dev, -EPROBE_DEFER,
+						"smmu dev has not bound yet\n"));
 	} else {
 		return ERR_PTR(-ENODEV);
 	}
@@ -3897,7 +3907,9 @@ static int __maybe_unused arm_smmu_pm_suspend(struct device *dev)
 	int ret = 0;
 	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+
+	if ((pm_suspend_target_state == PM_SUSPEND_MEM) &&
+				!(smmu->options & ARM_SMMU_OPT_DS_NOT_SUPPORTED))
 		return arm_smmu_pm_freeze_late(dev);
 
 	if (pm_runtime_suspended(dev))
@@ -3914,10 +3926,15 @@ clk_unprepare:
 
 static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
 {
-	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
+
+	if ((pm_suspend_target_state == PM_SUSPEND_MEM) &&
+				!(smmu->options & ARM_SMMU_OPT_DS_NOT_SUPPORTED))
 		return arm_smmu_pm_restore_early(dev);
+
 	else
 		return arm_smmu_pm_resume_common(dev);
+
 }
 
 static const struct dev_pm_ops arm_smmu_pm_ops = {

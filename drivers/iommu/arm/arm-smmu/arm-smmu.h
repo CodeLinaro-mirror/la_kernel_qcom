@@ -6,7 +6,7 @@
  *
  * Author: Will Deacon <will.deacon@arm.com>
  *
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _ARM_SMMU_H
@@ -383,6 +383,7 @@ struct arm_smmu_device {
 #define ARM_SMMU_OPT_CONTEXT_FAULT_RETRY	(1 << 5)
 #define ARM_SMMU_OPT_MULTI_MATCH_HANDOFF_SMR	(1 << 6)
 #define ARM_SMMU_OPT_IGNORE_NUMPAGENDXB	(1 << 7)
+#define ARM_SMMU_OPT_DS_NOT_SUPPORTED	(1 << 8)
 	u32				options;
 	enum arm_smmu_arch_version	version;
 	enum arm_smmu_implementation	model;

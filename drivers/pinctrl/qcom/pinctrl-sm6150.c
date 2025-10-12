@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -1580,6 +1580,21 @@ static const struct msm_pingroup sm6150_groups[] = {
 	[130] = SDC_QDSD_PINGROUP(sdc2_data, 0xd98000, 9, 0),
 };
 
+static const struct msm_gpio_wakeirq_map sm6150_pdc_map[] = {
+	{ 1, 45 }, { 3, 31 }, { 7, 55 }, { 9, 110 }, { 11, 34 },
+	{ 13, 33 }, { 14, 35 }, { 17, 46 }, { 19, 48 }, { 21, 83 },
+	{ 22, 36 }, { 26, 38 }, { 35, 37 }, { 39, 118 }, { 41, 47 },
+	{ 47, 49 }, { 48, 51 }, { 50, 52 }, { 51, 116 }, { 55, 56 },
+	{ 56, 57 }, { 57, 58 }, { 60, 60 }, { 71, 54 }, { 76, 79 },
+	{ 80, 73 }, { 81, 64 }, { 82, 50 }, { 83, 65 }, { 84, 92 }, { 85, 99 },
+	{ 86, 67 }, { 87, 84 }, { 88, 117 }, { 89, 115 }, { 90, 69 },
+	{ 92, 88}, { 93, 75 }, { 94, 91 }, { 95, 72 }, { 96, 82 },
+	{ 97, 74 }, { 98, 95 }, { 99, 94 }, { 100, 100 }, { 101, 40 },
+	{ 102, 93 }, { 103, 77 }, { 104, 78 }, { 105, 96 }, { 107, 97 },
+	{ 108, 111 }, { 112, 112 }, { 113, 113 }, { 117, 85 }, { 118, 102},
+	{ 119, 87 }, { 120, 114}, { 121, 89 }, { 122, 90},
+};
+
 static struct msm_dir_conn sm6150_dir_conn[] = {
 	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
 	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
@@ -1601,6 +1616,8 @@ static struct msm_pinctrl_soc_data sm6150_pinctrl = {
 	.groups = sm6150_groups,
 	.ngroups = ARRAY_SIZE(sm6150_groups),
 	.ngpios = 124,
+	.wakeirq_map = sm6150_pdc_map,
+	.nwakeirq_map = ARRAY_SIZE(sm6150_pdc_map),
 	.dir_conn = sm6150_dir_conn,
 	.egpio_func = 9,
 	.ntiles = NUM_TILES,
