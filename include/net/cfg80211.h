@@ -752,6 +752,8 @@ struct key_params {
 	enum nl80211_key_mode mode;
 };
 
+#define IEEE80211_EHT_PUNCTURE_BITMAP_DEFAULT 0
+
 /**
  * struct cfg80211_chan_def - channel definition
  * @chan: the (control) channel

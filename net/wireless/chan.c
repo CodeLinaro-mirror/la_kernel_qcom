@@ -1497,7 +1497,6 @@ cfg80211_chandef_dfs_cac_time(struct wiphy *wiphy,
 }
 #endif /* CONFIG_CHANDEF_NO_PUNCTURE */
 
-#ifndef CFG80211_PROP_SINGLE_WIPHY_SUPPORT
 static bool cfg80211_secondary_chans_ok(struct wiphy *wiphy,
 					u32 center_freq, u32 bandwidth,
 					u32 prohibited_flags,
@@ -1517,24 +1516,24 @@ static bool cfg80211_secondary_chans_ok(struct wiphy *wiphy,
 
 	return true;
 }
-#else
-static bool cfg80211_secondary_chans_ok(struct wiphy *wiphy,
-					u32 center_freq, u32 bandwidth,
-					u32 prohibited_flags,
-					enum nl80211_band band)
+
+static bool cfg80211_secondary_chans_ok_punctured(struct wiphy *wiphy,
+						  u32 center_freq, u32 bandwidth,
+						  u32 prohibited_flags,
+						  enum nl80211_band band,
+						  u16 punctured)
 {
 	struct ieee80211_channel *c;
 	u32 freq, start_freq, end_freq;
-	u16 puncture_bitmap = 0;
 
 	start_freq = cfg80211_get_start_freq_legacy(center_freq, bandwidth);
 	end_freq = cfg80211_get_end_freq_legacy(center_freq, bandwidth);
 
 	if (band == NL80211_BAND_5GHZ && bandwidth == 320)
-		puncture_bitmap = FIXED_PUNCTURE_PATTERN;
+		punctured = FIXED_PUNCTURE_PATTERN;
 
 	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
-		if ((1 << (freq - start_freq) / MHZ_TO_KHZ(20)) & puncture_bitmap)
+		if ((1 << (freq - start_freq) / MHZ_TO_KHZ(20)) & punctured)
 			continue;
 
 		c = ieee80211_get_channel_khz(wiphy, freq);
@@ -1544,7 +1543,6 @@ static bool cfg80211_secondary_chans_ok(struct wiphy *wiphy,
 
 	return true;
 }
-#endif
 
 /* check if the operating channels are valid and supported */
 static bool cfg80211_edmg_usable(struct wiphy *wiphy, u8 edmg_channels,
@@ -1611,6 +1609,8 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 	const struct ieee80211_sband_iftype_data *iftd;
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_channel *c;
+	u16 puncture_bitmap_cfreq1 = 0;
+	u16 puncture_bitmap_cfreq2 = 0;
 	int i;
 
 	if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
@@ -1785,20 +1785,42 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 	if (width < 20)
 		prohibited_flags |= IEEE80211_CHAN_NO_OFDM;
 
+	if (chandef->center_freq2)
+		puncture_bitmap_cfreq2 = chandef->punctured;
+	else
+		puncture_bitmap_cfreq1 = chandef->punctured;
+
 	if (IS_ENABLED(CONFIG_CHANDEF_NO_PUNCTURE)) {
-		if (!cfg80211_secondary_chans_ok(wiphy,
-						 ieee80211_chandef_to_khz(chandef),
-						 width, prohibited_flags,
-						 chandef->chan->band))
+		if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+		    !cfg80211_secondary_chans_ok_punctured(wiphy,
+							   ieee80211_chandef_to_khz(chandef),
+							   width, prohibited_flags,
+							   chandef->chan->band,
+							   puncture_bitmap_cfreq1)) {
 			return false;
+		} else {
+			if (!cfg80211_secondary_chans_ok(wiphy,
+							 ieee80211_chandef_to_khz(chandef),
+							 width, prohibited_flags,
+							 chandef->chan->band))
+				return false;
+		}
 
 		if (!chandef->center_freq2)
 			return true;
 
-		return cfg80211_secondary_chans_ok(wiphy,
-						   MHZ_TO_KHZ(chandef->center_freq2),
-						   width, prohibited_flags,
-						   chandef->chan->band);
+		if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+			return cfg80211_secondary_chans_ok_punctured(wiphy,
+								     MHZ_TO_KHZ
+								     (chandef->center_freq2),
+								     width, prohibited_flags,
+								     chandef->chan->band,
+								     puncture_bitmap_cfreq2);
+		else
+			return cfg80211_secondary_chans_ok(wiphy,
+							   MHZ_TO_KHZ(chandef->center_freq2),
+							   width, prohibited_flags,
+							   chandef->chan->band);
 	} else {
 		for_each_subchan(chandef, freq, cf) {
 			c = ieee80211_get_channel_khz(wiphy, freq);
