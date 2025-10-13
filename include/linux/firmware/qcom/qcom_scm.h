@@ -119,6 +119,7 @@ struct qcom_scm_pas_context {
 	phys_addr_t mem_phys;
 	size_t mem_size;
 	struct qcom_scm_pas_metadata *metadata;
+	bool has_iommu;
 };
 
 void *qcom_scm_pas_context_init(struct device *dev, u32 pas_id, phys_addr_t mem_phys,
@@ -132,6 +133,7 @@ extern int qcom_scm_pas_mem_setup(u32 pas_id, phys_addr_t addr,
 extern int qcom_scm_pas_auth_and_reset(u32 pas_id);
 extern int qcom_scm_pas_shutdown(u32 pas_id);
 extern bool qcom_scm_pas_supported(u32 pas_id);
+int qcom_scm_pas_prepare_and_auth_reset(struct qcom_scm_pas_context *ctx);
 
 extern int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
 extern int qcom_scm_io_writel(phys_addr_t addr, unsigned int val);
