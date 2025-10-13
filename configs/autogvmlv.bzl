@@ -78,6 +78,7 @@ autogvmlv_config = {
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SOC_WATCHDOG": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
     "CONFIG_QCOM_VA_MINIDUMP": "m",
     "CONFIG_QCOM_WDT_CORE": "m",
     "CONFIG_QRTR": "m",
