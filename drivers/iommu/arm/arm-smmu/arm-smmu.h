@@ -26,6 +26,7 @@
 #include <linux/types.h>
 #include <linux/qcom-iommu-util.h>
 #include <linux/qcom-io-pgtable.h>
+#include <linux/genalloc.h>
 
 /* Configuration registers */
 #define ARM_SMMU_GR0_sCR0		0x0
@@ -508,6 +509,7 @@ struct arm_smmu_domain {
 	struct arm_smmu_mapping_cfg	mapping_cfg;
 	bool				delayed_s1_trans_enable;
 	u32				secure_vmid;
+	struct gen_pool			*secure_mem_pool;
 	fault_handler_irq_t		fault_handler_irq;
 	void				*handler_irq_token;
 
