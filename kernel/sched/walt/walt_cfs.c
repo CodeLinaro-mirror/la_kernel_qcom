@@ -128,7 +128,7 @@ struct find_best_target_env {
 	int	end_index;
 	bool	strict_max;
 	int	skip_cpu;
-	u64	prs[8];
+	u64	prs[WALT_NR_CPUS];
 };
 
 /*
