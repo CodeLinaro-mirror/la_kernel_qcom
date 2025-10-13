@@ -29,6 +29,7 @@
 #include <linux/vmalloc.h>
 #include <linux/panic_notifier.h>
 #include "debug_symbol.h"
+
 #ifdef CONFIG_QCOM_MINIDUMP_PSTORE
 #include <linux/math64.h>
 #include <linux/of.h>
@@ -66,6 +67,16 @@
 #include "minidump_memory.h"
 #endif
 #include "../../../kernel/time/tick-internal.h"
+
+#if IS_ENABLED(CONFIG_ARM64)
+#define GET_PC(regs) instruction_pointer(regs)
+#define GET_LR(regs) ((regs)->regs[30])
+#define GET_SP(regs) ((regs)->sp)
+#elif IS_ENABLED(CONFIG_ARM)
+#define GET_PC(regs) instruction_pointer(regs)
+#define GET_LR(regs) ((regs)->uregs[14])
+#define GET_SP(regs) ((regs)->uregs[13])
+#endif
 
 #ifdef CONFIG_QCOM_DYN_MINIDUMP_STACK
 
@@ -999,17 +1010,18 @@ static void md_reg_context_data(struct pt_regs *regs)
 {
 	int nbytes = 128;
 
-	if (user_mode(regs) ||  !regs->pc)
+	if (user_mode(regs) ||  !GET_PC(regs))
 		return;
 
-	md_dump_data(regs->pc - nbytes, nbytes * 2, "PC");
-	md_dump_data(regs->regs[30] - nbytes, nbytes * 2, "LR");
-	md_dump_data(regs->sp - nbytes, nbytes * 2, "SP");
+	md_dump_data(GET_PC(regs) - nbytes, nbytes * 2, "PC");
+	md_dump_data(GET_LR(regs) - nbytes, nbytes * 2, "LR");
+	md_dump_data(GET_SP(regs) - nbytes, nbytes * 2, "SP");
 }
 
 static inline void md_dump_panic_regs(void)
 {
 	struct pt_regs regs;
+#if IS_ENABLED(CONFIG_ARM64)
 	u64 tmp1, tmp2;
 
 	/* Lifted from crash_setup_regs() */
@@ -1048,12 +1060,41 @@ static inline void md_dump_panic_regs(void)
 		: "r" (&regs)
 		: "memory"
 		);
-
+#elif IS_ENABLED(CONFIG_ARM)
+	__asm__ __volatile__ (
+		"str r0, [%0, #0]\n"
+		"str r1, [%0, #4]\n"
+		"str r2, [%0, #8]\n"
+		"str r3, [%0, #12]\n"
+		"str r4, [%0, #16]\n"
+		"str r5, [%0, #20]\n"
+		"str r6, [%0, #24]\n"
+		"str r7, [%0, #28]\n"
+		"str r8, [%0, #32]\n"
+		"str r9, [%0, #36]\n"
+		"str r10, [%0, #40]\n"
+		"str r11, [%0, #44]\n"
+		"str r12, [%0, #48]\n"
+		"mov r1, sp\n"
+		"str r1, [%0, #52]\n"
+		"mov r1, lr\n"
+		"str r1, [%0, #56]\n"
+		"mov r1, pc\n"
+		"str r1, [%0, #60]\n"
+		// --- Add CPSR capture here ---
+		"mrs r1, cpsr\n"              // Read CPSR into r1
+		"str r1, [%0, #64]\n"         // Store CPSR at offset 64 (next after pc)
+		:
+		: "r" (&regs)
+		: "memory", "r1"
+	);
+#endif
 	seq_buf_printf(md_cntxt_seq_buf, "PANIC CPU : %d\n",
 				   raw_smp_processor_id());
 	md_reg_context_data(&regs);
 }
 
+#if IS_ENABLED(CONFIG_SMP)
 static void md_dump_other_cpus_context(void)
 {
 	int cpu;
@@ -1065,6 +1106,8 @@ static void md_dump_other_cpus_context(void)
 		md_reg_context_data(&regs);
 	}
 }
+
+#endif
 
 static int md_die_context_notify(struct notifier_block *self,
 				 unsigned long val, void *data)
@@ -1087,7 +1130,11 @@ static int md_die_context_notify(struct notifier_block *self,
 
 static struct notifier_block md_die_context_nb = {
 	.notifier_call = md_die_context_notify,
+#if IS_ENABLED(CONFIG_ARM64)
 	.priority = INT_MAX - 2, /* < msm watchdog die notifier */
+#else
+	.priority = INT_MAX, /* < msm watchdog die notifier */
+#endif
 };
 
 static void md_ipi_stop(void *unused, struct pt_regs *regs)
@@ -1095,7 +1142,7 @@ static void md_ipi_stop(void *unused, struct pt_regs *regs)
 	unsigned int cpu = smp_processor_id();
 
 	per_cpu(regs_before_stop, cpu) = *regs;
-	dump_stack_minidump(regs->sp);
+	dump_stack_minidump(GET_SP(regs));
 }
 #endif
 
@@ -1140,9 +1187,14 @@ void md_dump_process(void)
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_CPU_CONTEXT
 	if (!md_cntxt_seq_buf)
 		goto dump_rq;
+#if IS_ENABLED(CONFIG_SMP)
 	if (raw_smp_processor_id() != die_cpu)
 		md_dump_panic_regs();
 	md_dump_other_cpus_context();
+#else
+    // For single-core, only dump current CPU context
+	md_dump_panic_regs();
+#endif //CONFIG_SMP
 dump_rq:
 #endif
 	md_dump_next_event();
@@ -1165,7 +1217,11 @@ static int md_panic_handler(struct notifier_block *this,
 
 static struct notifier_block md_panic_blk = {
 	.notifier_call = md_panic_handler,
+#if IS_ENABLED(CONFIG_ARM64)
 	.priority = INT_MAX - 3, /* < msm watchdog panic notifier */
+#else
+	.priority = INT_MAX, /* < msm watchdog panic notifier */
+#endif
 };
 
 static int md_register_minidump_entry(char *name, u64 virt_addr,
@@ -1384,7 +1440,11 @@ static void log_cpu_freq(void *unused,
 			unsigned int old_target_freq)
 {
 	uint32_t index;
-	int cluster = topology_cluster_id(policy->cpu);
+	int cluster = 0;
+
+#if IS_ENABLED(CONFIG_SMP)
+	cluster = topology_cluster_id(policy->cpu);
+#endif
 
 	if (cluster > max_cluster)
 		return;
@@ -1395,14 +1455,17 @@ static void log_cpu_freq(void *unused,
 
 static void register_cpufreq_log(void)
 {
-	int cpu;
 	struct md_region md_entry;
 	size_t freq_hist_sz;
-
+	max_cluster = 0;
+#if IS_ENABLED(CONFIG_SMP)
+	int cpu;
 	for_each_possible_cpu(cpu) {
 		if (topology_cluster_id(cpu) > max_cluster)
 			max_cluster = topology_cluster_id(cpu);
 	}
+#endif
+
 	freq_hist_sz = sizeof(struct freq_hist) * (max_cluster + 1);
 
 	cpuclk_log = kzalloc(freq_hist_sz, GFP_KERNEL);
