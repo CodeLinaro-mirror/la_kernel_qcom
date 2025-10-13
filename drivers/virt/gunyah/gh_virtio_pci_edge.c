@@ -12,6 +12,9 @@
 #include <linux/pci.h>
 #include <linux/pci_ids.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
+
+#include "kernel/sched/sched.h"
 
 static void gh_virtio_pci_edge_dev_note(struct pci_dev *pdev)
 {
@@ -94,11 +97,30 @@ static int gh_virtio_pci_edge_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int gh_virtio_pci_edge_suspend_late(struct device *dev)
+{
+	unsigned int i, nr_iowait = 0;
+
+	for_each_possible_cpu(i)
+		nr_iowait += atomic_read(&cpu_rq(i)->nr_iowait);
+
+	if (nr_iowait) {
+		pr_info("Aborting suspend due to pending IO tasks (%u)\n", nr_iowait);
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+static const struct dev_pm_ops gh_virtio_pci_edge_pm_ops = {
+	.suspend_late = gh_virtio_pci_edge_suspend_late,
+};
 
 static struct platform_driver gh_virtio_pci_edge_plat_driver = {
 	.probe = gh_virtio_pci_edge_probe,
 	.driver = {
 		.name = "gh_virtio_pci_edge",
+		.pm = &gh_virtio_pci_edge_pm_ops,
 	},
 };
 
