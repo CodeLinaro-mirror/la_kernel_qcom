@@ -20,7 +20,7 @@
 
 /* 'Primordial Object' operations related to memory object. */
 #define OBJECT_OP_MAP_REGION_SHM	0
-#define OBJECT_OP_MAP_REGION_FFA	1
+#define OBJECT_OP_MAP_REGION_FFA	3
 
 #define SMCINVOKE_MIN_ASYNC_VERSION 0x00010002U
 #define SMCINVOKE_ASYNC_VERSION_SHM 0x00010002U
