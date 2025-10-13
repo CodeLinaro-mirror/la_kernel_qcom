@@ -306,17 +306,19 @@ int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 v
 		goto bridge_exist;
 	}
 
-	pfn_and_ns_perm = paddr | QCOM_SCM_PERM_RW;
+	pfn_and_ns_perm = paddr;
 	ipfn_and_s_perm = paddr | QCOM_SCM_PERM_RW;
 
-	if (vmid)
+	if (vmid) {
 		size_and_flags = size | (1 << QCOM_SHM_BRIDGE_NUM_VM_SHIFT);
-	else
+		pfn_and_ns_perm |= QCOM_SCM_PERM_RW;
+	} else {
 		size_and_flags  = size  | (QCOM_SHM_BRIDGE_SELF_OWNER_BIT << 1)
 					| (QCOM_SCM_PERM_RW << 2);
+	}
 
-	pr_debug("paddr|PERM: %#llx, size: %#zx, size|flags: %#llx, vmid: %#x\n",
-		 pfn_and_ns_perm, size, size_and_flags, vmid);
+	pr_debug("PA|PERM: %#llx, IPA|PERM: %#llx, size: %#zx, size|flags: %#llx, vmid: %#x\n",
+		 pfn_and_ns_perm, ipfn_and_s_perm, size, size_and_flags, vmid);
 	ret = qcom_scm_shm_bridge_create(pfn_and_ns_perm, ipfn_and_s_perm,
 					 size_and_flags, vmid, handle);
 
