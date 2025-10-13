@@ -932,7 +932,13 @@ static int qcom_vadc_scale_code_voltage_factor(u16 adc_code,
 static s64 adc_code_to_resistance(u16 adc_code, int pull_up, u16 full_scale_code)
 {
 	/* Resistance = (ADC code * R_PULLUP) / (full_scale_code - ADC code) */
-	return div64_s64((s64) adc_code * pull_up, full_scale_code - adc_code);
+	s64 resistance = div64_s64((s64) adc_code * pull_up,
+				   full_scale_code - adc_code);
+
+	if (resistance > INT_MAX)
+		resistance = INT_MAX;
+
+	return resistance;
 }
 
 static int qcom_vadc7_scale_hw_calib_therm(
