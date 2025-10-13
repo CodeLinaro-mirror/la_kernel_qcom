@@ -1,6 +1,7 @@
 malabar_perf_config = {
     # keep sorted
     "CONFIG_ARCH_MALABAR": "y",
+    "CONFIG_PINCTRL_MALABAR": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_NVMEM": "n",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",

@@ -62,6 +62,7 @@ pinctrl-msm.ko
 pinctrl-alor.ko
 pinctrl-canoe.ko
 pinctrl-chora.ko
+pinctrl-malabar.ko
 qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
