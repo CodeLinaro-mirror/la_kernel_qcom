@@ -11,6 +11,10 @@
 #include <linux/notifier.h>
 #include <linux/pci.h>
 #include <linux/pci_ids.h>
+#include <linux/platform_device.h>
+#include <linux/pm.h>
+
+#include "kernel/sched/sched.h"
 
 static void gh_virtio_pci_edge_dev_note(struct pci_dev *pdev)
 {
@@ -80,7 +84,7 @@ static void gh_virtio_pci_edge_probe_devices(void)
 	}
 }
 
-static int __init gh_virtio_pci_edge_init(void)
+static int gh_virtio_pci_edge_probe(struct platform_device *pdev)
 {
 	int ret;
 
@@ -89,6 +93,53 @@ static int __init gh_virtio_pci_edge_init(void)
 	ret = bus_register_notifier(&pci_bus_type, &gh_virtio_pci_edge_notifier);
 	if (ret)
 		pr_err("PCI bus_register_notifier failed with %d, ignoring.\n", ret);
+
+	return 0;
+}
+
+static int gh_virtio_pci_edge_suspend_late(struct device *dev)
+{
+	unsigned int i, nr_iowait = 0;
+
+	for_each_possible_cpu(i)
+		nr_iowait += atomic_read(&cpu_rq(i)->nr_iowait);
+
+	if (nr_iowait) {
+		pr_info("Aborting suspend due to pending IO tasks (%u)\n", nr_iowait);
+		return -EBUSY;
+	}
+
+	return 0;
+}
+
+static const struct dev_pm_ops gh_virtio_pci_edge_pm_ops = {
+	.suspend_late = gh_virtio_pci_edge_suspend_late,
+};
+
+static struct platform_driver gh_virtio_pci_edge_plat_driver = {
+	.probe = gh_virtio_pci_edge_probe,
+	.driver = {
+		.name = "gh_virtio_pci_edge",
+		.pm = &gh_virtio_pci_edge_pm_ops,
+	},
+};
+
+static struct platform_device *gh_virtio_pci_edge_plat_dev;
+
+static int __init gh_virtio_pci_edge_init(void)
+{
+	int ret;
+
+	gh_virtio_pci_edge_plat_dev = platform_device_register_simple(
+				"gh_virtio_pci_edge", -1, NULL, 0);
+	if (IS_ERR(gh_virtio_pci_edge_plat_dev))
+		return PTR_ERR(gh_virtio_pci_edge_plat_dev);
+
+	ret = platform_driver_register(&gh_virtio_pci_edge_plat_driver);
+	if (ret) {
+		platform_device_unregister(gh_virtio_pci_edge_plat_dev);
+		return ret;
+	}
 
 	return 0;
 }
