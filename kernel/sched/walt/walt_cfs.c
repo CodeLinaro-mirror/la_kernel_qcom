@@ -93,9 +93,13 @@ inline bool can_fit_low_prio_task(struct task_struct *p, int cpu)
 	 * task (both top-app and non top-app tasks with prio less than 124) to
 	 * fit on medium cpus
 	 */
-	if ((!task_in_related_thread_group(p) || soc_feat(SOC_ENABLE_LIMIT_PRIME_USAGE))
-			&& p->prio >= 124 && !is_max_possible_cluster_cpu(cpu)) {
-		return (num_sched_clusters > 2) ? !is_min_possible_cluster_cpu(cpu) : true;
+	if (!task_in_related_thread_group(p)) {
+		if (p->prio >= 124 && !is_max_possible_cluster_cpu(cpu))
+			return (num_sched_clusters > 2) ? !is_min_possible_cluster_cpu(cpu) : true;
+	} else {
+		if (soc_feat(SOC_ENABLE_LIMIT_PRIME_USAGE) && p->prio >= 131 &&
+				!is_max_possible_cluster_cpu(cpu))
+			return (num_sched_clusters > 2) ? !is_min_possible_cluster_cpu(cpu) : true;
 	}
 
 	return false;
