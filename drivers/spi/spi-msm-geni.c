@@ -3840,6 +3840,7 @@ static const struct of_device_id spi_geni_dt_match[] = {
 	{ .compatible = "qcom,qspi-geni" },
 	{}
 };
+MODULE_DEVICE_TABLE(of, spi_geni_dt_match);
 
 static struct platform_driver spi_geni_driver = {
 	.probe  = spi_geni_probe,
