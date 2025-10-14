@@ -50,7 +50,7 @@ static int qcom_tzmem_ffa_mem_share_internal(struct sg_table *sgt, uint64_t *ffa
 }
 
 int qcom_tzmem_ffa_mem_share(const void *vaddr, const dma_addr_t dma_addr,
-			     size_t size, uint64_t *ffa_handle)
+			     size_t size, bool is_cached, uint64_t *ffa_handle)
 {
 	struct sg_table sgt;
 	int rc;
@@ -60,8 +60,8 @@ int qcom_tzmem_ffa_mem_share(const void *vaddr, const dma_addr_t dma_addr,
 
 	pr_debug("vaddr: 0x%p, , paddr: 0x%llx, size: 0x%zx\n", vaddr, dma_addr, size);
 
-	/* Try dma_get_sgtable() if dma_addr is valid */
-	if (dma_addr) {
+	if (!is_cached) {
+		/* Try dma_get_sgtable() if dma_addr is valid */
 		rc = dma_get_sgtable(qcom_tzmem_dev, &sgt, (void *)vaddr, dma_addr, size);
 		if (rc) {
 			pr_err("dma_get_sgtable failed, rc: %d\n", rc);

@@ -296,7 +296,7 @@ int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 v
 	size = PAGE_ALIGN(size);
 
 #if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
-	return qcom_tzmem_ffa_mem_share(phys_to_virt(paddr), 0, size, handle);
+	return qcom_tzmem_ffa_mem_share(phys_to_virt(paddr), paddr, size, 1, handle);
 #endif
 
 	mutex_lock(&bridge_list_head.lock);
@@ -389,15 +389,7 @@ static int qcom_tzmem_init_area(struct qcom_tzmem_area *area, bool is_cached)
 		return -ENOMEM;
 
 #if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
-	/*
-	 * Need to generate scattergatherlist later, so 2 options:
-	 * if cached, pass 0 in paddr
-	 * if uncached, pass dma_addr
-	 */
-	if (is_cached)
-		ret = qcom_tzmem_ffa_mem_share(area->vaddr, 0, area->size, handle);
-	else
-		ret = qcom_tzmem_ffa_mem_share(area->vaddr, area->paddr, area->size, handle);
+	ret = qcom_tzmem_ffa_mem_share(area->vaddr, area->paddr, area->size, is_cached, handle);
 #else
 	ret = qcom_tzmem_shm_bridge_create(area->paddr, area->size, handle);
 #endif
