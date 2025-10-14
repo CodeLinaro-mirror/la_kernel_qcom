@@ -105,6 +105,8 @@ autogvmlv_config = {
     "CONFIG_UIO_MSM_SHAREDMEM": "m",
     "CONFIG_USB_CONFIGFS_F_CDEV": "m",
     "CONFIG_USB_CONFIGFS_F_QDSS": "m",
+    "CONFIG_USB_REPEATER": "m",
+    "CONFIG_I2C_EUSB2_REPEATER": "m",
     "CONFIG_USB_DWC3_MSM": "m",
     "CONFIG_USB_F_CDEV": "m",
     "CONFIG_USB_F_QDSS": "m",

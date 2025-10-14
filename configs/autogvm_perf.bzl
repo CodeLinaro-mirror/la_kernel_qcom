@@ -132,6 +132,8 @@ autogvm_perf_config = {
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPI_SPIDEV": "m",
     "CONFIG_SND_USB_AUDIO_QMI": "m",
+    "CONFIG_USB_REPEATER": "m",
+    "CONFIG_I2C_EUSB2_REPEATER": "m",
     "CONFIG_MSM_HSUSB_PHY": "m",
     "CONFIG_USB_MSM_EUSB2_PHY": "m",
     "CONFIG_USB_DWC3_MSM": "m",
