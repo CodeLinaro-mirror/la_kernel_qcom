@@ -6,3 +6,7 @@ pinctrl-colibri.ko
 qcom-scm.ko
 qcom_tzmem.ko
 stub-regulator.ko
+llcc-qcom.ko
+kryo_arm64_edac.ko
+qcom_wdt_core.ko
+qcom_edac.ko
