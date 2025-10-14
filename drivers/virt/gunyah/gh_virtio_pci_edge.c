@@ -36,6 +36,13 @@ static void gh_virtio_pci_edge_dev_note(struct pci_dev *pdev)
 	}
 }
 
+static bool is_supported_virtio_vendor(struct pci_dev *pdev)
+{
+	return (pdev->vendor == PCI_VENDOR_ID_REDHAT_QUMRANET ||
+		pdev->vendor == PCI_VENDOR_ID_REDHAT ||
+		pdev->vendor == PCI_VENDOR_ID_INTEL);
+}
+
 static int gh_virtio_pci_edge_notifier_call(struct notifier_block *nb,
 					    unsigned long event,
 					    void *data)
@@ -43,11 +50,13 @@ static int gh_virtio_pci_edge_notifier_call(struct notifier_block *nb,
 	struct device *dev = data;
 	struct pci_dev *pdev = to_pci_dev(dev);
 
-	if (pdev->vendor != PCI_VENDOR_ID_REDHAT_QUMRANET ||
-			event != BUS_NOTIFY_ADD_DEVICE)
+	if (event != BUS_NOTIFY_ADD_DEVICE)
 		return NOTIFY_DONE;
 
-	gh_virtio_pci_edge_dev_note(pdev);
+	if (is_supported_virtio_vendor(pdev)) {
+		gh_virtio_pci_edge_dev_note(pdev);
+		dev_pm_syscore_device(&pdev->dev, true);
+	}
 
 	return NOTIFY_OK;
 }
@@ -63,8 +72,10 @@ static void gh_virtio_pci_edge_probe_devices(void)
 
 	while ((dev = bus_find_next_device(&pci_bus_type, dev))) {
 		pdev = to_pci_dev(dev);
-		if (pdev->vendor == PCI_VENDOR_ID_REDHAT_QUMRANET)
+		if (is_supported_virtio_vendor(pdev)) {
 			gh_virtio_pci_edge_dev_note(pdev);
+			dev_pm_syscore_device(&pdev->dev, true);
+		}
 		put_device(dev);
 	}
 }
