@@ -5527,6 +5527,7 @@ static unsigned long calculate_ipc(int cpu)
 static void android_rvh_tick_entry(void *unused, struct rq *rq)
 {
 	u64 wallclock;
+	int cpu = cpu_of(rq);
 
 	if (unlikely(walt_disabled))
 		return;
@@ -5540,6 +5541,13 @@ static void android_rvh_tick_entry(void *unused, struct rq *rq)
 
 	if (is_ed_task_present(rq, wallclock, NULL))
 		waltgov_run_callback(rq, WALT_CPUFREQ_EARLY_DET_BIT);
+
+	if (available_idle_cpu(cpu) && is_reserved(cpu) && !rq->active_balance)
+		clear_reserved(cpu);
+
+	if (walt_fair_task(rq->curr))
+		walt_cfs_tick(rq);
+
 	update_instruction_data(TICK_ENTRY);
 }
 
