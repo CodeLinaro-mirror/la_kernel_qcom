@@ -72,4 +72,5 @@ pinctrl-spmi-gpio.ko
 phy-qcom-eusb2-repeater.ko
 phy-qcom-snps-eusb2.ko
 phy-qcom-qmp-combo.ko
+phy-qcom-qmp-usb.ko
 dwc3-msm.ko
