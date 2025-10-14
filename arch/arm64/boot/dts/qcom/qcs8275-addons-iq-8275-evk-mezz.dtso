@@ -29,6 +29,26 @@
 
 	status = "okay";
 
+	eeprom1: eeprom@52 {
+		compatible = "atmel,24c256";
+		reg = <0x52>;
+		pagesize = <64>;
+
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mac_addr1: mac-addr@0 {
+				reg = <0x0 0x6>;
+			};
+
+			mac_addr2: mac-addr@6 {
+				reg = <0x6 0x6>;
+			};
+		};
+	};
+
 	qps615_switch: pcie-switch@77 {
 		compatible = "qcom,switch-i2c";
 		reg = <0x77>;
@@ -93,6 +113,8 @@
 				/* BDF 5.0.0 */
 				pcie0_bus5_dev0_fn0: pcie0_qps_eth0 {
 					reg = <0x0 0x0 0x0 0x0 0x0>;
+					nvmem-cells = <&mac_addr1>;
+					nvmem-cell-names = "mac-address";
 					pinctrl-names = "default";
 					pinctrl-0 = <&aqr_intn_wol_sig>;
 					phy-rst-som-gpios = <&tlmm 10 GPIO_ACTIVE_HIGH>;
@@ -116,6 +138,8 @@
 				/* BDF 5.0.1 */
 				pcie0_bus5_dev0_fn1: pcie0_qps_eth1 {
 					reg = <0x100 0x0 0x0 0x0 0x0>;
+					nvmem-cells = <&mac_addr2>;
+					nvmem-cell-names = "mac-address";
 					pinctrl-names = "default";
 					pinctrl-0 = <&napa_intn_wol_sig>;
 					phy-rst-som-gpios = <&expander5 0 GPIO_ACTIVE_HIGH>;

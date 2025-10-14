@@ -22,6 +22,7 @@
 
 	aliases {
 		i2c1 = &i2c1;
+		i2c15 = &i2c15;
 		serial0 = &uart7;
 		serial1 = &uart2;
 		serial2 = &uart6;
@@ -442,6 +443,14 @@
 		gpio-controller;
 		reg = <0x3e>;
 	};
+};
+
+&ice {
+	status = "okay";
+};
+
+&ice_mmc {
+	status = "okay";
 };
 
 &gpi_dma0 {
