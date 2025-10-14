@@ -17,6 +17,7 @@ COPY_FILES = [
     "drivers/dma/dmaengine.h",
     "drivers/dma/virt-dma.h",
     "drivers/i2c/busses/i2c-qcom-geni.c",
+    "drivers/i2c/busses/i2c-virtio.c",
     "drivers/spi/spi-geni-qcom.c",
     "drivers/virtio/virtio_input.c",
     "net/core/failover.c",

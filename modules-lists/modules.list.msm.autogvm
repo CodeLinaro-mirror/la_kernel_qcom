@@ -51,3 +51,4 @@ deferred-free-helper.ko
 virtio_net.ko
 net_failover.ko
 failover.ko
+i2c-virtio.ko
