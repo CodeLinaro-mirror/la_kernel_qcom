@@ -2548,6 +2548,12 @@ static void zram_bio_write(struct zram *zram, struct bio *bio)
 	bio_endio(bio);
 }
 
+#if IS_ENABLED(CONFIG_QTI_PAGE_COMPRESSION_ENGINE)
+#define QPACE_READY() static_branch_likely(&qpace_drv_probed)
+#else
+#define QPACE_READY()    (false)
+#endif
+
 /*
  * Handler function for all zram I/O requests.
  */
@@ -2560,10 +2566,16 @@ static void zram_submit_bio(struct bio *bio)
 		zram_bio_read(zram, bio);
 		break;
 	case REQ_OP_WRITE:
-		if (zram->qpace)
+		/* qpace_drv should in theory probed earlier than zram */
+		if (zram->qpace && QPACE_READY()) {
 			qpace_zram_submit_bio(zram, bio, &comp_control);
-		else
+		} else if (zram->qpace) {
+			WARN_ON_ONCE(1);
+			bio->bi_status = BLK_STS_IOERR;
+			bio_endio(bio);
+		} else {
 			zram_bio_write(zram, bio);
+		}
 		break;
 	case REQ_OP_DISCARD:
 	case REQ_OP_WRITE_ZEROES:
