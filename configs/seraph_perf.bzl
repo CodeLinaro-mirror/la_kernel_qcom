@@ -12,4 +12,5 @@ seraph_perf_config = {
     "CONFIG_QCOM_SOCINFO": "m",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
+    "CONFIG_SPMI_MSM_PMIC_ARB": "m",
 }
