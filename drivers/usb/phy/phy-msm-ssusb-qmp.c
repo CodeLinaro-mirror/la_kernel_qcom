@@ -82,7 +82,9 @@ enum core_ldo_levels {
 /* USB3_DP_COM_TYPEC_STATUS */
 #define PORTSELECT_RAW		BIT(0)
 
-#define MIN_PD			2
+#define UTXR			0 /* USB Transfer */
+#define UCORE			1 /* USB Core */
+#define MIN_PD			2 /* Min Power Domains */
 
 enum qmp_phy_rev_reg {
 	USB3_PHY_PCS_STATUS,
@@ -157,6 +159,7 @@ struct msm_ssphy_qmp {
 	struct device		**pd_devs;
 	int			pd_count;
 	struct eom_phy_device	eom_phy; /* EOM USB Phy */
+	bool			pd_refcnt[MIN_PD];
 };
 
 static const struct of_device_id msm_usb_id_table[] = {
@@ -229,29 +232,39 @@ static int msm_ssphy_modeled_domain_attach(struct msm_ssphy_qmp *phy)
 			return PTR_ERR(phy->pd_devs[i]);
 		}
 	}
+	phy->pd_refcnt[UTXR] = false;
+	phy->pd_refcnt[UCORE] = false;
 	return 0;
 }
 
 /* d3_to_d0 transition by turning on all the suppliers */
 static int msm_ssphy_modeled_d3_to_d0(struct msm_ssphy_qmp *phy)
 {
-	int ret;
+	int ret = 0;
 
 	if (!phy->fw_managed_pwr)
 		return 0;
 
-	ret = pm_runtime_resume_and_get(phy->pd_devs[1]);
-	if (ret) {
-		dev_err(phy->phy.dev, "Failed to change power state from d3 to d0\n");
-		return ret;
+	if (!phy->pd_refcnt[UCORE]) {
+		ret = pm_runtime_resume_and_get(phy->pd_devs[UCORE]);
+		if (ret) {
+			dev_err(phy->phy.dev, "Failed to resume core pd\n");
+			return ret;
+		}
+		phy->pd_refcnt[UCORE] = true;
 	}
 
-	ret = pm_runtime_resume_and_get(phy->pd_devs[0]);
-	if (ret) {
-		dev_err(phy->phy.dev, "Failed to change power state from d3 to d0\n");
-		pm_runtime_put_sync(phy->pd_devs[1]);
-		return ret;
+	if (!phy->pd_refcnt[UTXR]) {
+		ret = pm_runtime_resume_and_get(phy->pd_devs[UTXR]);
+		if (ret) {
+			dev_err(phy->phy.dev, "Failed to resume transfer pd\n");
+			pm_runtime_put_sync(phy->pd_devs[UCORE]);
+			phy->pd_refcnt[UCORE] = false;
+			return ret;
+		}
+		phy->pd_refcnt[UTXR] = true;
 	}
+
 	return ret;
 }
 
@@ -261,8 +274,15 @@ static void msm_ssphy_modeled_d0_to_d3(struct msm_ssphy_qmp *phy)
 	if (!phy->fw_managed_pwr)
 		return;
 
-	pm_runtime_put_sync(phy->pd_devs[0]);
-	pm_runtime_put_sync(phy->pd_devs[1]);
+	if (phy->pd_refcnt[UCORE]) {
+		pm_runtime_put_sync(phy->pd_devs[UCORE]);
+		phy->pd_refcnt[UCORE] = false;
+	}
+
+	if (phy->pd_refcnt[UTXR]) {
+		pm_runtime_put_sync(phy->pd_devs[UTXR]);
+		phy->pd_refcnt[UTXR] = false;
+	}
 }
 
 static inline char *get_cable_status_str(struct msm_ssphy_qmp *phy)
