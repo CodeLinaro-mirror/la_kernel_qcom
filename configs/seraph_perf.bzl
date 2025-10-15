@@ -27,4 +27,5 @@ seraph_perf_config = {
     "CONFIG_REGULATOR_RPMH": "m",
     "CONFIG_RTC_DRV_PM8XXX": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
+    "CONFIG_SPMI_MSM_PMIC_ARB_DEBUG": "m",
 }
