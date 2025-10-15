@@ -1021,6 +1021,10 @@ static inline bool is_min_capacity_cluster(struct walt_sched_cluster *cluster)
 	return cluster->id == min_possible_cluster_id;
 }
 
+static inline bool is_uclamped_cpu(int cpu)
+{
+	return uclamp_rq_get(cpu_rq(cpu), UCLAMP_MAX) < SCHED_CAPACITY_SCALE;
+}
 /*
  * This is only for tracepoints to print the avg irq load. For
  * task placment considerations, use sched_cpu_high_irqload().
