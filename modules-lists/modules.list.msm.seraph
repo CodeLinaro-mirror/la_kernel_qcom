@@ -8,4 +8,8 @@ smem.ko
 socinfo.ko
 qcom_tzmem.ko
 qcom_rpmh.ko
+debug-regulator.ko
+proxy-consumer.ko
+qti-fixed-regulator.ko
+rpmh-regulator.ko
 spmi-pmic-arb.ko
