@@ -9,6 +9,7 @@ colibri_consolidate_config = {
     "CONFIG_LKDTM": "m",
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_PAGE_OWNER": "y",
+    "CONFIG_PAGE_POISONING": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_TORTURE_TEST": "m",
 }
