@@ -2943,6 +2943,7 @@ static struct config_group *uvcg_framebased_make(struct config_group *group,
 
 	INIT_LIST_HEAD(&h->fmt.frames);
 	h->fmt.type = UVCG_FRAMEBASED;
+
 	h->fmt.color_matching = color_match;
 	color_match->refcnt++;
 	config_group_init_type_name(&h->fmt.group, name,
