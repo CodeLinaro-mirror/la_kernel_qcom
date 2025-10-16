@@ -14,6 +14,7 @@ colibri_perf_config = {
     "CONFIG_MFD_SPMI_PMIC": "m",
     "CONFIG_MSM_HAB": "n",
     "CONFIG_MSM_PERFORMANCE": "m",
+    "CONFIG_MSM_RPM_SMD": "m",
     "CONFIG_PINCTRL_COLIBRI": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
