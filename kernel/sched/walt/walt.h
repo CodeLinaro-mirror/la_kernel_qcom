@@ -1831,9 +1831,18 @@ static inline u64 read_instruction_cnt(void)
 
 static inline void get_entry_instr(enum trace_type type)
 {
-	int cpu = raw_smp_processor_id();
-	struct trace_inst_struct *t = &per_cpu(trace_inst_data, cpu);
-	u64 entry_cnt = read_instruction_cnt();
+	int cpu;
+	struct trace_inst_struct *t;
+	u64 entry_cnt;
+
+	/* some tracehooks can switch(sleep), tracking them creates issues */
+	if (type == WAKEUP_NEW || type == CPU_CGROUP_ATTACH ||
+			type == SCHED_FORK_INIT)
+		return;
+
+	cpu = raw_smp_processor_id();
+	t = &per_cpu(trace_inst_data, cpu);
+	entry_cnt = read_instruction_cnt();
 
 	if (t->top > 0) {
 		/* add the inst so far to the parent hook we've interrupted */
@@ -1854,9 +1863,18 @@ static inline void get_entry_instr(enum trace_type type)
 
 static inline void update_instruction_data(enum trace_type type)
 {
-	int cpu = raw_smp_processor_id();
-	struct trace_inst_struct *t = &per_cpu(trace_inst_data, cpu);
-	u64 exit_cnt = read_instruction_cnt();
+	int cpu;
+	struct trace_inst_struct *t;
+	u64 exit_cnt;
+
+	/* some tracehooks can switch, remove them */
+	if (type == WAKEUP_NEW || type == CPU_CGROUP_ATTACH ||
+			type == SCHED_FORK_INIT)
+		return;
+
+	cpu = raw_smp_processor_id();
+	t = &per_cpu(trace_inst_data, cpu);
+	exit_cnt = read_instruction_cnt();
 
 	if (t->top >= MAX_STACK_DEPTH)
 		/* We have consumed our stack depth, account these towards INVALID */
