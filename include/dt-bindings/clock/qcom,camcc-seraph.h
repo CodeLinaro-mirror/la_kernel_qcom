@@ -136,6 +136,16 @@
 #define CAM_CC_SOC_AHB_CLK					126
 #define CAM_CC_XO_CLK_SRC					127
 
+/* CAM_CC power domains */
+#define CAM_CC_BPS_GDSC						0
+#define CAM_CC_IFE_0_GDSC					1
+#define CAM_CC_IFE_1_GDSC					2
+#define CAM_CC_IFE_LITE_0_GDSC					3
+#define CAM_CC_IFE_LITE_1_GDSC					4
+#define CAM_CC_IFE_LITE_2_GDSC					5
+#define CAM_CC_IPE_0_GDSC					6
+#define CAM_CC_TITAN_TOP_GDSC					7
+
 /* CAM_CC resets */
 #define CAM_CC_BPS_BCR						0
 #define CAM_CC_CAMNOC_BCR					1

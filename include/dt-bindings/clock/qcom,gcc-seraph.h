@@ -195,6 +195,14 @@
 #define GCC_PWM8_XO512_CLK_SRC					185
 #define GCC_PWM9_XO512_CLK_SRC					186
 
+/* GCC power domains */
+#define GCC_PCIE_0_GDSC						0
+#define GCC_PCIE_0_PHY_GDSC					1
+#define GCC_PCIE_1_GDSC						2
+#define GCC_PCIE_1_PHY_GDSC					3
+#define GCC_USB30_PRIM_GDSC					4
+#define GCC_USB3_PHY_GDSC					5
+
 /* GCC resets */
 #define GCC_CAMERA_BCR						0
 #define GCC_DISPLAY_0_BCR					1
