@@ -18,6 +18,7 @@ load(
     "define_canoe_oemvm",
     "define_canoe_tuivm",
 )
+load(":kleaf-scripts/targets/canoe_le.bzl", "define_canoe_le")
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
 load(":kleaf-scripts/targets/colibri.bzl", "define_colibri")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
@@ -299,6 +300,8 @@ label_flag(
 )
 
 define_canoe()
+
+define_canoe_le()
 
 define_sun()
 
