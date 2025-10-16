@@ -1752,10 +1752,10 @@ static int qcom_glink_create_remote(struct qcom_glink *glink,
 
 	CH_INFO(channel, "\n");
 
-	ret = wait_for_completion_timeout(&channel->close_ack, 5 * HZ);
+	ret = wait_for_completion_timeout(&channel->close_ack, msecs_to_jiffies(10));
 	if (!ret) {
 		ret = -ETIMEDOUT;
-		goto close_link;
+		goto close_timeout;
 	}
 
 	ret = qcom_glink_send_open_req(glink, channel);
@@ -1780,6 +1780,8 @@ close_link:
 	 * by calling qcom_glink_native_remove().
 	 */
 	qcom_glink_send_close_req(glink, channel);
+close_timeout:
+	CH_INFO(channel, "close_link timeout%d\n", ret);
 
 	return ret;
 }
