@@ -20,4 +20,5 @@ colibri_perf_config = {
     "CONFIG_QCOM_LLCC": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_REGULATOR_STUB": "m",
 }
