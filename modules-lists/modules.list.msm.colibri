@@ -5,3 +5,4 @@ pinctrl-msm.ko
 pinctrl-colibri.ko
 qcom-scm.ko
 qcom_tzmem.ko
+stub-regulator.ko
