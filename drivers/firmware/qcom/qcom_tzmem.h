@@ -29,13 +29,13 @@ static inline int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size
 
 #ifdef CONFIG_QCOM_TZMEM_FFA
 int qcom_tzmem_ffa_mem_share(const void *vaddr, const dma_addr_t dma_addr,
-			     size_t size, uint64_t *ffa_handle);
+			     size_t size, bool is_cached, uint64_t *ffa_handle);
 int qcom_tzmem_ffa_mem_reclaim(uint64_t ffa_handle);
 
 int qcom_tzmem_ffa_register(struct device *dev);
 #else
 static inline int qcom_tzmem_ffa_mem_share(const void *vaddr, const dma_addr_t dma_addr,
-					   size_t size, uint64_t *ffa_handle)
+					   size_t size, bool is_cached, uint64_t *ffa_handle)
 {
 	return -EINVAL;
 }
