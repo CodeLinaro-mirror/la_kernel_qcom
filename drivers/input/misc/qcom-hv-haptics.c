@@ -2783,8 +2783,7 @@ static int haptics_autores_config(struct haptics_chip *chip, bool autores_en)
 	if (chip->hw_type >= HAP530_HV) {
 		mask = ADT_DRV_DUTY_EN_BIT | ADT_BRK_DUTY_EN_BIT |
 			DRV_DUTY_MASK | BRK_DUTY_MASK;
-		val = DRV_DUTY_62P5_PCT << DRV_DUTY_SHIFT | BRK_DUTY_62P5_PCT |
-			ADT_DRV_DUTY_EN_BIT | ADT_BRK_DUTY_EN_BIT;
+		val = DRV_DUTY_62P5_PCT << DRV_DUTY_SHIFT | BRK_DUTY_62P5_PCT;
 	} else if (chip->hw_type >= HAP525_HV) {
 		mask = ADT_DRV_DUTY_EN_BIT | ADT_BRK_DUTY_EN_BIT |
 			DRV_DUTY_MASK | BRK_DUTY_MASK;
