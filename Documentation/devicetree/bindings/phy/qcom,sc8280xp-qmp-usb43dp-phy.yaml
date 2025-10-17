@@ -60,6 +60,8 @@ properties:
 
   vdda-pll-supply: true
 
+  vdda-aux-supply: true
+
   "#clock-cells":
     const: 1
     description:
