@@ -99,6 +99,12 @@ properties:
     items:
       maximum: 3
 
+  lane-mapping:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: For DP controllers that allow lane mapping, this property specifies the mapping from logical to physical lanes.
+    minItems: 4
+    maxItems: 4
+
   "#sound-dai-cells":
     const: 0
 
