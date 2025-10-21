@@ -9302,6 +9302,7 @@ int ath12k_mac_allocate(struct ath12k_base *ab)
 	}
 
 	ath12k_dp_pdev_pre_alloc(ab);
+	ath12k_debugfs_pdev_create(ab);
 
 	return 0;
 
