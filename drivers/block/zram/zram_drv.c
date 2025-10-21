@@ -1904,6 +1904,10 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 
 	pr_debug("comp-success-handler, index: %d\n", ed_index);
 
+	/* TODO: dump all QPACE_COMP_CORE_* registers */
+	if (qpace_check_compress_err(ed))
+		panic("Compression failed! err=%d, index=%d\n", ed->completion_code, ed_index);
+
 	if (zmeta->bio->bi_status == BLK_STS_IOERR) {
 		pr_debug("comp-success-handler, index: %d, bio failed\n", ed_index);
 

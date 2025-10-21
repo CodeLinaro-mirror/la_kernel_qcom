@@ -128,6 +128,13 @@ int qpace_queue_compress(int tr_num, phys_addr_t src_addr,
 			  phys_addr_t dst_addr);
 
 /*
+ * qpace_check_compress_err() - check a compression result
+ * @ed: The event descriptor of the compression request
+ *
+ * Return: true if there is error, false otherwise.
+ */
+bool qpace_check_compress_err(struct qpace_event_descriptor *ed);
+/*
  * qpace_trigger_tr() - Have QPaCE process outstanding TD in the transfer ring
  * @tr_num: Transfer ring to have qpace take submissions from for processing
  *
@@ -217,6 +224,11 @@ static inline int qpace_queue_compress(int tr_num, phys_addr_t src_addr,
 					phys_addr_t dst_addr)
 {
 	return -EINVAL;
+}
+
+static inline bool qpace_check_compress_err(struct qpace_event_descriptor *ed)
+{
+	return false;
 }
 
 static inline bool qpace_trigger_tr(int tr_num)
