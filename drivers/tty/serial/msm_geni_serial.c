@@ -486,7 +486,7 @@ struct msm_geni_serial_port {
 	struct workqueue_struct *rx_wq;
 	struct completion xfer;
 	struct completion tx_xfer;
-	unsigned int count;
+	u8 rx_buf_idx;
 	atomic_t stop_rx_inprogress;
 	bool pm_auto_suspend_disable;
 	bool gsi_rx_done;
@@ -2142,20 +2142,18 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 	struct uart_port *uport = &msm_port->uport;
 	struct tty_port *tport = &uport->state->port;
 	unsigned int rx_bytes = rx_cb->length;
+	u8 idx = msm_port->rx_buf_idx;
 	int ret;
 
 	UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 		     "%s: Start\n", __func__);
 
-	if (!msm_port->rx_gsi_buf[msm_port->count]) {
+	if (!msm_port->rx_gsi_buf[idx]) {
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev, "%s: Invalid Rx buffer\n", __func__);
 		return;
 	}
 
-	ret = tty_insert_flip_string(tport,
-				     (unsigned char *)
-				     (msm_port->rx_gsi_buf[msm_port->count]),
-				      rx_bytes);
+	ret = tty_insert_flip_string(tport, (unsigned char *)(msm_port->rx_gsi_buf[idx]), rx_bytes);
 	if (ret != rx_bytes)
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 			     "%s: ret %d rx_bytes %d\n", __func__,
@@ -2164,10 +2162,10 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 	uport->icount.rx += ret;
 	tty_flip_buffer_push(tport);
 	dump_ipc(uport, msm_port->ipc_log_rx, "GSI Rx",
-		 (char *)msm_port->rx_gsi_buf[msm_port->count], 0, rx_bytes);
+		 (char *)msm_port->rx_gsi_buf[idx], 0, rx_bytes);
 
-	msm_geni_uart_rx_queue_dma_tre(msm_port->count, uport);
-	msm_port->count = (msm_port->count + 1) % 4;
+	msm_geni_uart_rx_queue_dma_tre(idx, uport);
+	msm_port->rx_buf_idx = (idx + 1) % 4;
 	UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 		     "%s: End\n", __func__);
 }
@@ -2711,6 +2709,9 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 			   &msm_port->gsi->rx_t[i],
 			   sizeof(msm_port->gsi->rx_t[i]));
 	}
+
+	/* Reset buffer index for new RX session */
+	msm_port->rx_buf_idx = 0;
 	msm_port->gsi->rx_desc = dmaengine_prep_slave_sg(msm_port->gsi->rx_c,
 							 msm_port->gsi->rx_sg,
 							 6, DMA_DEV_TO_MEM,
@@ -4550,7 +4551,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		msm_port->uart_error = UART_ERROR_DEFAULT;
 		atomic_set(&msm_port->flush_buffers, 0);
 		msm_port->current_termios = NULL;
-		msm_port->count = 0;
+		msm_port->rx_buf_idx = 0;
 	}
 	msm_port->port_state = UART_PORT_CLOSED_SHUTDOWN;
 	geni_capture_stop_time(&msm_port->se, msm_port->ipc_log_kpi, __func__,
