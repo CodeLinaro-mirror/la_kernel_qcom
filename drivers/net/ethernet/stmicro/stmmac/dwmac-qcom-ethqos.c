@@ -8246,24 +8246,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 #endif
 
 	if (ethqos->early_eth_enabled) {
-		if (plat_dat->probe_invoke_if_up || plat_dat->fixed_phy_mode ||
-		    plat_dat->interface == PHY_INTERFACE_MODE_RGMII ||
-		    plat_dat->interface == PHY_INTERFACE_MODE_RGMII_ID ||
-		    plat_dat->interface == PHY_INTERFACE_MODE_RGMII_RXID ||
-		    plat_dat->interface == PHY_INTERFACE_MODE_RGMII_TXID) {
-			/* Initialize work*/
-			INIT_WORK(&ethqos->early_eth,
-				  qcom_ethqos_bringup_iface);
-			/* Queue the work*/
-			queue_work(system_wq, &ethqos->early_eth);
+		/* Initialize work*/
+		INIT_WORK(&ethqos->early_eth,
+			  qcom_ethqos_bringup_iface);
+		/* Queue the work*/
+		queue_work(system_wq, &ethqos->early_eth);
 
-			/*Set early eth parameters*/
-			ethqos_set_early_eth_param(priv, ethqos);
-		}
+		/*Set early eth parameters*/
+		ethqos_set_early_eth_param(priv, ethqos);
 
-		if (priv->plat && priv->plat->mdio_bus_data)
-			priv->plat->mdio_bus_data->phy_mask =
-			priv->plat->mdio_bus_data->phy_mask | DUPLEX_FULL | SPEED_100;
 	}
 #ifdef CONFIG_MSM_BOOT_TIME_MARKER
 		update_marker("M - Ethernet probe end");
