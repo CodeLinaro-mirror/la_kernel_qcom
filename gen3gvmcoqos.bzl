@@ -32,6 +32,7 @@ def define_gen3gvmcoqos():
         "drivers/iommu/qcom_iommu_util.ko",
         "drivers/input/serio/ambakmi.ko",
         "drivers/media/cec/usb/pulse8/pulse8-cec.ko",
+        "drivers/media/platform/msm/npu/virtio_npu.ko",
         "drivers/mfd/vexpress-sysreg.ko",
         "drivers/mmc/host/armmmci.ko",
         "drivers/net/can/usb/gs_usb.ko",
