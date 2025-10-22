@@ -1114,10 +1114,10 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 		}
 	} else {
 
-		phy->ref_clk = devm_clk_get(dev, "ref_clk");
-		if (IS_ERR(phy->ref_clk)) {
-			dev_err(dev, "clk get failed for ref_clk\n");
-			ret = PTR_ERR(phy->ref_clk);
+		phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
+		if (IS_ERR(phy->ref_clk_src)) {
+			dev_err(dev, "clk get failed for ref_clk_src\n");
+			ret = PTR_ERR(phy->ref_clk_src);
 			goto err_ret;
 		}
 
