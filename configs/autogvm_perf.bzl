@@ -173,4 +173,7 @@ autogvm_perf_config = {
     "CONFIG_AQUANTIA_PHY": "m",
     "CONFIG_QCOM_FORCE_WDOG_BITE_ON_PANIC": "y",
     "CONFIG_EMAC_MDIO_FE": "m",
+    "CONFIG_ARM_SMMU_V3": "m",
+    "CONFIG_VIRTIO_IOMMU": "m",
+    "CONFIG_ARM_SMMU_V3_QCOM_VIRTIO": "y",
 }
