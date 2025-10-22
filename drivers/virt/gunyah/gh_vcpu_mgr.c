@@ -371,6 +371,7 @@ static void android_rvh_gh_before_vcpu_run(void *unused, u16 vmid, u32 vcpu_id)
 	if (vmid > QCOM_SCM_MAX_MANAGED_VMID)
 		return;
 
+	preempt_disable();
 	vm = gh_get_vm(vmid);
 	if (!vm || !vm->is_active)
 		return;
@@ -381,7 +382,6 @@ static void android_rvh_gh_before_vcpu_run(void *unused, u16 vmid, u32 vcpu_id)
 
 	/* Call into Gunyah to run vcpu. */
 	__pm_stay_awake(vcpu->ws);
-	preempt_disable();
 	if (vcpu->wdog_frozen) {
 		gh_hcall_wdog_manage(vm->wdog_cap_id, WATCHDOG_MANAGE_OP_UNFREEZE);
 		vcpu->wdog_frozen = false;
@@ -411,13 +411,18 @@ static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, i
 	if (vmid > QCOM_SCM_MAX_MANAGED_VMID)
 		return;
 
+	/*
+	 * VM state may change between vendor hooks.
+	 * Ensure preempt operations remain symmetric
+	 * even on early exit paths.
+	 */
 	vm = gh_get_vm(vmid);
 	if (!vm || !vm->is_active)
-		return;
+		goto re_enable_preempt;
 
 	vcpu = xa_load(&vm->vcpus, vcpu_id);
 	if (!vcpu)
-		return;
+		goto re_enable_preempt;
 
 	if (hcall_ret == GH_ERROR_OK && gh_vcpu_should_freeze_wdog(resp)) {
 		gh_hcall_wdog_manage(vm->wdog_cap_id,
@@ -449,6 +454,11 @@ static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, i
 			vcpu->wdog_frozen = true;
 		}
 	}
+
+	return;
+
+re_enable_preempt:
+	preempt_enable();
 }
 
 static int gh_vcpu_mgr_reg_rm_cbs(void)
