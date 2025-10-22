@@ -95,20 +95,34 @@ function merge_defconfig_fragments() {
     -m -r -y ${DEFCONFIG_FRAGMENTS} | tee $output
   set +x
   if grep -q -E -e "Previous value: [^=]+=[ym]" $output; then
-    echo "========================================================"
-    echo "ERROR! Detected overridden config!"
-    grep -C 1 -E -e "Previous value: [^=]+=[ym]" $output >&2
-    rm $output
-    exit 1
+  # Allow config overrides in leaf defconfigs by skipping fatal errors.
+  # This enables disabling base defconfig options in variant-specific fragments.
+    if [ -n "${ALLOW_CONFIG_OVERRIDES}" ]; then
+      echo "========================================================"
+      echo "Info: Overridden config detected (ALLOW_CONFIG_OVERRIDES is set)"
+      grep -C 1 -E -e "Previous value: [^=]+=[ym]" "${output}" >&2
+    else
+      echo "========================================================"
+      echo "Warning! Detected overridden config!"
+      grep -C 1 -E -e "Previous value: [^=]+=[ym]" "${output}" >&2
+      rm "${output}"
+      exit 1
+    fi
   fi
   local temp_config=$(mktemp)
   (cd ${KERNEL_DIR} && KCONFIG_CONFIG=${temp_config} make "${TOOL_ARGS[@]}" O=${OUT_DIR} "${MAKE_ARGS[@]}" ${DEFCONFIG}) 2>&1 | tee $output
   if grep -q -e "warning:" $output; then
-    echo "========================================================"
-    echo "ERROR! Treating config warnings as errors"
-    grep -e "warning" $output >&2
-    rm $output $temp_config
-    exit 1
+    if [ -n "${ALLOW_CONFIG_OVERRIDES}" ]; then
+      echo "========================================================"
+      echo "Info: Config warnings detected (ALLOW_CONFIG_OVERRIDES is set)"
+      grep -e "warning" "${output}" >&2
+    else
+      echo "========================================================"
+      echo "ERROR! Treating config warnings as errors"
+      grep -e "warning" "${output}" >&2
+      rm "${output}" "${temp_config}"
+      exit 1
+    fi
   fi
   rm $output $temp_config
   set -x
@@ -126,11 +140,17 @@ function check_merged_defconfig() {
   set +x
   # Allow CONFIG_CMDLINE changes
   if grep -q -v -E -e "^\+" -e "^CMDLINE " $output; then
-    echo "========================================================"
-    echo "ERROR! Defconfig fragment did not apply as expected"
-    grep -v -E -e "^\+" -e "^CMDLINE " $output
-    rm $output
-    exit 1
+    if [ -n "${ALLOW_CONFIG_OVERRIDES}" ]; then
+      echo "========================================================"
+      echo "Info: Defconfig fragment mismatch detected (ALLOW_CONFIG_OVERRIDES is set)"
+      grep -v -E -e "^\+" -e "^CMDLINE " "${output}"
+    else
+      echo "========================================================"
+      echo "ERROR! Defconfig fragment did not apply as expected"
+      grep -v -E -e "^\+" -e "^CMDLINE " "${output}"
+      rm "${output}"
+      exit 1
+    fi
   fi
   rm $output
   set -x
