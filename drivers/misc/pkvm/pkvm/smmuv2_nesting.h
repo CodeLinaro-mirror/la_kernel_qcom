@@ -63,6 +63,7 @@ struct smmu_v2_nested {
 	struct kvm_hyp_iommu iommu;
 	u64 base_pa;
 	u64 base_va;
+	u64 host_cb_base;
 	u32 size;
 	u32 ias;
 	u32 oas;
@@ -83,5 +84,6 @@ struct smmu_v2_nested {
 
 int smmuv2_hyp_nesting_init(void);
 int smmuv2_nesting_init(void);
+int smmuv2_post_boot_init(void);
 
 #endif /* _SMMUV2_NESTING_H */

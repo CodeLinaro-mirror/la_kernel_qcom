@@ -500,29 +500,38 @@ static int smmu_attach_stage_2(void)
 static int reserve_host_s2_context_bank(struct smmu_v2_nested *smmu)
 {
 	u32 cbar_val;
+	u32 cb_irq;
+	u64 cb_base_pa;
 
 	/* S2 Default to last available CB */
 	smmu->host_s2_cb_idx = smmu->num_cb - 1;
 	smmu->num_cbar--; /* Reduce available CBARs for host */
 	smmu->num_cb = smmu->num_cbar; /* Reduce available CBs for host */
 
+	/* Calculate IRQ number for this context bank */
+	cb_irq = smmu->irq_s2_cb + smmu->host_s2_cb_idx;
+	smmu->irq_s2_cb = cb_irq;
+
+	/* Calculate physical address of the context bank */
+	cb_base_pa = (u64)arm_smmu_page_pa(smmu, smmu->host_s2_cb_idx);
+
 	/* Read current CBAR value from hardware */
 	cbar_val = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBAR(smmu->host_s2_cb_idx));
 	smmu_v2_debug_print("Reserving CB[%d], original CBAR: 0x%x\n",
 			    smmu->host_s2_cb_idx, cbar_val);
 
-	/* Clear TYPE and VMID fields, then set new values */
-	cbar_val &= ~(ARM_SMMU_CBAR_TYPE | ARM_SMMU_CBAR_VMID);
-	cbar_val |= FIELD_PREP(ARM_SMMU_CBAR_TYPE,
-			       CBAR_TYPE_S2_TRANS) |
-		    FIELD_PREP(ARM_SMMU_CBAR_VMID, HOST_S2_VMID);
+	/* Clear TYPE, VMID, and IRPTNDX fields, then set new values */
+	cbar_val &= ~(ARM_SMMU_CBAR_TYPE | ARM_SMMU_CBAR_VMID | ARM_SMMU_CBAR_IRPTNDX);
+	cbar_val |= FIELD_PREP(ARM_SMMU_CBAR_TYPE, CBAR_TYPE_S2_TRANS) |
+		    FIELD_PREP(ARM_SMMU_CBAR_VMID, HOST_S2_VMID) |
+		    FIELD_PREP(ARM_SMMU_CBAR_IRPTNDX, cb_irq);
 	smmu_v2_debug_print("Modified CBAR for host S2: 0x%x\n", cbar_val);
 
 	/* Write back the modified CBAR value */
 	arm_smmu_gr1_write(smmu, ARM_SMMU_GR1_CBAR(smmu->host_s2_cb_idx), cbar_val);
 
-	smmu_v2_debug_print("Reserved & configured CB[%d] for host S2, Total CB: %d, CBAR: 0x%x\n",
-			    smmu->host_s2_cb_idx, smmu->num_cb, cbar_val);
+	smmu_v2_debug_print("Reserved CB[%d] for host S2: CBAR: 0x%x Total CB: %d\n",
+			    smmu->host_s2_cb_idx, cbar_val, smmu->num_cb);
 	return 0;
 }
 
@@ -596,10 +605,14 @@ int smmuv2_hyp_nesting_init(void)
 
 	smmu_v2_nested_base = kern_hyp_va(smmu_v2_nested_base);
 
-	ret = __pkvm_host_donate_hyp(hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT,
-				     smmu_arr_size >> PAGE_SHIFT);
-	if (ret)
-		return ret;
+	u32 page_count = smmu_arr_size >> PAGE_SHIFT;
+
+	for (int i = 0; i < page_count; i++) {
+		ret = __pkvm_host_share_hyp((hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT) +
+					    i);
+		if (ret)
+			return ret;
+	}
 
 	ret = take_over_smmus();
 	if (ret)
