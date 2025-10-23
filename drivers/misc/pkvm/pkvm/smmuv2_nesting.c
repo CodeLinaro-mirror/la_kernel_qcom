@@ -151,8 +151,9 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 
 	/* If type is S1_TRANS_S2_BYPASS, modify hardware value for nested translation */
 	if (current_type == CBAR_TYPE_S1_TRANS_S2_BYPASS) {
-		/* Clear the TYPE and VMID fields in hardware value */
-		hw_val &= ~(ARM_SMMU_CBAR_TYPE | ARM_SMMU_CBAR_VMID);
+		/* Clear the TYPE, VMID, and S1-specific fields (bits [8:15]) in hardware value */
+		hw_val &= ~(ARM_SMMU_CBAR_TYPE | ARM_SMMU_CBAR_VMID |
+			    ARM_SMMU_CBAR_S1_MEMATTR | ARM_SMMU_CBAR_S1_BPSHCFG);
 
 		/* Set type to S1_TRANS_S2_TRANS for nested translation */
 		hw_val |= FIELD_PREP(ARM_SMMU_CBAR_TYPE, CBAR_TYPE_S1_TRANS_S2_TRANS);
@@ -445,6 +446,7 @@ static int smmu_attach_stage_2(void)
 
 	for_each_smmu(smmu) {
 		u64 page_pa;
+		u32 sctlr_val;
 		int ret;
 
 		page_pa = (u64)arm_smmu_page_pa(smmu, smmu->host_s2_cb_idx);
@@ -463,16 +465,33 @@ static int smmu_attach_stage_2(void)
 		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
 				  ARM_SMMU_CB_TCR, vtcr);
 
-		/* Enable stage-2 translation by setting M bit in SCTLR */
-		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
-				  ARM_SMMU_CB_SCTLR, ARM_SMMU_SCTLR_M);
+		/* Configure CBA2R - set VA64 bit for 64-bit virtual addressing */
+		u32 cba2r_val = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBA2R(smmu->host_s2_cb_idx));
 
-		smmu_v2_debug_print("Configured S2, CB[%d]: VTCR=0x%x, VTTBR=0x%llx, SCTLR=0x%x\n",
-				    smmu->host_s2_cb_idx, vtcr, vttbr,
-				    ARM_SMMU_SCTLR_M);
-		/*
-		 * TBD: MAIR0, MAIR1, CONTEXTIDR, TCR2
-		 */
+		cba2r_val |= ARM_SMMU_CBA2R_VA64;
+		arm_smmu_gr1_write(smmu, ARM_SMMU_GR1_CBA2R(smmu->host_s2_cb_idx), cba2r_val);
+
+		/* Configure SCTLR for the host S2 context bank (0xCF0061) */
+		sctlr_val = ARM_SMMU_SCTLR_M |
+			    ARM_SMMU_SCTLR_CFRE |
+			    ARM_SMMU_SCTLR_CFIE |
+			    (0xF << 16) |   /* Bits 16-19 */
+			    (0x3 << 22);    /* Bits 22-23 */
+		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
+				  ARM_SMMU_CB_SCTLR, sctlr_val);
+
+		/* Configure ACTLR - set CPRE and CMTLB bits */
+		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
+				  ARM_SMMU_CB_ACTLR, 0x3);
+
+		/* Configure CONTEXTIDR */
+		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
+				  ARM_SMMU_CB_CONTEXTIDR, 0x0);
+
+		smmu_v2_debug_print("Configured S2, CB[%d] VTCR=0x%x, VTTBR=0x%llx, CBA2R=0x%x\n",
+				    smmu->host_s2_cb_idx, vtcr, vttbr, cba2r_val);
+		smmu_v2_debug_print("Configured S2, CB[%d] SCTLR=0x%x, ACTLR=0x3, CONTEXTIDR=0x0\n",
+				    smmu->host_s2_cb_idx, sctlr_val);
 	}
 
 	return 0;
