@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,gpucc-seraph.h>
@@ -18,6 +19,7 @@
 #include "clk-rcg.h"
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
+#include "gdsc.h"
 #include "common.h"
 #include "reset.h"
 #include "vdd-level.h"
@@ -355,6 +357,71 @@ static struct clk_branch gpu_cc_memnoc_gfx_clk = {
 	},
 };
 
+static struct gdsc gpu_cc_cx_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x8,
+	.pd = {
+		.name = "gpu_cc_cx_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_cx",
+};
+
+static int gdsc_cx_do_nothing(struct generic_pm_domain *domain)
+{
+	return 0;
+}
+
+static struct gdsc gpu_cc_cx_smmu_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x8,
+	.pd = {
+		.name = "gpu_cc_cx_smmu_gdsc",
+		.power_on = gdsc_cx_do_nothing,
+		.power_off = gdsc_cx_do_nothing,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.parent = &gpu_cc_cx_gdsc.pd,
+};
+
+static struct gdsc gpu_cc_cx_gmu_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x8,
+	.pd = {
+		.name = "gpu_cc_cx_gmu_gdsc",
+		.power_on = gdsc_cx_do_nothing,
+		.power_off = gdsc_cx_do_nothing,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.parent = &gpu_cc_cx_gdsc.pd,
+};
+
+static struct gdsc gx_clkctl_gx_gdsc = {
+	.gdscr = 0x0,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "gx_clkctl_gx_gdsc",
+		.power_on = gdsc_gx_do_nothing_enable,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_gfx",
+};
+
 static struct clk_regmap *gpu_cc_seraph_clocks[] = {
 	[GPU_CC_AHB_CLK] = &gpu_cc_ahb_clk.clkr,
 	[GPU_CC_CX_ACCU_SHIFT_CLK] = &gpu_cc_cx_accu_shift_clk.clkr,
@@ -388,6 +455,16 @@ static struct critical_clk_offset critical_clk_list[] = {
 	{ .offset = 0x90cc, .mask = BIT(0) },
 };
 
+static struct gdsc *gpu_cc_seraph_gdscs[] = {
+	[GPU_CC_CX_GDSC] = &gpu_cc_cx_gdsc,
+	[GPU_CC_CX_SMMU_GDSC] = &gpu_cc_cx_smmu_gdsc,
+	[GPU_CC_CX_GMU_GDSC] = &gpu_cc_cx_gmu_gdsc,
+};
+
+static struct gdsc *gx_clkctl_seraph_gdscs[] = {
+	[GX_CLKCTL_GX_GDSC] = &gx_clkctl_gx_gdsc,
+};
+
 static const struct qcom_reset_map gpu_cc_seraph_resets[] = {
 	[GPU_CC_CB_BCR] = { 0x93a0 },
 	[GPU_CC_CX_BCR] = { 0x907c },
@@ -407,6 +484,14 @@ static const struct regmap_config gpu_cc_seraph_regmap_config = {
 	.fast_io = true,
 };
 
+static const struct regmap_config gx_clkctl_seraph_regmap_config = {
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+	.max_register = 0x8,
+	.fast_io = true,
+};
+
 static struct qcom_cc_desc gpu_cc_seraph_desc = {
 	.config = &gpu_cc_seraph_regmap_config,
 	.clks = gpu_cc_seraph_clocks,
@@ -417,6 +502,14 @@ static struct qcom_cc_desc gpu_cc_seraph_desc = {
 	.num_clk_regulators = ARRAY_SIZE(gpu_cc_seraph_regulators),
 	.critical_clk_en = critical_clk_list,
 	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
+	.gdscs = gpu_cc_seraph_gdscs,
+	.num_gdscs = ARRAY_SIZE(gpu_cc_seraph_gdscs),
+};
+
+static const struct qcom_cc_desc gx_clkctl_seraph_desc = {
+	.config = &gx_clkctl_seraph_regmap_config,
+	.gdscs = gx_clkctl_seraph_gdscs,
+	.num_gdscs = ARRAY_SIZE(gx_clkctl_seraph_gdscs),
 };
 
 static const struct of_device_id gpu_cc_seraph_match_table[] = {
@@ -424,6 +517,12 @@ static const struct of_device_id gpu_cc_seraph_match_table[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_seraph_match_table);
+
+static const struct of_device_id gx_clkctl_seraph_match_table[] = {
+	{ .compatible = "qcom,seraph-gxclkctl" },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, gx_clkctl_seraph_match_table);
 
 static int gpu_cc_seraph_probe(struct platform_device *pdev)
 {
@@ -454,6 +553,35 @@ static int gpu_cc_seraph_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static int gx_clkctl_seraph_probe(struct platform_device *pdev)
+{
+	struct regmap *regmap;
+	int ret;
+
+	pm_runtime_enable(&pdev->dev);
+
+	ret = pm_runtime_resume_and_get(&pdev->dev);
+	if (ret)
+		return ret;
+
+	regmap = qcom_cc_map(pdev, &gx_clkctl_seraph_desc);
+	if (IS_ERR(regmap)) {
+		ret = PTR_ERR(regmap);
+		goto err;
+	}
+
+	ret = qcom_cc_really_probe(&pdev->dev, &gx_clkctl_seraph_desc, regmap);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed to register GX CLKCTL clocks\n");
+
+	dev_info(&pdev->dev, "Registered GX CLKCTL clocks\n");
+
+err:
+	pm_runtime_put(&pdev->dev);
+
+	return ret;
+}
+
 static void gpu_cc_seraph_sync_state(struct device *dev)
 {
 	qcom_cc_sync_state(dev, &gpu_cc_seraph_desc);
@@ -468,7 +596,32 @@ static struct platform_driver gpu_cc_seraph_driver = {
 	},
 };
 
-module_platform_driver(gpu_cc_seraph_driver);
+static struct platform_driver gx_clkctl_seraph_driver = {
+	.probe = gx_clkctl_seraph_probe,
+	.driver = {
+		.name = "gx_clkctl-seraph",
+		.of_match_table = gx_clkctl_seraph_match_table,
+	},
+};
+
+static int __init gpu_cc_seraph_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&gpu_cc_seraph_driver);
+	if (ret)
+		return ret;
+
+	return platform_driver_register(&gx_clkctl_seraph_driver);
+}
+subsys_initcall(gpu_cc_seraph_init);
+
+static void __exit gpu_cc_seraph_exit(void)
+{
+	platform_driver_unregister(&gx_clkctl_seraph_driver);
+	platform_driver_unregister(&gpu_cc_seraph_driver);
+}
+module_exit(gpu_cc_seraph_exit);
 
 MODULE_DESCRIPTION("QTI GPUCC SERAPH Driver");
 MODULE_LICENSE("GPL");

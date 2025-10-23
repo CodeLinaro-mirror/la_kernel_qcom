@@ -18,6 +18,7 @@
 #include "clk-rcg.h"
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
+#include "gdsc.h"
 #include "common.h"
 #include "reset.h"
 #include "vdd-level.h"
@@ -3452,6 +3453,92 @@ static struct clk_branch gcc_video_axi1_clk = {
 	},
 };
 
+static struct gdsc gcc_pcie_0_gdsc = {
+	.gdscr = 0x6b004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.collapse_ctrl = 0x5214c,
+	.collapse_mask = BIT(0),
+	.pd = {
+		.name = "gcc_pcie_0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc gcc_pcie_0_phy_gdsc = {
+	.gdscr = 0x6c000,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x2,
+	.collapse_ctrl = 0x5214c,
+	.collapse_mask = BIT(3),
+	.pd = {
+		.name = "gcc_pcie_0_phy_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_mx",
+};
+
+static struct gdsc gcc_pcie_1_gdsc = {
+	.gdscr = 0x8d004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.collapse_ctrl = 0x5214c,
+	.collapse_mask = BIT(1),
+	.pd = {
+		.name = "gcc_pcie_1_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc gcc_pcie_1_phy_gdsc = {
+	.gdscr = 0x8e000,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x2,
+	.collapse_ctrl = 0x5214c,
+	.collapse_mask = BIT(4),
+	.pd = {
+		.name = "gcc_pcie_1_phy_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
+	.supply = "vdd_mx",
+};
+
+static struct gdsc gcc_usb30_prim_gdsc = {
+	.gdscr = 0x39004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "gcc_usb30_prim_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc gcc_usb3_phy_gdsc = {
+	.gdscr = 0x5000c,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x2,
+	.pd = {
+		.name = "gcc_usb3_phy_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mx",
+};
+
 static struct clk_regmap *gcc_seraph_clocks[] = {
 	[GCC_AGGRE_NOC_PCIE_AXI_CLK] = &gcc_aggre_noc_pcie_axi_clk.clkr,
 	[GCC_AGGRE_USB3_PRIM_AXI_CLK] = &gcc_aggre_usb3_prim_axi_clk.clkr,
@@ -3659,6 +3746,15 @@ static struct critical_clk_offset critical_clk_list[] = {
 	{ .offset = 0x32040, .mask = BIT(0) },
 };
 
+static struct gdsc *gcc_seraph_gdscs[] = {
+	[GCC_PCIE_0_GDSC] = &gcc_pcie_0_gdsc,
+	[GCC_PCIE_0_PHY_GDSC] = &gcc_pcie_0_phy_gdsc,
+	[GCC_PCIE_1_GDSC] = &gcc_pcie_1_gdsc,
+	[GCC_PCIE_1_PHY_GDSC] = &gcc_pcie_1_phy_gdsc,
+	[GCC_USB30_PRIM_GDSC] = &gcc_usb30_prim_gdsc,
+	[GCC_USB3_PHY_GDSC] = &gcc_usb3_phy_gdsc,
+};
+
 static const struct qcom_reset_map gcc_seraph_resets[] = {
 	[GCC_CAMERA_BCR] = { 0x26000 },
 	[GCC_DISPLAY_0_BCR] = { 0x27000 },
@@ -3731,6 +3827,8 @@ static struct qcom_cc_desc gcc_seraph_desc = {
 	.num_clk_regulators = ARRAY_SIZE(gcc_seraph_regulators),
 	.critical_clk_en = critical_clk_list,
 	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
+	.gdscs = gcc_seraph_gdscs,
+	.num_gdscs = ARRAY_SIZE(gcc_seraph_gdscs),
 };
 
 static const struct of_device_id gcc_seraph_match_table[] = {
