@@ -196,6 +196,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/thermal/qcom/regulator_cdev",
+        out = "regulator_cdev.ko",
+        config = "CONFIG_REGULATOR_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/regulator_cdev.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/thermal/qcom/thermal_pause",
         out = "thermal_pause.ko",
         config = "CONFIG_QTI_CPU_PAUSE_COOLING_DEVICE",
