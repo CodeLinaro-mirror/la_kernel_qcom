@@ -129,6 +129,18 @@ config INTERCONNECT_QCOM_QOS_RPM
 	  interconnect drivers. It provides the necessary infrastructure for
 	  configuring QoS settings on Network-on-Chip (NoC) for RPM platforms.
 
+config INTERCONNECT_QCOM_SHIKRA
+	tristate "SHIKRA interconnect driver"
+	depends on INTERCONNECT_QCOM
+	depends on MSM_RPM_SMD
+	select INTERCONNECT_QCOM_RPM
+	select INTERCONNECT_QCOM_QOS_RPM
+	help
+	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
+	  on shikra-based platforms. The interconnect provider collects and
+	  aggregates the consumer bandwidth requests to satisfy constraints
+	  placed on Network-on-Chip performance states.
+
 config INTERCONNECT_QCOM_SA8775P
 	tristate "Qualcomm SA8775P interconnect driver"
 	depends on INTERCONNECT_QCOM_RPMH_POSSIBLE
