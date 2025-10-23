@@ -156,6 +156,16 @@ config QTI_DYNAMIC_HW_THERMAL_TRIP
 	   as thermal zone and enable thermal zone sysfs interface to modify
 	   hardware mitigation threshold via SCMI communication.
 
+config QTI_THERMAL_LIMITS_DCVS
+	tristate "QTI LMH DCVS Driver"
+	depends on THERMAL && CPU_THERMAL
+	help
+	  This enables the driver for Limits Management Hardware - DCVS block
+	  for the application processors. The h/w block that is available for
+	  each cluster can be used to perform quick thermal mitigations by
+	  tracking temperatures of the CPUs and taking thermal action in the
+	  hardware without s/w intervention.
+
 config QTI_THERMAL_LMH_STATS
 	tristate "QTI Thermal lmh stats driver"
 	depends on ARM_SCMI_CPUFREQ
