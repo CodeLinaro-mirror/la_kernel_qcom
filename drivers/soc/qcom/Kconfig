@@ -764,6 +764,25 @@ config MSM_BOOT_STATS
 	  This figures are reported in mpm sleep clock cycles and have a
 	  resolution of 31 bits as 1 bit is used as an overflow check.
 
+config QGKI_MSM_BOOT_TIME_MARKER
+	bool "Use MSM boot time marker reporting"
+	depends on MSM_BOOT_STATS
+	help
+	  Use this to mark msm boot kpi for measurement.
+	  An instrumentation for boot time measurement.
+	  To create an entry, call "place_marker" function.
+	  At userspace, write marker name to "/sys/kernel/boot_kpi/kpi_values"
+
+config DISABLE_UNIQUE_MARKERS
+	bool "Allow to add duplicate boot time marker"
+	depends on QGKI_MSM_BOOT_TIME_MARKER
+	help
+	  Use this to allow duplicate entries of boot time markers.
+	  By default it overwrites the values of same marker string,
+	  setting this config helps in recording multiple instances.
+	  Useful for suspend resume usecases, where multiple instances
+	  of the same marker can be reported.
+
 choice
 	prompt "Perform Action on spinlock bug"
 	depends on DEBUG_SPINLOCK && QCOM_CPU_VENDOR_HOOKS
