@@ -43,6 +43,7 @@ def define_gen3gvmcoqos():
         "drivers/nvdimm/virtio_pmem.ko",
         "drivers/power/supply/goldfish_battery.ko",
         "drivers/rtc/rtc-test.ko",
+	"drivers/soc/qcom/boot_stats.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
         "drivers/soc/qcom/secure_buffer.ko",
