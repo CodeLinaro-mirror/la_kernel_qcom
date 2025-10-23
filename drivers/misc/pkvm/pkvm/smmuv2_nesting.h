@@ -64,6 +64,7 @@ struct smmu_v2_nested {
 	u64 base_pa;
 	u64 base_va;
 	u64 host_cb_base;
+	u64 host_gr1_base;
 	u32 size;
 	u32 ias;
 	u32 oas;
