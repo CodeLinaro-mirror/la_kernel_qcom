@@ -79,7 +79,8 @@ static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, 
 		*buf = (*buf & ~ARM_SMMU_ID1_NUMCB) | (smmu->num_cb & ARM_SMMU_ID1_NUMCB);
 		smmu_v2_debug_print("smmu_v2_id1_read, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
-	} else if (offset >= ARM_SMMU_GR0_S2CR(0) && offset <= ARM_SMMU_GR0_S2CR(MAXNUM_SMR)) {
+	} else if (offset >= ARM_SMMU_GR0_S2CR(0) &&
+		   offset <= ARM_SMMU_GR0_S2CR(ARM_SMMU_MAX_S2CRS - 1)) {
 		/* S2CR register range */
 		smmu_v2_debug_print("smmu_v2_s2cr_read, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
@@ -94,7 +95,7 @@ static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, 
 static int smmuv2_read_global_region_1(struct smmu_v2_nested *smmu, u64 offset, u32 len, u64 *buf)
 {
 	if (offset >= ARM_SMMU_GR1_CBAR(0) &&
-	    offset <= ARM_SMMU_GR1_CBAR(MAXNUM_CBAR)) {
+	    offset <= ARM_SMMU_GR1_CBAR(ARM_SMMU_MAX_CBARS - 1)) {
 		/* TBD need to maskout "nested" here. */
 		smmuv2_cbar_read(smmu, offset, buf);
 	} else {
@@ -111,9 +112,9 @@ static int smmuv2_write_global_region_0(struct smmu_v2_nested *smmu,
 					u64 val)
 {
 	/* Handle special register ranges first */
-	if (offset >= ARM_SMMU_GR0_SMR(0) && offset <= ARM_SMMU_GR0_SMR(MAXNUM_SMR))
+	if (offset >= ARM_SMMU_GR0_SMR(0) && offset <= ARM_SMMU_GR0_SMR(ARM_SMMU_MAX_SMRS - 1))
 		return smmuv2_smr_write(smmu, offset, (u32)val);
-	if (offset >= ARM_SMMU_GR0_S2CR(0) && offset <= ARM_SMMU_GR0_S2CR(MAXNUM_SMR))
+	if (offset >= ARM_SMMU_GR0_S2CR(0) && offset <= ARM_SMMU_GR0_S2CR(ARM_SMMU_MAX_S2CRS - 1))
 		return smmuv2_s2cr_write(smmu, offset, (u32)val);
 	/* Check if access is to fault registers which are handled by TZ */
 	if ((offset >= ARM_SMMU_GFAR0 && offset <= ARM_SMMU_GFSR) ||
@@ -146,7 +147,7 @@ static int smmuv2_write_global_region_1(struct smmu_v2_nested *smmu,
 {
 	/* Handle CBAR registers specially */
 	if (offset >= ARM_SMMU_GR1_CBAR(0) &&
-	    offset <= ARM_SMMU_GR1_CBAR(MAXNUM_CBAR)) {
+	    offset <= ARM_SMMU_GR1_CBAR(ARM_SMMU_MAX_CBARS - 1)) {
 		return smmuv2_cbar_write(smmu, offset, (u32)val);
 	}
 	/* Handle general register writes based on access size */
@@ -241,31 +242,6 @@ static int take_over_smmus(void)
 	return 0;
 }
 
-static int update_smr_profile(struct smmu_v2_nested *smmu)
-{
-	int i;
-	u32 smr_val;
-
-	for (i = smmu->num_smr - 1; i >= 0; i--) {
-		smr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(i));
-
-		/* reset value is 0x0*/
-		if (smr_val == 0) {
-			continue;; /* Skip invalid entries */
-		} else {
-			smmu->num_smr = i + 1;
-		}
-
-		smmu->smr_pool[i].idx = i;
-		smmu->smr_pool[i].val = smr_val;
-
-		smmu_v2_debug_print("SMR[%d]: val: %llx\n",
-				    i, smr_val);
-	}
-	WARN_ON(smmu->num_smr == 0);
-	return 0;
-}
-
 static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 {
 	int i;
@@ -274,13 +250,10 @@ static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 	for (i = smmu->num_s2cr - 1; i >= 0; i--) {
 		s2cr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_S2CR(i));
 		if ((s2cr_val & ARM_SMMU_S2CR_TYPE) >> 16 == S2CR_TYPE_FAULT) {
-			continue;; /* Skip invalid entries */
-		} else {
-			smmu->num_s2cr = i + 1;
+			break;; /* Skip invalid entries */
 		}
-
-		smmu->s2cr_pool[i].idx = i;
-		smmu->s2cr_pool[i].val = s2cr_val;
+		smmu->num_s2cr = i + 1;
+		smmu->num_smr = smmu->num_s2cr; /* smr == s2cr */
 
 		smmu_v2_debug_print("S2CR[%d]: val: %llx\n",
 				    i, s2cr_val);
@@ -297,11 +270,9 @@ static int update_cbar_profile(struct smmu_v2_nested *smmu)
 		u32 cbar_val = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBAR(i));
 
 		if (((cbar_val & ARM_SMMU_CBAR_TYPE) >> 16) == CBAR_TYPE_S1_TRANS_S2_FAULT)
-			continue; /* Skip invalid entries */
-		else
-			smmu->num_cbar = i + 1;
-		smmu->cbar_pool[i].idx = i;
-		smmu->cbar_pool[i].val = cbar_val;
+			break; /* Skip invalid entries */
+		smmu->num_cbar = i + 1;
+		smmu->num_cb = smmu->num_cbar; /* cbar == cb */
 		smmu_v2_debug_print("CBAR[%d]: val: %llx\n",
 				    i, cbar_val);
 	}
@@ -314,62 +285,54 @@ static int smmu_attach_stage_2(void)
 		return -EINVAL;
 
 	struct smmu_v2_nested *smmu;
-	struct io_pgtable_cfg *pt_cfg =  &data.vdomain->pgtable->cfg;
+	struct io_pgtable_cfg *pt_cfg = &data.vdomain->pgtable->cfg;
 	u64 vttbr;
 	u32 vtcr;
 
+	/* Extract stage-2 configuration from idmapped domain */
+	vttbr = pt_cfg->arm_lpae_s2_cfg.vttbr;
+
+	/* Build VTCR from page table configuration */
+	vtcr = ARM_SMMU_VTCR_RES1 |
+	       FIELD_PREP(ARM_SMMU_VTCR_PS, pt_cfg->arm_lpae_s2_cfg.vtcr.ps) |
+	       FIELD_PREP(ARM_SMMU_VTCR_TG0, pt_cfg->arm_lpae_s2_cfg.vtcr.tg) |
+	       FIELD_PREP(ARM_SMMU_VTCR_SH0, pt_cfg->arm_lpae_s2_cfg.vtcr.sh) |
+	       FIELD_PREP(ARM_SMMU_VTCR_ORGN0, pt_cfg->arm_lpae_s2_cfg.vtcr.orgn) |
+	       FIELD_PREP(ARM_SMMU_VTCR_IRGN0, pt_cfg->arm_lpae_s2_cfg.vtcr.irgn) |
+	       FIELD_PREP(ARM_SMMU_VTCR_SL0, pt_cfg->arm_lpae_s2_cfg.vtcr.sl) |
+	       FIELD_PREP(ARM_SMMU_VTCR_T0SZ, pt_cfg->arm_lpae_s2_cfg.vtcr.tsz);
+
 	for_each_smmu(smmu) {
-		/* Extract stage-2 configuration from idmapped domain */
-		vttbr = pt_cfg->arm_lpae_s2_cfg.vttbr;
+		u64 page_pa = (u64)arm_smmu_page_pa(smmu, smmu->host_s2_cb_idx);
 
-		/* Build VTCR from page table configuration */
-		vtcr = ARM_SMMU_VTCR_RES1 |
-		       FIELD_PREP(ARM_SMMU_VTCR_PS, pt_cfg->arm_lpae_s2_cfg.vtcr.ps) |
-		       FIELD_PREP(ARM_SMMU_VTCR_TG0, pt_cfg->arm_lpae_s2_cfg.vtcr.tg) |
-		       FIELD_PREP(ARM_SMMU_VTCR_SH0, pt_cfg->arm_lpae_s2_cfg.vtcr.sh) |
-		       FIELD_PREP(ARM_SMMU_VTCR_ORGN0, pt_cfg->arm_lpae_s2_cfg.vtcr.orgn) |
-		       FIELD_PREP(ARM_SMMU_VTCR_IRGN0, pt_cfg->arm_lpae_s2_cfg.vtcr.irgn) |
-		       FIELD_PREP(ARM_SMMU_VTCR_SL0, pt_cfg->arm_lpae_s2_cfg.vtcr.sl) |
-		       FIELD_PREP(ARM_SMMU_VTCR_T0SZ, pt_cfg->arm_lpae_s2_cfg.vtcr.tsz);
+		/* Donate the S2 context bank page to hypervisor */
+		int ret = ___pkvm_host_donate_hyp(page_pa >> PAGE_SHIFT, 1, true);
 
-		/* Program context bank registers using host_s2_cb_idx as page number */
+		if (ret) {
+			smmu_v2_debug_print("Failed to donate CB page: %d\n", ret);
+			return ret;
+		}
+
+		/* Configure the stage-2 translation registers */
 		arm_smmu_cb_writeq(smmu, smmu->host_s2_cb_idx, ARM_SMMU_CB_TTBR0, vttbr);
 		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx, ARM_SMMU_CB_TCR, vtcr);
+		smmu_v2_debug_print("Configured stage-2 for CB[%d]: VTCR=0x%x, VTTBR=0x%llx\n",
+				    smmu->host_s2_cb_idx, vtcr, vttbr);
 	}
+
 	/* Do NOT enable stage-2 translation yet - just configure the registers */
-
-	smmu_v2_debug_print("Configured stage-2 for CB[%d]: VTCR=0x%x, VTTBR=0x%llx\n",
-			    smmu->host_s2_cb_idx, vtcr, vttbr);
-
 	return 0;
 }
 
 static int reserve_host_s2_context_bank(struct smmu_v2_nested *smmu)
 {
-	int i;
-	u32 cbar_val;
-	u32 cbar_type;
+	smmu->host_s2_cb_idx = smmu->num_cb - 1; /* S2 Default to last available CB */
+	smmu->num_cbar-- ; /* Reduce available CBARs for host */
+	smmu->num_cb = smmu->num_cbar; /* Reduce available CBs for host */
 
-	/* Search from the last context bank downward */
-	for (i = smmu->num_cbar - 1; i >= 0; i--) {
-		cbar_val = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBAR(i));
-		cbar_type = (cbar_val & ARM_SMMU_CBAR_TYPE) >> 16;
-
-		if (cbar_type == CBAR_TYPE_S1_TRANS_S2_FAULT) {
-			/* Found a suitable context bank - reserve it for host S2 */
-			smmu->host_s2_cb_idx = i;
-			smmu->num_cbar-- ; /* Reduce available CBARs for host */
-			smmu->num_cb = smmu->num_cbar; /* Reduce available CBs for host */
-
-			/* Configure the reserved context bank for stage-2 translation */
-			smmu_v2_debug_print("Reserved & configured CB[%d] for host S2,CBAR:0x%x\n",
-					    i, cbar_val);
-			return 0;
-		}
-	}
-
-	/* No suitable context bank found */
-	smmu_v2_debug_print("No S1+S2fault context bank found for host S2\n");
+	/* Configure the reserved context bank for stage-2 translation */
+	smmu_v2_debug_print("Reserved and configured CB[%d] for host S2, Total CB: %d\n",
+			    smmu->host_s2_cb_idx, smmu->num_cb);
 	return 0;
 }
 
@@ -386,12 +349,14 @@ static int hw_profile_init(void)
 		smmu->num_s2cr = smmu->num_smr; /* smr == s2cr */
 		smmu->num_cb = id1 & ARM_SMMU_ID1_NUMCB;
 		smmu->num_cbar = smmu->num_cb; /* cbar == cb */
+		/* ID1 */
+		smmu->pgshift = (id1 & ARM_SMMU_ID1_PAGESIZE) ? 16 : 12;
 		smmu->numpage = 1 << (FIELD_GET(ARM_SMMU_ID1_NUMPAGENDXB, id1) + 1);
 
 		smmu_v2_debug_print("SMMU ID0: %llx, ID1: %llx, num_smr: %d\n",
 				    id0, id1, smmu->num_smr);
-		smmu_v2_debug_print("SMMU num_cb: %d, numpage: %d\n",
-				    smmu->num_cb, smmu->numpage);
+		smmu_v2_debug_print("SMMU num_cb: %d, pgshift: %d, numpage: %d\n",
+				    smmu->num_cb, smmu->pgshift, smmu->numpage);
 
 		ret = update_s2cr_profile(smmu);
 		if (ret) {
@@ -419,21 +384,6 @@ static int hw_profile_init(void)
 				    smmu->num_cb, smmu->num_cbar);
 	}
 
-	return 0;
-}
-
-static int sw_profile_init(void)
-{
-	struct smmu_v2_nested *smmu;
-	int ret;
-
-	for_each_smmu(smmu) {
-		/* update profile permitted stream id and mask */
-		/* TBD: check s2cr == smr?*/
-		ret = update_smr_profile(smmu);
-		if (ret)
-			return ret;
-	}
 	return 0;
 }
 
@@ -466,9 +416,6 @@ int smmuv2_hyp_nesting_init(void)
 		return ret;
 
 	ret = hw_profile_init();
-	if (ret)
-		return ret;
-	ret = sw_profile_init();
 	if (ret)
 		return ret;
 

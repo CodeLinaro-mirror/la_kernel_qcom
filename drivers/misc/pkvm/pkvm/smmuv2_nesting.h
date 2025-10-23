@@ -10,19 +10,16 @@
  */
 #ifndef _SMMUV2_NESTING_H
 #define _SMMUV2_NESTING_H
-
 #include <kvm/iommu.h>
 
-/* Maximum number of SMR entries (Stream Matching Registers) */
-#define MAXNUM_SMR			0xff
-/* Maximum number of CBAR entries (Context Bank Attribute Registers) */
-#define MAXNUM_CBAR			0xff
 /* Global address offset mask for SMMUv2 */
-#define SMMU_V2_GLB_ADDR_OFFSET_MASK	0x0000FFFFU
-
-/* Maximum pool size for SMR and CB entries */
-#define SMMU_V2_MAX_POOL_SIZE		255
-
+#define SMMU_V2_GLB_ADDR_OFFSET_MASK   0x0000FFFFU
+/* Maximum number of context banks and CBARs per SMMU */
+#define ARM_SMMU_MAX_CBS 128
+#define ARM_SMMU_MAX_CBARS ARM_SMMU_MAX_CBS
+/* Maximum number of SMRs and S2CRs per SMMU */
+#define ARM_SMMU_MAX_SMRS 256
+#define ARM_SMMU_MAX_S2CRS ARM_SMMU_MAX_SMRS
 /**
  * struct smmu_v2_cbar_info - Context Bank information for SMMUv2
  */
@@ -74,11 +71,12 @@ struct smmu_v2_nested {
 	u32 num_s2cr; /* S2CR allocation for NS */
 	u32 num_cbar; /* CBAR allocation for NS */
 	u32 num_cb;   /* CB allocation for NS */
+	u32 pgshift;  /* Page size 4KB or 64KB  */
 	u32 numpage;
 	u32 host_s2_cb_idx;  /* Index of reserved host S2 context bank */
-	struct smmu_v2_smr_info smr_pool[SMMU_V2_MAX_POOL_SIZE];
-	struct smmu_v2_s2cr_info s2cr_pool[SMMU_V2_MAX_POOL_SIZE];
-	struct smmu_v2_cbar_info cbar_pool[SMMU_V2_MAX_POOL_SIZE];
+	struct smmu_v2_smr_info smr_pool[ARM_SMMU_MAX_SMRS];
+	struct smmu_v2_s2cr_info s2cr_pool[ARM_SMMU_MAX_S2CRS];
+	struct smmu_v2_cbar_info cbar_pool[ARM_SMMU_MAX_CBS];
 };
 
 int smmuv2_hyp_nesting_init(void);
