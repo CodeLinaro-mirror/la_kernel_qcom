@@ -67,7 +67,10 @@ static void smmuv2_cbar_read(struct smmu_v2_nested *smmu, u32 offset, u64 *buf)
 
 static int smmuv2_smr_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 {
-	int i;
+	int i, j;
+	bool new_valid, old_valid;
+	u32 new_sid, new_mask;
+	u32 other_smr, other_sid, other_mask;
 
 	/* Validate SMR offset and convert to index */
 	if (!ARM_SMMU_GR0_SMR_VALID(offset, smmu->num_smr)) {
@@ -76,11 +79,62 @@ static int smmuv2_smr_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	}
 	i = ARM_SMMU_GR0_SMR_INDEX(offset);
 
-	/* TBD: should we check valid bit before allowing to write? */
+	/* Extract VALID bits from new and old values */
+	new_valid = !!(val & ARM_SMMU_SMR_VALID);
+	old_valid = !!(smmu->smr_pool[i] & ARM_SMMU_SMR_VALID);
+
+	/* Handle detach case (VALID 1->0) */
+	if (!new_valid && old_valid) {
+		smmu_v2_debug_print("smmu_v2_smr_write: Detaching SMR[%d] (VALID 1->0)\n", i);
+		smmu->smr_pool[i] = val;
+		arm_smmu_gr0_write(smmu, offset, val);
+		smmu_v2_debug_print("smmu_v2_smr_write: SMR[%d] detached, val: 0x%x\n", i, val);
+		return 0;
+	}
+
+	/* If setting VALID=1, perform ARM SMMUv2 spec compliance checks */
+	if (new_valid) {
+		/* Validate StreamID mask for conflicts
+		 */
+		new_sid = val & ARM_SMMU_SMR_ID;
+		new_mask = (val & ARM_SMMU_SMR_MASK) >> 16;
+
+		for (j = 0; j < smmu->num_smr; j++) {
+			if (j == i)
+				continue;
+
+			other_smr = smmu->smr_pool[j];
+			if (!(other_smr & ARM_SMMU_SMR_VALID))
+				continue;
+
+			other_sid = other_smr & ARM_SMMU_SMR_ID;
+			other_mask = (other_smr & ARM_SMMU_SMR_MASK) >> 16;
+
+			/* Check for overlapping stream matching
+			 * Two SMRs conflict if they can match the same StreamID
+			 */
+			if (((new_sid & ~new_mask) == (other_sid & ~other_mask)) &&
+			    ((new_mask & other_mask) != 0)) {
+				smmu_v2_debug_print("smr_write: SMR[%d] (SID=0x%x, MASK=0x%x) ",
+						    i, new_sid, new_mask);
+				smmu_v2_debug_print("conflicts with SMR[%d] (SID=0x%x,MASK=0x%x)\n",
+						    j, other_sid, other_mask);
+				return -EINVAL;
+			}
+		}
+	}
+
+	/* Atomic write with proper ordering per ARM SMMUv2 spec:
+	 * Update software pool first, then hardware register
+	 */
 	smmu->smr_pool[i] = val;
 	arm_smmu_gr0_write(smmu, offset, val);
-	smmu_v2_debug_print("smmu_v2_virt_smr_write: write to is: %llx, val is: %llx\n",
-			    (u64)arm_smmu_gr0_read(smmu, offset), (u64)val);
+
+	smmu_v2_debug_print("smr_write: SMR[%d] written: 0x%x\n",
+			    i, val);
+	smmu_v2_debug_print("smr_write: (VALID=%d, SID=0x%x, MASK=0x%x)\n",
+			    new_valid, (val & ARM_SMMU_SMR_ID), ((val & ARM_SMMU_SMR_MASK) >> 16));
+
 	return 0;
 }
 
