@@ -14,6 +14,8 @@
 
 /* Global address offset mask for SMMUv2 */
 #define SMMU_V2_GLB_ADDR_OFFSET_MASK   0x0000FFFFU
+/* VMID for host S2 context bank */
+#define HOST_S2_VMID 0x3
 /* Maximum number of context banks and CBARs per SMMU */
 #define ARM_SMMU_MAX_CBS 128
 #define ARM_SMMU_MAX_CBARS ARM_SMMU_MAX_CBS
