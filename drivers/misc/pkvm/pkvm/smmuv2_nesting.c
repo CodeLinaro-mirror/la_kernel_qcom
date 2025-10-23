@@ -57,7 +57,7 @@ static void smmuv2_cbar_read(struct smmu_v2_nested *smmu, u32 offset, u64 *buf)
 		*buf |= FIELD_PREP(ARM_SMMU_CBAR_TYPE, CBAR_TYPE_S1_TRANS_S2_BYPASS);
 
 		/* Restore original VMID that EL1 wrote */
-		u32 original_vmid = smmu->cbar_pool[i].val & ARM_SMMU_CBAR_VMID;
+		u32 original_vmid = smmu->cbar_pool[i] & ARM_SMMU_CBAR_VMID;
 		*buf |= original_vmid;
 	}
 
@@ -77,8 +77,7 @@ static int smmuv2_smr_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	i = ARM_SMMU_GR0_SMR_INDEX(offset);
 
 	/* TBD: should we check valid bit before allowing to write? */
-	smmu->smr_pool[i].val = val;
-	smmu->smr_pool[i].idx = i;
+	smmu->smr_pool[i] = val;
 	arm_smmu_gr0_write(smmu, offset, val);
 	smmu_v2_debug_print("smmu_v2_virt_smr_write: write to is: %llx, val is: %llx\n",
 			    (u64)arm_smmu_gr0_read(smmu, offset), (u64)val);
@@ -102,8 +101,7 @@ static int smmuv2_s2cr_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	 * Save the ORIGINAL value for later read operations.
 	 * This is what EL1 will see on reads.
 	 */
-	smmu->s2cr_pool[i].val = val;
-	smmu->s2cr_pool[i].idx = i;
+	smmu->s2cr_pool[i] = val;
 
 	/* Extract current S2CR type from the original value */
 	current_type = (val & ARM_SMMU_S2CR_TYPE) >> 16;
@@ -121,7 +119,7 @@ static int smmuv2_s2cr_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	arm_smmu_gr0_write(smmu, offset, hw_val);
 
 	smmu_v2_debug_print("s2cr_write: idx: %d, EL1_val: 0x%x, HW_val: 0x%x, stored: 0x%x\n",
-			    i, val, hw_val, smmu->s2cr_pool[i].val);
+			    i, val, hw_val, smmu->s2cr_pool[i]);
 
 	return 0;
 }
@@ -143,8 +141,7 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	 * Save the ORIGINAL value for later read operations.
 	 * This is what EL1 will see on reads.
 	 */
-	smmu->cbar_pool[i].val = val;
-	smmu->cbar_pool[i].idx = i;
+	smmu->cbar_pool[i] = val;
 
 	/* Extract current CBAR type from the original value */
 	current_type = FIELD_GET(ARM_SMMU_CBAR_TYPE, val);
@@ -169,7 +166,7 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	arm_smmu_gr1_write(smmu, offset, hw_val);
 
 	smmu_v2_debug_print("cbar_write: idx: %d, EL1_val: 0x%x, HW_val: 0x%x, stored: 0x%x\n",
-			    i, val, hw_val, smmu->cbar_pool[i].val);
+			    i, val, hw_val, smmu->cbar_pool[i]);
 
 	return 0;
 }
@@ -218,7 +215,7 @@ static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, 
 			*buf |= FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_BYPASS);
 
 			/* Restore original CBNDX that EL1 wrote */
-			u32 original_cbndx = smmu->s2cr_pool[i].val & ARM_SMMU_S2CR_CBNDX;
+			u32 original_cbndx = smmu->s2cr_pool[i] & ARM_SMMU_S2CR_CBNDX;
 			*buf |= original_cbndx;
 		}
 

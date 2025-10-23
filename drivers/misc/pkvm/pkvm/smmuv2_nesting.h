@@ -23,28 +23,6 @@
 #define ARM_SMMU_MAX_SMRS 256
 #define ARM_SMMU_MAX_S2CRS ARM_SMMU_MAX_SMRS
 /**
- * struct smmu_v2_cbar_info - Context Bank information for SMMUv2
- */
-struct smmu_v2_cbar_info {
-	u32 val;
-	u32 idx;
-};
-
-struct smmu_v2_s2cr_info {
-	u32 val;
-	u32 idx;
-};
-/**
- * struct smmu_v2_smr_info - Stream Matching Register information for SMMUv2
- * @sid_and_mask: Stream ID and mask value
- * @idx: SMR index
- */
-struct smmu_v2_smr_info {
-	u32 val; /* [31]:valid, [30:16]:mask, [15:0]:stream_id */
-	u32 idx;
-};
-
-/**
  * struct smmu_v2_nested - SMMUv2 nested virtualization structure
  * @iommu: Base IOMMU structure
  * @base_pa: Base physical address
@@ -78,9 +56,9 @@ struct smmu_v2_nested {
 	u32 pgshift;  /* Page size 4KB or 64KB  */
 	u32 numpage;
 	u32 host_s2_cb_idx;  /* Index of reserved host S2 context bank */
-	struct smmu_v2_smr_info smr_pool[ARM_SMMU_MAX_SMRS];
-	struct smmu_v2_s2cr_info s2cr_pool[ARM_SMMU_MAX_S2CRS];
-	struct smmu_v2_cbar_info cbar_pool[ARM_SMMU_MAX_CBS];
+	u32 smr_pool[ARM_SMMU_MAX_SMRS];
+	u32 s2cr_pool[ARM_SMMU_MAX_S2CRS];
+	u32 cbar_pool[ARM_SMMU_MAX_CBS];
 };
 
 int smmuv2_hyp_nesting_init(void);

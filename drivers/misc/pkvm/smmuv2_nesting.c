@@ -82,8 +82,8 @@ static irqreturn_t smmuv2_cb_fault_handler(int irq, void *dev)
 	pr_err("  TTBR1:      0x%016llx\n", ttbr1);
 	pr_err("========================================\n");
 
-	/* Clear the fault by writing to FSRRESTORE */
-	writel_relaxed(fsr, cb_base + ARM_SMMU_CB_FSRRESTORE);
+	/* Clear the fault by writing to FSR */
+	writel_relaxed(fsr, cb_base + ARM_SMMU_CB_FSR);
 
 	return IRQ_HANDLED;
 }
