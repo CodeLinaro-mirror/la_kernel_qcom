@@ -2797,8 +2797,7 @@ EXPORT_SYMBOL(phy_advertise_supported);
 void phy_support_eee(struct phy_device *phydev)
 {
 	linkmode_copy(phydev->advertising_eee, phydev->supported_eee);
-	// phydev->eee_cfg.tx_lpi_enabled = true;
-	// phydev->eee_cfg.eee_enabled = true;
+	phydev->eee_enabled = !linkmode_empty(phydev->advertising_eee);
 }
 EXPORT_SYMBOL(phy_support_eee);
 
