@@ -6085,10 +6085,26 @@ static void msm_geni_serial_remove(struct platform_device *pdev)
 	if (port->pm_auto_suspend_disable)
 		pm_runtime_allow(&pdev->dev);
 	uart_remove_one_port(drv, &port->uport);
+
 	if (port->gsi_mode) {
-		destroy_workqueue(port->tx_wq);
-		destroy_workqueue(port->rx_wq);
+		/* Cancel specific works and wait for any running instance to finish */
+		cancel_work_sync(&port->tx_xfer_work);
+		cancel_work_sync(&port->tx_cancel_work);
+		cancel_work_sync(&port->rx_cancel_work);
+
+		if (port->gsi && port->gsi->tx_c)
+			dmaengine_pause(port->gsi->tx_c);
+
+		if (port->tx_wq) {
+			destroy_workqueue(port->tx_wq);
+			port->tx_wq = NULL;
+		}
+		if (port->rx_wq) {
+			destroy_workqueue(port->rx_wq);
+			port->rx_wq = NULL;
+		}
 		msm_geni_serial_cleanup_timestamp_resources(port);
+		msm_geni_deallocate_chan(&port->uport);
 	}
 	if (port->rx_dma) {
 		geni_se_common_iommu_free_buf(port->wrapper_dev, &port->rx_dma,
@@ -6107,7 +6123,7 @@ static void msm_geni_serial_remove(struct platform_device *pdev)
 	device_remove_file(port->uport.dev, &dev_attr_capture_kpi);
 	debugfs_remove(port->dbg);
 
-	dev_info(&pdev->dev, "%s driver removed %d\n", __func__, true);
+	dev_dbg(&pdev->dev, "%s: driver removed\n", __func__);
 }
 
 /*
