@@ -268,9 +268,10 @@ static void power_supply_init_work(struct work_struct *work)
 		thermal_zone_device_update(bcl_perph->tz_dev, THERMAL_DEVICE_UP);
 		schedule_work(&bcl_perph->soc_eval_work);
 		bcl_perph->psy_init_done = true;
-		power_supply_get_property(bcl_perph->batt_psy,
+		ret = power_supply_get_property(bcl_perph->batt_psy,
 				POWER_SUPPLY_PROP_MODEL_NAME, &rc);
-		strscpy(bcl_perph->batt_model_name, rc.strval, MAX_STR_LEN);
+		if (ret >= 0)
+			strscpy(bcl_perph->batt_model_name, rc.strval, MAX_STR_LEN);
 	}
 
 	if (bcl_perph->boot_limit_enabled) {
