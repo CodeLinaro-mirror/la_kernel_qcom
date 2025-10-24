@@ -867,4 +867,13 @@ config SM_DISPCC_CHORA
 	  Say Y if you want to support display devices and functionality such as
 	  splash screen.
 
+config SM_GPUCC_CHORA
+	tristate "CHORA Graphics Clock Controller"
+	depends on SM_GCC_CHORA
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc
+	  Chora devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
 endif
