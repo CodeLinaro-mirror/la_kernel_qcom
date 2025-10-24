@@ -25,14 +25,64 @@ void qcom_ethqos_serdes_power_down(struct qcom_ethqos *ethqos)
 }
 #endif
 
+static int qcom_ethqos_serdes3_soft_reset(struct qcom_ethqos *ethqos)
+{
+	int ret = 0;
+	unsigned int val;
+
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES3_PCS_SW_RESET);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES3_PCS_SW_RESET);
+	usleep_range(3000, 5000);
+	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES3_PCS_PHY_START);
+	usleep_range(3000, 5000);
+
+	ret = readl_poll_timeout(ethqos->sgmii_base + QSERDES3_COM_C_READY_STATUS,
+				 val, val & QSERDES3_COM_C_READY, 1000, 500000);
+	if (ret) {
+		ETHQOSERR("QSERDES3_COM_C_READY_STATUS timed out\n");
+		goto err_ret;
+	}
+
+	ret = readl_poll_timeout(ethqos->sgmii_base + QSERDES3_PCS_PCS_READY_STATUS,
+				 val, val & QSERDES3_PCS_READY, 1000, 500000);
+	if (ret) {
+		ETHQOSERR("PCS_READY timed out\n");
+		goto err_ret;
+	}
+
+	ret = readl_poll_timeout(ethqos->sgmii_base + QSERDES3_PCS_PCS_READY_STATUS,
+				 val, val & QSERDES3_PCS_SGMIIPHY_READY, 1000, 500000);
+	if (ret) {
+		ETHQOSERR("SGMIIPHY_READY timed out\n");
+		goto err_ret;
+	}
+
+	ret = readl_poll_timeout(ethqos->sgmii_base + QSERDES3_COM_CMN_STATUS,
+				 val, val & QSERDES3_COM_C_PLL_LOCKED, 1000, 5000000);
+	if (ret) {
+		ETHQOSERR("PLL Lock Status timed out\n");
+		goto err_ret;
+	}
+
+	return ret;
+
+err_ret:
+	ETHQOSERR("Serdes soft reset failed\n");
+	return ret;
+}
+
 void qcom_ethqos_serdes_soft_reset(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
 	int retry = 500;
 	unsigned int val;
 
-	if (ethqos->emac_ver == EMAC_HW_v3_1_0)
+	if (ethqos->emac_ver == EMAC_HW_v3_1_0) {
+		ret = qcom_ethqos_serdes3_soft_reset(ethqos);
+		if (ret)
+			ETHQOSERR("SerDes3 soft reset failed\n");
 		return;
+	}
 
 	writel_relaxed(0x01, ethqos->sgmii_base + QSERDES_PCS_SW_RESET);
 	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_PCS_SW_RESET);
@@ -509,7 +559,7 @@ static int qcom_ethqos_serdes_sgmii_1Gb(struct qcom_ethqos *ethqos)
 	writel_relaxed(0x09, ethqos->sgmii_base + QSERDES_TX0_RES_CODE_LANE_OFFSET_RX);
 	writel_relaxed(0xF5, ethqos->sgmii_base + QSERDES_TX0_LANE_MODE_1);
 	writel_relaxed(0x02, ethqos->sgmii_base + QSERDES_TX0_LANE_MODE_2);
-	writel_relaxed(0x3F, ethqos->sgmii_base + QSERDES_TX0_LANE_MODE_3);
+	writel_relaxed(0x00, ethqos->sgmii_base + QSERDES_TX0_LANE_MODE_3);
 	writel_relaxed(0x3F, ethqos->sgmii_base + QSERDES_TX_LANE_MODE_4);
 	writel_relaxed(0x5F, ethqos->sgmii_base + QSERDES_TX_LANE_MODE_5);
 	writel_relaxed(0x12, ethqos->sgmii_base + QSERDES_TX0_RCV_DETECT_LVL_2);

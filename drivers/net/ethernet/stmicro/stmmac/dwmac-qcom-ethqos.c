@@ -7288,7 +7288,7 @@ static int qcom_ethqos_bring_up_phy_if(struct device *dev)
 		phylink_connect_phy(priv->phylink, priv->phydev);
 		rtnl_unlock();
 
-		if (phydev->drv->phy_id == ETH_RTK_PHY_ID_RTL8261N) {
+		if (phydev && phydev->drv->phy_id == ETH_RTK_PHY_ID_RTL8261N) {
 			if (phydev->interface == PHY_INTERFACE_MODE_USXGMII) {
 				ETHQOSDBG("set_max_speed 10G\n");
 				phy_set_max_speed(phydev, SPEED_10000);
@@ -7335,7 +7335,7 @@ static int qcom_ethqos_bring_up_phy_if(struct device *dev)
 
 	ret = stmmac_resume(&ethqos->pdev->dev);
 
-	if (!priv->plat->mac2mac_en) {
+	if (!priv->plat->mac2mac_en && phydev) {
 		if (phydev->interface == PHY_INTERFACE_MODE_USXGMII)
 			speed = SPEED_10000;
 		else if (phydev->interface == PHY_INTERFACE_MODE_SGMII)
@@ -7936,6 +7936,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->handle_mac_err = dwmac_qcom_handle_mac_err;
 	plat_dat->enable_pfc = of_property_read_bool(np, "enable-pfc");
 	plat_dat->qos_use_skprio = of_property_read_bool(np, "qos-use-skprio");
+	if (plat_dat->has_xgmac)
+		plat_dat->insert_ts_pktid = true;
 
 	if (plat_dat->interface == PHY_INTERFACE_MODE_SGMII ||
 	    plat_dat->interface == PHY_INTERFACE_MODE_USXGMII ||
@@ -8244,24 +8246,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 #endif
 
 	if (ethqos->early_eth_enabled) {
-		if (plat_dat->probe_invoke_if_up || plat_dat->fixed_phy_mode ||
-		    plat_dat->interface == PHY_INTERFACE_MODE_RGMII ||
-		    plat_dat->interface == PHY_INTERFACE_MODE_RGMII_ID ||
-		    plat_dat->interface == PHY_INTERFACE_MODE_RGMII_RXID ||
-		    plat_dat->interface == PHY_INTERFACE_MODE_RGMII_TXID) {
-			/* Initialize work*/
-			INIT_WORK(&ethqos->early_eth,
-				  qcom_ethqos_bringup_iface);
-			/* Queue the work*/
-			queue_work(system_wq, &ethqos->early_eth);
+		/* Initialize work*/
+		INIT_WORK(&ethqos->early_eth,
+			  qcom_ethqos_bringup_iface);
+		/* Queue the work*/
+		queue_work(system_wq, &ethqos->early_eth);
 
-			/*Set early eth parameters*/
-			ethqos_set_early_eth_param(priv, ethqos);
-		}
+		/*Set early eth parameters*/
+		ethqos_set_early_eth_param(priv, ethqos);
 
-		if (priv->plat && priv->plat->mdio_bus_data)
-			priv->plat->mdio_bus_data->phy_mask =
-			priv->plat->mdio_bus_data->phy_mask | DUPLEX_FULL | SPEED_100;
 	}
 #ifdef CONFIG_MSM_BOOT_TIME_MARKER
 		update_marker("M - Ethernet probe end");
@@ -8475,6 +8468,8 @@ static int qcom_ethqos_suspend(struct device *dev)
 	    ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME) {
 		ETHQOSINFO("disable phy at suspend\n");
 		ethqos_phy_power_off(ethqos);
+		if (ethqos_phy_gpio_down_direct(priv, "snps,reset"))
+			ETHQOSERR("unable to set snps,reset to low\n");
 	}
 
 	if (ethqos->gdsc_off_on_suspend) {
@@ -8516,6 +8511,14 @@ static int qcom_ethqos_resume(struct device *dev)
 	if (!ethqos)
 		return -ENODEV;
 
+	ndev = dev_get_drvdata(dev);
+	priv = netdev_priv(ndev);
+
+	if (!ndev) {
+		ETHQOSERR(" Resume not possible\n");
+		return -EINVAL;
+	}
+
 	if (ethqos->gdsc_off_on_suspend) {
 		if (ethqos->gdsc_emac) {
 			ret = regulator_enable(ethqos->gdsc_emac);
@@ -8525,14 +8528,9 @@ static int qcom_ethqos_resume(struct device *dev)
 			}
 		}
 		ETHQOSDBG("Enabled <%s>\n", EMAC_GDSC_EMAC_NAME);
-	}
-
-	ndev = dev_get_drvdata(dev);
-	priv = netdev_priv(ndev);
-
-	if (!ndev) {
-		ETHQOSERR(" Resume not possible\n");
-		return -EINVAL;
+		if (ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME)
+			if (priv->mii)
+				priv->mii->reset(priv->mii);
 	}
 
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
@@ -8888,7 +8886,11 @@ static void __exit qcom_ethqos_exit_module(void)
  * to do something with the code that the module provides.
  */
 
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+device_initcall(qcom_ethqos_init_module)
+#else
 fs_initcall(qcom_ethqos_init_module)
+#endif
 
 /*!
  * \brief Macro to register the driver un-registration function.

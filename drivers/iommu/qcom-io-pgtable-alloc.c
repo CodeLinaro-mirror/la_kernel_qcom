@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -29,15 +28,24 @@ static bool is_secure_vmid(u32 vmid)
 
 static int io_pgtable_hyp_assign_page(u32 vmid, struct page *page)
 {
+	phys_addr_t page_addr = page_to_phys(page);
+	int ret;
+#ifdef CONFIG_ARM64
 	struct qcom_scm_vmperm dst_vmids[] = {{QCOM_SCM_VMID_HLOS,
 					       PERM_READ | PERM_WRITE},
 					      {vmid, PERM_READ}};
 	u64 src_vmid_list = BIT(QCOM_SCM_VMID_HLOS);
-	phys_addr_t page_addr = page_to_phys(page);
-	int ret;
-
 	ret = qcom_scm_assign_mem(page_to_phys(page), PAGE_SIZE, &src_vmid_list,
 			      dst_vmids, ARRAY_SIZE(dst_vmids));
+#else
+	u32 src_vmid_list[] = {VMID_HLOS};
+	int dst_vmid_list[] = {VMID_HLOS, vmid};
+	int dest_perms[] = {PERM_READ | PERM_WRITE, PERM_READ};
+
+	ret = hyp_assign_phys(page_to_phys(page), PAGE_SIZE, src_vmid_list,
+				ARRAY_SIZE(src_vmid_list), dst_vmid_list, dest_perms,
+				ARRAY_SIZE(dst_vmid_list));
+#endif
 	if (ret)
 		pr_err("failed qcom_assign for %pa address of size %lx - subsys VMid %d rc:%d\n",
 			&page_addr, PAGE_SIZE, vmid, ret);
@@ -48,14 +56,24 @@ static int io_pgtable_hyp_assign_page(u32 vmid, struct page *page)
 
 static int io_pgtable_hyp_unassign_page(u32 vmid, struct page *page)
 {
+	phys_addr_t page_addr = page_to_phys(page);
+	int ret;
+#ifdef CONFIG_ARM64
 	struct qcom_scm_vmperm dst_vmids[] = {{QCOM_SCM_VMID_HLOS,
 					      PERM_READ | PERM_WRITE | PERM_EXEC}};
 	u64 src_vmid_list = BIT(QCOM_SCM_VMID_HLOS) | BIT(vmid);
-	phys_addr_t page_addr = page_to_phys(page);
-	int ret;
 
 	ret = qcom_scm_assign_mem(page_to_phys(page), PAGE_SIZE, &src_vmid_list,
 			      dst_vmids, ARRAY_SIZE(dst_vmids));
+#else
+	u32 src_vmid_list[] = {VMID_HLOS, vmid};
+	int dst_vmid_list[] = {VMID_HLOS};
+	int dest_perms[] = {PERM_READ | PERM_WRITE | PERM_EXEC};
+
+	ret = hyp_assign_phys(page_to_phys(page), PAGE_SIZE, src_vmid_list,
+				ARRAY_SIZE(src_vmid_list), dst_vmid_list, dest_perms,
+				ARRAY_SIZE(dst_vmid_list));
+#endif
 	if (ret)
 		pr_err("failed qcom_assign for unassigning %pa address of size %lx - subsys VMid %d rc:%d\n",
 			&page_addr, PAGE_SIZE, vmid, ret);
