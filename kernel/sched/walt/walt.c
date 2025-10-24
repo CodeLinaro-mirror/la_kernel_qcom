@@ -5092,9 +5092,6 @@ static void android_rvh_account_irq(void *unused, struct task_struct *curr, int 
 	unsigned long flags;
 	struct walt_rq *wrq;
 
-	if (task_on_scx(curr))
-		return;
-
 	if (unlikely(walt_disabled))
 		return;
 
