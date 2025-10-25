@@ -3005,11 +3005,12 @@ static void msm_geni_serial_start_tx(struct uart_port *uport)
 	}
 
 	if (!uart_console(uport) && pm_runtime_enabled(uport->dev)) {
-		UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
-			"%s.Power on.\n", __func__);
-		pm_runtime_get(uport->dev);
+		if (msm_port->xfer_mode != GENI_GPI_DMA || !pm_runtime_active(uport->dev)) {
+			UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
+				     "%s: Power on.\n", __func__);
+			pm_runtime_get(uport->dev);
+		}
 	}
-
 	/*
 	 * If flush has been triggered earlier from userspace and port is
 	 * still active(not yet closed) then reset the flush_buffers flag.
@@ -4271,9 +4272,19 @@ static void msm_geni_wakeup_work(struct work_struct *work)
 
 	port = container_of(work, struct msm_geni_serial_port,
 			    wakeup_irq_dwork.work);
+
+	uport = &port->uport;
+	UART_LOG_DBG(port->ipc_log_rx, uport->dev, "Wakeup work start\n");
+
 	if (!atomic_read(&port->check_wakeup_byte))
 		return;
-	uport = &port->uport;
+
+	if (port->xfer_mode == GENI_GPI_DMA) {
+		if (msm_geni_serial_power_on(uport))
+			UART_LOG_DBG(port->ipc_log_pwr, uport->dev, "Failed to power on\n");
+		return;
+	}
+
 	reinit_completion(&port->wakeup_comp);
 	if (msm_geni_serial_power_on(uport)) {
 		atomic_set(&port->check_wakeup_byte, 0);
