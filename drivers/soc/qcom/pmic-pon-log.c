@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved. */
-/* Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <linux/bitfield.h>
 #include <linux/err.h>
@@ -83,7 +83,7 @@ enum pmic_pon_event {
 	PMIC_PON_EVENT_RESET_TYPE		= 0x07,
 	PMIC_PON_EVENT_WARM_RESET_COUNT		= 0x08,
 	PMIC_PON_EVENT_FAULT_REASON_1_2		= 0x09,
-	PMIC_PON_EVENT_FAULT_REASON_3		= 0x0A,
+	PMIC_PON_EVENT_FAULT_REASON_3_4		= 0x0A,
 	PMIC_PON_EVENT_PBS_PC_DURING_FAULT	= 0x0B,
 	PMIC_PON_EVENT_FUNDAMENTAL_RESET	= 0x0C,
 	PMIC_PON_EVENT_PON_SEQ_START		= 0x0D,
@@ -136,6 +136,17 @@ static const char * const pmic_pon_fault_reason3[8] = {
 	[5] = "GP_FAULT9",
 	[6] = "GP_FAULT10",
 	[7] = "GP_FAULT11",
+};
+
+static const char *const pmic_pon_fault_reason4[8] = {
+	[0] = "V1P2_SYS_OK",
+	[1] = "PVDD_OK",
+	[2] = "CBOOST_OK",
+	[3] = "RAW_UVLO_LV_RB",
+	[4] = "RAW_UVLO_RB",
+	[5] = "RAW_OVLO_RB",
+	[6] = "RAW_OVLO_LV_RB",
+	[7] = "UNKNOWN(7)",
 };
 
 static const char * const pmic_pon_s3_reset_reason[8] = {
@@ -210,7 +221,7 @@ static const enum pmic_pon_event pmic_pon_important_events[] = {
 	PMIC_PON_EVENT_RESET_TRIGGER_RECEIVED,
 	PMIC_PON_EVENT_RESET_TYPE,
 	PMIC_PON_EVENT_FAULT_REASON_1_2,
-	PMIC_PON_EVENT_FAULT_REASON_3,
+	PMIC_PON_EVENT_FAULT_REASON_3_4,
 	PMIC_PON_EVENT_FUNDAMENTAL_RESET,
 };
 
@@ -403,12 +414,23 @@ static int pmic_pon_log_parse_entry(const struct pmic_pon_log_entry *entry,
 					pmic_pon_fault_reason2);
 		}
 		break;
-	case PMIC_PON_EVENT_FAULT_REASON_3:
-		if (!entry->data0)
+	case PMIC_PON_EVENT_FAULT_REASON_3_4:
+		if (!entry->data0 && !entry->data1)
 			is_important = false;
 		pos += scnprintf(buf + pos, BUF_SIZE - pos, "FAULT_REASON3=");
 		pos += pmic_pon_log_print_reason(buf + pos, BUF_SIZE - pos,
 					entry->data0, pmic_pon_fault_reason3);
+		/*
+		 * Byte-1 stores Fault_Reason4 in PMH0101. If the register value is 0,
+		 * it means there is no fault. If the register value is non-zero,
+		 * any bit with a value of 0 indicates a fault, so we invert the bits
+		 * with ~ before passing to pmic_pon_log_print_reason().
+		 */
+		if (!entry->data1)
+			break;
+		pos += scnprintf(buf + pos, BUF_SIZE - pos, "; FAULT_REASON4=");
+		pos += pmic_pon_log_print_reason(buf + pos, BUF_SIZE - pos,
+					~entry->data1 & 0x7f, pmic_pon_fault_reason4);
 		break;
 	case PMIC_PON_EVENT_PBS_PC_DURING_FAULT:
 		scnprintf(buf, BUF_SIZE, "PBS PC at Fault: 0x%04X", data);
@@ -613,12 +635,17 @@ static void pmic_pon_log_fault_panic(struct pmic_pon_log_dev *pon_dev)
 				panic("PMIC SID0 FAULT; FAULT_REASON2=%s", buf);
 			}
 			break;
-		case PMIC_PON_EVENT_FAULT_REASON_3:
+		case PMIC_PON_EVENT_FAULT_REASON_3_4:
 			if (pon_dev->log[i].data0) {
 				pmic_pon_log_print_reason(buf, BUF_SIZE,
 							pon_dev->log[i].data0,
 							pmic_pon_fault_reason3);
 				panic("PMIC SID0 FAULT; FAULT_REASON3=%s", buf);
+			} else if (pon_dev->log[i].data1) {
+				pmic_pon_log_print_reason(buf, BUF_SIZE,
+							~pon_dev->log[i].data1 & 0x7f,
+							pmic_pon_fault_reason4);
+				panic("PMIC SID0 FAULT; FAULT_REASON4=%s", buf);
 			}
 			break;
 		case PMIC_PON_EVENT_PMIC_FAULT_MIN ... PMIC_PON_EVENT_PMIC_FAULT_MAX:
