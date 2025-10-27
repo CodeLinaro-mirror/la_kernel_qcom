@@ -2666,6 +2666,7 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 	struct device *rx_dev = msm_port->wrapper_dev;
 	int i, k, index = 0;
 
+	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "Start: GSI Rx xfer\n");
 	if (!msm_port->port_setup) {
 		dev_err(uport->dev, "%s: Port setup not yet done\n", __func__);
 		return -EAGAIN;
@@ -2738,7 +2739,7 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 	}
 	dma_async_issue_pending(msm_port->gsi->rx_c);
 	msm_port->gsi_rx_done = true;
-
+	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "End: GSI Rx xfer\n");
 	return 0;
 exit_gsi_xfer_rx:
 	for (i = 0; i < NUM_RX_BUF; i++) {
@@ -2748,6 +2749,7 @@ exit_gsi_xfer_rx:
 	}
 	msm_geni_deallocate_chan(uport);
 	msm_port->gsi_rx_done = false;
+	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "GSI Rx xfer failed\n");
 	return -EIO;
 }
 
@@ -4459,11 +4461,10 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev,
 					     "%s:GSI DMA-Rx ch\n", __func__);
-				dma_release_channel(msm_port->gsi->rx_c);
 				if (msm_port->rx_wq)
 					flush_workqueue(msm_port->rx_wq);
 
-				for (i = 0; i < 4; i++) {
+				for (i = 0; i < NUM_RX_BUF; i++) {
 					if (msm_port->dma_addr[i]) {
 						geni_se_common_iommu_free_buf(rx_dev,
 								      &msm_port->dma_addr[i],
@@ -4472,6 +4473,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 						msm_port->rx_gsi_buf[i] = NULL;
 					}
 				}
+				dma_release_channel(msm_port->gsi->rx_c);
 				msm_port->gsi->rx_c = NULL;
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev, "%s: Rx unmap buf done\n",
@@ -4481,7 +4483,6 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev, "%s:GSI DMA-Tx ch\n",
 					     __func__);
-				dma_release_channel(msm_port->gsi->tx_c);
 				if (msm_port->tx_wq)
 					flush_workqueue(msm_port->tx_wq);
 
@@ -4494,6 +4495,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 						     uport->dev, "%s: Tx unmap buf done\n",
 						     __func__);
 				}
+				dma_release_channel(msm_port->gsi->tx_c);
 				msm_port->gsi->tx_c = NULL;
 			}
 		} else {
