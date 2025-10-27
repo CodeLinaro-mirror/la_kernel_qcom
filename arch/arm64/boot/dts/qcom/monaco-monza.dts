@@ -5,6 +5,7 @@
 
 /dts-v1/;
 
+#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include <dt-bindings/spmi/spmi.h>
 #include "qcs8300.dtsi"
@@ -232,6 +233,13 @@
 		drive-strength = <2>;
 		bias-disable;
 		output-high;
+	};
+
+	wlan_rfkill_pin: wlan-rfkill-pin {
+		gpio-hog;
+		gpios = <54 GPIO_ACTIVE_HIGH>;
+		output-high;
+		line-name = "wlan-rfkill-pin";
 	};
 };
 
