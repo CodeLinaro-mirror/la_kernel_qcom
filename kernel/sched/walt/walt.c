@@ -174,7 +174,7 @@ static inline void acquire_rq_locks_irqsave(const cpumask_t *cpus,
 		if (level == 0)
 			raw_spin_lock(&cpu_rq(cpu)->__lock);
 		else
-			raw_spin_lock_nested(&cpu_rq(cpu)->__lock, level);
+			raw_spin_lock_nested(&cpu_rq(cpu)->__lock, level % MAX_LOCKDEP_SUBCLASSES);
 		level++;
 	}
 }
@@ -4754,7 +4754,7 @@ static void walt_irq_work(struct irq_work *irq_work)
 		if (level == 0)
 			raw_spin_lock(&cpu_rq(cpu)->__lock);
 		else
-			raw_spin_lock_nested(&cpu_rq(cpu)->__lock, level);
+			raw_spin_lock_nested(&cpu_rq(cpu)->__lock, level % MAX_LOCKDEP_SUBCLASSES);
 		level++;
 	}
 
@@ -5927,7 +5927,7 @@ static int walt_init_stop_handler(void *data)
 		if (level == 0)
 			raw_spin_lock(&cpu_rq(cpu)->__lock);
 		else
-			raw_spin_lock_nested(&cpu_rq(cpu)->__lock, level);
+			raw_spin_lock_nested(&cpu_rq(cpu)->__lock, level % MAX_LOCKDEP_SUBCLASSES);
 		level++;
 	}
 
