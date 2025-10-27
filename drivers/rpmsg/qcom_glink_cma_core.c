@@ -211,6 +211,18 @@ static void glink_cma_tx_write(struct qcom_glink_pipe *glink_pipe,
 	*pipe->head = cpu_to_le32(head);
 }
 
+static void glink_cma_rx_reset(struct qcom_glink_pipe *np)
+{
+	struct glink_cma_pipe *pipe = to_glink_cma_pipe(np);
+	*pipe->tail = 0;
+}
+
+static void glink_cma_tx_reset(struct qcom_glink_pipe *np)
+{
+	struct glink_cma_pipe *pipe = to_glink_cma_pipe(np);
+	*pipe->head = 0;
+}
+
 static void glink_cma_native_init(struct glink_cma_dev *gdev)
 {
 	struct qcom_glink_pipe *tx_native = &gdev->tx_pipe.native;
@@ -219,11 +231,13 @@ static void glink_cma_native_init(struct glink_cma_dev *gdev)
 	tx_native->length = FIFO_SIZE;
 	tx_native->avail = glink_cma_tx_avail;
 	tx_native->write = glink_cma_tx_write;
+	tx_native->reset = glink_cma_tx_reset;
 
 	rx_native->length = FIFO_SIZE;
 	rx_native->avail = glink_cma_rx_avail;
 	rx_native->peak = glink_cma_rx_peek;
 	rx_native->advance = glink_cma_rx_advance;
+	rx_native->reset = glink_cma_rx_reset;
 	GLINK_CMA_DEBUG_LOG(gdev->glink_cma_ilc, "success");
 }
 
