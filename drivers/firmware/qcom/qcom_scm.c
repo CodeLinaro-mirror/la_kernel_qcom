@@ -3557,6 +3557,33 @@ static void qcom_scm_shutdown(struct platform_device *pdev)
 		qcom_scm_set_download_mode(QCOM_DOWNLOAD_NODUMP);
 }
 
+static int qcom_scm_pm_freeze(struct device *dev)
+{
+	qtee_shmbridge_pm_freeze();
+	qcom_tzmem_pm_freeze();
+	return 0;
+}
+
+static int qcom_scm_pm_restore(struct device *dev)
+{
+	qcom_tzmem_pm_restore();
+	qtee_shmbridge_pm_restore();
+	return 0;
+}
+
+static int qcom_scm_pm_thaw(struct device *dev)
+{
+	qcom_tzmem_pm_thaw();
+	qtee_shmbridge_pm_thaw();
+	return 0;
+}
+
+static const struct dev_pm_ops qcom_scm_pm_ops = {
+	.freeze = qcom_scm_pm_freeze,
+	.restore = qcom_scm_pm_restore,
+	.thaw = qcom_scm_pm_thaw,
+};
+
 static const struct of_device_id qcom_scm_dt_match[] = {
 	{ .compatible = "qcom,scm" },
 
@@ -3577,6 +3604,7 @@ static struct platform_driver qcom_scm_driver = {
 		.name = "qcom_scm",
 		.of_match_table = qcom_scm_dt_match,
 		.suppress_bind_attrs = true,
+		.pm = &qcom_scm_pm_ops,
 	},
 	.probe = qcom_scm_probe,
 	.shutdown = qcom_scm_shutdown,
