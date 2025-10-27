@@ -291,11 +291,15 @@ static ssize_t store_max_low_power_cluster_freqs(struct kobject *kobj,
 	if (!strlist)
 		return -ENOMEM;
 	numcpus = cpumask_weight(&node->hw->low_power_cluster_cpus);
-	if (numvals > numcpus) {
-		dev_err(node->hw->dev, "invalid num of low power cpufreqs\n");
+	if (numvals > numcpus || numcpus > MAX_LOW_POWER_CLUSTERS) {
+		if (numvals > numcpus)
+			dev_err(node->hw->dev, "invalid num of low power cpufreqs\n");
+		if (numcpus > MAX_LOW_POWER_CLUSTERS)
+			dev_err(node->hw->dev, "numcpus exceeds array size\n");
 		ret = -EINVAL;
 		goto out;
 	}
+
 	node->low_power_io_percent_enabled = true;
 	for (i = 0; i < numcpus; i++) {
 		if (i < numvals)
