@@ -653,6 +653,14 @@ const struct mpm_pin mpm_bengal_gic_chip_data[] = {
 	{-1},
 };
 
+const struct mpm_pin mpm_colibri_gic_chip_data[] = {
+	{12, 422}, /* qmp_usb3_lfps_rxterm_irq_cx */
+	{86, 183}, /* mpm_wake,spmi_m */
+	{90, 157}, /* eud_p0_dmse_int_mx */
+	{91, 158}, /* eud_p0_dpse_int_mx */
+	{-1},
+};
+
 static const struct of_device_id mpm_gic_chip_data_table[] = {
 	{
 		.compatible = "qcom,mpm-blair",
@@ -677,6 +685,10 @@ static const struct of_device_id mpm_gic_chip_data_table[] = {
 	{
 		.compatible = "qcom,mpm-bengal",
 		.data = mpm_bengal_gic_chip_data,
+	},
+	{
+		.compatible = "qcom,mpm-colibri",
+		.data = mpm_colibri_gic_chip_data,
 	},
 	{}
 };
