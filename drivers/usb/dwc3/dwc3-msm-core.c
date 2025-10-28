@@ -4023,14 +4023,19 @@ static void enable_usb_pdc_interrupt(struct dwc3_msm *mdwc, bool enable)
 		 * during bus-suspend case, irrespective of the speed of the connected
 		 * device, both eDM and eDP line will be pulled high (XeSE1).
 		 */
-		if (mdwc->use_eusb2_phy)
+		if (mdwc->use_eusb2_phy) {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_RISING, enable);
-		else
+
+			configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
+				IRQ_TYPE_EDGE_RISING, enable);
+		} else {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_FALLING, enable);
+		}
 
 	} else if (mdwc->phy_flags & PHY_HSFS_MODE) {
 		/*
@@ -4039,14 +4044,19 @@ static void enable_usb_pdc_interrupt(struct dwc3_msm *mdwc, bool enable)
 		 * during bus-suspend case, irrespective of the speed of the connected
 		 * device, both eDM and eDP line will be pulled high (XeSE1).
 		 */
-		if (mdwc->use_eusb2_phy)
+		if (mdwc->use_eusb2_phy) {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_RISING, enable);
-		else
+
+			configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
+				IRQ_TYPE_EDGE_RISING, enable);
+		} else {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_FALLING, enable);
+		}
 
 	} else {
 		/* When in host mode, with no device connected, set the HS
