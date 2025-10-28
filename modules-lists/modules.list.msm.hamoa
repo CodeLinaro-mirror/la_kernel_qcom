@@ -74,3 +74,7 @@ phy-qcom-snps-eusb2.ko
 phy-qcom-qmp-combo.ko
 phy-qcom-qmp-usb.ko
 dwc3-msm.ko
+msm_geni_serial.ko
+i2c-msm-geni.ko
+msm_gpi.ko
+spi-msm-geni.ko
