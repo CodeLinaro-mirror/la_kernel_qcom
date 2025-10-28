@@ -276,6 +276,12 @@ void walt_config(void)
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+	} else if (!strcmp(name, "X1E80100")) {
+		/*
+		 * By default this SOC flag will be disabled. Enable this only
+		 * for X1E80100 platforms
+		 */
+		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
 	}
 
 }
