@@ -43,6 +43,10 @@ static struct shmem_irq_config pchan_factory_settings[] = {
 	{0x1b018000, 31},
 	{0x1b019000, 32},
 	{0x1b01a000, 33},
+	{0x1b01b000, 34},
+	{0x1b01e000, 35},
+	{0x1b01f000, 36},
+	{0x1b020000, 37},
 };
 
 struct qvm_plugin_info qvm_priv_info = {
