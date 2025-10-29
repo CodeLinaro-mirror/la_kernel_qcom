@@ -31,6 +31,8 @@
 #include <linux/qseecom_kernel.h>
 #endif
 
+static unsigned long long cookie;
+
 /* Static 'Primordial Object' operations. */
 
 #define OBJECT_OP_YIELD	1
@@ -95,10 +97,11 @@ static int next_arg_type(struct si_arg u[], int i, enum arg_type type)
 #define SI_OBJECT_ID_START		(SI_OBJECT_PRIMORDIAL + 1)
 #define SI_OBJECT_ID_END		(UINT_MAX)
 
-#define SET_SI_OBJECT(p, type, ...) __SET_SI_OBJECT(p, type, ##__VA_ARGS__, 0UL)
-#define __SET_SI_OBJECT(p, type, optr, ...) do { \
+#define SET_SI_OBJECT(p, type, ...) __SET_SI_OBJECT(p, type, ##__VA_ARGS__, 0UL, 0ULL)
+#define __SET_SI_OBJECT(p, type, optr, ocookie, ...) do { \
 		(p)->object_type = (type); \
 		(p)->info.object_ptr = (unsigned long)(optr); \
+		(p)->info.object_cookie = (unsigned long long)(ocookie); \
 		(p)->release = NULL; \
 	} while (0)
 
@@ -211,6 +214,17 @@ struct si_object *erase_si_object(u32 idx)
 	return xa_erase(&xa_si_objects, idx);
 }
 
+static void release_si_objects(void)
+{
+	unsigned long object_id;
+	struct si_object *object;
+
+	xa_for_each(&xa_si_objects, object_id, object) {
+		erase_si_object(object_id);
+		put_si_object(object);
+	}
+}
+
 static int __free_si_object(struct si_object *object)
 {
 	/* This is used by si-core itself if it requires to do cleanup on the
@@ -224,6 +238,8 @@ static int __free_si_object(struct si_object *object)
 
 	switch (typeof_si_object(object)) {
 	case SI_OT_USER:
+		if (object->info.object_cookie != cookie)
+			break;
 		release_user_object(object);
 
 		break;
@@ -358,7 +374,7 @@ static int init_si_object(struct si_object **object, unsigned int object_id)
 			/* "no-name"; it is not really a reason to fail here!. */
 			t_object->name = kasprintf(GFP_KERNEL, "qtee-%u", object_id);
 
-			SET_SI_OBJECT(t_object, SI_OT_USER, object_id);
+			SET_SI_OBJECT(t_object, SI_OT_USER, object_id, cookie);
 
 			*object = t_object;
 
@@ -930,6 +946,10 @@ int si_object_do_invoke(struct si_object_invoke_ctx *oic,
 		typeof_si_object(object) != SI_OT_ROOT)
 		return -EINVAL;
 
+	if (typeof_si_object(object) == SI_OT_USER &&
+		object->info.object_cookie != cookie)
+		return -EINVAL;
+
 	ret = si_object_invoke_ctx_init(oic, u);
 	if (ret)
 		return ret;
@@ -1447,6 +1467,33 @@ static void si_core_remove(struct platform_device *pdev)
 	destroy_si_core_wq();
 }
 
+static int si_core_pm_freeze(struct device *dev)
+{
+	adci_shutdown();
+	return 0;
+}
+
+static int si_core_pm_restore(struct device *dev)
+{
+	cookie++;
+
+	release_si_objects();
+	adci_start();
+	return 0;
+}
+
+static int si_core_pm_thaw(struct device *dev)
+{
+	adci_start();
+	return 0;
+}
+
+static const struct dev_pm_ops si_core_pm_ops = {
+	.freeze = si_core_pm_freeze,
+	.restore = si_core_pm_restore,
+	.thaw = si_core_pm_thaw,
+};
+
 static const struct of_device_id si_core_match[] = {
 	/* qcom,mem-object is deprecated, only here for backward
 	 * compatibility.
@@ -1461,6 +1508,7 @@ static struct platform_driver si_core_plat_driver = {
 	.driver = {
 		.name = "si-core",
 		.of_match_table = si_core_match,
+		.pm = &si_core_pm_ops,
 	},
 };
 
