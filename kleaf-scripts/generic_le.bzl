@@ -78,7 +78,7 @@ def define_qcom_le(
     dtbo_list = get_dtbo_list(target)
 
     kernel_build(
-        name = "{}_le_build".format(stem),
+        name = "{}_dtb_build".format(stem),
         srcs = [
             ":additional_msm_headers_aarch64_globs",
             "//common:kernel_aarch64_sources",
