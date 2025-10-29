@@ -708,6 +708,21 @@ int qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr)
 }
 EXPORT_SYMBOL_GPL(qpace_queue_compress);
 
+/*
+ * OP_BUS_ERROR and OP_TIMED_OUT should be critial error.
+ * OP_COMP_TOO_BIG is not an error. We're settign threshold size to (PAGE_SIZE-1).
+ * This typically occurs if the page is completely uncompressible. The logic then
+ * goes to huge_class_size case, which is fine.
+ */
+bool qpace_check_compress_err(struct qpace_event_descriptor *ed)
+{
+	if (ed->completion_code & (OP_BUS_ERROR | OP_TIMED_OUT))
+		return true;
+	else
+		return false;
+}
+EXPORT_SYMBOL_GPL(qpace_check_compress_err);
+
 static inline void qpace_free_tr_entries(int tr_num, int n_consumed_entries)
 {
 	struct transfer_ring *ring = &tr_rings[tr_num];
