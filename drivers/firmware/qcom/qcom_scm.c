@@ -3501,7 +3501,7 @@ static int __qcom_multi_smc_init(struct qcom_scm *__scm,
 			dev_err(__scm->dev, "Failed to request qcom-scm irq: %d\n", ret);
 			return ret;
 		}
-
+		irq_set_irq_wake(irq, true);
 	}
 
 	return ret;
