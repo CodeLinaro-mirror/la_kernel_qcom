@@ -3242,9 +3242,6 @@ static void ethqos_is_ipv6_NW_stack_ready(struct work_struct *work)
 	ret = qcom_ethqos_add_ipv6addr(&pparams, ndev);
 	if (ret)
 		return;
-
-	cancel_delayed_work_sync(&ethqos->ipv6_addr_assign_wq);
-	flush_delayed_work(&ethqos->ipv6_addr_assign_wq);
 }
 
 static void ethqos_set_early_eth_param(struct stmmac_priv *priv,
