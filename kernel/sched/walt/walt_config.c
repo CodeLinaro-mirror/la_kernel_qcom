@@ -332,7 +332,8 @@ void early_walt_config(void)
 		soc_cluster_freq_table[1][13] = 5087;
 		soc_cluster_freq_table[1][14] = 5390;
 		soc_cluster_freq_table[1][15] = 5516;
-	} else if (!strcmp(name, "CANOE") || !strcmp(name, "CANOEPSG")) {
+	} else if (!strcmp(name, "CANOE") || !strcmp(name, "CANOEPSG") || !strcmp(name, "WHALE")
+			|| !strcmp(name, "WHALEP")) {
 		soc_cluster_freq_table_size[0] = 32;
 		soc_cluster_freq_table_size[1] = 32;
 
