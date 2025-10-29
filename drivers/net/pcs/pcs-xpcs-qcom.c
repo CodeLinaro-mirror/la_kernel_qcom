@@ -355,6 +355,10 @@ int qcom_xpcs_config_eee(struct dw_xpcs_qcom *xpcs, int mult_fact_100ns, int ena
 
 	ret = qcom_xpcs_write(xpcs, DW_VR_XS_PCS_EEE_MCTRL0, ret);
 
+	ret = qcom_xpcs_read(xpcs, DW_SR_MII_PCS_CTRL1);
+	ret &= ~DW_VR_CS_EN;
+	ret = qcom_xpcs_write(xpcs, DW_SR_MII_PCS_CTRL1, ret);
+
 	ret = qcom_xpcs_read(xpcs, DW_VR_XS_PCS_EEE_MCTRL1);
 	if (ret < 0)
 		goto out;
