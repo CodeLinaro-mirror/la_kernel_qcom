@@ -1305,6 +1305,8 @@ static int ili9881c_dsi_probe(struct mipi_dsi_device *dsi)
 		return ret;
 	}
 
+	ctx->panel.prepare_prev_first = true;
+
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
 		return ret;
