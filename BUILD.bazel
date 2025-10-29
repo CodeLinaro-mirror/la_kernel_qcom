@@ -9,6 +9,7 @@ load(":kleaf-scripts/ddk_uapi_headers_cc_library.bzl", "ddk_uapi_headers_cc_libr
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtb_setup")
 load(":kleaf-scripts/generic_qtvm.bzl", "define_qtvm")
 load(":kleaf-scripts/le_build.bzl", "define_common_le_rules")
+load(":kleaf-scripts/targets/alor_le.bzl", "define_alor_le")
 load(":kleaf-scripts/targets/autogvm.bzl", "define_autogvm")
 load(":kleaf-scripts/targets/autogvmlv.bzl", "define_autogvmlv")
 load(":kleaf-scripts/targets/bengal.bzl", "define_bengal")
@@ -18,7 +19,6 @@ load(
     "define_canoe_oemvm",
     "define_canoe_tuivm",
 )
-load(":kleaf-scripts/targets/canoe_le.bzl", "define_canoe_le")
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
 load(":kleaf-scripts/targets/colibri.bzl", "define_colibri")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
@@ -301,7 +301,7 @@ label_flag(
 
 define_canoe()
 
-define_canoe_le()
+define_alor_le()
 
 define_sun()
 

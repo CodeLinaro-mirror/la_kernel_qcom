@@ -24,8 +24,8 @@ la_variants = [
 le_targets = [
     # keep sorted
     #"sun-allyes",
+    "alor-le",
     "autogvm",
-    "canoe-le",
     "vienna-le",
 ]
 

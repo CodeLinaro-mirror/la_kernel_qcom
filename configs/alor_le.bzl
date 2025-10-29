@@ -1,4 +1,4 @@
-canoe_le_config = {
+alor_le_config = {
     # keep sorted
     "CONFIG_ARCH_ALOR": "y",
     "CONFIG_ARCH_CANOE": "y",

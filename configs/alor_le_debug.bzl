@@ -1,4 +1,4 @@
-canoe_le_debug_config = {
+alor_le_debug_config = {
     # keep sorted
     "CONFIG_ATOMIC64_SELFTEST": "m",
     "CONFIG_CMA_DEBUGFS": "y",

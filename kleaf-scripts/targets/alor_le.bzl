@@ -1,12 +1,12 @@
-load(":configs/canoe_le.bzl", "canoe_le_config")
-load(":configs/canoe_le_debug.bzl", "canoe_le_debug_config")
+load(":configs/alor_le.bzl", "alor_le_config")
+load(":configs/alor_le_debug.bzl", "alor_le_debug_config")
 load(":kleaf-scripts/image_opts.bzl", "boot_image_opts")
 load(":kleaf-scripts/le_build.bzl", "define_typical_le_build")
 load(":target_variants.bzl", "le_variants")
 
-target_name = "canoe-le"
+target_name = "alor-le"
 
-def define_canoe_le():
+def define_alor_le():
     for variant in le_variants:
         board_kernel_cmdline_extras = []
         board_bootconfig_extras = []
@@ -37,15 +37,15 @@ def define_canoe_le():
 
     define_typical_le_build(
         name = target_name,
-        build_config = "build.config.msm.canoe.le",
-        debug_config = canoe_le_debug_config,
-        config = canoe_le_config,
+        build_config = "build.config.msm.alor.le",
+        debug_config = alor_le_debug_config,
+        config = alor_le_config,
         debug_build_img_opts = debug_build_img_opts,
         build_img_opts = build_img_opts,
         debug_kwargs = {
-            "config_path": "configs/canoe_le_debug.bzl",
+            "config_path": "configs/alor_le_debug.bzl",
         },
         perf_kwargs = {
-            "config_path": "configs/canoe_le.bzl",
+            "config_path": "configs/alor_le.bzl",
         },
     )
