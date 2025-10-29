@@ -3,6 +3,7 @@ seraph_perf_config = {
     "CONFIG_ARCH_QCOM": "y",
     "CONFIG_ARCH_SERAPH": "y",
     "CONFIG_HWSPINLOCK_QCOM": "m",
+    "CONFIG_MSM_PERFORMANCE": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_SERAPH": "m",
     "CONFIG_QCOM_SCM": "m",
