@@ -249,6 +249,8 @@ inline bool skb_recycler_consume(struct sk_buff *skb)
 					      SKB_RECYCLE_MAX_SIZE)))
 		return false;
 
+	skb->destructor = NULL; /* Explicitly clear destructor */
+
 	/* If we can, then it will be much faster for us to recycle this one
 	 * later than to allocate a new one from scratch.
 	 */
