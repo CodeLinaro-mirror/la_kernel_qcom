@@ -132,6 +132,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/thermal/qcom/cx_ipeak_cdev",
+        out = "cx_ipeak_cdev.ko",
+        config = "CONFIG_QTI_CX_IPEAK_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/cx_ipeak_cdev.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/thermal/qcom/qti_devfreq_cdev",
         out = "qti_devfreq_cdev.ko",
         config = "CONFIG_QTI_DEVFREQ_CDEV",

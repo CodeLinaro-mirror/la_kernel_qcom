@@ -129,6 +129,15 @@ config QTI_CPU_PAUSE_COOLING_DEVICE
 	   a CPU will be used when the CPU frequency mitigation
 	   is not good enough to achieve the necessary cooling.
 
+config QTI_CX_IPEAK_COOLING_DEVICE
+	tristate "QTI CX IPeak cooling device"
+	depends on THERMAL && THERMAL_OF
+	help
+	  This implements a mitigation device to place a thermal client vote
+	  to CXIP LM hardware. When all pre-defined clients on CX rail including
+	  thermal client set their vote, CXIP LM hardware throttles the clients
+	  on the CX rail.
+
 config QTI_DEVFREQ_CDEV
 	tristate "QTI Devfreq cooling device"
 	depends on PM_DEVFREQ && THERMAL && PM_OPP
