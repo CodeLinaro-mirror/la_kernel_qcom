@@ -214,6 +214,7 @@ hamoa_perf_config = {
     "CONFIG_SCHED_WALT": "m",
     "CONFIG_SCHED_WALT_DEBUG": "n",
     "CONFIG_SCHED_WALT_STATS": "n",
+    "CONFIG_SCHED_WALT_NR_CPUS": "12",
     "CONFIG_SC_AV1ECC_X1P42100": "m",
     "CONFIG_SC_CAMCC_X1P42100": "m",
     "CONFIG_SC_DEBUGCC_X1E80100": "m",

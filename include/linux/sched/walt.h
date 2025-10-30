@@ -52,7 +52,7 @@ enum task_boost_type {
 	TASK_BOOST_END,
 };
 
-#define WALT_NR_CPUS 8
+#define WALT_NR_CPUS CONFIG_SCHED_WALT_NR_CPUS
 #define RAVG_HIST_SIZE 5
 /* wts->bucket_bitmask needs to be updated if NUM_BUSY_BUCKETS > 16 */
 #define NUM_BUSY_BUCKETS 16
