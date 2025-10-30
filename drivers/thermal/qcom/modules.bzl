@@ -293,3 +293,23 @@ def register_modules(registry):
             "drivers/iio/adc/qcom-vadc-common",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/msm-tsens-driver",
+        out = "msm-tsens-driver.ko",
+        config = "CONFIG_THERMAL_TSENS_LEGACY",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/thermal_zone_internal.h",
+            "drivers/thermal/qcom/tsens2xxx.c",
+            "drivers/thermal/qcom/tsens-dbg.c",
+            "drivers/thermal/qcom/tsens1xxx.c",
+            "drivers/thermal/qcom/tsens2xxx.h",
+            "drivers/thermal/qcom/msm-tsens.c",
+        ],
+        deps = [
+            # do not sort
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
