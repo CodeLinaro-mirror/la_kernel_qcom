@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "mem_buf_vm: " fmt
@@ -24,6 +24,7 @@ static struct class *mem_buf_vm_class;
 static DEFINE_XARRAY_ALLOC(mem_buf_vm_minors);
 static DEFINE_XARRAY(mem_buf_vms);
 int current_vmid;
+static bool allow_hyp_assign;
 
 #define PERIPHERAL_VM(_uname, _lname)		\
 static struct mem_buf_vm vm_ ## _lname = {	\
@@ -108,6 +109,9 @@ static const struct file_operations mem_buf_vm_fops = {
 
 bool mem_buf_vm_uses_hyp_assign(void)
 {
+	if (allow_hyp_assign)
+		return true;
+
 	return current_vmid == VMID_HLOS;
 }
 EXPORT_SYMBOL_GPL(mem_buf_vm_uses_hyp_assign);
@@ -298,6 +302,8 @@ int mem_buf_vm_init(struct device *dev)
 		return ret;
 	}
 	current_vmid = vmid;
+
+	allow_hyp_assign = of_property_read_bool(dev->of_node, "qcom,vm-uses-hyp-assign");
 
 	ret = alloc_chrdev_region(&mem_buf_vm_devt, 0, NUM_MEM_BUF_VM_MINORS,
 				DEVNAME);
