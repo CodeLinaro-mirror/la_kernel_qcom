@@ -270,6 +270,12 @@ ifeq ($(CONFIG_WLAN_LITE),y)
 dtc_cpp_flags  += -D __WLAN_LITE_PROFILE__
 endif
 
+# __WLAN_UD__: It is used to conditionally apply Unified Driver configuration
+# in the device tree for CPE-V1 profile
+ifeq ($(CONFIG_WLAN_UD),y)
+dtc_cpp_flags += -D __WLAN_UD__
+endif
+
 ifdef CONFIG_OBJTOOL
 
 objtool := $(objtree)/tools/objtool/objtool

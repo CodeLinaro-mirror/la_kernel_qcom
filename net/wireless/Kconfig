@@ -52,6 +52,15 @@ config WLAN_LITE
 	  disabling non-critical features, and optimizing internal allocations to
 	  ensure stable operation under low-memory conditions.
 
+config WLAN_UD
+	bool "WLAN Backport Driver profile for CPE-V1"
+	help
+	  Enable this option to activate the Backports driver WLAN configuration
+	  for CPE-V1 devices.
+
+	  Select this option only for CPE-V1 profile that are specifically
+	  supports the Backports wifi driver.
+
 config ML_RECONFIG_SINGLE_WIPHY
 	tristate "cfg80211 - wireless configuration for ML Reconfig"
 	help
