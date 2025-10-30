@@ -2882,8 +2882,10 @@ static void geni_spi_handle_tx(struct spi_geni_master *mas)
 	int max_bytes = 0;
 	const u8 *tx_buf = NULL;
 
-	if (!mas->cur_xfer)
+	if (!mas->cur_xfer || !mas->cur_xfer->tx_buf) {
+		SPI_LOG_DBG(mas->ipc, false, mas->dev, "cur_xfer or tx_buf are NULL\n");
 		return;
+	}
 
 	/*
 	 * For non-byte aligned bits-per-word values:
@@ -2936,8 +2938,10 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 	int rx_wc = 0;
 	u8 *rx_buf = NULL;
 
-	if (!mas->cur_xfer)
+	if (!mas->cur_xfer || !mas->cur_xfer->rx_buf) {
+		SPI_LOG_DBG(mas->ipc, false, mas->dev, "cur_xfer or rx_buf are NULL\n");
 		return;
+	}
 
 	rx_buf = mas->cur_xfer->rx_buf;
 	rx_wc = (rx_fifo_status & RX_FIFO_WC_MSK);
