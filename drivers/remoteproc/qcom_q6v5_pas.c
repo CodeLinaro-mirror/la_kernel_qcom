@@ -20,7 +20,6 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/firmware/qcom/qcom_scm.h>
-#include <linux/firmware/qcom/qcom_tzmem.h>
 #include <linux/regulator/consumer.h>
 #include <linux/remoteproc.h>
 #include <linux/soc/qcom/mdt_loader.h>
@@ -36,7 +35,6 @@
 #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
 
 #define MAX_ASSIGN_COUNT 3
-#define DEVMEM_ENTRY_SIZE 4
 
 struct adsp_data {
 	int crash_reason_smem;
@@ -115,9 +113,6 @@ struct qcom_adsp {
 
 	struct qcom_scm_pas_metadata pas_metadata;
 	struct qcom_scm_pas_metadata dtb_pas_metadata;
-
-	struct qcom_devmem_table *devmem;
-	struct qcom_tzmem_area *tzmem;
 };
 
 static void adsp_segment_dump(struct rproc *rproc, struct rproc_dump_segment *segment,
@@ -257,43 +252,6 @@ release_dtb_firmware:
 	return ret;
 }
 
-static int adsp_create_shmbridge(struct qcom_adsp *adsp)
-{
-	struct qcom_tzmem_area *rproc_tzmem;
-	struct rproc *rproc = adsp->rproc;
-	int ret;
-
-	if (!rproc->has_iommu)
-		return 0;
-
-	rproc_tzmem = devm_kzalloc(adsp->dev, sizeof(*rproc_tzmem), GFP_KERNEL);
-	if (!rproc_tzmem)
-		return -ENOMEM;
-
-	rproc_tzmem->size = PAGE_ALIGN(adsp->mem_size);
-	rproc_tzmem->paddr = adsp->mem_phys;
-	ret = qcom_tzmem_init_area(rproc_tzmem);
-	if (ret) {
-		dev_err(adsp->dev,
-			"failed to create shmbridge for carveout: %d\n", ret);
-		return ret;
-	}
-
-	adsp->tzmem = rproc_tzmem;
-
-	return ret;
-}
-
-static void adsp_delete_shmbridge(struct qcom_adsp *adsp)
-{
-	struct rproc *rproc = adsp->rproc;
-
-	if (!rproc->has_iommu)
-		return;
-
-	qcom_tzmem_cleanup_area(adsp->tzmem);
-}
-
 static int adsp_start(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
@@ -349,10 +307,6 @@ static int adsp_start(struct rproc *rproc)
 
 	qcom_pil_info_store(adsp->info_name, adsp->mem_phys, adsp->mem_size);
 
-	ret = adsp_create_shmbridge(adsp);
-	if (ret)
-		goto release_pas_metadata;
-
 	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
 	if (ret) {
 		dev_err(adsp->dev,
@@ -360,7 +314,6 @@ static int adsp_start(struct rproc *rproc)
 		goto release_pas_metadata;
 	}
 
-	adsp_delete_shmbridge(adsp);
 	ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
 	if (ret == -ETIMEDOUT) {
 		dev_err(adsp->dev, "start timed out\n");
@@ -718,58 +671,6 @@ static void adsp_unassign_memory_region(struct qcom_adsp *adsp)
 		if (ret < 0)
 			dev_err(adsp->dev, "unassign memory %d failed\n", offset);
 	}
-}
-
-static int adsp_devmem_init(struct qcom_adsp *adsp)
-{
-	unsigned int entry_size = DEVMEM_ENTRY_SIZE;
-	struct qcom_devmem_table *devmem_table;
-	struct rproc *rproc = adsp->rproc;
-	struct device *dev = adsp->dev;
-	struct qcom_devmem_info *info;
-	char *pname = "qcom,devmem";
-	size_t table_size;
-	int num_entries;
-	u32 i;
-
-	if (!rproc->has_iommu)
-		return 0;
-
-	/* devmem property is a set of n-tuple */
-	num_entries = of_property_count_u32_elems(dev->of_node, pname);
-	if (num_entries < 0) {
-		dev_err(adsp->dev, "No '%s' property present\n", pname);
-		return num_entries;
-	}
-
-	if (!num_entries || (num_entries % entry_size)) {
-		dev_err(adsp->dev, "All '%s' list entries need %d vals\n", pname,
-			entry_size);
-		return -EINVAL;
-	}
-
-	num_entries /= entry_size;
-	table_size = sizeof(*devmem_table) + sizeof(*info) * num_entries;
-	devmem_table = devm_kzalloc(dev, table_size, GFP_KERNEL);
-	if (!devmem_table)
-		return -ENOMEM;
-
-	devmem_table->num_entries = num_entries;
-	info = &devmem_table->entries[0];
-	for (i = 0; i < num_entries; i++, info++) {
-		of_property_read_u32_index(dev->of_node, pname,
-					   i * entry_size, (u32 *)&info->da);
-		of_property_read_u32_index(dev->of_node, pname,
-					   i * entry_size + 1, (u32 *)&info->pa);
-		of_property_read_u32_index(dev->of_node, pname,
-					   i * entry_size + 2, &info->len);
-		of_property_read_u32_index(dev->of_node, pname,
-					   i * entry_size + 3, &info->flags);
-	}
-
-	adsp->devmem = devmem_table;
-
-	return 0;
 }
 
 static int adsp_probe(struct platform_device *pdev)
