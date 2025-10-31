@@ -6,6 +6,7 @@ seraph_perf_config = {
     "CONFIG_MSM_PERFORMANCE": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_SERAPH": "m",
+    "CONFIG_QCOM_RPMH": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SOCINFO": "m",
