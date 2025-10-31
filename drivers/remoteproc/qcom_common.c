@@ -915,6 +915,7 @@ void qcom_remove_pdm_subdev(struct rproc *rproc, struct qcom_rproc_pdm *pdm)
 }
 EXPORT_SYMBOL_GPL(qcom_remove_pdm_subdev);
 
+#ifdef CONFIG_ANDROID_VENDOR_HOOKS
 static void qcom_check_ssr_status(void *data, struct rproc *rproc)
 {
 	if (!atomic_read(&rproc->power) ||
@@ -940,6 +941,7 @@ static void rproc_recovery_notifier(void *data, struct rproc *rproc)
 	if (rproc_recovery_set_fn)
 		(rproc_recovery_set_fn)(rproc);
 }
+#endif
 
 int qcom_common_init(void)
 {
@@ -964,6 +966,7 @@ int qcom_common_init(void)
 		goto remove_shutdown_sysfs;
 	}
 
+#ifdef CONFIG_ANDROID_VENDOR_HOOKS
 	ret = register_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
 	if (ret) {
 		pr_err("qcom rproc: failed to register trace hooks\n");
@@ -975,13 +978,16 @@ int qcom_common_init(void)
 		pr_err("qcom rproc: failed to register recovery_set vendor hook\n");
 		goto unregister_rproc_recovery_vh;
 	}
-
+#endif
 	return 0;
 
+#ifdef CONFIG_ANDROID_VENDOR_HOOKS
 unregister_rproc_recovery_vh:
 	unregister_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
 remove_coredump_sysfs:
 	sysfs_remove_file(sysfs_kobject, &both_coredumps_attr.attr);
+#endif
+
 remove_shutdown_sysfs:
 	sysfs_remove_file(sysfs_kobject, &shutdown_requested_attr.attr);
 remove_kobject:
@@ -996,7 +1002,9 @@ void qcom_common_exit(void)
 	sysfs_remove_file(sysfs_kobject, &both_coredumps_attr.attr);
 	sysfs_remove_file(sysfs_kobject, &shutdown_requested_attr.attr);
 	kobject_put(sysfs_kobject);
+#ifdef CONFIG_ANDROID_VENDOR_HOOKS
 	unregister_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
+#endif
 }
 module_exit(qcom_common_exit);
 
