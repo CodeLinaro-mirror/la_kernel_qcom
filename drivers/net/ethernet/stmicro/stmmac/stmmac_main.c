@@ -1123,6 +1123,32 @@ void stmmac_set_speed100(struct stmmac_priv *priv)
 	}
 }
 
+void stmmac_set_speed1000(struct stmmac_priv *priv)
+{
+	u16 bmcr_val, ctrl1000_val, adv_val;
+	struct phy_device *phydev = priv->phydev;
+
+	/* Disable 1000M half duplex mode */
+	ctrl1000_val = phy_read(phydev, MII_CTRL1000);
+	ctrl1000_val &= ~(ADVERTISE_1000HALF);
+	phy_write(phydev, MII_CTRL1000, ctrl1000_val);
+
+	/* Disable 100M mode */
+	adv_val = phy_read(phydev, MII_ADVERTISE);
+	adv_val &= ~(ADVERTISE_100HALF | ADVERTISE_100FULL);
+	phy_write(phydev, MII_ADVERTISE, adv_val);
+
+	/* Disable 10M mode */
+	adv_val = phy_read(phydev, MII_ADVERTISE);
+	adv_val &= ~(ADVERTISE_10HALF | ADVERTISE_10FULL);
+	phy_write(phydev, MII_ADVERTISE, adv_val);
+
+	/* Disable autoneg */
+	bmcr_val = phy_read(phydev, MII_BMCR);
+	bmcr_val &= ~(BMCR_ANENABLE);
+	phy_write(phydev, MII_BMCR, bmcr_val);
+}
+
 static void stmmac_validate(struct phylink_config *config,
 			    unsigned long *supported,
 			    struct phylink_link_state *state)
@@ -1130,6 +1156,7 @@ static void stmmac_validate(struct phylink_config *config,
 	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mac_supported) = { 0, };
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(earlyeth_advt) = { 0, };
 	int tx_cnt = priv->plat->tx_queues_to_use;
 	int max_speed = priv->plat->max_speed;
 
@@ -1233,13 +1260,24 @@ static void stmmac_validate(struct phylink_config *config,
 	if (priv->phydev && !priv->plat->fixed_phy_mode &&
 	    priv->plat->early_eth && !priv->early_eth_config_set) {
 		priv->phydev->autoneg = AUTONEG_DISABLE;
-		priv->phydev->speed = SPEED_100;
 		priv->phydev->duplex = DUPLEX_FULL;
 
-		pr_info(" qcom-ethqos: %s early eth setting successful\n",
-			__func__);
+		if (priv->phydev->drv &&
+		    (priv->phydev->phy_id & priv->phydev->drv->phy_id_mask) ==
+		    MARVELL_PHY_ID_88E1510) {
+			priv->phydev->speed = SPEED_1000;
+			phylink_set(earlyeth_advt, 1000baseT_Full);
+			linkmode_copy(priv->phydev->advertising, priv->phydev->supported);
+			linkmode_and(priv->phydev->advertising, priv->phydev->advertising,
+				     earlyeth_advt);
+			stmmac_set_speed1000(priv);
+		} else {
+			priv->phydev->speed = SPEED_100;
+			stmmac_set_speed100(priv);
+		}
 
-		stmmac_set_speed100(priv);
+		pr_info(" qcom-ethqos: %s early eth setting successful with speed = %d\n",
+			__func__, priv->phydev->speed);
 		/* Validate method will also be called
 		 * when we change speed using ethtool.
 		 * Add check to avoid multiple calls

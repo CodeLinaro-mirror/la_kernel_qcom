@@ -9,6 +9,7 @@
 #include <linux/phy.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
+#include <linux/marvell_phy.h>
 
 #include "stmmac.h"
 #include "dwmac-qcom-ethqos.h"
@@ -373,8 +374,14 @@ void ethqos_trigger_phylink(struct qcom_ethqos *ethqos, bool status)
 		node = priv->plat->phylink_node;
 
 		if (priv->phydev && !priv->plat->fixed_phy_mode &&
-		    priv->plat->early_eth)
-			stmmac_set_speed100(priv);
+		    priv->plat->early_eth) {
+			if (priv->phydev->drv &&
+			    (priv->phydev->phy_id & priv->phydev->drv->phy_id_mask) ==
+			    MARVELL_PHY_ID_88E1510)
+				stmmac_set_speed1000(priv);
+			else
+				stmmac_set_speed100(priv);
+		}
 
 		if (node)
 			ret = phylink_of_phy_connect(priv->phylink, node, 0);
