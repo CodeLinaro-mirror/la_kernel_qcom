@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
  * Copyright (c) 2012-2014,2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _DT_BINDINGS_QCOM_SPMI_VADC_H
@@ -472,6 +472,9 @@
 #define ADC5_GEN4_ATEST3_DIV3			0x9d
 #define ADC5_GEN4_VBAT_2S_MID2			0x9f
 #define ADC5_GEN4_ICHG_FB			0xa1
+
+/* 1/3 Divider */
+#define ADC5_GEN4_VPH_PWR			0x8e
 
 /* VADC scale function index */
 #define ADC_SCALE_DEFAULT				0
