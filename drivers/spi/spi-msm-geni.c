@@ -3204,7 +3204,7 @@ static int geni_spi_resources_init(struct platform_device *pdev, struct spi_geni
 	}
 
 	/* call set_bw for once, then do icc_enable/disable */
-	ret = geni_common_icc_set_bw(spi_rsc, geni_mas->ipc);
+	ret = geni_icc_set_bw(spi_rsc);
 	if (ret) {
 		dev_err(&pdev->dev, "%s: icc set bw failed ret:%d\n",
 			__func__, ret);
