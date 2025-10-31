@@ -1341,6 +1341,7 @@ static int geni_serial_set_level(struct uart_port *uport, unsigned long baud)
 {
 	struct qcom_geni_serial_port *port = to_dev_port(uport);
 	struct device *perf_dev = port->pd_list->pd_devs[DOMAIN_IDX_PERF];
+	int ret;
 
 	/*
 	 * The performance protocol sets UART communication
@@ -1370,7 +1371,12 @@ static int geni_serial_set_level(struct uart_port *uport, unsigned long baud)
 	 * +---------------------+--------------------+
 	 */
 
-	return geni_serial_pm_opp_set_level(perf_dev, baud);
+	dev_dbg(uport->dev, "Calling Opp set level for %lu baud rate\n", baud);
+	ret = geni_serial_pm_opp_set_level(perf_dev, baud);
+	if (ret)
+		dev_err(uport->dev, "performance operation(%lu) failed with err=%d\n",
+			baud, ret);
+	return ret;
 }
 
 static void qcom_geni_serial_set_termios(struct uart_port *uport,
@@ -1694,9 +1700,10 @@ static int geni_serial_pwr_init(struct uart_port *uport)
 
 	ret = dev_pm_domain_attach_list(port->se.dev,
 					&port->dev_data->pd_data, &port->pd_list);
-	if (ret <= 0)
+	if (ret <= 0) {
+		dev_err(port->se.dev, "Failed to attach domain: %d\n", ret);
 		return -EINVAL;
-
+	}
 	return 0;
 }
 
@@ -1740,16 +1747,21 @@ static int geni_serial_resource_init(struct uart_port *uport)
 static void qcom_geni_serial_pm(struct uart_port *uport,
 		unsigned int new_state, unsigned int old_state)
 {
+	int ret;
+
 	/* If we've never been called, treat it as off */
 	if (old_state == UART_PM_STATE_UNDEFINED)
 		old_state = UART_PM_STATE_OFF;
 
-	if (new_state == UART_PM_STATE_ON && old_state == UART_PM_STATE_OFF)
-		pm_runtime_resume_and_get(uport->dev);
-	else if (new_state == UART_PM_STATE_OFF &&
-			old_state == UART_PM_STATE_ON)
+	if (new_state == UART_PM_STATE_ON && old_state == UART_PM_STATE_OFF) {
+		ret = pm_runtime_resume_and_get(uport->dev);
+		if (ret < 0) {
+			dev_err(uport->dev, "Failed to resume device in pm ops:%d\n", ret);
+			return;
+		}
+	} else if (new_state == UART_PM_STATE_OFF && old_state == UART_PM_STATE_ON) {
 		pm_runtime_put_sync(uport->dev);
-
+	}
 }
 
 static const struct uart_ops qcom_geni_console_pops = {
