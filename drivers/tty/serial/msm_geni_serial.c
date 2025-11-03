@@ -2174,10 +2174,16 @@ static void msm_geni_deallocate_chan(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 
-	dma_release_channel(msm_port->gsi->rx_c);
-	dma_release_channel(msm_port->gsi->tx_c);
-	msm_port->gsi->rx_c = NULL;
-	msm_port->gsi->tx_c = NULL;
+	if (msm_port->gsi->rx_c) {
+		dma_release_channel(msm_port->gsi->rx_c);
+		msm_port->gsi->rx_c = NULL;
+	}
+
+	if (msm_port->gsi->tx_c) {
+		dma_release_channel(msm_port->gsi->tx_c);
+		msm_port->gsi->tx_c = NULL;
+	}
+	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "DMA channel release done\n");
 }
 
 static int msm_geni_allocate_chan(struct uart_port *uport)
