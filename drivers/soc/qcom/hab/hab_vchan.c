@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include "hab.h"
 
@@ -38,10 +38,10 @@ hab_vchan_alloc(struct uhab_context *ctx, struct physical_channel *pchan,
 	vchan->pchan = pchan;
 	/* vchan need both vcid and openid to be properly located */
 	vchan->session_id = openid;
-	write_lock(&pchan->vchans_lock);
+	write_lock_bh(&pchan->vchans_lock);
 	list_add_tail(&vchan->pnode, &pchan->vchannels);
 	pchan->vcnt++;
-	write_unlock(&pchan->vchans_lock);
+	write_unlock_bh(&pchan->vchans_lock);
 	vchan->id = ((id << HAB_VCID_ID_SHIFT) & HAB_VCID_ID_MASK) |
 		((pchan->habdev->id << HAB_VCID_MMID_SHIFT) &
 			HAB_VCID_MMID_MASK) |
@@ -182,11 +182,11 @@ void hab_vchans_stop(struct physical_channel *pchan)
 {
 	struct virtual_channel *vchan, *tmp;
 
-	read_lock(&pchan->vchans_lock);
+	read_lock_bh(&pchan->vchans_lock);
 	list_for_each_entry_safe(vchan, tmp, &pchan->vchannels, pnode) {
 		hab_vchan_stop(vchan);
 	}
-	read_unlock(&pchan->vchans_lock);
+	read_unlock_bh(&pchan->vchans_lock);
 }
 
 /* send vchan close to remote and stop receiving anything locally */
@@ -200,7 +200,7 @@ static int hab_vchans_per_pchan_empty(struct physical_channel *pchan)
 {
 	int empty;
 
-	read_lock(&pchan->vchans_lock);
+	read_lock_bh(&pchan->vchans_lock);
 	empty = list_empty(&pchan->vchannels);
 	if (!empty) {
 		struct virtual_channel *vchan;
@@ -221,7 +221,7 @@ static int hab_vchans_per_pchan_empty(struct physical_channel *pchan)
 		if (!vcnt)
 			empty = 1;/* unpaired vchan can exist at init time */
 	}
-	read_unlock(&pchan->vchans_lock);
+	read_unlock_bh(&pchan->vchans_lock);
 
 	return empty;
 }

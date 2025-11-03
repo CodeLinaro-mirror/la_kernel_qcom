@@ -279,7 +279,7 @@ void hab_ctx_free_fn(struct uhab_context *ctx)
 		list_for_each_entry(pchan, &habdev->pchannels, node) {
 
 			/* check vchan ctx owner */
-			read_lock(&pchan->vchans_lock);
+			read_lock_bh(&pchan->vchans_lock);
 			list_for_each_entry(vchan, &pchan->vchannels, pnode) {
 				if (vchan->ctx == ctx) {
 					pr_warn("leak vcid %X cnt %d pchan %s local %d remote %d\n",
@@ -289,7 +289,7 @@ void hab_ctx_free_fn(struct uhab_context *ctx)
 						pchan->vmid_remote);
 				}
 			}
-			read_unlock(&pchan->vchans_lock);
+			read_unlock_bh(&pchan->vchans_lock);
 		}
 		read_unlock_bh(&habdev->pchan_lock);
 	}
