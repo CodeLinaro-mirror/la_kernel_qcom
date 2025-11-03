@@ -23,19 +23,33 @@
 #define SAMPLING_MS 10
 #define boost_dection(ptr, idx) ({ \
 	(ptr->cpu_freq_curr[idx] - ptr->cpu_freq_prev[idx]) \
-		> ptr->config[idx].cpu_boost_thresh ? 1 : 0; })
+		> ptr->config->freq_cfg[idx].cpu_boost_thresh ? 1 : 0; })
 
 #define cache_get(ptr, member) ({	\
 	(mpam_version.version >= 0x10002) ?	\
 	ptr->V2.member : ptr->V1.member; })
 
-struct cpu_gpu_bw_config {
+struct freq_mon_config {
 	int cluster_id;
 	u32 cpu_boost_thresh;
 	u32 cpu_restore_thresh;
 	u32 cpu_instant_thresh[2];
 	u32 gpu_instant_thresh;
-	u64 bw_mon_ratio_thresh[2];
+};
+
+struct client_ratio_gear {
+	int cpu_gear;
+	int gpu_gear;
+};
+
+struct bw_ratio_config {
+	u64 bw_mon_ratio_thresh[4];
+	struct client_ratio_gear bw_gear[5];
+};
+
+struct soc_config {
+	struct freq_mon_config *freq_cfg;
+	struct bw_ratio_config *bw_ratio_cfg;
 };
 
 struct bw_monitor_data {
@@ -48,7 +62,7 @@ struct bw_monitor_data {
 struct cache_allocation {
 	struct devfreq *df;
 	struct device_node *gpu_np;
-	struct cpu_gpu_bw_config *config;
+	struct soc_config *config;
 	u32 *cpu_freq_prev;
 	u32 *cpu_freq_curr;
 	u32 gpu_freq_prev;
@@ -174,7 +188,8 @@ static void cpu_gpu_freq_update(struct cache_allocation *pdev)
 
 	for (i = 0; i < pdev->cluster_num; i++) {
 		pdev->cpu_freq_prev[i] = pdev->cpu_freq_curr[i];
-		pdev->cpu_freq_curr[i] = cpufreq_quick_get(pdev->config[i].cluster_id);
+		pdev->cpu_freq_curr[i] =
+				cpufreq_quick_get(pdev->config->freq_cfg[i].cluster_id);
 		trace_cache_alloc_cpu_update(i, pdev->cpu_freq_prev[i],
 							pdev->cpu_freq_curr[i]);
 	}
@@ -260,8 +275,10 @@ static void module_bw_monitor(struct cache_allocation *pdev,
 	trace_cache_alloc_byte_cnt(pdev->bw_monitor_data[idx].byte_cnt, idx);
 
 	if (pdev->bw_monitor_data[idx].timestamp ==
-			pdev->bw_monitor_data[idx].last_timestamp)
+			pdev->bw_monitor_data[idx].last_timestamp) {
 		*mbps = 0;
+		return;
+	}
 
 	*mbps = (pdev->bw_monitor_data[idx].byte_cnt -
 				pdev->bw_monitor_data[idx].last_byte_cnt) * K_F /
@@ -284,7 +301,7 @@ static void platform_bw_thresh_monitor(struct cache_allocation *pdev, u64 *ratio
 		module_bw_monitor(pdev, &slc_config[2], &gpu_mbps, 2);
 
 		if (gpu_mbps == 0)
-			*ratio = pdev->config[pdev->cluster_num - 1].bw_mon_ratio_thresh[1] + 1;
+			*ratio = pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[3] + 1;
 		else
 			*ratio = 100 * cpu_mbps / gpu_mbps;
 		trace_cache_alloc_bw_ratio(m_mbps, l_mbps, cpu_mbps, gpu_mbps, *ratio);
@@ -317,9 +334,9 @@ static void freq_mon_prefer_cpu_gov(struct cache_allocation *pdev)
 		}
 	} else if (pdev->freq_mon_status != 3 &&
 			((pdev->cpu_freq_curr[0] <=
-					pdev->config[0].cpu_restore_thresh) &&
+					pdev->config->freq_cfg[0].cpu_restore_thresh) &&
 			(pdev->cpu_freq_curr[1] <=
-					pdev->config[1].cpu_restore_thresh))) {
+					pdev->config->freq_cfg[1].cpu_restore_thresh))) {
 		pdev->freq_mon_status = 3;
 		pdev->client_input[APPS] = GEAR_LVL_10;
 		pdev->client_input[GPU] = GEAR_LVL_11;
@@ -340,30 +357,30 @@ static void freq_mon_prefer_gpu_gov(struct cache_allocation *pdev)
 	int ret = 0;
 
 	if (pdev->freq_mon_status != 5 &&
-	   (pdev->cpu_freq_curr[0] < pdev->config[0].cpu_instant_thresh[0] ||
-	   pdev->cpu_freq_curr[1] < pdev->config[1].cpu_instant_thresh[0])) {
+	   (pdev->cpu_freq_curr[0] < pdev->config->freq_cfg[0].cpu_instant_thresh[0] ||
+	   pdev->cpu_freq_curr[1] < pdev->config->freq_cfg[1].cpu_instant_thresh[0])) {
 		pdev->freq_mon_status = 5;
 		pdev->client_input[APPS] = GEAR_LVL_5;
 		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->freq_mon_status != 6 &&
 			((pdev->cpu_freq_curr[0] >=
-					pdev->config[0].cpu_instant_thresh[0] &&
+					pdev->config->freq_cfg[0].cpu_instant_thresh[0] &&
 			pdev->cpu_freq_curr[0] <
-					pdev->config[0].cpu_instant_thresh[1]) ||
+					pdev->config->freq_cfg[0].cpu_instant_thresh[1]) ||
 			(pdev->cpu_freq_curr[0] >=
-					pdev->config[1].cpu_instant_thresh[0] &&
+					pdev->config->freq_cfg[1].cpu_instant_thresh[0] &&
 			pdev->cpu_freq_curr[1] <
-					pdev->config[1].cpu_instant_thresh[1]))) {
+					pdev->config->freq_cfg[1].cpu_instant_thresh[1]))) {
 		pdev->freq_mon_status = 6;
 		pdev->client_input[APPS] = GEAR_LVL_10;
 		pdev->client_input[GPU] = GEAR_LVL_11;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->freq_mon_status != 7 &&
 			(pdev->cpu_freq_curr[0] >=
-					pdev->config[0].cpu_instant_thresh[1] ||
+					pdev->config->freq_cfg[0].cpu_instant_thresh[1] ||
 			pdev->cpu_freq_curr[1] >=
-					pdev->config[1].cpu_instant_thresh[1])){
+					pdev->config->freq_cfg[1].cpu_instant_thresh[1])){
 		pdev->freq_mon_status = 7;
 		pdev->client_input[APPS] = GEAR_LVL_10;
 		pdev->client_input[GPU] = GEAR_LVL_6;
@@ -378,9 +395,9 @@ static void freq_mon_prefer_gpu_gov(struct cache_allocation *pdev)
 
 static void freq_mon_gov(struct cache_allocation *pdev)
 {
-	if (pdev->gpu_freq_curr < pdev->config[0].gpu_instant_thresh)
+	if (pdev->gpu_freq_curr < pdev->config->freq_cfg[0].gpu_instant_thresh)
 		freq_mon_prefer_cpu_gov(pdev);
-	else if (pdev->gpu_freq_curr > pdev->config[1].gpu_instant_thresh)
+	else if (pdev->gpu_freq_curr > pdev->config->freq_cfg[1].gpu_instant_thresh)
 		freq_mon_prefer_gpu_gov(pdev);
 }
 
@@ -394,37 +411,37 @@ static void bw_mon_ratio_gov(struct cache_allocation *pdev)
 		return;
 
 	if (pdev->bw_mon_ratio_status != 1 &&
-			ratio < pdev->config[0].bw_mon_ratio_thresh[0]) {
+			ratio < pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[0]) {
 		pdev->bw_mon_ratio_status = 1;
-		pdev->client_input[APPS] = GEAR_BYPASS;
-		pdev->client_input[GPU] = GEAR_LVL_11;
+		pdev->client_input[APPS] = pdev->config->bw_ratio_cfg->bw_gear[0].cpu_gear;
+		pdev->client_input[GPU] = pdev->config->bw_ratio_cfg->bw_gear[0].gpu_gear;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 2 &&
-			ratio >= pdev->config[0].bw_mon_ratio_thresh[0] &&
-			ratio < pdev->config[0].bw_mon_ratio_thresh[1]) {
+			ratio >= pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[0] &&
+			ratio < pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[1]) {
 		pdev->bw_mon_ratio_status = 2;
-		pdev->client_input[APPS] = GEAR_LVL_5;
-		pdev->client_input[GPU] = GEAR_LVL_11;
+		pdev->client_input[APPS] = pdev->config->bw_ratio_cfg->bw_gear[1].cpu_gear;
+		pdev->client_input[GPU] = pdev->config->bw_ratio_cfg->bw_gear[1].gpu_gear;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 3 &&
-			ratio >= pdev->config[0].bw_mon_ratio_thresh[1] &&
-			ratio < pdev->config[1].bw_mon_ratio_thresh[0]) {
+			ratio >= pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[1] &&
+			ratio < pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[2]) {
 		pdev->bw_mon_ratio_status = 3;
-		pdev->client_input[APPS] = GEAR_LVL_10;
-		pdev->client_input[GPU] = GEAR_LVL_11;
+		pdev->client_input[APPS] = pdev->config->bw_ratio_cfg->bw_gear[2].cpu_gear;
+		pdev->client_input[GPU] = pdev->config->bw_ratio_cfg->bw_gear[2].gpu_gear;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 4 &&
-			ratio >= pdev->config[1].bw_mon_ratio_thresh[0] &&
-			ratio < pdev->config[1].bw_mon_ratio_thresh[1]) {
+			ratio >= pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[2] &&
+			ratio < pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[3]) {
 		pdev->bw_mon_ratio_status = 4;
-		pdev->client_input[APPS] = GEAR_LVL_10;
-		pdev->client_input[GPU] = GEAR_LVL_6;
+		pdev->client_input[APPS] = pdev->config->bw_ratio_cfg->bw_gear[3].cpu_gear;
+		pdev->client_input[GPU] = pdev->config->bw_ratio_cfg->bw_gear[3].gpu_gear;
 		ret = cache_allocation_configure(pdev);
 	} else if (pdev->bw_mon_ratio_status != 5 &&
-			ratio >= pdev->config[1].bw_mon_ratio_thresh[1]) {
+			ratio >= pdev->config->bw_ratio_cfg->bw_mon_ratio_thresh[3]) {
 		pdev->bw_mon_ratio_status = 5;
-		pdev->client_input[APPS] = GEAR_LVL_10;
-		pdev->client_input[GPU] = GEAR_BYPASS;
+		pdev->client_input[APPS] = pdev->config->bw_ratio_cfg->bw_gear[4].cpu_gear;
+		pdev->client_input[GPU] = pdev->config->bw_ratio_cfg->bw_gear[4].gpu_gear;
 		ret = cache_allocation_configure(pdev);
 	}
 
@@ -499,13 +516,11 @@ static ssize_t bw_mon_ratio_thresh_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
 	struct cache_allocation *pd = dev_get_drvdata(dev);
-	int i, j, cnt = 0;
+	int i, cnt = 0;
 
-	for (i = 0; i < pd->cluster_num; i++) {
-		for (j = 0; j < 2; j++)
-			cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%llu ",
-					pd->config[i].bw_mon_ratio_thresh[j]);
-	}
+	for (i = 0; i < 4; i++)
+		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%llu ",
+					pd->config->bw_ratio_cfg->bw_mon_ratio_thresh[i]);
 	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "\n");
 
 	return cnt;
@@ -516,7 +531,7 @@ static ssize_t bw_mon_ratio_thresh_store(struct device *dev,
 {
 	struct cache_allocation *pd = dev_get_drvdata(dev);
 	int var[4] = {0};
-	int ret, i = 0, j = 0;
+	int ret, i = 0;
 	char *kbuf, *s, *str;
 
 	kbuf = kstrdup(buf, GFP_KERNEL);
@@ -534,10 +549,8 @@ static ssize_t bw_mon_ratio_thresh_store(struct device *dev,
 	}
 
 	mutex_lock(&pd->lock);
-	for (i = 0; i < 2; i++) {
-		for (j = 0; j < 2; j++)
-			pd->config[i].bw_mon_ratio_thresh[j] = var[i * 2 + j];
-	}
+	for (i = 0; i < 4; i++)
+		pd->config->bw_ratio_cfg->bw_mon_ratio_thresh[i] = var[i];
 	mutex_unlock(&pd->lock);
 
 out:
@@ -554,23 +567,23 @@ static ssize_t freq_mon_thresh_show(struct device *dev,
 
 	for (i = 0; i < pd->cluster_num; i++) {
 		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%d ",
-					pd->config[i].cpu_boost_thresh);
+					pd->config->freq_cfg[i].cpu_boost_thresh);
 		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%d ",
-					pd->config[i].cpu_restore_thresh);
+					pd->config->freq_cfg[i].cpu_restore_thresh);
 	}
 
 	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%d\n",
-				pd->config[0].gpu_instant_thresh);
+				pd->config->freq_cfg[0].gpu_instant_thresh);
 
 	for (i = 0; i < pd->cluster_num; i++) {
 		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%d ",
-					pd->config[i].cpu_instant_thresh[0]);
+					pd->config->freq_cfg[i].cpu_instant_thresh[0]);
 		cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%d ",
-					pd->config[i].cpu_instant_thresh[1]);
+					pd->config->freq_cfg[i].cpu_instant_thresh[1]);
 	}
 
 	cnt += scnprintf(buf + cnt, PAGE_SIZE - cnt, "%d\n",
-				pd->config[1].gpu_instant_thresh);
+				pd->config->freq_cfg[1].gpu_instant_thresh);
 
 	return cnt;
 }
@@ -599,11 +612,11 @@ static ssize_t freq_mon_thresh_store(struct device *dev,
 
 	mutex_lock(&pd->lock);
 	for (i = 0; i < pd->cluster_num; i++) {
-		pd->config[i].cpu_boost_thresh = var[i * 2];
-		pd->config[i].cpu_restore_thresh = var[i * 2 + 1];
-		pd->config[i].cpu_instant_thresh[0] = var[i * 2 + 5];
-		pd->config[i].cpu_instant_thresh[1] = var[i * 2 + 6];
-		pd->config[i].gpu_instant_thresh = var[i * 5 + 4];
+		pd->config->freq_cfg[i].cpu_boost_thresh = var[i * 2];
+		pd->config->freq_cfg[i].cpu_restore_thresh = var[i * 2 + 1];
+		pd->config->freq_cfg[i].cpu_instant_thresh[0] = var[i * 2 + 5];
+		pd->config->freq_cfg[i].cpu_instant_thresh[1] = var[i * 2 + 6];
+		pd->config->freq_cfg[i].gpu_instant_thresh = var[i * 5 + 4];
 	}
 	mutex_unlock(&pd->lock);
 
@@ -690,11 +703,11 @@ static void cache_allocation_monitor_work(struct work_struct *work)
 static int cache_allocation_probe(struct platform_device *pdev)
 {
 	struct cache_allocation *pd;
-	struct cpu_gpu_bw_config *config;
+	struct soc_config *config;
 	int ret = 0;
 	struct resource *res;
 
-	config = (struct cpu_gpu_bw_config *)of_device_get_match_data(&pdev->dev);
+	config = (struct soc_config *)of_device_get_match_data(&pdev->dev);
 	if (!config)
 		return -ENODEV;
 
@@ -707,9 +720,18 @@ static int cache_allocation_probe(struct platform_device *pdev)
 	if (ret)
 		return -EINVAL;
 
-	pd->config = devm_kcalloc(&pdev->dev, pd->cluster_num,
-					sizeof(*pd->config), GFP_KERNEL);
+	pd->config = devm_kzalloc(&pdev->dev, sizeof(*pd->config), GFP_KERNEL);
 	if (!pd->config)
+		return -ENOMEM;
+
+	pd->config->freq_cfg = devm_kcalloc(&pdev->dev, pd->cluster_num,
+						sizeof(struct freq_mon_config), GFP_KERNEL);
+	if (!pd->config->freq_cfg)
+		return -ENOMEM;
+
+	pd->config->bw_ratio_cfg = devm_kzalloc(&pdev->dev,
+						sizeof(struct bw_ratio_config), GFP_KERNEL);
+	if (!pd->config->bw_ratio_cfg)
 		return -ENOMEM;
 
 	pd->cpu_freq_prev = devm_kcalloc(&pdev->dev, pd->cluster_num,
@@ -752,7 +774,7 @@ static int cache_allocation_probe(struct platform_device *pdev)
 		DL_FLAG_AUTOPROBE_CONSUMER);
 
 	put_device(&gpu_pdev->dev);
-	of_node_put(devfreq_cdev->gpu_np);
+	of_node_put(pd->gpu_np);
 
 	if (!link) {
 		pr_err("add gpu device_link fail\n");
@@ -791,7 +813,9 @@ static int cache_allocation_probe(struct platform_device *pdev)
 	if (!pd->bw_monitor_data)
 		return -ENOMEM;
 
-	memcpy(pd->config, config, pd->cluster_num * sizeof(*config));
+	memcpy(pd->config->freq_cfg, config->freq_cfg,
+				pd->cluster_num * sizeof(struct freq_mon_config));
+	memcpy(pd->config->bw_ratio_cfg, config->bw_ratio_cfg, sizeof(struct bw_ratio_config));
 	pd->enable_monitor = false;
 	pd->running_flag =  false;
 	pd->sampling_time_ms = SAMPLING_MS;
@@ -865,7 +889,9 @@ fail_create_freq_mon_thresh:
 fail_create_sampling_time_ms:
 	device_remove_file(&pdev->dev, &dev_attr_enable_monitor);
 fail_create_enable_monitor:
+#if IS_ENABLED(CONFIG_QTI_GPU_RESOURCE_ENABLED)
 	of_node_put(pd->gpu_np);
+#endif
 	return ret;
 }
 
@@ -883,14 +909,13 @@ static void cache_allocation_remove(struct platform_device *pdev)
 	device_remove_file(&pdev->dev, &dev_attr_available_governors);
 }
 
-static struct cpu_gpu_bw_config canoe_config[] = {
+static struct freq_mon_config canoe_cpu_gpu_freq_cfg[] = {
 	[0] = {
 		.cluster_id = 0,
 		.cpu_boost_thresh = 1500000,
 		.cpu_restore_thresh = 1000000,
 		.cpu_instant_thresh = { 115200, 1996800 },
 		.gpu_instant_thresh = 443,
-		.bw_mon_ratio_thresh = { 10, 50 },
 	},
 	[1] = {
 		.cluster_id = 6,
@@ -898,18 +923,16 @@ static struct cpu_gpu_bw_config canoe_config[] = {
 		.cpu_restore_thresh = 1400000,
 		.cpu_instant_thresh = { 1689600, 3072000 },
 		.gpu_instant_thresh = 607,
-		.bw_mon_ratio_thresh = { 150, 1000 },
 	},
 };
 
-static struct cpu_gpu_bw_config alor_config[] = {
+static struct freq_mon_config alor_cpu_gpu_freq_cfg[] = {
 	[0] = {
 		.cluster_id = 0,
 		.cpu_boost_thresh = 1500000,
 		.cpu_restore_thresh = 1000000,
 		.cpu_instant_thresh = { 115200, 1996800 },
 		.gpu_instant_thresh = 443,
-		.bw_mon_ratio_thresh = { 10, 50 },
 	},
 	[1] = {
 		.cluster_id = 6,
@@ -917,8 +940,39 @@ static struct cpu_gpu_bw_config alor_config[] = {
 		.cpu_restore_thresh = 1400000,
 		.cpu_instant_thresh = { 1689600, 3072000 },
 		.gpu_instant_thresh = 607,
-		.bw_mon_ratio_thresh = { 150, 1000 },
 	},
+};
+
+static struct bw_ratio_config canoe_bw_ratio_cfg = {
+	.bw_mon_ratio_thresh = { 10, 50, 150, 1000},
+	.bw_gear = {
+		{GEAR_BYPASS, GEAR_LVL_11},
+		{GEAR_LVL_5, GEAR_LVL_11},
+		{GEAR_LVL_10, GEAR_LVL_11},
+		{GEAR_LVL_10, GEAR_LVL_6},
+		{GEAR_LVL_10, GEAR_BYPASS},
+	},
+};
+
+static struct bw_ratio_config alor_bw_ratio_cfg = {
+	.bw_mon_ratio_thresh = { 10, 50, 150, 1000},
+	.bw_gear = {
+		{GEAR_BYPASS, GEAR_LVL_9},
+		{GEAR_LVL_4, GEAR_LVL_9},
+		{GEAR_LVL_9, GEAR_LVL_9},
+		{GEAR_LVL_9,  GEAR_LVL_4},
+		{GEAR_LVL_9, GEAR_BYPASS},
+	},
+};
+
+struct soc_config canoe_config = {
+	.freq_cfg = canoe_cpu_gpu_freq_cfg,
+	.bw_ratio_cfg = &canoe_bw_ratio_cfg,
+};
+
+struct soc_config alor_config = {
+	.freq_cfg = alor_cpu_gpu_freq_cfg,
+	.bw_ratio_cfg = &alor_bw_ratio_cfg,
 };
 
 static const struct of_device_id cache_allocation_table[] = {
