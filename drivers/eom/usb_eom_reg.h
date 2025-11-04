@@ -4,7 +4,18 @@
 #ifndef USB_EOM_REG_H
 #define USB_EOM_REG_H
 
-#define MAX_T_COARSE     8
+#define EYE_HEIGHT_STEP         3
+#define MAX_VERTICAL_THRESHOLD  8
+#define MAX_EYE_HEIGHT          8
+#define MAX_EYE_HEIGHT_MV       (MAX_EYE_HEIGHT * EYE_HEIGHT_STEP)
+#define EYE_WIDTH_STEP          (1 / 32)
+#define MAX_EYE_WIDTH           64
+#define MAX_EYE_WIDTH_UI        (MAX_EYE_WIDTH * EYE_WIDTH_STEP)
+#define MAX_NUM_LANES           8
+#define EOM_TEST_TIME_DEFAULT   1
+#define EOM_TEST_TIME_MAX       1000
+#define MAX_T_COARSE            8
+
 #define USB_PHY_LANE_TYPE_CONFIG_OFFSET 0x24
 #define USB3_QSERDES_LANE_A_BASE_OFFSET 0x1400
 #define LANE_B_OFFSET 0x400
