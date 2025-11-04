@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #define pr_fmt(fmt) "gic-router: %s: " fmt, __func__
 
@@ -87,15 +87,20 @@ static int process_cpu_index(struct device_node *np, int cpu_index, int clss)
 	const __be32 *reg;
 	u32 cpu_mpidr = 0;
 	int ret;
+	int pcpu;
 
-	dev_phandle = of_parse_phandle(np, "qcom,gic-cpulist", cpu_index);
+	pcpu = cpu_logical_to_phys(cpu_index);
+	if (pcpu < 0)
+		return pcpu;
+
+	dev_phandle = of_parse_phandle(np, "qcom,gic-cpulist", pcpu);
 	if (!dev_phandle) {
-		pr_err("Invalid CPU index: %d\n", cpu_index);
+		pr_err("Invalid CPU index: %d\n", pcpu);
 		return -EINVAL;
 	}
 	reg = of_get_property(dev_phandle, "reg", NULL);
 	if (!reg) {
-		pr_err("Failed to get reg property for CPU%d\n", cpu_index);
+		pr_err("Failed to get reg property for CPU%d\n", pcpu);
 		ret = -EINVAL;
 		goto dec_node;
 	}
@@ -103,12 +108,9 @@ static int process_cpu_index(struct device_node *np, int cpu_index, int clss)
 	ret = qcom_scm_set_gic_cpuclass(cpu_mpidr, clss);
 	if (ret) {
 		pr_err("Runtime CPU configuration for GIC failed for CPU%d at address 0x%x\n",
-				cpu_index, cpu_mpidr);
-		ret = -EINVAL;
-		goto dec_node;
+				pcpu, cpu_mpidr);
 	}
 
-	ret = 0;
 
 dec_node:
 	of_node_put(dev_phandle);
