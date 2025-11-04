@@ -642,6 +642,16 @@ const struct mpm_pin mpm_khaje_gic_chip_data[] = {
 	{-1},
 };
 
+const struct mpm_pin mpm_bengal_gic_chip_data[] = {
+	{2, 190},
+	{12, 422}, /* b3_lfps_rxterm_irq */
+	{86, 183}, /* mpm_wake,spmi_m */
+	{90, 260}, /* eud_p0_dpse_int_mx */
+	{91, 260}, /* eud_p0_dmse_int_mx */
+	{5, 296}, /* lpass_irq_out_sdc */
+	{24, 79}, /* bi_px_lpi_1_aoss_mx */
+	{-1},
+};
 
 static const struct of_device_id mpm_gic_chip_data_table[] = {
 	{
@@ -663,6 +673,10 @@ static const struct of_device_id mpm_gic_chip_data_table[] = {
 	{
 		.compatible = "qcom,mpm-khaje",
 		.data = mpm_khaje_gic_chip_data,
+	},
+	{
+		.compatible = "qcom,mpm-bengal",
+		.data = mpm_bengal_gic_chip_data,
 	},
 	{}
 };
