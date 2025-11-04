@@ -9,6 +9,7 @@ camcc-canoe.ko
 clk-dummy.ko
 clk-qcom.ko
 clk-rpmh.ko
+cpu_phys_log_map.ko
 midpoint.ko
 clk-scmi.ko
 sched-walt.ko
