@@ -3,49 +3,26 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include "qcom,sm8650-videocc.h"
 #ifndef _DT_BINDINGS_CLK_QCOM_VIDEO_CC_X1P42100_H
 #define _DT_BINDINGS_CLK_QCOM_VIDEO_CC_X1P42100_H
 
 /* VIDEO_CC clocks */
-#define VIDEO_CC_AHB_CLK					0
-#define VIDEO_CC_AHB_CLK_SRC					1
-#define VIDEO_CC_MVS0_BSE_CLK					2
-#define VIDEO_CC_MVS0_BSE_CLK_SRC				3
-#define VIDEO_CC_MVS0_BSE_DIV4_DIV_CLK_SRC			4
-#define VIDEO_CC_MVS0_CLK					5
-#define VIDEO_CC_MVS0_CLK_SRC					6
-#define VIDEO_CC_MVS0_SHIFT_CLK					7
-#define VIDEO_CC_MVS0C_CLK					8
-#define VIDEO_CC_MVS0C_SHIFT_CLK				9
-#define VIDEO_CC_MVS1_CLK					10
-#define VIDEO_CC_MVS1_CLK_SRC					11
-#define VIDEO_CC_MVS1_DIV_CLK_SRC				12
-#define VIDEO_CC_MVS1_SHIFT_CLK					13
-#define VIDEO_CC_MVS1C_CLK					14
-#define VIDEO_CC_MVS1C_DIV2_DIV_CLK_SRC				15
-#define VIDEO_CC_MVS1C_SHIFT_CLK				16
-#define VIDEO_CC_PLL0						17
-#define VIDEO_CC_PLL1						18
-#define VIDEO_CC_SLEEP_CLK					19
-#define VIDEO_CC_SLEEP_CLK_SRC					20
-#define VIDEO_CC_XO_CLK						21
-#define VIDEO_CC_XO_CLK_SRC					22
-
-/* VIDEO_CC power domains */
-#define VIDEO_CC_MVS0_GDSC					0
-#define VIDEO_CC_MVS0C_GDSC					1
-#define VIDEO_CC_MVS1_GDSC					2
-#define VIDEO_CC_MVS1C_GDSC					3
+#define VIDEO_CC_AHB_CLK					17
+#define VIDEO_CC_AHB_CLK_SRC					18
+#define VIDEO_CC_MVS0_BSE_CLK					19
+#define VIDEO_CC_MVS0_BSE_CLK_SRC				20
+#define VIDEO_CC_MVS0_BSE_DIV4_DIV_CLK_SRC			21
+#define VIDEO_CC_SLEEP_CLK					22
+#define VIDEO_CC_SLEEP_CLK_SRC					23
+#define VIDEO_CC_XO_CLK						24
 
 /* VIDEO_CC resets */
-#define VIDEO_CC_INTERFACE_AHB_BCR				0
-#define VIDEO_CC_MVS0_BSE_BCR					1
-#define VIDEO_CC_MVS0_BCR					2
-#define VIDEO_CC_MVS0C_CLK_ARES					3
-#define VIDEO_CC_MVS0C_BCR					4
-#define VIDEO_CC_MVS1_BCR					5
-#define VIDEO_CC_MVS1C_CLK_ARES					6
-#define VIDEO_CC_MVS1C_BCR					7
-#define VIDEO_CC_XO_CLK_ARES					8
+#define VIDEO_CC_INTERFACE_AHB_BCR				8
+#define VIDEO_CC_MVS0_BSE_BCR					9
+#define VIDEO_CC_MVS0_BCR					10
+#define VIDEO_CC_MVS0C_BCR					11
+#define VIDEO_CC_MVS1_BCR					12
+#define VIDEO_CC_MVS1C_BCR					13
 
 #endif
