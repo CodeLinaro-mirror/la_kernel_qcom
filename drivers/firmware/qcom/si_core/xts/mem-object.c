@@ -449,7 +449,10 @@ static unsigned long mo_prepare_ffa(struct si_object *object, struct si_arg args
 		ffa->offset = mo->ffa_mapping_info.offset;
 		ffa->size = mo->ffa_mapping_info.size;
 		/* append cacheability info to upper nibble */
-		ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
+		if (mo->flags & SI_CORE_MEM_OBJ_UNCACHED)
+			ffa->mem_attr = CACHE_UNCACHED | mo->ffa_mapping_info.mem_attr;
+		else
+			ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
 
 		args[0].b.size = sizeof(*ffa);
 
@@ -495,7 +498,10 @@ static unsigned long mo_prepare_shm(struct si_object *object, struct si_arg args
 		shm->p_addr = mo->shm_mapping_info.p_addr;
 		shm->len = mo->shm_mapping_info.p_addr_len;
 		/* append cacheability info to upper nibble */
-		shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
+		if (mo->flags & SI_CORE_MEM_OBJ_UNCACHED)
+			shm->perms = CACHE_UNCACHED | mo->shm_mapping_info.perms;
+		else
+			shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
 
 		args[0].b.size = sizeof(*shm);
 
@@ -598,7 +604,10 @@ static int map_memory_obj_ffa(struct si_arg args[])
 		ffa->offset = mo->ffa_mapping_info.offset;
 		ffa->size = mo->ffa_mapping_info.size;
 		/* append cacheability info to upper nibble */
-		ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
+		if (mo->flags & SI_CORE_MEM_OBJ_UNCACHED)
+			ffa->mem_attr = CACHE_UNCACHED | mo->ffa_mapping_info.mem_attr;
+		else
+			ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
 
 		pr_info("%s ffa-mapped %llx %lx\n",
 			si_object_name(object), ffa->ffa_handle, ffa->size);
@@ -666,7 +675,10 @@ static int map_memory_obj_shm(struct si_arg args[])
 		shm->p_addr = mo->shm_mapping_info.p_addr;
 		shm->len = mo->shm_mapping_info.p_addr_len;
 		/* append cacheability info to upper nibble */
-		shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
+		if (mo->flags & SI_CORE_MEM_OBJ_UNCACHED)
+			shm->perms = CACHE_UNCACHED | mo->shm_mapping_info.perms;
+		else
+			shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
 
 		pr_info("%s shm-mapped %llx %llx\n",
 			si_object_name(object), shm->p_addr, shm->len);
