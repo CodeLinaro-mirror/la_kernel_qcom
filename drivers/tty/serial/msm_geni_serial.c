@@ -776,7 +776,7 @@ int msm_geni_serial_resources_on(struct msm_geni_serial_port *port)
 	}
 
 	UART_LOG_DBG(port->ipc_log_misc, port->uport.dev, "%s: ICC BW voting\n", __func__);
-	ret = geni_common_icc_set_bw(&port->se, port->ipc_log_misc);
+	ret = geni_icc_set_bw(&port->se);
 	if (ret) {
 		UART_LOG_DBG(port->ipc_log_misc, port->uport.dev,
 			     "%s: Error %d ICC BW voting failed\n", __func__, ret);

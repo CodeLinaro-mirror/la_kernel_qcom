@@ -213,8 +213,11 @@ static inline int geni_common_icc_set_bw(struct geni_se *se, void *ipcl)
 	u32 avg_bw, peak_bw;
 
 	for (i = 0; i < ARRAY_SIZE(se->icc_paths); i++) {
-		avg_bw = se->icc_paths[i].avg_bw / 100;
+		avg_bw = se->icc_paths[i].avg_bw;
 		peak_bw = se->icc_paths[i].avg_bw;
+
+		if (i == 0)
+			avg_bw = se->icc_paths[i].avg_bw / 100;
 
 		ret = icc_set_bw(se->icc_paths[i].path, avg_bw, peak_bw);
 		if (ret) {
