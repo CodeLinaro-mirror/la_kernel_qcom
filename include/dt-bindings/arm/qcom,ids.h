@@ -235,6 +235,7 @@
 #define QCOM_ID_SA8540P			461
 #define QCOM_ID_QCM4290			469
 #define QCOM_ID_QCS4290			470
+#define QCOM_ID_SM7325			475
 #define QCOM_ID_SM8450_2		480
 #define QCOM_ID_SM8450_3		482
 #define QCOM_ID_MONACO			486
@@ -251,6 +252,7 @@
 #define QCOM_ID_IPQ9554			512
 #define QCOM_ID_IPQ9570			513
 #define QCOM_ID_IPQ9574			514
+#define QCOM_ID_SM7315			515
 #define QCOM_ID_KHAJE			518
 #define QCOM_ID_SM8550			519
 #define QCOM_ID_IPQ5016			520
