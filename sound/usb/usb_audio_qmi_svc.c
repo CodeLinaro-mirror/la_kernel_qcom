@@ -104,6 +104,7 @@ struct uaudio_dev {
 	int num_intf;
 	struct intf_info *info;
 	struct snd_usb_audio *chip;
+	bool disconnect_wq_init;
 };
 
 static struct uaudio_dev uadev[SNDRV_CARDS];
@@ -491,6 +492,9 @@ static void *find_csint_desc(unsigned char *descstart, int desclen, u8 dsubtype)
 	return NULL;
 }
 
+
+static int initialize_uadev_if_in_use(int card_num,
+		struct snd_usb_substream *subs, struct snd_usb_audio *chip);
 /**
  * uaudio_populate_uac_desc() - parse UAC parameters and populate QMI resp
  * @subs: usb substream
@@ -857,18 +861,9 @@ skip_sync:
 	chip = uadev[card_num].chip;
 
 	if (atomic_read(&uadev[card_num].in_use) == 1) {
-		init_waitqueue_head(&uadev[card_num].disconnect_wq);
-		uadev[card_num].num_intf =
-			subs->dev->config->desc.bNumInterfaces;
-		uadev[card_num].info = kcalloc(uadev[card_num].num_intf,
-			sizeof(struct intf_info), GFP_KERNEL);
-		if (!uadev[card_num].info) {
-			ret = -ENOMEM;
+		ret = initialize_uadev_if_in_use(card_num, subs, chip);
+		if (ret < 0)
 			goto unmap_sync;
-		}
-		mutex_lock(&chip->mutex);
-		uadev[card_num].udev = subs->dev;
-		mutex_unlock(&chip->mutex);
 	}
 
 	uadev[card_num].card_num = card_num;
@@ -917,6 +912,29 @@ drop_data_ep:
 			usb_pipe_endpoint(subs->dev, subs->data_endpoint->pipe));
 err:
 	return ret;
+}
+
+
+static int initialize_uadev_if_in_use(int card_num,
+		struct snd_usb_substream *subs, struct snd_usb_audio *chip)
+{
+	uaudio_dbg("Device in use: card_num=%d, num_intf=%d",
+		card_num, subs->dev->config->desc.bNumInterfaces);
+	if (!uadev[card_num].disconnect_wq_init) {
+		init_waitqueue_head(&uadev[card_num].disconnect_wq);
+		uadev[card_num].disconnect_wq_init = true;
+	}
+	uadev[card_num].num_intf =
+		subs->dev->config->desc.bNumInterfaces;
+	uadev[card_num].info = kcalloc(uadev[card_num].num_intf,
+		sizeof(struct intf_info), GFP_KERNEL);
+	if (!uadev[card_num].info)
+		return -ENOMEM;
+
+	mutex_lock(&chip->mutex);
+	uadev[card_num].udev = subs->dev;
+	mutex_unlock(&chip->mutex);
+	return 0;
 }
 
 static void uaudio_dev_intf_cleanup(struct usb_device *udev,
