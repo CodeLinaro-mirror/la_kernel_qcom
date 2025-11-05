@@ -9,6 +9,7 @@ seraph_consolidate_config = {
     "CONFIG_LKDTM": "m",
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_PAGE_OWNER": "y",
+    "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
     "CONFIG_TORTURE_TEST": "m",
