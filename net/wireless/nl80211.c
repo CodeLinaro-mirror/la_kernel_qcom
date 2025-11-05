@@ -3467,6 +3467,8 @@ int nl80211_parse_chandef(struct cfg80211_registered_device *rdev,
 					       "driver doesn't support puncturing");
 				return -EINVAL;
 			}
+		} else {
+			chandef->punctured = IEEE80211_EHT_PUNCTURE_BITMAP_DEFAULT;
 		}
 	}
 
