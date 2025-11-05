@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 #ifndef __LINUX_NL80211_H
 #define __LINUX_NL80211_H
 /*
@@ -4301,6 +4302,7 @@ enum nl80211_wmm_rule {
  *	as the primary or any of the secondary channels isn't possible
  * @NL80211_FREQUENCY_ATTR_NO_EHT: EHT operation is not allowed on this channel
  *	in current regulatory domain.
+ * NL80211_FREQUENCY_ATTR_CHANNEL: HW value for frequency.
  * @NL80211_FREQUENCY_ATTR_PSD: Power spectral density (in dBm) that
  *	is allowed on this channel in current regulatory domain.
  * @NL80211_FREQUENCY_ATTR_DFS_CONCURRENT: Operation on this channel is
@@ -4318,7 +4320,7 @@ enum nl80211_wmm_rule {
  * See https://apps.fcc.gov/eas/comments/GetPublishedDocument.html?id=327&tn=528122
  * for more information on the FCC description of the relaxations allowed
  * by NL80211_FREQUENCY_ATTR_INDOOR_ONLY and
- * NL80211_FREQUENCY_ATTR_IR_CONCURRENT.
+ * NL80211_FREQUENCY_ATTR_IR_CONCURRENT,
  */
 enum nl80211_frequency_attr {
 	__NL80211_FREQUENCY_ATTR_INVALID,
@@ -4349,10 +4351,13 @@ enum nl80211_frequency_attr {
 	NL80211_FREQUENCY_ATTR_16MHZ,
 	NL80211_FREQUENCY_ATTR_NO_320MHZ,
 	NL80211_FREQUENCY_ATTR_NO_EHT,
+	NL80211_FREQUENCY_ATTR_CHANNEL,
 	NL80211_FREQUENCY_ATTR_PSD,
 	NL80211_FREQUENCY_ATTR_DFS_CONCURRENT,
 	NL80211_FREQUENCY_ATTR_NO_6GHZ_VLP_CLIENT,
 	NL80211_FREQUENCY_ATTR_NO_6GHZ_AFC_CLIENT,
+	NL80211_FREQUENCY_ATTR_CAN_MONITOR,
+	NL80211_FREQUENCY_ATTR_ALLOW_6GHZ_VLP_AP,
 
 	/* keep last */
 	__NL80211_FREQUENCY_ATTR_AFTER_LAST,
@@ -4592,6 +4597,7 @@ enum nl80211_reg_rule_flags {
 	NL80211_RRF_DFS_CONCURRENT	= 1<<21,
 	NL80211_RRF_NO_6GHZ_VLP_CLIENT	= 1<<22,
 	NL80211_RRF_NO_6GHZ_AFC_CLIENT	= 1<<23,
+	NL80211_RRF_ALLOW_6GHZ_VLP_AP   = 1<<24,
 };
 
 #define NL80211_RRF_PASSIVE_SCAN	NL80211_RRF_NO_IR
@@ -5825,6 +5831,7 @@ enum nl80211_wowlan_triggers {
 	NL80211_WOWLAN_TRIG_WAKEUP_TCP_NOMORETOKENS,
 	NL80211_WOWLAN_TRIG_NET_DETECT,
 	NL80211_WOWLAN_TRIG_NET_DETECT_RESULTS,
+	NL80211_WOWLAN_TRIG_UNPROTECTED_DEAUTH_DISASSOC,
 
 	/* keep last */
 	NUM_NL80211_WOWLAN_TRIG,
@@ -6656,6 +6663,7 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_DFS_CONCURRENT,
 	NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD,
 	NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_BTM_OFFLOAD,
+	NL80211_EXT_FEATURE_SPP_AMSDU_SUPPORT,
 
 	/* add new features before the definition below */
 	NUM_NL80211_EXT_FEATURES,
