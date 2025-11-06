@@ -705,11 +705,6 @@ void walt_lb_tick(struct rq *rq)
 	if (walt_quiet_state)
 		return;
 
-	raw_spin_lock(&rq->__lock);
-	if (available_idle_cpu(prev_cpu) && is_reserved(prev_cpu) && !rq->active_balance)
-		clear_reserved(prev_cpu);
-	raw_spin_unlock(&rq->__lock);
-
 	if (is_storage_boost()) {
 		if (rq->cpu == 0) {
 			raw_spin_lock_irqsave(&walt_lb_migration_lock, flags);
@@ -722,8 +717,6 @@ void walt_lb_tick(struct rq *rq)
 
 	if (!walt_fair_task(p))
 		return;
-
-	walt_cfs_tick(rq);
 
 	if (!rq->misfit_task_load || storage_balance)
 		return;
