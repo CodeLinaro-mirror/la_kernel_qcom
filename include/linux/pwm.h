@@ -288,6 +288,7 @@ struct pwm_ops {
  * @base: number of first PWM controlled by this chip
  * @npwm: number of PWMs controlled by this chip
  * @of_xlate: request a PWM device given a device tree PWM specifier
+ * @driver_data: Private pointer for driver specific info
  * @of_pwm_n_cells: number of cells expected in the device tree PWM specifier
  * @list: list node for internal use
  * @pwms: array of PWM devices allocated by the framework
@@ -303,9 +304,28 @@ struct pwm_chip {
 	unsigned int of_pwm_n_cells;
 
 	/* only used internally by the PWM framework */
+	void *driver_data;
 	struct list_head list;
 	struct pwm_device *pwms;
 };
+
+static inline void *pwmchip_get_drvdata(struct pwm_chip *chip)
+{
+	/*
+	 * After pwm_chip got a dedicated struct device, this can be replaced by
+	 * dev_get_drvdata(&chip->dev);
+	 */
+	return chip->driver_data;
+}
+
+static inline void pwmchip_set_drvdata(struct pwm_chip *chip, void *data)
+{
+	/*
+	 * After pwm_chip got a dedicated struct device, this can be replaced by
+	 * dev_set_drvdata(&chip->dev, data);
+	 */
+	chip->driver_data = data;
+}
 
 #if IS_ENABLED(CONFIG_PWM)
 /* PWM user APIs */
