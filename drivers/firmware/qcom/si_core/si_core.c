@@ -1396,11 +1396,15 @@ static int si_core_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_sysfs_create;
 
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		goto err_dma_mask;
+
 	ret = qtee_ffa_shm_init(pdev);
 	if (ret) {
 		if (ret == -ENODEV)
 			ret = -EPROBE_DEFER;
-		goto err_ffa_shm_init;
+		goto err_dma_mask;
 	}
 
 	ret = mem_object_init(pdev);
@@ -1412,7 +1416,7 @@ static int si_core_probe(struct platform_device *pdev)
 
 err_mem_obj_init:
 	qtee_ffa_shm_deinit(pdev);
-err_ffa_shm_init:
+err_dma_mask:
 	sysfs_remove_group(si_core_kobj, &attr_group);
 err_sysfs_create:
 	kobject_put(si_core_kobj);
