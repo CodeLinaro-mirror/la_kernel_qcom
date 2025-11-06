@@ -11,7 +11,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
-#include <dt-bindings/clock/qcom,x1p42100-camcc.h>
+#include <dt-bindings/clock/qcom,x1e80100-camcc.h>
 
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
