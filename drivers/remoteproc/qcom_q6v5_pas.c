@@ -1670,6 +1670,31 @@ void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable, bool lo
 }
 EXPORT_SYMBOL_GPL(qcom_rproc_update_recovery_status);
 
+static void adsp_parse_subdev_fw(struct qcom_adsp *adsp)
+{
+	const char *subdev_fw_name = NULL;
+	int i, count, ret;
+
+	if (!adsp->q6_subdev || !adsp->q6_subdev_count)
+		return;
+
+	count = of_property_read_string_array(adsp->dev->of_node, "subdev-firmware-name", NULL, 0);
+	if (count <= 0)
+		return;
+
+	adsp->q6_subdev_count = min_t(int, adsp->q6_subdev_count, count);
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		ret = of_property_read_string_index(adsp->dev->of_node,
+			"subdev-firmware-name", i, &subdev_fw_name);
+		if (ret < 0) {
+			dev_err(adsp->dev, "Failed to read subdev firmware: %d\n", ret);
+			return;
+		}
+		adsp->q6_subdev[i].firmware_name = subdev_fw_name;
+		subdev_fw_name = NULL;
+	}
+}
+
 static ssize_t q6v5_read_debugfs(struct file *file, char __user *buf,
 				 size_t count, loff_t *ppos)
 {
@@ -1844,6 +1869,9 @@ static int adsp_probe(struct platform_device *pdev)
 		adsp->dtb_firmware_name = dtb_fw_name;
 		adsp->dtb_pas_id = desc->dtb_pas_id;
 	}
+
+	adsp_parse_subdev_fw(adsp);
+
 	platform_set_drvdata(pdev, adsp);
 
 	ret = device_init_wakeup(adsp->dev, true);
