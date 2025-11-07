@@ -67,6 +67,27 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/interconnect/qcom/icc-rpm",
+        out = "icc-rpm.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_RPM",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/icc-debug.h",
+            "drivers/interconnect/qcom/icc-rpm.c",
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/rpmsg/rpm-smd",
+            "drivers/soc/qcom/smem",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
         name = "drivers/interconnect/qcom/qnoc-canoe",
         out = "qnoc-canoe.ko",
         config = "CONFIG_INTERCONNECT_QCOM_CANOE",
@@ -177,6 +198,40 @@ def register_modules(registry):
             "drivers/interconnect/qcom/icc-rpmh.h",
             "drivers/interconnect/qcom/qnoc-qos.c",
             "drivers/interconnect/qcom/qnoc-qos.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-qos-rpm",
+        out = "qnoc-qos-rpm.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_QOS_RPM",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.c",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-bengal",
+        out = "qnoc-bengal.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_BENGAL",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/bengal.c",
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/rpm-ids.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos-rpm",
+            "drivers/interconnect/qcom/icc-rpm",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/soc/qcom/smem",
+            "kernel/trace/qcom_ipc_logging",
         ],
     )
 

@@ -21,6 +21,8 @@
 #include <linux/reset.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#include <linux/eom_ioctl.h>
+#include <linux/phy_core.h>
 
 enum core_ldo_levels {
 	CORE_LEVEL_NONE = 0,
@@ -80,7 +82,9 @@ enum core_ldo_levels {
 /* USB3_DP_COM_TYPEC_STATUS */
 #define PORTSELECT_RAW		BIT(0)
 
-#define MIN_PD			2
+#define UTXR			0 /* USB Transfer */
+#define UCORE			1 /* USB Core */
+#define MIN_PD			2 /* Min Power Domains */
 
 enum qmp_phy_rev_reg {
 	USB3_PHY_PCS_STATUS,
@@ -154,6 +158,8 @@ struct msm_ssphy_qmp {
 	bool			fw_managed_pwr;
 	struct device		**pd_devs;
 	int			pd_count;
+	struct eom_phy_device	eom_phy; /* EOM USB Phy */
+	bool			pd_refcnt[MIN_PD];
 };
 
 static const struct of_device_id msm_usb_id_table[] = {
@@ -226,29 +232,39 @@ static int msm_ssphy_modeled_domain_attach(struct msm_ssphy_qmp *phy)
 			return PTR_ERR(phy->pd_devs[i]);
 		}
 	}
+	phy->pd_refcnt[UTXR] = false;
+	phy->pd_refcnt[UCORE] = false;
 	return 0;
 }
 
 /* d3_to_d0 transition by turning on all the suppliers */
 static int msm_ssphy_modeled_d3_to_d0(struct msm_ssphy_qmp *phy)
 {
-	int ret;
+	int ret = 0;
 
 	if (!phy->fw_managed_pwr)
 		return 0;
 
-	ret = pm_runtime_resume_and_get(phy->pd_devs[1]);
-	if (ret) {
-		dev_err(phy->phy.dev, "Failed to change power state from d3 to d0\n");
-		return ret;
+	if (!phy->pd_refcnt[UCORE]) {
+		ret = pm_runtime_resume_and_get(phy->pd_devs[UCORE]);
+		if (ret) {
+			dev_err(phy->phy.dev, "Failed to resume core pd\n");
+			return ret;
+		}
+		phy->pd_refcnt[UCORE] = true;
 	}
 
-	ret = pm_runtime_resume_and_get(phy->pd_devs[0]);
-	if (ret) {
-		dev_err(phy->phy.dev, "Failed to change power state from d3 to d0\n");
-		pm_runtime_put_sync(phy->pd_devs[1]);
-		return ret;
+	if (!phy->pd_refcnt[UTXR]) {
+		ret = pm_runtime_resume_and_get(phy->pd_devs[UTXR]);
+		if (ret) {
+			dev_err(phy->phy.dev, "Failed to resume transfer pd\n");
+			pm_runtime_put_sync(phy->pd_devs[UCORE]);
+			phy->pd_refcnt[UCORE] = false;
+			return ret;
+		}
+		phy->pd_refcnt[UTXR] = true;
 	}
+
 	return ret;
 }
 
@@ -258,8 +274,15 @@ static void msm_ssphy_modeled_d0_to_d3(struct msm_ssphy_qmp *phy)
 	if (!phy->fw_managed_pwr)
 		return;
 
-	pm_runtime_put_sync(phy->pd_devs[0]);
-	pm_runtime_put_sync(phy->pd_devs[1]);
+	if (phy->pd_refcnt[UCORE]) {
+		pm_runtime_put_sync(phy->pd_devs[UCORE]);
+		phy->pd_refcnt[UCORE] = false;
+	}
+
+	if (phy->pd_refcnt[UTXR]) {
+		pm_runtime_put_sync(phy->pd_devs[UTXR]);
+		phy->pd_refcnt[UTXR] = false;
+	}
 }
 
 static inline char *get_cable_status_str(struct msm_ssphy_qmp *phy)
@@ -1166,6 +1189,73 @@ static int msm_ssphy_qmp_get_resets(struct msm_ssphy_qmp *phy, struct device *de
 	return ret;
 }
 
+#if IS_ENABLED(CONFIG_USB_MSM_EOM)
+/**
+ * Read USB PHY register for EOM functionality
+ */
+static int usb_phy_read(void *priv, u32 offset, u32 *value)
+{
+	struct eom_phy_device *eom_phy = (struct eom_phy_device *)priv;
+	struct msm_ssphy_qmp *phy = container_of(eom_phy, struct msm_ssphy_qmp,
+					eom_phy);
+
+	*value = readl_relaxed(phy->base + offset);
+	dev_dbg(phy->phy.dev, "EOM PHY read\n");
+
+	return 0;
+}
+
+/**
+ * Write to USB PHY register for EOM functionality
+ */
+static int usb_phy_write(void *priv, u32 offset, u32 value)
+{
+	struct eom_phy_device *eom_phy = (struct eom_phy_device *)priv;
+	struct msm_ssphy_qmp *phy = container_of(eom_phy, struct msm_ssphy_qmp,
+					eom_phy);
+
+	writel_relaxed(value, phy->base + offset);
+	dev_dbg(phy->phy.dev, "EOM PHY write\n");
+
+	return 0;
+}
+
+/**
+ * EOM operations for USB PHY register access
+ */
+static struct eom_phy_ops usb_ops = {
+	.phy_read = usb_phy_read,
+	.phy_write = usb_phy_write,
+};
+
+/**
+ * Register USB PHY with the EOM framework
+ */
+static void register_eom_phy(struct msm_ssphy_qmp *phy)
+{
+	int ret = 0;
+	struct eom_phy_device *eom_phy = &phy->eom_phy;
+
+	if (!phy->base) {
+		dev_err(phy->phy.dev, "EOM reg phy base error\n");
+		return;
+	}
+
+	eom_phy->index = 0;
+	eom_phy->lanes = 2;
+
+	ret = register_phy_device(&usb_ops, eom_phy,
+				  eom_phy->index, 0, 0, TYPE_USB,
+				  eom_phy->lanes);
+	if (ret)
+		dev_err(phy->phy.dev, "EOM PHY registration failed\n");
+
+	dev_dbg(phy->phy.dev, "EOM PHY registered\n");
+}
+#else
+static inline void register_eom_phy(struct msm_ssphy_qmp *phy) { }
+#endif /* CONFIG_USB_MSM_EOM */
+
 static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 {
 	struct msm_ssphy_qmp *phy;
@@ -1351,6 +1441,8 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 		}
 		dev_err(dev, "usb3_dp_phy_gdsc optional regulator missing\n");
 	}
+
+	register_eom_phy(phy);
 
 	platform_set_drvdata(pdev, phy);
 

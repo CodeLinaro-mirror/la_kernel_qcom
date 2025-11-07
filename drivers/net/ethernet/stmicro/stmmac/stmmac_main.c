@@ -1795,6 +1795,12 @@ static int init_dma_rx_desc_rings(struct net_device *dev,
 	int queue;
 	int ret;
 
+	if (rx_count > MTL_MAX_RX_QUEUES) {
+		dev_err(priv->device, "Invalid RX queue count (%d), must be <= %d\n",
+			rx_count, MTL_MAX_RX_QUEUES);
+		return -EINVAL;
+	}
+
 	/* RX INITIALIZATION */
 	netif_dbg(priv, probe, priv->dev,
 		  "SKB addresses:\nskb\t\tskb data\tdma data\n");
@@ -2978,7 +2984,7 @@ static void stmmac_dma_interrupt(struct stmmac_priv *priv)
 	u32 channels_to_check = tx_channel_count > rx_channel_count ?
 				tx_channel_count : rx_channel_count;
 	u32 chan;
-	int status[MAX_T(u32, MTL_MAX_TX_QUEUES, MTL_MAX_RX_QUEUES)];
+	int status[MAX_T(u32, MTL_MAX_TX_QUEUES, MTL_MAX_RX_QUEUES)] = {0};
 
 	/* Make sure we never check beyond our status buffer. */
 	if (WARN_ON_ONCE(channels_to_check > ARRAY_SIZE(status)))
@@ -3041,7 +3047,7 @@ static int stmmac_get_hw_features(struct stmmac_priv *priv)
  */
 static void stmmac_check_ether_addr(struct stmmac_priv *priv)
 {
-	u8 addr[ETH_ALEN];
+	u8 addr[ETH_ALEN] = {0};
 
 	if (!is_valid_ether_addr(priv->dev->dev_addr)) {
 		stmmac_get_umac_addr(priv, priv->hw, addr, 0);
@@ -3659,10 +3665,11 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	char *int_name;
 	int ret;
 	int i;
-	size_t buff_size = 256;
+	size_t buff_size;
 
 	/* For common interrupt */
 	int_name = priv->int_name_mac;
+	buff_size = sizeof(priv->int_name_mac);
 	snprintf(int_name, buff_size, "%s:%s", dev->name,
 		 "mac");
 	ret = request_irq(dev->irq, stmmac_mac_interrupt,
@@ -3681,6 +3688,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	priv->wol_irq_disabled = true;
 	if (priv->wol_irq > 0 && priv->wol_irq != dev->irq) {
 		int_name = priv->int_name_wol;
+		buff_size = sizeof(priv->int_name_wol);
 		snprintf(int_name, buff_size, "%s:%s", dev->name,
 			 "wol");
 		ret = request_irq(priv->wol_irq,
@@ -3700,6 +3708,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	 */
 	if (priv->lpi_irq > 0 && priv->lpi_irq != dev->irq) {
 		int_name = priv->int_name_lpi;
+		buff_size = sizeof(priv->int_name_lpi);
 		snprintf(int_name, buff_size, "%s:%s", dev->name,
 			 "lpi");
 		ret = request_irq(priv->lpi_irq,
@@ -3719,6 +3728,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	 */
 	if (priv->sfty_irq > 0 && priv->sfty_irq != dev->irq) {
 		int_name = priv->int_name_sfty;
+		buff_size = sizeof(priv->int_name_sfty);
 		snprintf(int_name, buff_size, "%s:%s", dev->name,
 			 "safety");
 		ret = request_irq(priv->sfty_irq, stmmac_safety_interrupt,
@@ -3737,6 +3747,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	 */
 	if (priv->sfty_ce_irq > 0 && priv->sfty_ce_irq != dev->irq) {
 		int_name = priv->int_name_sfty_ce;
+		buff_size = sizeof(priv->int_name_sfty_ce);
 		snprintf(int_name, buff_size, "%s:%s", dev->name,
 			 "safety-ce");
 		ret = request_irq(priv->sfty_ce_irq,
@@ -3756,6 +3767,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	 */
 	if (priv->sfty_ue_irq > 0 && priv->sfty_ue_irq != dev->irq) {
 		int_name = priv->int_name_sfty_ue;
+		buff_size = sizeof(priv->int_name_sfty_ue);
 		snprintf(int_name, buff_size, "%s:%s", dev->name,
 			 "safety-ue");
 		ret = request_irq(priv->sfty_ue_irq,
@@ -3778,6 +3790,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 			continue;
 
 		int_name = priv->int_name_rx_irq[i];
+		buff_size = sizeof(priv->int_name_rx_irq[i]);
 		snprintf(int_name, buff_size, "%s:%s-%d",
 			 dev->name, "rx", i);
 		ret = request_irq(priv->rx_irq[i],
@@ -3804,6 +3817,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 			continue;
 
 		int_name = priv->int_name_tx_irq[i];
+		buff_size = sizeof(priv->int_name_tx_irq[i]);
 		snprintf(int_name, buff_size, "%s:%s-%d",
 			 dev->name, "tx", i);
 		ret = request_irq(priv->tx_irq[i],
@@ -8042,6 +8056,88 @@ static void stmmac_reset_queues_param(struct stmmac_priv *priv)
 		stmmac_reset_tx_queue(priv, queue);
 }
 
+static void stmmac_reinit_rx_buffers(struct stmmac_priv *priv, struct stmmac_dma_conf *dma_conf)
+{
+	u32 rx_count = priv->plat->rx_queues_to_use;
+	u32 queue;
+	int i;
+
+	for (queue = 0; queue < rx_count; queue++) {
+		struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
+
+		for (i = 0; i < dma_conf->dma_rx_size; i++) {
+			struct stmmac_rx_buffer *buf = &rx_q->buf_pool[i];
+
+			if (buf->page) {
+				page_pool_recycle_direct(rx_q->page_pool, buf->page);
+				buf->page = NULL;
+			}
+
+			if (priv->sph && buf->sec_page) {
+				page_pool_recycle_direct(rx_q->page_pool, buf->sec_page);
+				buf->sec_page = NULL;
+			}
+		}
+	}
+
+	for (queue = 0; queue < rx_count; queue++) {
+		struct stmmac_rx_queue *rx_q = &dma_conf->rx_queue[queue];
+
+		for (i = 0; i < dma_conf->dma_rx_size; i++) {
+			struct stmmac_rx_buffer *buf = &rx_q->buf_pool[i];
+			struct dma_desc *p;
+
+			if (priv->extend_desc)
+				p = &((rx_q->dma_erx + i)->basic);
+			else
+				p = rx_q->dma_rx + i;
+
+			if (!buf->page) {
+				buf->page = page_pool_dev_alloc_pages(rx_q->page_pool);
+				if (!buf->page)
+					goto err_reinit_rx_buffers;
+
+				buf->addr = page_pool_get_dma_addr(buf->page);
+				if (!buf->addr) {
+					pr_err("buf->addr is NULL\n");
+					goto err_reinit_rx_buffers;
+				}
+			}
+
+			if (priv->sph && !buf->sec_page) {
+				buf->sec_page = page_pool_dev_alloc_pages(rx_q->page_pool);
+				if (!buf->sec_page)
+					goto err_reinit_rx_buffers;
+
+				buf->sec_addr = page_pool_get_dma_addr(buf->sec_page);
+				if (!buf->sec_addr) {
+					pr_err("buf->sec_addr is NULL\n");
+					goto err_reinit_rx_buffers;
+				}
+				stmmac_set_desc_sec_addr(priv, p, buf->sec_addr, true);
+			} else {
+				buf->sec_page = NULL;
+				stmmac_set_desc_sec_addr(priv, p, buf->sec_addr, false);
+			}
+
+			stmmac_set_desc_addr(priv, p, buf->addr);
+
+			if (dma_conf->dma_buf_sz == BUF_SIZE_16KiB)
+				stmmac_init_desc3(priv, p);
+		}
+	}
+
+	return;
+
+err_reinit_rx_buffers:
+	pr_err(" error in reinit_rx_buffers\n");
+	do {
+		dma_free_rx_skbufs(priv, dma_conf, queue);
+		if (queue == 0)
+			break;
+	} while (queue-- > 0);
+}
+
 /**
  * stmmac_resume - resume callback
  * @dev: device pointer
@@ -8102,6 +8198,8 @@ int stmmac_resume(struct device *dev)
 	mutex_lock(&priv->lock);
 
 	stmmac_reset_queues_param(priv);
+
+	stmmac_reinit_rx_buffers(priv, &priv->dma_conf);
 
 	stmmac_free_tx_skbufs(priv);
 	stmmac_clear_descriptors(priv, &priv->dma_conf);

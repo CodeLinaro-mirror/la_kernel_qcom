@@ -105,9 +105,9 @@ def define_single_le_build(
     kernel_images(
         name = "{}_images".format(stem),
         kernel_modules_install = ":{}_modules_install".format(stem),
-        kernel_build = "{}_le_build".format(stem),
+        kernel_build = "{}_dtb_build".format(stem),
         base_kernel_images = None,
-        dtbo_srcs = [":{}_le_build/{}".format(stem, dtbo) for dtbo in dtbo_list] if dtbo_list else None,
+        dtbo_srcs = [":{}_dtb_build/{}".format(stem, dtbo) for dtbo in dtbo_list] if dtbo_list else None,
         build_boot = True,
         build_initramfs = True,
         build_dtbo = True,
@@ -140,7 +140,7 @@ def define_single_le_build(
 
     merged_kernel_uapi_headers(
         name = "{}_merged_kernel_uapi_headers".format(stem),
-        kernel_build = "{}_le_build".format(stem),
+        kernel_build = "{}_dtb_build".format(stem),
     )
 
     hermetic_genrule(
@@ -165,10 +165,10 @@ def define_single_le_build(
     dist_data = [
         "{}".format(base_kernel),
         ":{}_modules_install".format(stem),
-        "{}_le_build".format(stem),
+        "{}_dtb_build".format(stem),
         ":{}_images".format(stem),
         "{}_merge_msm_uapi_headers".format(stem),
-        "{}_le_build_config".format(stem),
+        "{}_dtb_build_config".format(stem),
         "{}_tar_kernel_headers".format(stem),
         # Keys needed for kernel module signing and verification
         ":signing_key",

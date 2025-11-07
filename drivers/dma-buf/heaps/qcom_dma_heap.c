@@ -8,6 +8,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
+#include <linux/of.h>
 
 #include <linux/qcom_dma_heap.h>
 #include <linux/qcom_tvm_heap.h>
@@ -37,10 +38,14 @@ static int qcom_dma_heap_probe(struct platform_device *pdev)
 #ifdef CONFIG_QCOM_DMABUF_HEAPS_SYSTEM_UNCACHED
 	qcom_system_heap_create("qcom,system-uncached", NULL, true);
 #endif
-	qcom_secure_system_heap_create("qcom,secure-pixel", NULL,
+	const struct device_node *dt_node = pdev->dev.of_node;
+
+	if (!of_property_read_bool(dt_node, "qcom,hgy-secure-heap")) {
+		qcom_secure_system_heap_create("qcom,secure-pixel", NULL,
 				       QCOM_DMA_HEAP_FLAG_CP_PIXEL);
-	qcom_secure_system_heap_create("qcom,secure-non-pixel", NULL,
+		qcom_secure_system_heap_create("qcom,secure-non-pixel", NULL,
 				       QCOM_DMA_HEAP_FLAG_CP_NON_PIXEL);
+	}
 	qcom_sys_movable_heap_create();
 
 	heaps = parse_heap_dt(pdev);

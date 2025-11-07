@@ -165,7 +165,7 @@ static struct clk_alpha_pll video_cc_pll2 = {
 };
 
 /* 480.0 MHz Configuration */
-static const struct alpha_pll_config video_cc_pll3_config = {
+static struct alpha_pll_config video_cc_pll3_config = {
 	.l = 0x19,
 	.cal_l = 0x48,
 	.alpha = 0x0,
@@ -919,6 +919,7 @@ static const struct of_device_id video_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-videocc" },
 	{ .compatible = "qcom,alor-videocc" },
 	{ .compatible = "qcom,canoe-videocc-v2" },
+	{ .compatible = "qcom,whale-videocc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, video_cc_canoe_match_table);
@@ -978,6 +979,13 @@ static int video_cc_canoe_fixup(struct platform_device *pdev, struct regmap *reg
 		video_cc_mvs0c_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L0] = 1260000000;
 	}
 
+	if (!strcmp(compat, "qcom,whale-videocc")) {
+		video_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
+		video_cc_pll1_config.config_ctl_hi_val = 0x0a8060e0;
+		video_cc_pll2_config.config_ctl_hi_val = 0x0a8060e0;
+		video_cc_pll3_config.config_ctl_hi_val = 0x0a8060e0;
+	}
+
 	clk_taycan_eko_t_pll_configure(&video_cc_pll3, regmap, &video_cc_pll3_config);
 
 	/*
@@ -1006,13 +1014,13 @@ static int video_cc_canoe_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	clk_taycan_eko_t_pll_configure(&video_cc_pll0, regmap, &video_cc_pll0_config);
-	clk_taycan_eko_t_pll_configure(&video_cc_pll1, regmap, &video_cc_pll1_config);
-	clk_taycan_eko_t_pll_configure(&video_cc_pll2, regmap, &video_cc_pll2_config);
-
 	ret = video_cc_canoe_fixup(pdev, regmap);
 	if (ret)
 		return ret;
+
+	clk_taycan_eko_t_pll_configure(&video_cc_pll0, regmap, &video_cc_pll0_config);
+	clk_taycan_eko_t_pll_configure(&video_cc_pll1, regmap, &video_cc_pll1_config);
+	clk_taycan_eko_t_pll_configure(&video_cc_pll2, regmap, &video_cc_pll2_config);
 
 	/*
 	 *	Maximize ctl data download delay and enable memory redundancy:

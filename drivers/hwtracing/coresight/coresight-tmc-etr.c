@@ -1789,6 +1789,11 @@ static int tmc_enable_etr_sink_perf(struct coresight_device *csdev, void *data)
 		goto unlock_out;
 	}
 
+	if (drvdata->out_mode == TMC_ETR_OUT_MODE_USB) {
+		rc = -EBUSY;
+		goto unlock_out;
+	}
+
 	if (WARN_ON(!etr_perf || !etr_perf->etr_buf)) {
 		rc = -EINVAL;
 		goto unlock_out;

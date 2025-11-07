@@ -8,13 +8,20 @@
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/module.h>
+#include <linux/device.h>
+#include <linux/dma-buf.h>
+#include <linux/platform_device.h>
+#include <linux/of_platform.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/xarray.h>
+#include <linux/version.h>
 
 #include "si_core.h"
 #include "si_core_adci.h"
+
+#include "mem-object.h"
 
 #define CREATE_TRACE_POINTS
 #include "trace_si_core.h"
@@ -466,24 +473,40 @@ static int shmem_alloc(struct si_object_invoke_ctx *oic, struct si_arg u[])
 
 	size = PAGE_ALIGN(size);
 
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	int rc;
+
+	rc = qtee_ffa_shm_alloc(size, OUT_BUFFER_SIZE, &oic->shm);
+	if (rc)
+		return rc;
+
+	oic->in.msg.addr = oic->shm.in_vaddr;
+	oic->in.msg.size = oic->shm.in_size;
+	oic->in.paddr = oic->shm.paddr;
+
+	oic->out.msg.addr = oic->shm.out_vaddr;
+	oic->out.msg.size = oic->shm.out_size;
+	oic->out.paddr = oic->shm.paddr + oic->shm.in_size;
+#else
 	/* Get inbound buffer. */
-	if (qtee_shmbridge_allocate_shm(size, &oic->in.shm))
+	if (qtee_shmbridge_allocate_shm(size, &oic->in_shm))
 		return -ENOMEM;
 
 	/* Get outbound buffer. */
-	if (qtee_shmbridge_allocate_shm(OUT_BUFFER_SIZE, &oic->out.shm)) {
-		qtee_shmbridge_free_shm(&oic->in.shm);
+	if (qtee_shmbridge_allocate_shm(OUT_BUFFER_SIZE, &oic->out_shm)) {
+		qtee_shmbridge_free_shm(&oic->in_shm);
 
 		return -ENOMEM;
 	}
 
-	oic->in.msg.addr = oic->in.shm.vaddr;
+	oic->in.msg.addr = oic->in_shm.vaddr;
 	oic->in.msg.size = size;
-	oic->in.paddr = oic->in.shm.paddr;
+	oic->in.paddr = oic->in_shm.paddr;
 
-	oic->out.msg.addr = oic->out.shm.vaddr;
+	oic->out.msg.addr = oic->out_shm.vaddr;
 	oic->out.msg.size = OUT_BUFFER_SIZE;
-	oic->out.paddr = oic->out.shm.paddr;
+	oic->out.paddr = oic->out_shm.paddr;
+#endif
 
 	/* QTEE assume unused buffers are zeroed; Do it now! */
 	memset(oic->in.msg.addr, 0, oic->in.msg.size);
@@ -521,8 +544,12 @@ static void si_object_invoke_ctx_uninit(struct si_object_invoke_ctx *oic)
 {
 	ida_free(&si_object_invoke_ctxs_ida, oic->context_id);
 
-	qtee_shmbridge_free_shm(&oic->in.shm);
-	qtee_shmbridge_free_shm(&oic->out.shm);
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	qtee_ffa_shm_free(oic->shm);
+#else
+	qtee_shmbridge_free_shm(&oic->in_shm);
+	qtee_shmbridge_free_shm(&oic->out_shm);
+#endif
 }
 
 /* For X_msg functions, on failure we do the cleanup. Because, we could not
@@ -1335,10 +1362,12 @@ ssize_t release_show(struct kobject *kobj, struct kobj_attribute *attr, char *bu
 static struct kobj_attribute ot = __ATTR_RO(ot);
 static struct kobj_attribute po = __ATTR_RO(po);
 static struct kobj_attribute release = __ATTR_RO(release);
+static struct kobj_attribute mo = __ATTR_RO(mem_objects);
 static struct attribute *attrs[] = {
 	&ot.attr,
 	&po.attr,
 	&release.attr,
+	&mo.attr,
 	NULL
 };
 
@@ -1347,7 +1376,8 @@ static struct attribute_group attr_group = {
 };
 
 static struct kobject *si_core_kobj;
-static int __init si_core_init(void)
+
+static int si_core_probe(struct platform_device *pdev)
 {
 	int ret;
 
@@ -1358,30 +1388,84 @@ static int __init si_core_init(void)
 	/* Create '/sys/kernel/si_core'. */
 	si_core_kobj = kobject_create_and_add("si_core", kernel_kobj);
 	if (!si_core_kobj) {
-		destroy_si_core_wq();
-
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_kobj_create;
 	}
 
 	ret = sysfs_create_group(si_core_kobj, &attr_group);
+	if (ret)
+		goto err_sysfs_create;
+
+	ret = qtee_ffa_shm_init(pdev);
 	if (ret) {
-		kobject_put(si_core_kobj);
-		destroy_si_core_wq();
+		if (ret == -ENODEV)
+			ret = -EPROBE_DEFER;
+		goto err_ffa_shm_init;
 	}
 
-	adci_start();
+	ret = mem_object_init(pdev);
+	if (ret)
+		goto err_mem_obj_init;
 
+	adci_start();
+	return 0;
+
+err_mem_obj_init:
+	qtee_ffa_shm_deinit(pdev);
+err_ffa_shm_init:
+	sysfs_remove_group(si_core_kobj, &attr_group);
+err_sysfs_create:
+	kobject_put(si_core_kobj);
+err_kobj_create:
+	destroy_si_core_wq();
 	return ret;
+}
+
+static void si_core_remove(struct platform_device *pdev)
+{
+	/* TODO. Prevent unloading if 'xa_si_objects' is not empty. */
+	adci_shutdown();
+	qtee_ffa_shm_deinit(pdev);
+	sysfs_remove_group(si_core_kobj, &attr_group);
+
+	kobject_put(si_core_kobj);
+	destroy_si_core_wq();
+}
+
+static const struct of_device_id si_core_match[] = {
+	{ .compatible = "qcom,mem-object", }, {}
+};
+
+static struct platform_driver si_core_plat_driver = {
+	.probe = si_core_probe,
+	.remove = si_core_remove,
+	.driver = {
+		.name = "si-core",
+		.of_match_table = si_core_match,
+	},
+};
+
+static int __init si_core_init(void)
+{
+	int ret;
+
+	ret = si_core_ffa_driver_register();
+	if (ret)
+		return ret;
+
+	ret = platform_driver_register(&si_core_plat_driver);
+	if (ret) {
+		si_core_ffa_driver_unregister();
+		return ret;
+	}
+
+	return 0;
 }
 
 static void __exit si_core_exit(void)
 {
-	/* TODO. Prevent unloading if 'xa_si_objects' is not empty. */
-
-	adci_shutdown();
-	sysfs_remove_group(si_core_kobj, &attr_group);
-
-	kobject_put(si_core_kobj);
+	platform_driver_unregister(&si_core_plat_driver);
+	si_core_ffa_driver_unregister();
 }
 
 module_init(si_core_init);
@@ -1389,3 +1473,4 @@ module_exit(si_core_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("SI CORE driver");
+MODULE_IMPORT_NS(DMA_BUF);

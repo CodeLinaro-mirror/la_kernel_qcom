@@ -157,6 +157,24 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 #define DATA_BYTES_PER_LINE	(32)
 #define MAX_LEN			(20)
 
+/* TX Instances of DMA transmit for timestamp register */
+#define TX_TRE_INSTANCES_1	1
+#define TX_TRE_INSTANCES_2	2
+#define TX_TRE_MAX_INSTANCES	3
+
+/* RX Instance of DMA transmit for timestamp register */
+#define RX_TRE_INSTANCES	5
+
+/* Tx-Rx scatterlist instances */
+#define TX_SG_INSTANCES		5
+#define RX_SG_INSTANCES		6
+
+/*Instances to store the DMA address for timestamp register*/
+#define TS_DMA_INSTANCES_0	0
+#define TS_DMA_INSTANCES_1	1
+#define TS_DMA_MAX_INSTANCES	2
+
+
 #define GENI_SE_DMA_DONE_EN		BIT(0)
 #define GENI_SE_DMA_EOT_EN		BIT(1)
 #define GENI_SE_DMA_IMMEDIATE_MODE	BIT(1)
@@ -366,14 +384,14 @@ struct uart_gsi {
 	struct msm_gpi_tre rx_cfg0_t;
 	struct msm_gpi_tre tx_go_t;
 	struct msm_gpi_tre rx_go_t;
-	struct msm_gpi_tre tx_t[3];
-	struct msm_gpi_tre rx_t[5];
+	struct msm_gpi_tre tx_t[TX_TRE_MAX_INSTANCES];
+	struct msm_gpi_tre rx_t[RX_TRE_INSTANCES];
 	dma_addr_t tx_ph;
 	dma_addr_t rx_ph;
 	struct msm_gpi_ctrl tx_ev;
 	struct msm_gpi_ctrl rx_ev;
-	struct scatterlist tx_sg[5];
-	struct scatterlist rx_sg[6];
+	struct scatterlist tx_sg[TX_SG_INSTANCES];
+	struct scatterlist rx_sg[RX_SG_INSTANCES];
 	struct dma_async_tx_descriptor *tx_desc;
 	struct dma_async_tx_descriptor *rx_desc;
 	struct msm_gpi_dma_async_tx_cb_param tx_cb;
@@ -468,7 +486,7 @@ struct msm_geni_serial_port {
 	struct workqueue_struct *rx_wq;
 	struct completion xfer;
 	struct completion tx_xfer;
-	unsigned int count;
+	u8 rx_buf_idx;
 	atomic_t stop_rx_inprogress;
 	bool pm_auto_suspend_disable;
 	bool gsi_rx_done;
@@ -484,7 +502,7 @@ struct msm_geni_serial_port {
 	struct uart_kpi_capture uart_kpi_tx[UART_KPI_TX_RX_INSTANCES];
 	struct uart_kpi_capture uart_kpi_rx[UART_KPI_TX_RX_INSTANCES];
 	struct uart_split_dma_tre split_dma_tre;
-	dma_addr_t ts_dma[2];
+	dma_addr_t ts_dma[TS_DMA_MAX_INSTANCES];
 	bool time_stamp;
 };
 
@@ -758,7 +776,7 @@ int msm_geni_serial_resources_on(struct msm_geni_serial_port *port)
 	}
 
 	UART_LOG_DBG(port->ipc_log_misc, port->uport.dev, "%s: ICC BW voting\n", __func__);
-	ret = geni_icc_set_bw(&port->se);
+	ret = geni_common_icc_set_bw(&port->se, port->ipc_log_misc);
 	if (ret) {
 		UART_LOG_DBG(port->ipc_log_misc, port->uport.dev,
 			     "%s: Error %d ICC BW voting failed\n", __func__, ret);
@@ -2124,20 +2142,18 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 	struct uart_port *uport = &msm_port->uport;
 	struct tty_port *tport = &uport->state->port;
 	unsigned int rx_bytes = rx_cb->length;
+	u8 idx = msm_port->rx_buf_idx;
 	int ret;
 
 	UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 		     "%s: Start\n", __func__);
 
-	if (!msm_port->rx_gsi_buf[msm_port->count]) {
+	if (!msm_port->rx_gsi_buf[idx]) {
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev, "%s: Invalid Rx buffer\n", __func__);
 		return;
 	}
 
-	ret = tty_insert_flip_string(tport,
-				     (unsigned char *)
-				     (msm_port->rx_gsi_buf[msm_port->count]),
-				      rx_bytes);
+	ret = tty_insert_flip_string(tport, (unsigned char *)(msm_port->rx_gsi_buf[idx]), rx_bytes);
 	if (ret != rx_bytes)
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 			     "%s: ret %d rx_bytes %d\n", __func__,
@@ -2146,10 +2162,10 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 	uport->icount.rx += ret;
 	tty_flip_buffer_push(tport);
 	dump_ipc(uport, msm_port->ipc_log_rx, "GSI Rx",
-		 (char *)msm_port->rx_gsi_buf[msm_port->count], 0, rx_bytes);
+		 (char *)msm_port->rx_gsi_buf[idx], 0, rx_bytes);
 
-	msm_geni_uart_rx_queue_dma_tre(msm_port->count, uport);
-	msm_port->count = (msm_port->count + 1) % 4;
+	msm_geni_uart_rx_queue_dma_tre(idx, uport);
+	msm_port->rx_buf_idx = (idx + 1) % 4;
 	UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 		     "%s: End\n", __func__);
 }
@@ -2407,6 +2423,39 @@ static int msm_geni_serial_gsi_xfer_split_tx(struct msm_geni_serial_port *msm_po
 	return ret;
 }
 
+static bool setup_timestamp_tre_pair(struct msm_geni_serial_port *msm_port,
+				    struct uart_port *uport, int *index)
+{
+	int ret;
+
+	/* First timestamp TRE */
+	ret = setup_timestamp_dma_tre(msm_port, &msm_port->gsi->tx_t[TX_TRE_INSTANCES_1], 0, 1,
+				      &msm_port->ts_dma[TS_DMA_INSTANCES_0]);
+	if (ret) {
+		dev_err(uport->dev, "Failed to set up first timestamp TRE ret: %d\n", ret);
+		msm_geni_deallocate_chan(uport);
+		return false;
+	}
+	sg_set_buf(&msm_port->gsi->tx_sg[(*index)++], &msm_port->gsi->tx_t[TX_TRE_INSTANCES_1],
+		   sizeof(msm_port->gsi->tx_t[TX_TRE_INSTANCES_1]));
+
+	/* Second timestamp TRE */
+	ret = setup_timestamp_dma_tre(msm_port, &msm_port->gsi->tx_t[TX_TRE_INSTANCES_2], 1, 0,
+				      &msm_port->ts_dma[TS_DMA_INSTANCES_1]);
+	if (ret) {
+		dev_err(uport->dev, "Failed to set up second timestamp TRE ret: %d\n", ret);
+		dma_unmap_resource(msm_port->wrapper_dev, msm_port->ts_dma[TS_DMA_INSTANCES_0],
+				   TIMESTAMP_DATA_SIZE, DMA_TO_DEVICE, 0);
+		msm_port->ts_dma[TS_DMA_INSTANCES_0] = 0;
+		msm_geni_deallocate_chan(uport);
+		return false;
+	}
+	sg_set_buf(&msm_port->gsi->tx_sg[(*index)++], &msm_port->gsi->tx_t[TX_TRE_INSTANCES_2],
+		   sizeof(msm_port->gsi->tx_t[TX_TRE_INSTANCES_2]));
+
+	return true;
+}
+
 /**
  * msm_geni_uart_gsi_xfer_tx() - Setup GSI TX transfer with optional timestamp
  * @work: Pointer to work structure
@@ -2505,31 +2554,10 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 	sg_set_buf(&msm_port->gsi->tx_sg[index++], &msm_port->gsi->tx_t[0],
 		   sizeof(msm_port->gsi->tx_t[0]));
 
-	if (msm_port->time_stamp && !skip_time_stamp) {
-		ret = setup_timestamp_dma_tre(msm_port, &msm_port->gsi->tx_t[1], 0, 1,
-					      &msm_port->ts_dma[0]);
-		if (ret) {
-			dev_err(uport->dev, "Error %d: failed to set up first timestamp TRE\n",
-				ret);
-			msm_geni_deallocate_chan(uport);
-			return;
-		}
-		sg_set_buf(&msm_port->gsi->tx_sg[index++], &msm_port->gsi->tx_t[1],
-			   sizeof(msm_port->gsi->tx_t[1]));
-		ret = setup_timestamp_dma_tre(msm_port, &msm_port->gsi->tx_t[2], 1, 0,
-					      &msm_port->ts_dma[1]);
-		if (ret) {
-			dev_err(uport->dev, "Error %d: failed to set up second timestamp TRE\n",
-				ret);
-			dma_unmap_resource(tx_dev, msm_port->ts_dma[0],
-					   TIMESTAMP_DATA_SIZE, DMA_TO_DEVICE, 0);
-			msm_port->ts_dma[0] = 0;
-			msm_geni_deallocate_chan(uport);
-			return;
-		}
-		sg_set_buf(&msm_port->gsi->tx_sg[index++], &msm_port->gsi->tx_t[2],
-			   sizeof(msm_port->gsi->tx_t[2]));
-	}
+	if (msm_port->time_stamp && !skip_time_stamp
+	    && !setup_timestamp_tre_pair(msm_port, uport, &index))
+		return;
+
 	msm_port->gsi->tx_desc = dmaengine_prep_slave_sg(msm_port->gsi->tx_c,
 							 msm_port->gsi->tx_sg,
 							 index, DMA_MEM_TO_DEV,
@@ -2681,6 +2709,9 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 			   &msm_port->gsi->rx_t[i],
 			   sizeof(msm_port->gsi->rx_t[i]));
 	}
+
+	/* Reset buffer index for new RX session */
+	msm_port->rx_buf_idx = 0;
 	msm_port->gsi->rx_desc = dmaengine_prep_slave_sg(msm_port->gsi->rx_c,
 							 msm_port->gsi->rx_sg,
 							 6, DMA_DEV_TO_MEM,
@@ -2975,11 +3006,12 @@ static void msm_geni_serial_start_tx(struct uart_port *uport)
 	}
 
 	if (!uart_console(uport) && pm_runtime_enabled(uport->dev)) {
-		UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
-			"%s.Power on.\n", __func__);
-		pm_runtime_get(uport->dev);
+		if (msm_port->xfer_mode != GENI_GPI_DMA || !pm_runtime_active(uport->dev)) {
+			UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
+				     "%s: Power on.\n", __func__);
+			pm_runtime_get(uport->dev);
+		}
 	}
-
 	/*
 	 * If flush has been triggered earlier from userspace and port is
 	 * still active(not yet closed) then reset the flush_buffers flag.
@@ -4241,9 +4273,19 @@ static void msm_geni_wakeup_work(struct work_struct *work)
 
 	port = container_of(work, struct msm_geni_serial_port,
 			    wakeup_irq_dwork.work);
+
+	uport = &port->uport;
+	UART_LOG_DBG(port->ipc_log_rx, uport->dev, "Wakeup work start\n");
+
 	if (!atomic_read(&port->check_wakeup_byte))
 		return;
-	uport = &port->uport;
+
+	if (port->xfer_mode == GENI_GPI_DMA) {
+		if (msm_geni_serial_power_on(uport))
+			UART_LOG_DBG(port->ipc_log_pwr, uport->dev, "Failed to power on\n");
+		return;
+	}
+
 	reinit_completion(&port->wakeup_comp);
 	if (msm_geni_serial_power_on(uport)) {
 		atomic_set(&port->check_wakeup_byte, 0);
@@ -4509,7 +4551,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		msm_port->uart_error = UART_ERROR_DEFAULT;
 		atomic_set(&msm_port->flush_buffers, 0);
 		msm_port->current_termios = NULL;
-		msm_port->count = 0;
+		msm_port->rx_buf_idx = 0;
 	}
 	msm_port->port_state = UART_PORT_CLOSED_SHUTDOWN;
 	geni_capture_stop_time(&msm_port->se, msm_port->ipc_log_kpi, __func__,
@@ -5339,6 +5381,7 @@ static const struct of_device_id msm_geni_device_tbl[] = {
 			.data = (void *)&msm_geni_serial_hs_driver},
 	{},
 };
+MODULE_DEVICE_TABLE(of, msm_geni_device_tbl);
 
 static void msm_geni_serial_init_gsi(struct uart_port *uport)
 {
@@ -5598,6 +5641,32 @@ static int msm_geni_serial_get_clk(struct platform_device *pdev,
 	return ret;
 }
 
+/**
+ * geni_se_handle_common_resources: Load common resources.
+ * @pdev: structure to platform driver.
+ * @se_rsc: structure to geni_se.
+ *
+ * This function will read the clock vote values from
+ * the DTSI file and configure and initialize the resources
+ * accordingly. If the resources are not explicitly mentioned
+ * in the DTSI, they will be initialized with default values.
+ *
+ * return: 0 on success else error code on failure.
+ */
+static int geni_se_handle_common_resources(struct platform_device *pdev, struct geni_se *se_rsc)
+{
+	int ret;
+
+	ret = geni_se_get_common_resources(pdev, se_rsc);
+	if (ret) {
+		/* Error in loading vote values from DTS, try loading default vote values */
+		ret = geni_se_common_resources_init(se_rsc, UART_CORE2X_VOTE,
+						    APPS_PROC_TO_QUP_VOTE,
+						    DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH);
+	}
+	return ret;
+}
+
 static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 					struct msm_geni_serial_port *dev_port)
 {
@@ -5626,9 +5695,7 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	}
 
 	if (!is_console)
-		ret = geni_se_common_resources_init(&dev_port->se, UART_CORE2X_VOTE,
-						    APPS_PROC_TO_QUP_VOTE,
-						    (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+		ret = geni_se_handle_common_resources(pdev, &dev_port->se);
 	else
 		ret = geni_se_common_resources_init(&dev_port->se, GENI_DEFAULT_BW,
 						    GENI_DEFAULT_BW, GENI_DEFAULT_BW);

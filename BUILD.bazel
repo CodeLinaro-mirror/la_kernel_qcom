@@ -9,6 +9,7 @@ load(":kleaf-scripts/ddk_uapi_headers_cc_library.bzl", "ddk_uapi_headers_cc_libr
 load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtb_setup")
 load(":kleaf-scripts/generic_qtvm.bzl", "define_qtvm")
 load(":kleaf-scripts/le_build.bzl", "define_common_le_rules")
+load(":kleaf-scripts/targets/alor_le.bzl", "define_alor_le")
 load(":kleaf-scripts/targets/autogvm.bzl", "define_autogvm")
 load(":kleaf-scripts/targets/autogvmlv.bzl", "define_autogvmlv")
 load(":kleaf-scripts/targets/bengal.bzl", "define_bengal")
@@ -19,8 +20,13 @@ load(
     "define_canoe_tuivm",
 )
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
+load(":kleaf-scripts/targets/colibri.bzl", "define_colibri")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
 load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
+load(":kleaf-scripts/targets/malabar.bzl", "define_malabar")
+load(":kleaf-scripts/targets/monaco.bzl", "define_monaco")
+load(":kleaf-scripts/targets/pikachu.bzl", "define_pikachu")
+load(":kleaf-scripts/targets/seraph.bzl", "define_seraph")
 load(
     ":kleaf-scripts/targets/sun.bzl",
     "define_sun",
@@ -89,6 +95,12 @@ hermetic_genrule(
         echo 'unsigned int shipped_regdb_certs_len = sizeof(shipped_regdb_certs);'; \
         ) > $@
         """,
+)
+
+filegroup(
+    name = "soc_repo_sources",
+    srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -289,6 +301,8 @@ label_flag(
 
 define_canoe()
 
+define_alor_le()
+
 define_sun()
 
 define_autogvm()
@@ -301,6 +315,8 @@ define_sun_tuivm()
 
 define_sun_oemvm()
 
+define_seraph()
+
 define_sun_vms()
 
 define_canoe_tuivm()
@@ -309,6 +325,8 @@ define_canoe_oemvm()
 
 define_canoe_vms()
 
+define_pikachu()
+
 define_vienna()
 
 define_vienna_le()
@@ -316,3 +334,9 @@ define_vienna_le()
 define_lahaina()
 
 define_hamoa()
+
+define_malabar()
+
+define_monaco()
+
+define_colibri()

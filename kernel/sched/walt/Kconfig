@@ -47,4 +47,13 @@ config SCHED_CONSERVATIVE_BOOST_LPM_BIAS
 	  modes on a cpu if conservative boost is active. The cpu
 	  will not enter low power mode for a hysteresis time period,
 	  which can be configured from userspace.
+
+config SCHED_WALT_NR_CPUS
+	int "Maximum number of CPUs managed by WALT"
+	range 2 32
+	default 8
+	help
+	  This feature allows the configuration of the number of CPUs
+	  in the system that need to be managed by WALT.
+
 endmenu

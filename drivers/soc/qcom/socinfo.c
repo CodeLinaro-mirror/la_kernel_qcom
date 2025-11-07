@@ -629,6 +629,8 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(SC7180P) },
 	{ qcom_board_id(QCM6490) },
 	{ qcom_board_id(QCS6490) },
+	{ qcom_board_id(QCS5430) },
+	{ qcom_board_id(QCM5430) },
 	{ qcom_board_id(IPQ5000) },
 	{ qcom_board_id(IPQ0509) },
 	{ qcom_board_id(IPQ0518) },
@@ -670,6 +672,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(IPQ5300) },
 	{ qcom_board_id(CANOE) },
 	{ qcom_board_id(CANOEP) },
+	{ qcom_board_id(SERAPH) },
 	{ qcom_board_id(ALOR) },
 	{ qcom_board_id(ALORP) },
 	{ qcom_board_id(ALOR_INTERPOSER) },
@@ -684,6 +687,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(KHAJEQ) },
 	{ qcom_board_id(KHAJEG) },
 	{ qcom_board_id(KHAJEIOT) },
+	{ qcom_board_id(PIKACHU) },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];

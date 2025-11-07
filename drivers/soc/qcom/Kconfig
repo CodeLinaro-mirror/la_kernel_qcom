@@ -250,6 +250,14 @@ config PDR_INDICATION_NOTIF_TIMEOUT
 	  the start and end of notifications, before a warning
 	  is emitted.
 
+config MSM_CORE_HANG_DETECT
+        tristate "MSM Core Hang Detection Support"
+        help
+          This enables the core hang detection module. It causes SoC
+          reset on core hang detection and collects the core context
+          for hang. By using sysfs entries core hang detection can be
+          enabled or disabled dynamically.
+
 config MSM_POWER_STATE
 	tristate "Power State driver support for Deep Sleep and Hibernate"
 	help

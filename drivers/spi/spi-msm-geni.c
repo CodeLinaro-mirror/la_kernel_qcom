@@ -166,6 +166,9 @@ if (dev) \
 #define CREATE_TRACE_POINTS
 #include "spi-qup-trace.h"
 
+#define MIN_IPC_LOG_SIZE	4
+#define MAX_IPC_LOG_SIZE	30
+
 /* FTRACE Logging */
 void spi_trace_log(struct device *dev, const char *fmt, ...)
 {
@@ -297,6 +300,7 @@ struct spi_geni_master {
 	bool is_deep_sleep; /* For deep sleep restore the config similar to the probe. */
 	bool is_tx_rx; /* Indicates if current transfer Tx_Rx  */
 	u8 dummy_len;
+	u32 ipc_log_size;
 };
 
 /**
@@ -634,7 +638,7 @@ static ssize_t capture_kpi_store(struct device *dev,
 	if (geni_mas->spi_kpi && !geni_mas->ipc_log_kpi) {
 		memset(name, 0, sizeof(name));
 		scnprintf(name, sizeof(name), "%s%s", dev_name(geni_mas->dev), "_kpi");
-		geni_mas->ipc_log_kpi = ipc_log_context_create(IPC_LOG_KPI_PAGES, name, 0);
+		geni_mas->ipc_log_kpi = ipc_log_context_create(geni_mas->ipc_log_size, name, 0);
 		if (!geni_mas->ipc_log_kpi && IS_ENABLED(CONFIG_IPC_LOGGING))
 			dev_err(&pdev->dev, "Error creating kpi IPC logs\n");
 	}
@@ -2858,7 +2862,7 @@ static int spi_geni_transfer_one_message(struct spi_controller *spi, struct spi_
 		}
 		msg->actual_length += xfer->len;
 
-		if (mas->is_tx_rx) {
+		if (mas->is_tx_rx && xfer_tx_rx) {
 			msg->actual_length += xfer_tx_rx->len;
 			xfer = xfer_tx_rx;
 		}
@@ -3146,6 +3150,13 @@ static int spi_get_dt_property(struct platform_device *pdev, struct spi_geni_mas
 		return -ENOMEM;
 	}
 
+	if (of_property_read_u32(pdev->dev.of_node, "qcom,ipc-size",
+				 &geni_mas->ipc_log_size)) {
+		geni_mas->ipc_log_size = MIN_IPC_LOG_SIZE;
+	}
+
+	geni_mas->ipc_log_size = clamp(geni_mas->ipc_log_size, MIN_IPC_LOG_SIZE,
+				       MAX_IPC_LOG_SIZE);
 	return 0;
 }
 
@@ -3153,12 +3164,12 @@ void create_ipc_context(struct spi_geni_master *geni_mas, struct device *dev)
 {
 	char name[MAX_IPC_NAME_BUF];
 
-	geni_mas->ipc = ipc_log_context_create(4, dev_name(geni_mas->dev), 0);
+	geni_mas->ipc = ipc_log_context_create(geni_mas->ipc_log_size, dev_name(geni_mas->dev), 0);
 	if (!geni_mas->ipc && IS_ENABLED(CONFIG_IPC_LOGGING))
 		dev_err(dev, "Error creating IPC logs\n");
 
 	scnprintf(name, sizeof(name), "%s%s", dev_name(geni_mas->dev), "_tx_rx");
-	geni_mas->ipc_log_tx_rx = ipc_log_context_create(4, name, 0);
+	geni_mas->ipc_log_tx_rx = ipc_log_context_create(MIN_IPC_LOG_SIZE, name, 0);
 	if (!geni_mas->ipc_log_tx_rx && IS_ENABLED(CONFIG_IPC_LOGGING))
 		dev_err(dev, "Error creating IPC TX/RX logs\n");
 }
@@ -3178,16 +3189,22 @@ static int geni_spi_resources_init(struct platform_device *pdev, struct spi_geni
 	int ret;
 	struct device *dev = &pdev->dev;
 
-	ret = geni_se_common_resources_init(spi_rsc, SPI_CORE2X_VOTE,
-					    APPS_PROC_TO_QUP_VOTE,
-					    (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+	ret = geni_se_get_common_resources(pdev, spi_rsc);
+	if (ret) {
+		/* error in loading vote values from dts, loading default vote values */
+		dev_err(&pdev->dev, "Error loading vote values from dts\n");
+		ret = geni_se_common_resources_init(spi_rsc, SPI_CORE2X_VOTE,
+						    APPS_PROC_TO_QUP_VOTE,
+						    (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+	}
+
 	if (ret) {
 		dev_err(&pdev->dev, "Error geni_se_resources_init\n");
 		return ret;
 	}
 
 	/* call set_bw for once, then do icc_enable/disable */
-	ret = geni_icc_set_bw(spi_rsc);
+	ret = geni_common_icc_set_bw(spi_rsc, geni_mas->ipc);
 	if (ret) {
 		dev_err(&pdev->dev, "%s: icc set bw failed ret:%d\n",
 			__func__, ret);
@@ -3823,6 +3840,7 @@ static const struct of_device_id spi_geni_dt_match[] = {
 	{ .compatible = "qcom,qspi-geni" },
 	{}
 };
+MODULE_DEVICE_TABLE(of, spi_geni_dt_match);
 
 static struct platform_driver spi_geni_driver = {
 	.probe  = spi_geni_probe,

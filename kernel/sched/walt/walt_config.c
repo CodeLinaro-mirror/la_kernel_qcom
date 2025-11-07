@@ -276,6 +276,12 @@ void walt_config(void)
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+	} else if (!strcmp(name, "X1E80100")) {
+		/*
+		 * By default this SOC flag will be disabled. Enable this only
+		 * for X1E80100 platforms
+		 */
+		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
 	}
 
 }
@@ -283,6 +289,9 @@ void walt_config(void)
 void early_walt_config(void)
 {
 	const char *name = socinfo_get_id_string();
+
+	if (!name)
+		return;
 
 	memset(soc_cluster_freq_table_size, 0, sizeof(soc_cluster_freq_table_size));
 	memset(soc_cluster_freq_table, 0, sizeof(soc_cluster_freq_table));
@@ -323,7 +332,8 @@ void early_walt_config(void)
 		soc_cluster_freq_table[1][13] = 5087;
 		soc_cluster_freq_table[1][14] = 5390;
 		soc_cluster_freq_table[1][15] = 5516;
-	} else if (!strcmp(name, "CANOE") || !strcmp(name, "CANOEPSG")) {
+	} else if (!strcmp(name, "CANOE") || !strcmp(name, "CANOEPSG") || !strcmp(name, "WHALE")
+			|| !strcmp(name, "WHALEP")) {
 		soc_cluster_freq_table_size[0] = 32;
 		soc_cluster_freq_table_size[1] = 32;
 

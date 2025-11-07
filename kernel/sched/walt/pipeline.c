@@ -861,14 +861,20 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 		}
 	}
 
-	if (!heavy_wts[MAX_NR_PIPELINE - 1] ||
-		cpumask_weight(&sched_cluster[prime_cluster_id]->cpus) == 1) {
+	if (!heavy_wts[MAX_NR_PIPELINE - 1]) {
 		rearrange_heavy(wrq->window_start, false);
 		goto out;
 	}
 
 	if (found_topapp == FIND_HEAVY_WAIT)
 		goto unlock;
+
+	if (cpumask_weight(&sched_cluster[prime_cluster_id]->cpus) == 1)
+		sysctl_pipeline_force_config = CONFIG1;
+
+	/* force config skip EAS evaluations */
+	if ((sysctl_pipeline_force_config == CONFIG1) || (sysctl_pipeline_force_config == CONFIG2))
+		goto assign_pipeline_cpu;
 
 	for_each_sched_cluster(cluster) {
 		if (cluster->id != gold_cluster_id && cluster->id != prime_cluster_id)
@@ -960,6 +966,7 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 	if (!prev_energy)
 		prev_energy = ULONG_MAX;
 
+assign_pipeline_cpu:
 	if ((((prev_config == CONFIG1 && prev_energy < config2) ||
 	      (prev_config == CONFIG2 && config1 < prev_energy) ||
 	      (!prev_config && config1 < config2) ||

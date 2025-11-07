@@ -1,7 +1,7 @@
 vienna_le_config = {
     # keep sorted
     "CONFIG_ARCH_VIENNA": "y",
-    # CONFIG_ARM64_AMU_EXTN is not set
+    "CONFIG_ARM64_AMU_EXTN": "n",
     "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
     "CONFIG_ARM_SMMU": "m",
@@ -142,7 +142,6 @@ vienna_le_config = {
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SI_CORE_ADCI": "y",
-    "CONFIG_QCOM_SI_CORE_MEM_OBJECT": "m",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SMP2P": "m",
@@ -156,6 +155,7 @@ vienna_le_config = {
     "CONFIG_QCOM_SYSMON_SUBSYSTEM_STATS": "m",
     "CONFIG_QCOM_TSENS": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
     "CONFIG_QCOM_VADC_COMMON": "m",
     "CONFIG_QCOM_VA_MINIDUMP": "m",
     "CONFIG_QCOM_WATCHDOG_BARK_TIME": "11000",
@@ -172,6 +172,7 @@ vienna_le_config = {
     "CONFIG_QTI_BATTERY_GLINK_DEBUG": "m",
     "CONFIG_QTI_BCL_PMIC5": "m",
     "CONFIG_QTI_BCL_SOC_DRIVER": "m",
+    "CONFIG_QTI_CHARGER_NFC_VREG": "y",
     "CONFIG_QTI_CHARGER_ULOG_GLINK": "m",
     "CONFIG_QTI_CPUCP_LOG": "m",
     "CONFIG_QTI_CPUFREQ_CDEV": "m",

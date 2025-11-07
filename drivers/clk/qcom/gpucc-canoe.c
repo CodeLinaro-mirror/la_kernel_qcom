@@ -577,6 +577,7 @@ static const struct qcom_cc_desc gx_clkctl_canoe_desc = {
 static const struct of_device_id gpu_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-gpucc" },
 	{ .compatible = "qcom,alor-gpucc" },
+	{ .compatible = "qcom,whale-gpucc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_canoe_match_table);
@@ -604,6 +605,9 @@ static int gpu_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regma
 
 	if (!strcmp(compat, "qcom,alor-gpucc"))
 		gpu_cc_alor_fixup(regmap);
+
+	if (!strcmp(compat, "qcom,whale-gpucc"))
+		gpu_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
 
 	return 0;
 }

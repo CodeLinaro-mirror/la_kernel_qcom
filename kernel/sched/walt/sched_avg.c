@@ -295,7 +295,7 @@ int sched_busy_hyst_handler(const struct ctl_table *table, int write,
 
 	ret = proc_dointvec_minmax(&local_table, write, buffer, lenp, ppos);
 
-	if (!ret && write)
+	if (!ret && write && !walt_quiet_state)
 		sched_update_hyst_times();
 
 	return ret;
@@ -314,6 +314,9 @@ void sched_update_nr_prod(int cpu, int enq)
 	u64 diff;
 	u64 curr_time;
 	unsigned long flags, nr_running;
+
+	if (walt_quiet_state)
+		return;
 
 	spin_lock_irqsave(&per_cpu(nr_lock, cpu), flags);
 	nr_running = per_cpu(nr, cpu);
@@ -372,6 +375,9 @@ int sched_lpm_disallowed_time(int cpu, u64 *timeout)
 	u64 bias_end_time = atomic64_read(&per_cpu(busy_hyst_end_time, cpu));
 
 	if (unlikely(walt_disabled))
+		return -EAGAIN;
+
+	if (walt_quiet_state)
 		return -EAGAIN;
 
 	if (unlikely(is_reserved(cpu))) {

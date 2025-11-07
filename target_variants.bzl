@@ -4,8 +4,13 @@ targets = [
     #"gen3auto",
     "autogvm",
     "bengal",
+    "colibri",
     "hamoa",
     "lahaina",
+    "malabar",
+    "monaco",
+    "pikachu",
+    "seraph",
     "sun",
     "vienna",
 ]
@@ -19,6 +24,7 @@ la_variants = [
 le_targets = [
     # keep sorted
     #"sun-allyes",
+    "alor-le",
     "autogvm",
     "vienna-le",
 ]

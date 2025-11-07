@@ -396,11 +396,17 @@ static void *__arm_lpae_alloc_pages(struct arm_lpae_io_pgtable *data,
 	void *pages;
 
 	VM_BUG_ON((gfp & __GFP_HIGHMEM));
-	p = qcom_io_pgtable_alloc_page(data->vmid, gfp | __GFP_ZERO);
-	if (!p)
+
+	if (cfg->alloc) {
+		pages = cfg->alloc(cookie, size, gfp | __GFP_ZERO);
+	} else {
+		p = qcom_io_pgtable_alloc_page(data->vmid, gfp | __GFP_ZERO);
+		pages = p ? page_address(p) : NULL;
+	}
+
+	if (!pages)
 		return NULL;
 
-	pages = page_address(p);
 	if (!cfg->coherent_walk) {
 		dma = dma_map_single(dev, pages, size, DMA_TO_DEVICE);
 		if (dma_mapping_error(dev, dma))
@@ -420,7 +426,11 @@ out_unmap:
 	dev_err(dev, "Cannot accommodate DMA translation for IOMMU page tables\n");
 	dma_unmap_single(dev, dma, size, DMA_TO_DEVICE);
 out_free:
-	qcom_io_pgtable_free_page(p);
+	if (cfg->free)
+		cfg->free(cookie, pages, size);
+	else
+		qcom_io_pgtable_free_page(p);
+
 	return NULL;
 }
 
@@ -432,8 +442,9 @@ static void __arm_lpae_free_pages(struct arm_lpae_io_pgtable *data,
 	if (!cfg->coherent_walk)
 		dma_unmap_single(cfg->iommu_dev, __arm_lpae_dma_addr(pages),
 				 size, DMA_TO_DEVICE);
-
-	if (deferred_free)
+	if (cfg->free)
+		cfg->free(cookie, pages, size);
+	else if (deferred_free)
 		qcom_io_pgtable_tlb_add_walk_page(data->iommu_tlb_ops, cookie, pages);
 	else
 		qcom_io_pgtable_free_page(virt_to_page(pages));

@@ -39,6 +39,7 @@ proxy-consumer.ko
 bam_dma.ko
 stub-regulator.ko
 clk-smd-rpm.ko
+gcc-khaje.ko
 icc-rpm.ko
 qnoc-qos-rpm.ko
 qnoc-bengal.ko
@@ -76,6 +77,7 @@ qcom_dma_heaps.ko
 ufshcd-crypto-qti.ko
 qcom_ice.ko
 ufs-qcom.ko
+phy-qcom-ufs-qmp-v4-khaje.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
 sg.ko

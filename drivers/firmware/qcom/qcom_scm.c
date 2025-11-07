@@ -136,6 +136,8 @@ enum qcom_scm_qseecom_tz_cmd_info {
 
 #define QSEECOM_MAX_APP_NAME_SIZE		64
 
+#define SHMBRIDGE_RESULT_NOTSUPP		4
+
 /* Each bit configures cold/warm boot address for one of the 4 CPUs */
 static const u8 qcom_scm_cpu_cold_bits[QCOM_SCM_BOOT_MAX_CPUS] = {
 	0, BIT(0), BIT(3), BIT(5)
@@ -2448,6 +2450,8 @@ EXPORT_SYMBOL_GPL(qcom_scm_lmh_dcvsh_available);
 
 int qcom_scm_shm_bridge_enable(void)
 {
+	int ret;
+
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_MP,
 		.cmd = QCOM_SCM_MP_SHM_BRIDGE_ENABLE,
@@ -2460,7 +2464,15 @@ int qcom_scm_shm_bridge_enable(void)
 					  QCOM_SCM_MP_SHM_BRIDGE_ENABLE))
 		return -EOPNOTSUPP;
 
-	return qcom_scm_call(__scm->dev, &desc, &res) ?: res.result[0];
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+
+	if (ret)
+		return ret;
+
+	if (res.result[0] == SHMBRIDGE_RESULT_NOTSUPP)
+		return -EOPNOTSUPP;
+
+	return res.result[0];
 }
 EXPORT_SYMBOL_GPL(qcom_scm_shm_bridge_enable);
 
@@ -2750,6 +2762,40 @@ int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
 }
 EXPORT_SYMBOL(qcom_scm_invoke_smc);
 
+int qcom_scm_invoke_smc_ffa(uint64_t ffa_handle, size_t offset,
+		size_t in_buf_size, size_t out_buf_size, int32_t *result,
+		u64 *response_type, unsigned int *data)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMCINVOKE,
+		.cmd = QCOM_SCM_SMCINVOKE_INVOKE_FFA,
+		.owner = ARM_SMCCC_OWNER_TRUSTED_OS,
+		.args[0] = ffa_handle,
+		.args[1] = offset,
+		.args[2] = in_buf_size,
+		.args[3] = out_buf_size,
+		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_VAL, QCOM_SCM_VAL,
+					QCOM_SCM_VAL, QCOM_SCM_VAL),
+		.multicall_allowed = true,
+	};
+	struct qcom_scm_res res;
+
+	ret = qcom_scm_call_noretry(__scm->dev, &desc, &res);
+
+	if (result)
+		*result = res.result[1];
+
+	if (response_type)
+		*response_type = res.result[0];
+
+	if (data)
+		*data = res.result[2];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_invoke_smc_ffa);
+
 int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 	size_t out_buf_size, int32_t *result, u64 *response_type,
 	unsigned int *data)
@@ -2780,6 +2826,39 @@ int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 	return ret;
 }
 EXPORT_SYMBOL(qcom_scm_invoke_callback_response);
+
+int qcom_scm_invoke_callback_response_ffa(uint64_t ffa_handle,
+	size_t out_offset, size_t out_buf_size, int32_t *result,
+	u64 *response_type, unsigned int *data)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMCINVOKE,
+		.cmd = QCOM_SCM_SMCINVOKE_CB_RSP_FFA,
+		.owner = ARM_SMCCC_OWNER_TRUSTED_OS,
+		.args[0] = ffa_handle,
+		.args[1] = out_offset,
+		.args[2] = out_buf_size,
+		.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_VAL,
+					QCOM_SCM_VAL),
+		.multicall_allowed = true,
+	};
+	struct qcom_scm_res res;
+
+	ret = qcom_scm_call_noretry(__scm->dev, &desc, &res);
+
+	if (result)
+		*result = res.result[1];
+
+	if (response_type)
+		*response_type = res.result[0];
+
+	if (data)
+		*data = res.result[2];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_invoke_callback_response_ffa);
 
 int qcom_scm_invoke_ack_doorbell(u32 doorbell_id, u32 msg_id)
 {
@@ -3422,7 +3501,7 @@ static int __qcom_multi_smc_init(struct qcom_scm *__scm,
 			dev_err(__scm->dev, "Failed to request qcom-scm irq: %d\n", ret);
 			return ret;
 		}
-
+		irq_set_irq_wake(irq, true);
 	}
 
 	return ret;

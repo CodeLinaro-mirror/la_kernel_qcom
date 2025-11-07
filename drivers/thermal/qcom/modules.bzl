@@ -5,7 +5,9 @@ def register_modules(registry):
         config = "CONFIG_QTI_BCL_PMIC5",
         srcs = [
             # do not sort
-            "drivers/thermal/qcom/bcl_pmic5.c",
+            "drivers/thermal/qcom/qti_bcl_pmic5.c",
+            "drivers/thermal/qcom/qti_bcl_stats.c",
+            "drivers/thermal/qcom/qti_bcl_common.h",
             "drivers/thermal/qcom/thermal_zone_internal.h",
         ],
         deps = [

@@ -317,6 +317,18 @@ enum usb_gsi_reg {
 	GSI_REG_MAX,
 };
 
+struct usb_udc {
+	struct usb_gadget_driver	*driver;
+	struct usb_gadget		*gadget;
+	struct device			dev;
+	struct list_head		list;
+	bool				vbus;
+	bool				started;
+	bool				allow_connect;
+	struct work_struct		vbus_work;
+	struct mutex			connect_lock;
+};
+
 struct dload_struct {
 	u32	pid;
 	char	serial_number[SERIAL_NUMBER_LENGTH];
@@ -406,7 +418,7 @@ static const struct {
 } bus_vote_values[BUS_VOTE_MAX][3] = {
 	/* usb_ddr avg/peak, usb_ipa avg/peak, apps_usb avg/peak */
 	[BUS_VOTE_NONE]    = { {0, 0}, {0, 0}, {0, 0} },
-	[BUS_VOTE_NOMINAL] = { {1000000, 1250000}, {0, 2400}, {0, 40000}, },
+	[BUS_VOTE_NOMINAL] = { {1000000, 1450000}, {0, 2400}, {0, 40000}, },
 	[BUS_VOTE_SVS]     = { {240000, 700000}, {0, 2400}, {0, 40000}, },
 	[BUS_VOTE_MIN]     = { {1, 1}, {1, 1}, {1, 1}, },
 };
@@ -656,10 +668,10 @@ struct dwc3_msm {
 	int			repeater_rev;
 
 	u32			cap_length;
-
 	bool			fw_managed_pwr;
 	int			pd_count;
 	struct device		**pd_devs;
+	bool			force_disconnect;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -3897,15 +3909,20 @@ static void dwc3_msm_orientation_gpio_init(struct dwc3_msm *mdwc)
 	int rc;
 
 	mdwc->orientation_gpio = of_get_named_gpio(dev->of_node, "gpios", 0);
+
+	/*
+	 * If the GPIO is not defined or invalid, simply disable the
+	 * orientation feature – this is not an error condition.
+	 */
 	if (!gpio_is_valid(mdwc->orientation_gpio)) {
-		dev_err(dev, "Failed to get gpio\n");
+		dev_dbg(dev, "Orientation GPIO not defined, feature disabled\n");
 		return;
 	}
 
 	rc = devm_gpio_request_one(dev, mdwc->orientation_gpio,
 				   GPIOF_IN, "dwc3-msm-orientation");
 	if (rc < 0) {
-		dev_err(dev, "Failed to request gpio\n");
+		dev_err(dev, "failed to request orientation GPIO ret=%d\n", rc);
 		mdwc->orientation_gpio = -EINVAL;
 		return;
 	}
@@ -4006,14 +4023,19 @@ static void enable_usb_pdc_interrupt(struct dwc3_msm *mdwc, bool enable)
 		 * during bus-suspend case, irrespective of the speed of the connected
 		 * device, both eDM and eDP line will be pulled high (XeSE1).
 		 */
-		if (mdwc->use_eusb2_phy)
+		if (mdwc->use_eusb2_phy) {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_RISING, enable);
-		else
+
+			configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
+				IRQ_TYPE_EDGE_RISING, enable);
+		} else {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_FALLING, enable);
+		}
 
 	} else if (mdwc->phy_flags & PHY_HSFS_MODE) {
 		/*
@@ -4022,14 +4044,19 @@ static void enable_usb_pdc_interrupt(struct dwc3_msm *mdwc, bool enable)
 		 * during bus-suspend case, irrespective of the speed of the connected
 		 * device, both eDM and eDP line will be pulled high (XeSE1).
 		 */
-		if (mdwc->use_eusb2_phy)
+		if (mdwc->use_eusb2_phy) {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_RISING, enable);
-		else
+
+			configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
+				IRQ_TYPE_EDGE_RISING, enable);
+		} else {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_FALLING, enable);
+		}
 
 	} else {
 		/* When in host mode, with no device connected, set the HS
@@ -6853,6 +6880,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	mdwc->dp_state = DP_NONE;
 
+	mdwc->force_disconnect = false;
 	return 0;
 
 put_dwc3:
@@ -7551,6 +7579,7 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 {
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 	int timeout = 1000;
+	unsigned long flags;
 	int ret;
 
 	ret = pm_runtime_resume_and_get(mdwc->dev);
@@ -7614,6 +7643,20 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 
 		usb_role_switch_set_role(mdwc->dwc3_drd_sw, USB_ROLE_DEVICE);
 		clk_set_rate(mdwc->core_clk, mdwc->core_clk_rate);
+
+		/*
+		 * Check udc->driver to find out if we are bound to udc or not.
+		 */
+		spin_lock_irqsave(&dwc->lock, flags);
+		if ((mdwc->force_disconnect) && (!dwc->softconnect) &&
+			(dwc->gadget) && (dwc->gadget->udc->driver)) {
+			spin_unlock_irqrestore(&dwc->lock, flags);
+			dbg_event(0xFF, "Force Pullup", 0);
+			usb_gadget_connect(dwc->gadget);
+			spin_lock_irqsave(&dwc->lock, flags);
+		}
+		spin_unlock_irqrestore(&dwc->lock, flags);
+		mdwc->force_disconnect = false;
 	} else {
 		dev_dbg(mdwc->dev, "%s: turn off gadget\n", __func__);
 
@@ -7642,6 +7685,18 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 				msleep(20);
 			dbg_event(0xFF, "StopGdgt connected", dwc->connected);
 			pm_runtime_suspend(&mdwc->dwc3->dev);
+		}
+		if ((timeout == 0) && (dwc->connected)) {
+			dbg_event(0xFF, "Force Pulldown", 0);
+
+			/*
+			 * Since we are not taking the udc_lock, there is a
+			 * chance that this might race with gadget_remove driver
+			 * in case this is called in parallel to UDC getting
+			 * cleared in userspace
+			 */
+			usb_gadget_disconnect(dwc->gadget);
+			mdwc->force_disconnect = true;
 		}
 
 		/* wait for LPM, to ensure h/w is reset after stop_peripheral */

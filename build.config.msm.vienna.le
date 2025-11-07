@@ -1,10 +1,7 @@
 ################################################################################
 ## Inheriting configs from ACK
-. "${KERNEL_DIR}/build.config.constants"
-ARCH=arm64
-LLVM=1
-CLANG_PREBUILT_BIN=prebuilts/clang/host/linux-x86/clang-${CLANG_VERSION}/bin
-BUILDTOOLS_PREBUILT_BIN=build/kernel/build-tools/path/linux-x86
+. "${ROOT_DIR}/soc-repo/build.config.common"
+. "${ROOT_DIR}/soc-repo/build.config.aarch64"
 
 #################################################################################
 ## Target and Variant setup

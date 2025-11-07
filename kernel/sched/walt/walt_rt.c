@@ -258,6 +258,10 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 	if (unlikely(walt_disabled))
 		return;
 
+	if (walt_quiet_state)
+		return;
+
+	get_entry_instr(WALT_SELECT_TASK_RQ_RT);
 	/* For anything but wake ups, just return the task_cpu */
 	if (sd_flag != SD_BALANCE_WAKE && sd_flag != SD_BALANCE_FORK) {
 		fastpath = NON_WAKEUP;
@@ -362,6 +366,7 @@ unlock:
 	rcu_read_unlock();
 out:
 	trace_sched_select_task_rt(task, fastpath, *new_cpu, lowest_mask);
+	update_instruction_data(WALT_SELECT_TASK_RQ_RT);
 }
 
 
@@ -378,6 +383,10 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *sched_ctx,
 	if (unlikely(walt_disabled))
 		return;
 
+	if (walt_quiet_state)
+		return;
+
+	get_entry_instr(WALT_RT_FIND_LOWEST_RQ);
 	wts = (struct walt_task_struct *)android_task_vendor_data(sched_ctx);
 
 	packing_cpu = walt_find_and_choose_cluster_packing_cpu(0, sched_ctx);
@@ -414,6 +423,7 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *sched_ctx,
 		cpumask_andnot(lowest_mask, lowest_mask, cpu_halt_mask);
 out:
 	trace_sched_rt_find_lowest_rq(sched_ctx, fastpath, *best_cpu, lowest_mask);
+	update_instruction_data(WALT_RT_FIND_LOWEST_RQ);
 }
 
 void walt_rt_init(void)

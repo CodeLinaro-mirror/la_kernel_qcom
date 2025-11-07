@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -82,7 +82,7 @@ static int qcom_smd_qrtr_probe(struct rpmsg_device *rpdev)
 	qdev->ep.xmit = qcom_smd_qrtr_send;
 
 	/* data callback runs in threaded context */
-	qdev->ep.in_thread = true;
+	qdev->ep.in_thread = !of_property_read_bool(rpdev->dev.of_node, "qcom,cb-irq");
 
 	rc = of_property_read_u32(rpdev->dev.of_node, "qcom,net-id", &net_id);
 	if (rc < 0)

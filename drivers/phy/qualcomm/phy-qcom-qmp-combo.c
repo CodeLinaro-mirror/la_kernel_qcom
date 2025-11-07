@@ -4029,10 +4029,11 @@ static int qmp_combo_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_node_put;
 
+#ifdef CONFIG_DRM_DP_AUX_BUS
 	ret = drm_aux_bridge_register(dev);
 	if (ret)
 		goto err_node_put;
-
+#endif
 	pm_runtime_set_active(dev);
 	ret = devm_pm_runtime_enable(dev);
 	if (ret)

@@ -50,6 +50,7 @@
 
 extern bool walt_disabled;
 extern bool waltgov_disabled;
+extern bool walt_quiet_state;
 
 enum task_event {
 	PUT_PREV_TASK	= 0,
@@ -703,14 +704,7 @@ static inline void waltgov_remove_callback(int cpu)
 	rcu_assign_pointer(per_cpu(waltgov_cb_data, cpu), NULL);
 }
 
-static inline void waltgov_run_callback(struct rq *rq, unsigned int flags)
-{
-	struct waltgov_callback *cb;
-
-	cb = rcu_dereference_sched(*per_cpu_ptr(&waltgov_cb_data, cpu_of(rq)));
-	if (cb)
-		cb->func(cb, walt_sched_clock(), flags);
-}
+extern void waltgov_run_callback(struct rq *rq, unsigned int flags);
 
 extern unsigned long cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load,
 		unsigned int *reason);
@@ -1756,4 +1750,167 @@ extern u64 oscillate_ts_ns;
  */
 #define GIANT_UTIL_THRESH_PCT 700
 extern u64 walt_rotation_stop_hyst_start_ts;
+
+enum trace_type {
+	INVALID,
+	WAKEUP_NEW,
+	UPDATE_CPU_CAPACITY,
+	CPU_STARTING,
+	CPU_DYING,
+	SET_TASK_CPU,
+	NEW_TASK_STATS,
+	ACCOUNT_IRQ,
+	FLUSH_TASK,
+	UPDATE_MISFIT_STATUS,
+	ENQUEUE_TASK,
+	DEQUEUE_TASK,
+	TRY_TO_WAKE_UP,
+	TICK_ENTRY,
+	SCHEDULER_TICK,
+	SCHEDULE,
+	CPU_CGROUP_ATTACH,
+	CPU_CGROUP_FREE,
+	CPU_CGROUP_ONLINE,
+	SCHED_FORK_INIT,
+	TTWU_COND,
+	SCHED_EXEC,
+	BUILD_PERF_DOMAINS,
+	CPU_FREQUENCY_LIMITS,
+	DO_SCHED_YIELD,
+	UPDATE_THERMAL_STATS,
+	DUP_TASK_STRUCT,
+	FREQ_QOS_ADD_REQUEST,
+	FREQ_QOS_UPDATE_REQUEST,
+	FREQ_QOS_REMOVE_REQUEST,
+	/* walt_cfs.c */
+	SELECT_TASK_RQ_FAIR,
+	BINDER_SET_PRIORITY_HOOK,
+	BINDER_RESTORE_PRIORITY_HOOK,
+	CHECK_PREEMPT_WAKEUP_FAIR,
+	REPLACE_NEXT_TASK_FAIR,
+	/* walt_lb.c */
+
+	SCHED_NOHZ_BALANCER_KICK,
+	CAN_MIGRATE_TASK,
+	FIND_BUSIEST_QUEUE,
+	SCHED_NEWIDLE_BALANCE,
+	FIND_NEW_ILB,
+
+	/* walt_rt.c */
+	WALT_SELECT_TASK_RQ_RT,
+	WALT_RT_FIND_LOWEST_RQ,
+
+	NUM_TRACE_HOOKS
+};
+
+#define MAX_STACK_DEPTH 16
+struct trace_inst_struct {
+	u64 inst_cnt[NUM_TRACE_HOOKS];
+	u64 last_inst_cnt;
+	enum trace_type type_stack[MAX_STACK_DEPTH];
+	uint top; /* top points to an empty one */
+	uint count_trace_hook[NUM_TRACE_HOOKS];
+};
+
+#ifdef TRACEHOOK_INST_CNT
+DECLARE_PER_CPU(struct trace_inst_struct, trace_inst_data);
+DECLARE_PER_CPU(u64, governor_entry);
+DECLARE_PER_CPU(u64, governor_inst);
+DECLARE_PER_CPU(uint, governor_count);
+DECLARE_PER_CPU(u64, walt_irq_work_inst);
+DECLARE_PER_CPU(u64, walt_irq_work_entry);
+DECLARE_PER_CPU(uint, walt_irq_work_count);
+DECLARE_PER_CPU(u64, utra_inst);
+DECLARE_PER_CPU(u64, utra_entry);
+DECLARE_PER_CPU(uint, utra_count);
+
+static inline u64 read_instruction_cnt(void)
+{
+	return read_sysreg_s(SYS_AMEVCNTR0_INST_RET_EL0);
+}
+
+static inline void get_entry_instr(enum trace_type type)
+{
+	int cpu;
+	struct trace_inst_struct *t;
+	u64 entry_cnt;
+
+	/* some tracehooks can switch(sleep), tracking them creates issues */
+	if (type == WAKEUP_NEW || type == CPU_CGROUP_ATTACH ||
+			type == SCHED_FORK_INIT)
+		return;
+
+	cpu = raw_smp_processor_id();
+	t = &per_cpu(trace_inst_data, cpu);
+	entry_cnt = read_instruction_cnt();
+
+	if (t->top > 0) {
+		/* add the inst so far to the parent hook we've interrupted */
+		uint prev_top = t->top - 1;
+		enum trace_type prev_type = t->type_stack[prev_top];
+
+		if (prev_top >= MAX_STACK_DEPTH)
+			/* crossed beyond our stack depth account such things in invalid bucket */
+			prev_type = INVALID;
+
+		t->inst_cnt[prev_type] += entry_cnt - t->last_inst_cnt;
+	}
+
+	t->last_inst_cnt = entry_cnt;
+	t->type_stack[t->top] = type;
+	t->top = t->top + 1;
+}
+
+static inline void update_instruction_data(enum trace_type type)
+{
+	int cpu;
+	struct trace_inst_struct *t;
+	u64 exit_cnt;
+
+	/* some tracehooks can switch, remove them */
+	if (type == WAKEUP_NEW || type == CPU_CGROUP_ATTACH ||
+			type == SCHED_FORK_INIT)
+		return;
+
+	cpu = raw_smp_processor_id();
+	t = &per_cpu(trace_inst_data, cpu);
+	exit_cnt = read_instruction_cnt();
+
+	if (t->top >= MAX_STACK_DEPTH)
+		/* We have consumed our stack depth, account these towards INVALID */
+		type = INVALID;
+	if (t->top == 0)
+		/*
+		 * Likely have migrated and unravelling the stack but no account of the prev stack
+		 * on the new cpu
+		 */
+		type = INVALID;
+
+	/* keep this snippet for stricter checks
+	 * if (t->last_inst_cnt > exit_cnt)
+	 *	 BUG();
+	 *
+	 * if (t->type != type)
+	 *	BUG();
+	 *
+	 * if (t->top == 0)
+	 *	BUG();
+	 */
+
+
+	t->inst_cnt[type] += exit_cnt - t->last_inst_cnt;
+	t->last_inst_cnt = exit_cnt;
+	if (t->top != 0)
+		t->top--;
+
+
+	/* Updating the count at the end of tracehook call */
+	t->count_trace_hook[type]++;
+}
+
+#else
+static inline void get_entry_instr(enum trace_type type) {}
+static inline void update_instruction_data(enum trace_type type) {}
+#endif
+
 #endif /* _WALT_H */

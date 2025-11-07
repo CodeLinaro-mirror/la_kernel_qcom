@@ -1,0 +1,15 @@
+colibri_consolidate_config = {
+    # keep sorted
+    "CONFIG_ATOMIC64_SELFTEST": "m",
+    "CONFIG_CMA_DEBUGFS": "y",
+    "CONFIG_DEBUG_PAGEALLOC": "y",
+    "CONFIG_DEBUG_PAGEALLOC_ENABLE_DEFAULT": "y",
+    "CONFIG_DEBUG_SPINLOCK": "y",
+    "CONFIG_DETECT_HUNG_TASK": "y",
+    "CONFIG_LKDTM": "m",
+    "CONFIG_LOCK_TORTURE_TEST": "m",
+    "CONFIG_PAGE_OWNER": "y",
+    "CONFIG_PAGE_POISONING": "y",
+    "CONFIG_RCU_TORTURE_TEST": "m",
+    "CONFIG_TORTURE_TEST": "m",
+}

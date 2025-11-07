@@ -24,10 +24,13 @@ dispcc-canoe.ko
 evacc-canoe.ko
 gcc-alor.ko
 gcc-canoe.ko
+tcsrcc-chora.ko
+gcc-chora.ko
 gdsc-regulator.ko
 gpucc-canoe.ko
 tcsrcc-canoe.ko
 videocc-canoe.ko
+videocc-chora.ko
 smem.ko
 socinfo.ko
 icc-bcm-voter.ko
@@ -42,6 +45,7 @@ dcvs_fp.ko
 qcom-dcvs.ko
 qcom_llcc_pmu.ko
 qcom-pmu-lib.ko
+kryo_arm64_edac.ko
 proxy-consumer.ko
 rpmh-regulator.ko
 stub-regulator.ko

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018 Linaro Limited, All rights reserved.
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Author: Mike Leach <mike.leach@linaro.org>
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/amba/bus.h>
@@ -1163,7 +1163,10 @@ static int cti_suspend(struct device *dev)
 	if (pm_suspend_via_firmware()
 		&& drvdata->config.hw_enabled) {
 		drvdata->config.hw_enabled_store = drvdata->config.hw_enabled;
+
 		rc = cti_disable(drvdata->csdev, NULL);
+		if (!rc)
+			pm_runtime_put_sync(dev);
 	}
 	return rc;
 }
@@ -1175,7 +1178,14 @@ static int cti_resume(struct device *dev)
 
 	if (pm_suspend_via_firmware()
 		&& drvdata->config.hw_enabled_store) {
+		rc = pm_runtime_resume_and_get(dev);
+		if (rc)
+			return rc;
+
 		rc = cti_enable(drvdata->csdev, CS_MODE_SYSFS, NULL);
+		if (rc)
+			pm_runtime_put_sync(dev);
+
 		drvdata->config.hw_enabled_store = false;
 	}
 	return rc;
@@ -1190,7 +1200,10 @@ static int cti_freeze(struct device *dev)
 
 	if (drvdata->config.hw_enabled) {
 		drvdata->config.hw_enabled_store = drvdata->config.hw_enabled;
+
 		rc = cti_disable(drvdata->csdev, NULL);
+		if (!rc)
+			pm_runtime_put_sync(dev);
 	}
 
 	return rc;
@@ -1202,7 +1215,14 @@ static int cti_restore(struct device *dev)
 	struct cti_drvdata *drvdata = dev_get_drvdata(dev);
 
 	if (drvdata->config.hw_enabled_store) {
+		rc = pm_runtime_resume_and_get(dev);
+		if (rc)
+			return rc;
+
 		rc = cti_enable(drvdata->csdev, CS_MODE_SYSFS, NULL);
+		if (rc)
+			pm_runtime_put_sync(dev);
+
 		drvdata->config.hw_enabled_store = false;
 	}
 

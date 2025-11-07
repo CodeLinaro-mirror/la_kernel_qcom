@@ -215,7 +215,6 @@ sun_perf_config = {
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SI_CORE_ADCI": "y",
-    "CONFIG_QCOM_SI_CORE_MEM_OBJECT": "m",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SMP2P": "m",
@@ -356,5 +355,8 @@ sun_perf_config = {
     "CONFIG_WILC1000_SDIO": "n",
     "CONFIG_WILC1000_SPI": "n",
     "CONFIG_ZRAM": "m",
+    "CONFIG_ZRAM_BACKEND_ZSTD": "n",
+    "CONFIG_ZRAM_MULTI_COMP": "n",
+    "CONFIG_ZRAM_WRITEBACK": "n",
     "CONFIG_ZSMALLOC": "m",
 }

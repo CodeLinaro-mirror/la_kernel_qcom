@@ -10,9 +10,22 @@ config QCOM_SCM
 	select QCOM_TZMEM
 	tristate
 
+config QCOM_TZMEM_FFA
+	bool "QCOM TZMEM FFA support"
+	depends on QCOM_TZMEM && ARM_FFA_TRANSPORT
+	default n
+	help
+	  This option enables support for QCOM TZMEM FFA.
+
+	  This feature config enable FFA support in qcom_tzmem driver.
+	  Please note, FFA memory sharing is different aspect compared to older
+	  older method of plugging feature via scm calls.
+	  With this, traditional method of memory sharing will be replaced with
+	  FFA based implementation.
+
 config QTEE_SHM_BRIDGE
 	bool "QTI TEE shared memory bridge"
-	depends on QCOM_SCM
+	depends on QCOM_SCM && QCOM_TZMEM
 	default y if QCOM_SCM
 	help
 	  QTEE shared memory bridge driver provides kernel APIs to share

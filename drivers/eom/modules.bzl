@@ -8,6 +8,7 @@ def register_modules(registry):
             "drivers/eom/phy_core.c",
             "drivers/eom/buffer_manager.h",
             "drivers/eom/pcie_eom_reg.h",
+            "drivers/eom/usb_eom_reg.h",
             "drivers/eom/eom_driver.c",
             "drivers/eom/buffer_manager.c",
         ],

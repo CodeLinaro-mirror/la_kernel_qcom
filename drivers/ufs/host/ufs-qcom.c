@@ -3341,19 +3341,12 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	if (!np)
 		return;
 
-	of_property_read_u32(np, "qcom,prime-mask", &mask);
-	host->perf_mask.bits[0] = mask & cpu_possible_mask->bits[0];
-	if (!mask || !cpumask_subset(&host->perf_mask, cpu_possible_mask)) {
-		dev_err(dev, "Invalid group prime mask 0x%x\n", mask);
-		host->perf_mask.bits[0] = UFS_QCOM_IRQ_PRIME_MASK;
-	}
+	if (!of_property_read_u32(np, "qcom,prime-mask", &mask))
+		host->perf_mask.bits[0] = mask & cpu_possible_mask->bits[0];
+
 	mask = 0;
-	of_property_read_u32(np, "qcom,silver-mask", &mask);
-	host->def_mask.bits[0] = mask & cpu_possible_mask->bits[0];
-	if (!mask || !cpumask_subset(&host->def_mask, cpu_possible_mask)) {
-		dev_err(dev, "Invalid group silver mask 0x%x\n", mask);
-		host->def_mask.bits[0] = UFS_QCOM_IRQ_SLVR_MASK;
-	}
+	if (!of_property_read_u32(np, "qcom,silver-mask", &mask))
+		host->def_mask.bits[0] = mask & cpu_possible_mask->bits[0];
 
 	/* If device includes perf mask, enable dynamic irq affinity feature */
 	if (host->perf_mask.bits[0])

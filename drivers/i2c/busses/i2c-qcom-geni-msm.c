@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/acpi.h>
 #include <linux/clk.h>
@@ -818,7 +818,7 @@ static int geni_i2c_resource_init(struct geni_i2c_dev *gi2c)
 	if (IS_ERR(gi2c->se.clk) && !has_acpi_companion(dev))
 		return PTR_ERR(gi2c->se.clk);
 
-	ret = geni_icc_get(&gi2c->se, desc->icc_ddr);
+	ret = geni_icc_get(&gi2c->se, desc ? desc->icc_ddr : NULL);
 	if (ret)
 		return ret;
 
@@ -829,7 +829,7 @@ static int geni_i2c_resource_init(struct geni_i2c_dev *gi2c)
 	 */
 	gi2c->se.icc_paths[GENI_TO_CORE].avg_bw = GENI_DEFAULT_BW;
 	gi2c->se.icc_paths[CPU_TO_GENI].avg_bw = GENI_DEFAULT_BW;
-	if (desc->icc_ddr)
+	if (desc && desc->icc_ddr)
 		gi2c->se.icc_paths[GENI_TO_DDR].avg_bw = Bps_to_icc(gi2c->clk_freq_out);
 
 	return geni_icc_set_bw(&gi2c->se);

@@ -1,4 +1,8 @@
+load(":drivers/power/supply/qcom/modules.bzl", register_qcom = "register_modules")
+
 def register_modules(registry):
+    register_qcom(registry)
+
     registry.register(
         name = "drivers/power/supply/qti_battery_charger",
         out = "qti_battery_charger.ko",
@@ -8,6 +12,8 @@ def register_modules(registry):
             "drivers/power/supply/qti_battery_charger.c",
             "drivers/power/supply/qti_charger_boost_lib.c",
             "drivers/power/supply/qti_charger_boost_lib.h",
+            "drivers/power/supply/qti_typec_class.c",
+            "drivers/power/supply/qti_typec_class.h",
         ],
         deps = [
             # do not sort

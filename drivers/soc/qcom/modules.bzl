@@ -858,6 +858,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/soc/qcom/qcom_cpucp.c",
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
             "kernel/sched/walt/sched-walt",
         ],
     )
@@ -1680,4 +1681,19 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/minidump",
         ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/core_hang_detect",
+        out = "core_hang_detect.ko",
+        config = "CONFIG_MSM_CORE_HANG_DETECT",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/core_hang_detect.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+        includes = ["include"],
     )

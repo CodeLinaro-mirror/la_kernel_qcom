@@ -3,7 +3,7 @@ if POWER_SUPPLY
 
 config QTI_BATTERY_CHARGER
 	tristate "QTI Glink battery charger"
-	depends on QTI_PMIC_GLINK
+	depends on QTI_PMIC_GLINK && EXTCON && TYPEC
 	help
 	  Say Y here to enable Qualcomm Technologies, Inc. battery charger
 	  driver which interfaces with the charger firmware running on the
@@ -37,5 +37,7 @@ config QTI_CHARGER_NFC_VREG
 	  boost regulator. This may be used by client drivers such as NFC
 	  to manage their power supply requirements through the charger’s
 	  reverse boost regulator.
+
+source "$(KCONFIG_EXT_PREFIX)drivers/power/supply/qcom/Kconfig"
 
 endif # POWER_SUPPLY
