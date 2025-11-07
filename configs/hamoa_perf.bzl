@@ -43,6 +43,7 @@ hamoa_perf_config = {
     "CONFIG_DRM_DISPLAY_HELPER": "m",
     "CONFIG_DRM_MSM_HELPER": "m",
     "CONFIG_GH_VIRT_WATCHDOG": "m",
+    "CONFIG_GIC_INTERRUPT_ROUTING": "m",
     "CONFIG_GUNYAH_DRIVERS": "y",
     "CONFIG_HWSPINLOCK_QCOM": "m",
     "CONFIG_I2C_MSM_GENI": "m",
