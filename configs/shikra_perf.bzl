@@ -1,6 +1,6 @@
-colibri_perf_config = {
+shikra_perf_config = {
     # keep sorted
-    "CONFIG_ARCH_COLIBRI": "y",
+    "CONFIG_ARCH_SHIKRA": "y",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
     "CONFIG_ARM_SMMU_QCOM": "m",
@@ -15,7 +15,7 @@ colibri_perf_config = {
     "CONFIG_MSM_HAB": "n",
     "CONFIG_MSM_PERFORMANCE": "m",
     "CONFIG_MSM_RPM_SMD": "m",
-    "CONFIG_PINCTRL_COLIBRI": "m",
+    "CONFIG_PINCTRL_SHIKRA": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
     "CONFIG_QCOM_DMABUF_HEAPS": "m",

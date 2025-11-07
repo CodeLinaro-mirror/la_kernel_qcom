@@ -99,7 +99,7 @@
 	}
 
 
-static const struct pinctrl_pin_desc colibri_pins[] = {
+static const struct pinctrl_pin_desc shikra_pins[] = {
 	PINCTRL_PIN(0, "GPIO_0"),
 	PINCTRL_PIN(1, "GPIO_1"),
 	PINCTRL_PIN(2, "GPIO_2"),
@@ -448,7 +448,7 @@ static const unsigned int sdc2_clk_pins[] = { 166 };
 static const unsigned int sdc2_cmd_pins[] = { 167 };
 static const unsigned int sdc2_data_pins[] = { 168 };
 
-enum colibri_functions {
+enum shikra_functions {
 	msm_mux_gpio,
 	msm_mux_agera_pll,
 	msm_mux_atest_bbrx0,
@@ -2016,7 +2016,7 @@ static const char *const wlan1_adc1_groups[] = {
 };
 
 
-static const struct pinfunction colibri_functions[] = {
+static const struct pinfunction shikra_functions[] = {
 	MSM_PIN_FUNCTION(gpio),
 	FUNCTION(agera_pll),
 	FUNCTION(atest_bbrx0),
@@ -2331,7 +2331,7 @@ static const struct pinfunction colibri_functions[] = {
  * pin descriptor registered with pinctrl core.
  * Clients would not be able to request these dummy pin groups.
  */
-static const struct msm_pingroup colibri_groups[] = {
+static const struct msm_pingroup shikra_groups[] = {
 	[0] = PINGROUP(0, qup0_se0_l2, m_voc, NA, phase_flag6, NA, NA, NA, NA,
 		       NA, NA, NA, 0, -1),
 	[1] = PINGROUP(1, qup0_se0_l3, mpm_pwr, ddr_bist_fail, NA, phase_flag0,
@@ -2664,34 +2664,34 @@ static const struct msm_pingroup colibri_groups[] = {
 	[168] = SDC_QDSD_PINGROUP(sdc2_data, 0x1AA000, 9, 0),
 };
 
-static struct pinctrl_qup colibri_qup_regs[] = {
+static struct pinctrl_qup shikra_qup_regs[] = {
 };
 
-static const struct msm_gpio_wakeirq_map colibri_pdc_map[] = {
+static const struct msm_gpio_wakeirq_map shikra_pdc_map[] = {
 
 };
 
-static const struct msm_pinctrl_soc_data colibri_tlmm = {
-	.pins = colibri_pins,
-	.npins = ARRAY_SIZE(colibri_pins),
-	.functions = colibri_functions,
-	.nfunctions = ARRAY_SIZE(colibri_functions),
-	.groups = colibri_groups,
-	.ngroups = ARRAY_SIZE(colibri_groups),
+static const struct msm_pinctrl_soc_data shikra_tlmm = {
+	.pins = shikra_pins,
+	.npins = ARRAY_SIZE(shikra_pins),
+	.functions = shikra_functions,
+	.nfunctions = ARRAY_SIZE(shikra_functions),
+	.groups = shikra_groups,
+	.ngroups = ARRAY_SIZE(shikra_groups),
 	.ngpios = 166,
-	.qup_regs = colibri_qup_regs,
-	.nqup_regs = ARRAY_SIZE(colibri_qup_regs),
-	.wakeirq_map = colibri_pdc_map,
-	.nwakeirq_map = ARRAY_SIZE(colibri_pdc_map),
+	.qup_regs = shikra_qup_regs,
+	.nqup_regs = ARRAY_SIZE(shikra_qup_regs),
+	.wakeirq_map = shikra_pdc_map,
+	.nwakeirq_map = ARRAY_SIZE(shikra_pdc_map),
 	.egpio_func = 11,
 };
 
-static const struct of_device_id colibri_tlmm_of_match[] = {
-	{ .compatible = "qcom,colibri-tlmm", .data = &colibri_tlmm },
+static const struct of_device_id shikra_tlmm_of_match[] = {
+	{ .compatible = "qcom,shikra-tlmm", .data = &shikra_tlmm },
 	{},
 };
 
-static int colibri_tlmm_probe(struct platform_device *pdev)
+static int shikra_tlmm_probe(struct platform_device *pdev)
 {
 	const struct msm_pinctrl_soc_data *pinctrl_data;
 	struct device *dev = &pdev->dev;
@@ -2703,27 +2703,27 @@ static int colibri_tlmm_probe(struct platform_device *pdev)
 	return msm_pinctrl_probe(pdev, pinctrl_data);
 }
 
-static struct platform_driver colibri_tlmm_driver = {
+static struct platform_driver shikra_tlmm_driver = {
 	.driver = {
-		.name = "colibri-tlmm",
-		.of_match_table = colibri_tlmm_of_match,
+		.name = "shikra-tlmm",
+		.of_match_table = shikra_tlmm_of_match,
 	},
-	.probe = colibri_tlmm_probe,
+	.probe = shikra_tlmm_probe,
 	.remove = msm_pinctrl_remove,
 };
 
-static int __init colibri_tlmm_init(void)
+static int __init shikra_tlmm_init(void)
 {
-	return platform_driver_register(&colibri_tlmm_driver);
+	return platform_driver_register(&shikra_tlmm_driver);
 }
-arch_initcall(colibri_tlmm_init);
+arch_initcall(shikra_tlmm_init);
 
-static void __exit colibri_tlmm_exit(void)
+static void __exit shikra_tlmm_exit(void)
 {
-	platform_driver_unregister(&colibri_tlmm_driver);
+	platform_driver_unregister(&shikra_tlmm_driver);
 }
-module_exit(colibri_tlmm_exit);
+module_exit(shikra_tlmm_exit);
 
-MODULE_DESCRIPTION("QTI colibri TLMM driver");
+MODULE_DESCRIPTION("QTI shikra TLMM driver");
 MODULE_LICENSE("GPL");
-MODULE_DEVICE_TABLE(of, colibri_tlmm_of_match);
+MODULE_DEVICE_TABLE(of, shikra_tlmm_of_match);

@@ -5,7 +5,7 @@
 
 ################################################################################
 ## Variant setup
-MSM_ARCH=colibri
+MSM_ARCH=shikra
 VARIANTS=(consolidate perf)
 [ -z "${VARIANT}" ] && VARIANT=consolidate
 

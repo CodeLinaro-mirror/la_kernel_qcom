@@ -9,7 +9,7 @@ mem_buf.ko
 mem_buf_dev.ko
 msm_dma_iommu_mapping.ko
 pinctrl-msm.ko
-pinctrl-colibri.ko
+pinctrl-shikra.ko
 qcom_dma_heaps.ko
 qcom_iommu_debug.ko
 qcom_iommu_util.ko
