@@ -2978,10 +2978,14 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 
 static irqreturn_t geni_spi_irq(int irq, void *data)
 {
-	struct spi_geni_master *mas = data;
+	struct spi_geni_master *mas;
 	u32 m_irq = 0;
 	unsigned long long start_time;
 
+	if (unlikely(!data))
+		return IRQ_HANDLED;
+
+	mas = (struct spi_geni_master *)data;
 	start_time = geni_capture_start_time(&mas->spi_rsc, mas->ipc_log_kpi, __func__,
 					     mas->spi_kpi);
 
