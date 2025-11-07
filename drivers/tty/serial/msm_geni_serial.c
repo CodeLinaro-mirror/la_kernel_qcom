@@ -1375,8 +1375,9 @@ static int vote_clock_off(struct uart_port *uport)
 	UART_LOG_DBG(port->ipc_log_pwr, uport->dev,
 		     "Enter %s:%s ioctl_count:%d\n",
 		     __func__, current->comm, port->ioctl_count);
-	if (!pm_runtime_enabled(uport->dev)) {
-		dev_err(uport->dev, "RPM not available.Can't enable clocks\n");
+	if (!pm_runtime_enabled(uport->dev) || !pm_runtime_active(uport->dev)) {
+		dev_err(uport->dev,
+			"RPM not available or not active, clock status read would fail\n");
 		return -EPERM;
 	}
 	if (!port->ioctl_count) {
