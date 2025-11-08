@@ -1056,6 +1056,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/rpm-smd-debug",
+        out = "rpm-smd-debug.ko",
+        config = "CONFIG_MSM_RPM_SMD_DEBUG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/rpm-smd-debug.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/rpmsg/rpm-smd",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_soc_wdt",
         out = "qcom_soc_wdt.ko",
         config = "CONFIG_QCOM_SOC_WATCHDOG",
