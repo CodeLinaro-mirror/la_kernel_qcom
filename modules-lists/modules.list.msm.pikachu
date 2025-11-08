@@ -7,4 +7,10 @@ qcom_hwspinlock.ko
 smem.ko
 socinfo.ko
 qcom_tzmem.ko
+qnoc-pikachu.ko
+qnoc-qos.ko
+icc-debug.ko
+icc-bcm-voter.ko
+icc-rpmh.ko
+icc-clk.ko
 stub-regulator.ko
