@@ -4,6 +4,9 @@ qcom-scm.ko
 pinctrl-msm.ko
 pinctrl-pikachu.ko
 qcom_hwspinlock.ko
+clk-qcom.ko
+clk-rpmh.ko
+clk-dummy.ko
 smem.ko
 socinfo.ko
 qcom_tzmem.ko
