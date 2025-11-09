@@ -252,6 +252,7 @@ int qtee_ffa_shm_init(struct platform_device *pdev)
 
 err_gen_pool_add_virt:
 	gen_pool_destroy(ffa_pool.genpool);
+	ffa_pool.genpool = NULL;
 err_gen_pool_create:
 	dma_unmap_single(&pdev->dev, ffa_pool.paddr, ffa_pool.size,
 			 DMA_TO_DEVICE);
@@ -266,6 +267,7 @@ void qtee_ffa_shm_deinit(struct platform_device *pdev)
 {
 	qtee_ffa_mem_reclaim(ffa_pool.ffa_handle);
 	gen_pool_destroy(ffa_pool.genpool);
+	ffa_pool.genpool = NULL;
 	dma_unmap_single(&pdev->dev, ffa_pool.paddr, ffa_pool.size,
 			 DMA_TO_DEVICE);
 	free_pages((long)ffa_pool.vaddr, get_order(ffa_pool.size));
