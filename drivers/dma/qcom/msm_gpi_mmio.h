@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /* Register offsets from gpi-top */
@@ -59,14 +59,14 @@
 #define GPI_GPII_n_CH_CMD_DISABLE_HID (49)
 
 /* EV Context Array */
-#define GPI_GPII_n_EV_CH_k_CNTXT_0_OFFS(n, k) \
-		(0x21000 + (0x4000 * (n)) + (0x80 * (k)))
-#define GPI_GPII_n_EV_CH_k_CNTXT_2_OFFS(n, k) \
-		(0x21008 + (0x4000 * (n)) + (0x80 * (k)))
-#define GPI_GPII_n_EV_CH_k_CNTXT_4_OFFS(n, k) \
-		(0x21010 + (0x4000 * (n)) + (0x80 * (k)))
-#define GPI_GPII_n_EV_CH_k_CNTXT_6_OFFS(n, k) \
-		(0x21018 + (0x4000 * (n)) + (0x80 * (k)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_0_OFFS(n) \
+	(0x21000 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_2_OFFS(n) \
+	(0x21008 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_4_OFFS(n) \
+	(0x21010 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_6_OFFS(n) \
+	(0x21018 + (0x4000 * (n)))
 
 #define GPI_GPII_n_EV_CH_k_CNTXT_0_ELEMENT_SIZE_BMSK (0xFF000000)
 #define GPI_GPII_n_EV_CH_k_CNTXT_0_ELEMENT_SIZE_SHFT (24)

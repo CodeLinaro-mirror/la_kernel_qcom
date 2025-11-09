@@ -808,33 +808,25 @@ static void gpi_dump_cntxt_regs(struct gpii *gpii)
 			 gpii->gpii_id, chan, reg_val);
 	}
 
-	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
-		offset = GPI_GPII_n_EV_CH_k_CNTXT_0_OFFS(gpii->gpii_id,	gpii->gpii_chan[chan].chid);
-		reg_val = readl_relaxed(gpii->regs + offset);
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_%d_CNTXT_0 reg_val:0x%x\n",
-			 gpii->gpii_id, chan, reg_val);
-	}
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_0_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_0 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
 
-	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
-		offset = GPI_GPII_n_EV_CH_k_CNTXT_2_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
-		reg_val = readl_relaxed(gpii->regs + offset);
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_%d_CNTXT_2 reg_val:0x%x\n",
-			 gpii->gpii_id, chan, reg_val);
-	}
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_2_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_2 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
 
-	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
-		offset = GPI_GPII_n_EV_CH_k_CNTXT_4_OFFS(gpii->gpii_id,	gpii->gpii_chan[chan].chid);
-		reg_val = readl_relaxed(gpii->regs + offset);
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_%d_CNTXT_4 reg_val:0x%x\n",
-			 gpii->gpii_id, chan, reg_val);
-	}
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_4_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_4 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
 
-	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
-		offset = GPI_GPII_n_EV_CH_k_CNTXT_6_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
-		reg_val = readl_relaxed(gpii->regs + offset);
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_%d_CNTXT_6 reg_val:0x%x\n",
-			 gpii->gpii_id, chan, reg_val);
-	}
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_6_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_6 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
 
 	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
 		offset = GPI_GPII_n_CH_k_RE_FETCH_READ_PTR(gpii->gpii_id,
@@ -4533,7 +4525,7 @@ static int gpi_probe(struct platform_device *pdev)
 
 		/* set up ev cntxt register map */
 		gpii->ev_cntxt_base_reg = gpi_dev->ee_base +
-			GPI_GPII_n_EV_CH_k_CNTXT_0_OFFS(i, 0);
+			GPI_GPII_n_EV_CH_0_CNTXT_0_OFFS(i);
 		gpii->ev_cntxt_db_reg = gpi_dev->ee_base +
 			GPI_GPII_n_EV_CH_k_DOORBELL_0_OFFS(i, 0);
 		gpii->ev_ring_base_lsb_reg = gpii->ev_cntxt_base_reg +
