@@ -157,7 +157,7 @@ void qrtr_save_wakeup_reason(u64 pl, struct qrtr_cb cb, int pid, char *name, int
 	}
 
 	info->client_pid = pid;
-	memcpy(info->client_name, name, TASK_COMM_LEN);
+	snprintf(info->client_name, TASK_COMM_LEN, "%s", name);
 
 	info->src_node = cb.src_node;
 	info->dst_node = cb.dst_node;
