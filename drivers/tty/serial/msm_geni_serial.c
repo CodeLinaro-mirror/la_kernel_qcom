@@ -746,6 +746,11 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 		     "dma_if_en:0x%x, geni_clk_ctrl:0x%x fifo_if_disable:0x%x\n",
 		     dma_if_en, geni_clk_ctrl_ro, fifo_if_disable_ro);
+
+	if (IS_ENABLED(CONFIG_MSM_GPI_DMA) && port->xfer_mode == GENI_GPI_DMA &&
+	    port->gsi && port->gsi->tx_c)
+		gpi_dump_for_geni(port->gsi->tx_c);
+
 }
 
 int msm_geni_serial_resources_on(struct msm_geni_serial_port *port)
