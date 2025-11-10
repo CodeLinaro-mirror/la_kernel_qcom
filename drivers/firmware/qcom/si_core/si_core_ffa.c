@@ -53,6 +53,7 @@ int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 	}
 
 	*ffa_handle = mem_args.g_handle;
+	pr_debug("Memory shared successfully, ffa_handle: 0x%llx\n", *ffa_handle);
 
 	return 0;
 }
@@ -86,6 +87,7 @@ int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 	}
 
 	*ffa_handle = mem_args.g_handle;
+	pr_debug("Memory lend successfully, ffa_handle: 0x%llx\n", *ffa_handle);
 
 	return 0;
 }
@@ -105,6 +107,7 @@ int qtee_ffa_mem_reclaim(uint64_t ffa_handle)
 		pr_err("mem_reclaim failed: 0x%llx %d\n", ffa_handle, rc);
 		return rc;
 	}
+	pr_debug("Memory reclaimed successfully, ffa_handle: 0x%llx\n", ffa_handle);
 
 	return 0;
 }
