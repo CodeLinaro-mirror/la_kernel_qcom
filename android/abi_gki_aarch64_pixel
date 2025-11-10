@@ -378,6 +378,9 @@
   devfreq_recommended_opp
   devfreq_register_opp_notifier
   devfreq_remove_device
+  devfreq_remove_governor
+  devfreq_resume_device
+  devfreq_suspend_device
   devfreq_unregister_opp_notifier
   devfreq_update_interval
   __dev_fwnode
@@ -883,6 +886,7 @@
   drm_mode_duplicate
   drm_mode_equal
   drm_mode_equal_no_clocks
+  drm_mode_is_420_only
   drm_mode_object_find
   drm_mode_object_get
   drm_mode_object_put
@@ -1348,6 +1352,7 @@
   __ipv6_addr_type
   __irq_alloc_descs
   __irq_apply_affinity_hint
+  irq_check_status_bit
   irq_create_mapping_affinity
   irq_create_of_mapping
   irq_dispose_mapping
@@ -1361,6 +1366,7 @@
   irq_force_affinity
   irq_get_irqchip_state
   irq_get_irq_data
+  irq_get_percpu_devid_partition
   irq_modify_status
   irq_of_parse_and_map
   __irq_resolve_mapping
@@ -1374,6 +1380,7 @@
   irq_set_irq_wake
   irq_to_desc
   irq_work_queue
+  irq_work_run
   irq_work_sync
   is_vmalloc_addr
   jiffies
@@ -1723,6 +1730,7 @@
   of_get_named_gpio
   of_get_next_available_child
   of_get_next_child
+  of_get_next_cpu_node
   of_get_next_parent
   of_get_parent
   of_get_property
@@ -1863,6 +1871,7 @@
   perf_aux_output_begin
   perf_aux_output_end
   perf_aux_output_flag
+  perf_aux_output_skip
   perf_event_addr_filters_sync
   perf_event_create_kernel_counter
   perf_event_disable
@@ -2114,6 +2123,7 @@
   regmap_async_complete
   regmap_bulk_read
   regmap_bulk_write
+  regmap_check_range_table
   regmap_field_read
   regmap_field_update_bits_base
   regmap_get_device
@@ -2164,6 +2174,7 @@
   remove_proc_subtree
   remove_resource
   remove_wait_queue
+  report_iommu_fault
   request_firmware
   request_firmware_direct
   request_firmware_nowait
@@ -2599,6 +2610,7 @@
   __thermal_zone_get_trip
   thermal_zone_get_trip
   thermal_zone_get_zone_by_name
+  this_cpu_has_cap
   thread_group_cputime_adjusted
   tick_nohz_get_idle_calls_cpu
   time64_to_tm
@@ -2612,6 +2624,7 @@
   touch_softlockup_watchdog
   trace_array_destroy
   trace_array_get_by_name
+  trace_array_get_by_name_ext
   trace_array_put
   trace_array_set_clr_event
   trace_event_buffer_commit
@@ -2654,10 +2667,13 @@
   __traceiter_android_rvh_select_task_rq_fair
   __traceiter_android_rvh_select_task_rq_rt
   __traceiter_android_rvh_set_cpus_allowed_by_task
+  __traceiter_android_rvh_set_cpus_allowed_ptr
   __traceiter_android_rvh_set_iowait
   __traceiter_android_rvh_setscheduler
+  __traceiter_android_rvh_setscheduler_prio
   __traceiter_android_rvh_set_task_cpu
   __traceiter_android_rvh_set_user_nice_locked
+  __traceiter_android_rvh_swap_readpage_bdev_sync
   __traceiter_android_rvh_tick_entry
   __traceiter_android_rvh_try_to_wake_up_success
   __traceiter_android_rvh_uclamp_eff_get
@@ -2679,6 +2695,7 @@
   __traceiter_android_vh_binder_set_priority
   __traceiter_android_vh_calculate_totalreserve_pages
   __traceiter_android_vh_check_new_page
+  __traceiter_android_vh_chk_task
   __traceiter_android_vh_cpu_idle_enter
   __traceiter_android_vh_cpu_idle_exit
   __traceiter_android_vh_dump_throttled_rt_tasks
@@ -2686,6 +2703,7 @@
   __traceiter_android_vh_early_resume_begin
   __traceiter_android_vh_enable_thermal_genl_check
   __traceiter_android_vh_ep_create_wakeup_source
+  __traceiter_android_vh_exit_check
   __traceiter_android_vh_filemap_get_folio
   __traceiter_android_vh_free_one_page_flag_check
   __traceiter_android_vh_free_pages_prepare_init
@@ -2696,14 +2714,15 @@
   __traceiter_android_vh_post_alloc_hook
   __traceiter_android_vh_prio_inheritance
   __traceiter_android_vh_prio_restore
+  __traceiter_android_vh_put_task
   __traceiter_android_vh_resume_end
   __traceiter_android_vh_rmqueue
   __traceiter_android_vh_scheduler_tick
   __traceiter_android_vh_setscheduler_uclamp
   __traceiter_android_vh_set_task_comm
   __traceiter_android_vh_si_meminfo_adjust
-  __traceiter_android_vh_swap_writepage
   __traceiter_android_vh_swap_readpage_bdev_sync
+  __traceiter_android_vh_swap_writepage
   __traceiter_android_vh_sysrq_crash
   __traceiter_android_vh_timerfd_create
   __traceiter_android_vh_tune_swappiness
@@ -2722,6 +2741,7 @@
   __traceiter_android_vh_ufs_update_sysfs
   __traceiter_android_vh_usb_dev_resume
   __traceiter_android_vh_use_amu_fie
+  __traceiter_android_vh_xhci_full_reset_on_remove
   __traceiter_clock_set_rate
   __traceiter_cma_alloc_finish
   __traceiter_cma_alloc_start
@@ -2741,6 +2761,10 @@
   __traceiter_pelt_irq_tp
   __traceiter_pelt_rt_tp
   __traceiter_pelt_se_tp
+  __traceiter_rwmmio_post_read
+  __traceiter_rwmmio_post_write
+  __traceiter_rwmmio_read
+  __traceiter_rwmmio_write
   __traceiter_sched_cpu_capacity_tp
   __traceiter_sched_overutilized_tp
   __traceiter_sched_switch
@@ -2750,6 +2774,7 @@
   __traceiter_softirq_entry
   __traceiter_softirq_exit
   __traceiter_suspend_resume
+  __traceiter_task_newtask
   __traceiter_workqueue_execute_end
   __traceiter_workqueue_execute_start
   trace_output_call
@@ -2787,10 +2812,13 @@
   __tracepoint_android_rvh_select_task_rq_fair
   __tracepoint_android_rvh_select_task_rq_rt
   __tracepoint_android_rvh_set_cpus_allowed_by_task
+  __tracepoint_android_rvh_set_cpus_allowed_ptr
   __tracepoint_android_rvh_set_iowait
   __tracepoint_android_rvh_setscheduler
+  __tracepoint_android_rvh_setscheduler_prio
   __tracepoint_android_rvh_set_task_cpu
   __tracepoint_android_rvh_set_user_nice_locked
+  __tracepoint_android_rvh_swap_readpage_bdev_sync
   __tracepoint_android_rvh_tick_entry
   __tracepoint_android_rvh_try_to_wake_up_success
   __tracepoint_android_rvh_uclamp_eff_get
@@ -2812,6 +2840,7 @@
   __tracepoint_android_vh_binder_set_priority
   __tracepoint_android_vh_calculate_totalreserve_pages
   __tracepoint_android_vh_check_new_page
+  __tracepoint_android_vh_chk_task
   __tracepoint_android_vh_cpu_idle_enter
   __tracepoint_android_vh_cpu_idle_exit
   __tracepoint_android_vh_dump_throttled_rt_tasks
@@ -2819,6 +2848,7 @@
   __tracepoint_android_vh_early_resume_begin
   __tracepoint_android_vh_enable_thermal_genl_check
   __tracepoint_android_vh_ep_create_wakeup_source
+  __tracepoint_android_vh_exit_check
   __tracepoint_android_vh_filemap_get_folio
   __tracepoint_android_vh_free_one_page_flag_check
   __tracepoint_android_vh_free_pages_prepare_init
@@ -2829,14 +2859,15 @@
   __tracepoint_android_vh_post_alloc_hook
   __tracepoint_android_vh_prio_inheritance
   __tracepoint_android_vh_prio_restore
+  __tracepoint_android_vh_put_task
   __tracepoint_android_vh_resume_end
   __tracepoint_android_vh_rmqueue
   __tracepoint_android_vh_scheduler_tick
   __tracepoint_android_vh_setscheduler_uclamp
   __tracepoint_android_vh_set_task_comm
   __tracepoint_android_vh_si_meminfo_adjust
-  __tracepoint_android_vh_swap_writepage
   __tracepoint_android_vh_swap_readpage_bdev_sync
+  __tracepoint_android_vh_swap_writepage
   __tracepoint_android_vh_sysrq_crash
   __tracepoint_android_vh_timerfd_create
   __tracepoint_android_vh_tune_swappiness
@@ -2855,6 +2886,7 @@
   __tracepoint_android_vh_ufs_update_sysfs
   __tracepoint_android_vh_usb_dev_resume
   __tracepoint_android_vh_use_amu_fie
+  __tracepoint_android_vh_xhci_full_reset_on_remove
   __tracepoint_clock_set_rate
   __tracepoint_cma_alloc_finish
   __tracepoint_cma_alloc_start
@@ -2876,6 +2908,10 @@
   __tracepoint_pelt_se_tp
   tracepoint_probe_register
   tracepoint_probe_unregister
+  __tracepoint_rwmmio_post_read
+  __tracepoint_rwmmio_post_write
+  __tracepoint_rwmmio_read
+  __tracepoint_rwmmio_write
   __tracepoint_sched_cpu_capacity_tp
   __tracepoint_sched_overutilized_tp
   __tracepoint_sched_switch
@@ -2885,6 +2921,7 @@
   __tracepoint_softirq_entry
   __tracepoint_softirq_exit
   __tracepoint_suspend_resume
+  __tracepoint_task_newtask
   __tracepoint_workqueue_execute_end
   __tracepoint_workqueue_execute_start
   trace_print_array_seq
