@@ -1230,7 +1230,8 @@ static int adsp_stop(struct rproc *rproc)
 	add_mpss_dsm_mem_ssr_dump(adsp);
 
 	/* collect subdev coredump */
-	if (adsp->q6_subdev && !(rproc->dump_conf == RPROC_COREDUMP_DISABLED)) {
+	if (adsp->q6_subdev && rproc->state == RPROC_CRASHED &&
+		!(rproc->dump_conf == RPROC_COREDUMP_DISABLED)) {
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
 			ret = qcom_elf_dump(&adsp->q6_subdev[i].dump_segments,
 				adsp->q6_subdev[i].dev, rproc->elf_class);
