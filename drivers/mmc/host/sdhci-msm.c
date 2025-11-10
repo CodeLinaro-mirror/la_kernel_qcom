@@ -29,6 +29,7 @@
 #include <linux/nvmem-consumer.h>
 #include <linux/ipc_logging.h>
 #include <linux/pinctrl/qcom-pinctrl.h>
+#include <linux/suspend.h>
 
 #include <trace/hooks/mmc.h>
 #include "../core/mmc_ops.h"
@@ -179,6 +180,9 @@
 /* Timeout value to avoid infinite waiting for pwr_irq */
 #define MSM_PWR_IRQ_TIMEOUT_MS 5000
 
+/* Max load for eMMC Vdd supply */
+#define MMC_VMMC_MAX_LOAD_UA	570000
+
 /* Max load for eMMC Vdd-io supply */
 #define MMC_VQMMC_MAX_LOAD_UA	325000
 
@@ -200,6 +204,11 @@
 			ipc_log_string(host->sdhci_msm_ipc_log_ctx,	\
 					"%s: " fmt, __func__, ##__VA_ARGS__);\
 	} while (0)
+/* Max load for SD Vdd supply */
+#define SD_VMMC_MAX_LOAD_UA	800000
+
+/* Max load for SD Vdd-io supply */
+#define SD_VQMMC_MAX_LOAD_UA	22000
 
 #define msm_host_readl(msm_host, host, offset) \
 	msm_host->var_ops->msm_readl_relaxed(host, offset)
@@ -1896,10 +1905,47 @@ out:
 	return true;
 }
 
-static int sdhci_msm_set_vmmc(struct mmc_host *mmc)
+static void msm_config_vmmc_regulator(struct mmc_host *mmc, bool hpm)
+{
+	int load;
+
+	if (!hpm)
+		load = 0;
+	else if (!mmc->card)
+		load = max(MMC_VMMC_MAX_LOAD_UA, SD_VMMC_MAX_LOAD_UA);
+	else if (mmc_card_mmc(mmc->card))
+		load = MMC_VMMC_MAX_LOAD_UA;
+	else if (mmc_card_sd(mmc->card))
+		load = SD_VMMC_MAX_LOAD_UA;
+	else
+		return;
+
+	regulator_set_load(mmc->supply.vmmc, load);
+}
+
+static void msm_config_vqmmc_regulator(struct mmc_host *mmc, bool hpm)
+{
+	int load;
+
+	if (!hpm)
+		load = 0;
+	else if (!mmc->card)
+		load = max(MMC_VQMMC_MAX_LOAD_UA, SD_VQMMC_MAX_LOAD_UA);
+	else if (mmc_card_sd(mmc->card))
+		load = SD_VQMMC_MAX_LOAD_UA;
+	else
+		return;
+
+	regulator_set_load(mmc->supply.vqmmc, load);
+}
+
+static int sdhci_msm_set_vmmc(struct sdhci_msm_host *msm_host,
+			      struct mmc_host *mmc, bool hpm)
 {
 	if (IS_ERR(mmc->supply.vmmc))
 		return 0;
+
+	msm_config_vmmc_regulator(mmc, hpm);
 
 	return mmc_regulator_set_ocr(mmc, mmc->supply.vmmc, mmc->ios.vdd);
 }
@@ -1912,6 +1958,8 @@ static int msm_toggle_vqmmc(struct sdhci_msm_host *msm_host,
 
 	if (msm_host->vqmmc_enabled == level)
 		return 0;
+
+	msm_config_vqmmc_regulator(mmc, level);
 
 	if (level) {
 		/* Set the IO voltage regulator to default voltage level */
@@ -2586,7 +2634,8 @@ static void sdhci_msm_handle_pwr_irq(struct sdhci_host *host, int irq)
 	}
 
 	if (pwr_state) {
-		ret = sdhci_msm_set_vmmc(mmc);
+		ret = sdhci_msm_set_vmmc(msm_host, mmc,
+					 pwr_state & REQ_BUS_ON);
 		if (!ret)
 			ret = sdhci_msm_set_vqmmc(msm_host, mmc,
 					pwr_state & REQ_BUS_ON);
@@ -3796,8 +3845,16 @@ static void sdhci_msm_bus_voting(struct sdhci_host *host, bool enable)
 
 static void sdhci_msm_reset(struct sdhci_host *host, u8 mask)
 {
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+
 	if ((host->mmc->caps2 & MMC_CAP2_CQE) && (mask & SDHCI_RESET_ALL))
 		cqhci_deactivate(host->mmc);
+
+	if (msm_host->rst_n_disable && host->mmc && host->mmc->card &&
+	    host->mmc->card->ext_csd.rst_n_function != EXT_CSD_RST_N_ENABLED)
+		host->mmc->card->ext_csd.rst_n_function = true;
+
 	sdhci_reset(host, mask);
 }
 
@@ -4068,6 +4125,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	struct platform_device *pdev = msm_host->pdev;
 	int ret = -EOPNOTSUPP;
+	bool deepsleep = (pm_suspend_target_state == PM_SUSPEND_MEM);
 
 	if (!msm_host->core_reset) {
 		dev_err(&pdev->dev, "%s: failed, err = %d\n", __func__,
@@ -4077,7 +4135,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 
 	msm_host->reg_store = true;
 	sdhci_msm_registers_save(host);
-	if (host->mmc->caps2 & MMC_CAP2_CQE) {
+	if ((host->mmc->caps2 & MMC_CAP2_CQE) && !deepsleep) {
 		host->mmc->cqe_ops->cqe_disable(host->mmc);
 		host->mmc->cqe_enabled = false;
 	}
@@ -4089,7 +4147,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 
 	sdhci_msm_log_str(msm_host, "HW reset done\n");
 #if defined(CONFIG_SDC_QTI)
-	if (host->mmc->card)
+	if (host->mmc->card && !deepsleep)
 		mmc_power_cycle(host->mmc, host->mmc->card->ocr);
 #endif
 }
@@ -4397,6 +4455,11 @@ static int mmc_partial_init(struct mmc_host *mmc)
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(shost);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 
+	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		shost->ops->hw_reset(shost);
+		return -EOPNOTSUPP;
+	}
+
 	if (msm_host->is_partial_init_broken)
 		return -EOPNOTSUPP;
 
@@ -4590,6 +4653,7 @@ static unsigned int sdhci_msm_get_sup_clk_rate(struct sdhci_host *host,
 	return sup_clk;
 }
 
+#ifdef CONFIG_SMP
 /**
  * sdhci_msm_irq_affinity_notify - Callback for affinity changes
  * @notify: context as to what irq was changed
@@ -4631,7 +4695,7 @@ sdhci_msm_irq_affinity_notify(struct irq_affinity_notify *notify,
 	sdhci_msm_vote_pmqos(msm_host->mmc,
 			msm_host->sdhci_qos->active_mask);
 }
-
+#endif
 /**
  * sdhci_msm_irq_affinity_release - Callback for affinity notifier release
  * @ref: internal core kernel usage
@@ -4650,13 +4714,14 @@ static int sdhci_msm_setup_qos(struct sdhci_msm_host *msm_host)
 	struct platform_device *pdev = msm_host->pdev;
 	struct sdhci_msm_qos_req *qr = msm_host->sdhci_qos;
 	struct qos_cpu_group *qcg = qr->qcg;
-	struct mmc_host *mmc = msm_host->mmc;
-	struct sdhci_host *host = mmc_priv(mmc);
 	int i, err;
 
 	if (!msm_host->sdhci_qos)
 		return 0;
 
+#ifdef CONFIG_SMP
+	struct mmc_host *mmc = msm_host->mmc;
+	struct sdhci_host *host = mmc_priv(mmc);
 	/* Affine irq to first set of mask */
 	WARN_ON(irq_set_affinity_hint(host->irq, &qcg->mask));
 
@@ -4664,6 +4729,7 @@ static int sdhci_msm_setup_qos(struct sdhci_msm_host *msm_host)
 	msm_host->affinity_notify.notify = sdhci_msm_irq_affinity_notify;
 	msm_host->affinity_notify.release = sdhci_msm_irq_affinity_release;
 	irq_set_affinity_notifier(host->irq, &msm_host->affinity_notify);
+#endif
 
 	for (i = 0; i < qr->num_groups; i++, qcg++) {
 		qcg->qos_req = kcalloc(cpumask_weight(&qcg->mask),
@@ -5542,6 +5608,8 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		ret = sdhci_add_host(host);
 	if (ret)
 		goto pm_runtime_disable;
+
+	msm_host->rst_n_disable = of_property_read_bool(node, "mmc-rst-n-disable");
 
 	/* For SDHC v5.0.0 onwards, ICE 3.0 specific registers are added
 	 * in CQ register space, due to which few CQ registers are
