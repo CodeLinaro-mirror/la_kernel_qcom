@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
+/* SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause */
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
@@ -43,5 +43,6 @@
 #define IPCC_CLIENT_SOCCP		46
 #define IPCC_CLIENT_CAM1		47
 #define IPCC_CLIENT_BROADCAST           0xF000
+#define IPCC_CLIENT_DCP                 57
 
 #endif
