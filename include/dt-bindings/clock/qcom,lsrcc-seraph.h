@@ -24,6 +24,11 @@
 #define LSR_CC_XO_CLK						14
 #define LSR_CC_XO_CLK_SRC					15
 
+/* LSR_CC power domains */
+#define LSR_CC_LSR_NOC_GDSC					0
+#define LSR_CC_MVS0_GDSC					1
+#define LSR_CC_MVS0C_GDSC					2
+
 /* LSR_CC resets */
 #define LSR_CC_INTERFACE_BCR					0
 #define LSR_CC_LSR_NOC_BCR					1
