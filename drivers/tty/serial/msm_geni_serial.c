@@ -628,7 +628,10 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	u32 dma_tx_max_burst_size = 0, dma_rx_ptr_l = 0, dma_rx_ptr_h = 0;
 	u32 dma_rx_attr = 0, dma_rx_max_burst_size = 0, dma_if_en = 0;
 	u32 geni_clk_ctrl_ro = 0, fifo_if_disable_ro = 0;
-
+	u32 geni_output_ctrl = 0, geni_fw_multilock_msa_ro = 0;
+	u32 geni_clk_sel = 0, geni_m_irq_enable = 0;
+	u32 se_gsi_event_en = 0, se_irq_en = 0;
+	u32 dma_if_en_ro = 0, dma_general_cfg = 0, dma_qsb_trans_cfg = 0;
 
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	void __iomem *base = uport->membase;
@@ -694,6 +697,15 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	dma_if_en = geni_read_reg(base, SE_DMA_IF_EN);
 	geni_clk_ctrl_ro = geni_read_reg(base, GENI_CLK_CTRL_RO);
 	fifo_if_disable_ro = geni_read_reg(base, GENI_IF_DISABLE_RO);
+	geni_output_ctrl = geni_read_reg(base, GENI_OUTPUT_CTRL);
+	geni_fw_multilock_msa_ro = geni_read_reg(base, GENI_FW_MULTILOCK_MSA_RO);
+	geni_clk_sel = geni_read_reg(base, SE_GENI_CLK_SEL);
+	geni_m_irq_enable = geni_read_reg(base, M_IRQ_ENABLE);
+	se_gsi_event_en = geni_read_reg(base, SE_GSI_EVENT_EN);
+	se_irq_en = geni_read_reg(base, SE_IRQ_EN);
+	dma_if_en_ro = geni_read_reg(base, DMA_IF_EN_RO);
+	dma_general_cfg = geni_read_reg(base, DMA_GENERAL_CFG);
+	dma_qsb_trans_cfg = geni_read_reg(base, SE_DMA_QSB_TRANS_CFG);
 
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 		     "%s: m_cmd0:0x%x, m_irq_status:0x%x, geni_status:0x%x, geni_ios:0x%x\n",
@@ -746,6 +758,22 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 		     "dma_if_en:0x%x, geni_clk_ctrl:0x%x fifo_if_disable:0x%x\n",
 		     dma_if_en, geni_clk_ctrl_ro, fifo_if_disable_ro);
+
+	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+		     "geni_output_ctrl:0x%x, geni_fw_multilock_msa_ro:0x%x\n",
+		     geni_output_ctrl, geni_fw_multilock_msa_ro);
+
+	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+		     "geni_clk_sel:0x%x, geni_m_irq_enable:0x%x\n",
+		      geni_clk_sel, geni_m_irq_enable);
+
+	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+		     "se_gsi_event_en:0x%x, se_irq_en:0x%x, dma_qsb_trans_cfg:0x%x\n",
+		     se_gsi_event_en, se_irq_en, dma_qsb_trans_cfg);
+
+	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+		     "dma_if_en_ro:0x%x, dma_general_cfg:0x%x\n",
+		     dma_if_en_ro, dma_general_cfg);
 
 	if (IS_ENABLED(CONFIG_MSM_GPI_DMA) && port->xfer_mode == GENI_GPI_DMA &&
 	    port->gsi && port->gsi->tx_c)
