@@ -9113,6 +9113,46 @@ exit:
 	return ret;
 }
 
+static int ath11k_mac_station_remove(struct ath11k *ar,
+				     struct ieee80211_vif *vif,
+				     struct ieee80211_sta *sta)
+{
+	struct ath11k_base *ab = ar->ab;
+	struct ath11k_vif *arvif = ath11k_vif_to_arvif(vif);
+	struct ath11k_sta *arsta = ath11k_sta_to_arsta(sta);
+	int ret;
+
+	if (ab->hw_params.vdev_start_delay &&
+	    arvif->is_started &&
+	    arvif->vdev_type != WMI_VDEV_TYPE_AP) {
+		ret = ath11k_mac_stop_vdev_early(ar->hw, vif);
+		if (ret) {
+			ath11k_warn(ab, "failed to do early vdev stop: %d\n", ret);
+			return ret;
+		}
+	}
+
+	ath11k_dp_peer_cleanup(ar, arvif->vdev_id, sta->addr);
+
+	ret = ath11k_peer_delete(ar, arvif->vdev_id, sta->addr);
+	if (ret)
+		ath11k_warn(ab, "Failed to delete peer: %pM for VDEV: %d\n",
+			    sta->addr, arvif->vdev_id);
+	else
+		ath11k_dbg(ab, ATH11K_DBG_MAC, "Removed peer: %pM for VDEV: %d\n",
+			   sta->addr, arvif->vdev_id);
+
+	ath11k_mac_dec_num_stations(arvif, sta);
+
+	kfree(arsta->tx_stats);
+	arsta->tx_stats = NULL;
+
+	kfree(arsta->rx_stats);
+	arsta->rx_stats = NULL;
+
+	return ret;
+}
+
 static int ath11k_mac_op_sta_state(struct ieee80211_hw *hw,
 				   struct ieee80211_vif *vif,
 				   struct ieee80211_sta *sta,
@@ -9148,31 +9188,15 @@ static int ath11k_mac_op_sta_state(struct ieee80211_hw *hw,
 				    sta->addr, arvif->vdev_id);
 	} else if ((old_state == IEEE80211_STA_NONE &&
 		    new_state == IEEE80211_STA_NOTEXIST)) {
-		bool skip_peer_delete = ar->ab->hw_params.vdev_start_delay &&
-			vif->type == NL80211_IFTYPE_STATION;
+		ret = ath11k_mac_station_remove(ar, vif, sta);
+		if (ret)
+			ath11k_warn(ar->ab, "Failed to remove station: %pM for VDEV: %d\n",
+				    sta->addr, arvif->vdev_id);
 
-		ath11k_dp_peer_cleanup(ar, arvif->vdev_id, sta->addr);
-
-		if (!skip_peer_delete) {
-			ret = ath11k_peer_delete(ar, arvif->vdev_id, sta->addr);
-			if (ret)
-				ath11k_warn(ar->ab,
-					    "Failed to delete peer: %pM for VDEV: %d\n",
-					    sta->addr, arvif->vdev_id);
-			else
-				ath11k_dbg(ar->ab,
-					   ATH11K_DBG_MAC,
-					   "Removed peer: %pM for VDEV: %d\n",
-					   sta->addr, arvif->vdev_id);
-		}
-
-		ath11k_mac_dec_num_stations(arvif, sta);
 		mutex_lock(&ar->ab->tbl_mtx_lock);
 		spin_lock_bh(&ar->ab->base_lock);
 		peer = ath11k_peer_find(ar->ab, arvif->vdev_id, sta->addr);
-		if (skip_peer_delete && peer) {
-			peer->sta = NULL;
-		} else if (peer && peer->sta == sta) {
+		if (peer && peer->sta == sta) {
 			ath11k_warn(ar->ab, "Found peer entry %pM n vdev %i after it was supposedly removed\n",
 				    vif->addr, arvif->vdev_id);
 			ath11k_peer_rhash_delete(ar->ab, peer);
@@ -9183,12 +9207,6 @@ static int ath11k_mac_op_sta_state(struct ieee80211_hw *hw,
 		}
 		spin_unlock_bh(&ar->ab->base_lock);
 		mutex_unlock(&ar->ab->tbl_mtx_lock);
-
-		kfree(arsta->tx_stats);
-		arsta->tx_stats = NULL;
-
-		kfree(arsta->rx_stats);
-		arsta->rx_stats = NULL;
 	} else if (old_state == IEEE80211_STA_AUTH &&
 		   new_state == IEEE80211_STA_ASSOC &&
 		   (vif->type == NL80211_IFTYPE_AP ||
