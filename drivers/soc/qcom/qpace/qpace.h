@@ -41,18 +41,23 @@ struct qpace_transfer_descriptor {
 	uint32_t noop:1;
 };
 
+#define CYCLE_BIT_MASK BIT(30)
 struct qpace_event_descriptor {
 	uint64_t td_addr;
 	uint64_t out_addr;
-	uint64_t size:20;
+	union {
+		uint64_t flags;
 
-	uint64_t completion_code:4;
-	uint64_t tr_ring_id:4;
-	uint64_t unused:2;
-	uint64_t cycle_bit:1;
-	uint64_t replication_found:1;
-
-	uint64_t rep_word:32;
+		struct {
+			uint64_t size:20;
+			uint64_t completion_code:4;
+			uint64_t tr_ring_id:4;
+			uint64_t unused:2;
+			uint64_t cycle_bit:1;
+			uint64_t replication_found:1;
+			uint64_t rep_word:32;
+		};
+	};
 
 	uint32_t crc;
 
@@ -143,20 +148,21 @@ bool qpace_check_compress_err(struct qpace_event_descriptor *ed);
  * This boils down to updating a HW register that points to the end of the valid
  * in the ring buffer.
  *
- * Return: true if the ring had items to submit / submission was done, false if
- * the ring had no items to submit.
+ * Return: positive for the requests number that submitted to HW, 0 if the ring had
+ * no items to submit.
  */
-bool qpace_trigger_tr(int tr_num);
+size_t qpace_trigger_tr(int tr_num);
 
 /*
  * qpace_wait_for_tr_consumption() - Wait for event completion interrupt for @tr_num
  * @tr_num: Transfer ring to have qpace take submissions from for processing
+ * @nr_trigger: requests triggered in one batch
  * @no_sleep: If true, poll on the relevant completion event, go to sleep otherwise.
  *
  * Wait for there to be a completion event for the event ring corresponding to the
  * transfer ring @tr_num. Can be sleeping or non-sleeping based on @no_sleep.
  */
-void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep);
+void qpace_wait_for_tr_consumption(int tr_num, size_t nr_trigger, bool no_sleep);
 
 /*
  * qpace_consume_er() - process completed event descriptors in the event ring @er_num
@@ -231,12 +237,12 @@ static inline bool qpace_check_compress_err(struct qpace_event_descriptor *ed)
 	return false;
 }
 
-static inline bool qpace_trigger_tr(int tr_num)
+static inline size_t qpace_trigger_tr(int tr_num)
 {
-	return false;
+	return 0;
 }
 
-static inline void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep)
+static inline void qpace_wait_for_tr_consumption(int tr_num, size_t nr_trigger, bool no_sleep)
 {
 
 }

@@ -15,6 +15,7 @@
 #include <linux/interconnect.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/iopoll.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
 
 #include "qpace-constants.h"
@@ -751,10 +752,10 @@ static inline bool transfer_ring_is_empty(struct transfer_ring *ring)
  * This boils down to updating a HW register that points to the end of the valid
  * in the ring buffer.
  *
- * Return: true if the ring had items to submit / submission was done, false if
- * the ring had no items to submit.
+ * Return: positive for the requests number that submitted to HW, 0 if the ring had
+ * no items to submit.
  */
-bool qpace_trigger_tr(int tr_num)
+size_t qpace_trigger_tr(int tr_num)
 {
 	struct transfer_ring *ring = &tr_rings[tr_num];
 	struct qpace_transfer_descriptor *last_processed_td;
@@ -763,7 +764,7 @@ bool qpace_trigger_tr(int tr_num)
 
 	/* bail if ring is empty */
 	if (transfer_ring_is_empty(ring))
-		return false;
+		return 0;
 
 	if (ring->hw_write_ptr == ring->ring_buffer_start)
 		last_processed_td = ring->ring_buffer_start + DESCRIPTORS_PER_RING - 1;
@@ -781,41 +782,80 @@ bool qpace_trigger_tr(int tr_num)
 	QPACE_WRITE_TR_REG(tr_num, QPACE_DMA_TR_MGR_0_WR_PTR_L_OFFSET,
 			   FIELD_GET(GENMASK(31, 0), write_ptr_addr));
 
-	return true;
+	return ring->item_count;
 }
 EXPORT_SYMBOL_GPL(qpace_trigger_tr);
 
+static inline bool read_last_cycle_bit(struct qpace_event_descriptor *ed)
+{
+	return FIELD_GET(CYCLE_BIT_MASK, READ_ONCE(ed->flags));
+}
 /*
  * qpace_wait_for_tr_consumption() - Wait for event completion interrupt for @tr_num
  * @tr_num: Transfer ring to have qpace take submissions from for processing
+ * @nr_trigger: requests triggered in one batch
  * @no_sleep: If true, poll on the relevant completion event, go to sleep otherwise.
  *
  * Wait for there to be a completion event for the event ring corresponding to the
  * transfer ring @tr_num. Can be sleeping or non-sleeping based on @no_sleep.
  */
-void qpace_wait_for_tr_consumption(int tr_num, bool no_sleep)
+void qpace_wait_for_tr_consumption(int tr_num, size_t nr_trigger, bool no_sleep)
 {
 	struct event_ring *ev_ring = &ev_rings[tr_num];
-	struct qpace_event_descriptor *first_ed_to_consume;
+	struct qpace_event_descriptor *last_ed_to_consume;
+	unsigned long ret;
+	bool last_cycle_bit, val;
+	/* single core: 0.52 GB/s @ SVS -> 7.69us/page */
+	unsigned long timeout_us = 100 * USEC_PER_MSEC;
+	size_t offset;
 
-	if (ev_ring->hw_read_ptr == ev_ring->ring_buffer_start + DESCRIPTORS_PER_RING - 1)
-		first_ed_to_consume = ev_ring->ring_buffer_start;
-	else
-		first_ed_to_consume = ev_ring->hw_read_ptr + 1;
+	/* Validate nr_trigger to prevent underflow */
+	if (WARN_ON_ONCE(nr_trigger == 0 || nr_trigger > DESCRIPTORS_PER_RING)) {
+		pr_err("QPACE: Invalid nr_trigger=%zx\n", nr_trigger);
+		return;
+	}
 
-retry:
-	if (no_sleep)
-		while (!try_wait_for_completion(&ev_rings[tr_num].ring_has_events))
-			udelay(1);
-	else
-		wait_for_completion(&ev_rings[tr_num].ring_has_events);
+	if (!no_sleep) {
+		/* Returns 0 on timeout */
+		ret = wait_for_completion_timeout(&ev_rings[tr_num].ring_has_events,
+						usecs_to_jiffies(timeout_us));
+		if (!ret)
+			pr_err("QPACE: Timeout, fallback to poll\n");
+	} else {
+		/* Return -ETIMEDOUT on timeout */
+		ret = read_poll_timeout_atomic(try_wait_for_completion,
+				val, val, 1, timeout_us, false,
+				&ev_rings[tr_num].ring_has_events);
+		if (ret)
+			pr_err("QPACE: Timeout, fallback to poll\n");
+	}
 
 	/*
-	 * Check the first ed to consume to see if it has been created yet. If not,
+	 * calculate last ed to consume from triggered requests from
+	 * last time qpace_trigger_tr
+	 */
+	offset = ev_ring->hw_write_ptr - ev_ring->ring_buffer_start;
+	offset += nr_trigger - 1;
+
+	if (offset > DESCRIPTORS_PER_RING - 1) {
+		last_cycle_bit = !ev_ring->cycle_bit;
+		last_ed_to_consume = ev_ring->ring_buffer_start + offset -
+					DESCRIPTORS_PER_RING;
+	} else {
+		last_cycle_bit = ev_ring->cycle_bit;
+		last_ed_to_consume = ev_ring->ring_buffer_start + offset;
+	}
+	pr_debug("nr_trigger: %zx last_offset: %zx  cycle_bit: %x\n",
+			nr_trigger, offset, last_cycle_bit);
+
+	/*
+	 * Check the last_ed_to_consume to see if it has been created yet. If not,
 	 * treat the interrupt as spurious and wait for another one.
 	 */
-	if (first_ed_to_consume->cycle_bit != ev_ring->cycle_bit)
-		goto retry;
+	ret = read_poll_timeout(read_last_cycle_bit, val, val == last_cycle_bit,
+			8, timeout_us, false, last_ed_to_consume);
+	if (ret)
+		panic("QPACE: Timeout of polling ed cycle_bit, panic\n");
 }
 EXPORT_SYMBOL_GPL(qpace_wait_for_tr_consumption);
 
