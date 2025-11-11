@@ -166,6 +166,7 @@ hamoa_perf_config = {
     "CONFIG_QCOM_RPMH": "m",
     "CONFIG_QCOM_RPROC_COMMON": "m",
     "CONFIG_QCOM_SCM": "m",
+    "CONFIG_QCOM_SCM_SMCI": "m",
     "CONFIG_QCOM_SECURE_BUFFER": "m",
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
     "CONFIG_QCOM_SI_CORE": "m",
