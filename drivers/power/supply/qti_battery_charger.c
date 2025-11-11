@@ -299,6 +299,7 @@ struct battery_chg_dev {
 	bool				initialized;
 	bool				notify_en;
 	bool				error_prop;
+	bool				micro_usb;
 	unsigned int			num_usb_ports;
 };
 
@@ -913,7 +914,8 @@ static void battery_chg_update_usb_type_work(struct work_struct *work)
 		}
 	}
 
-	battery_chg_update_uusb_type(bcdev, pst->prop[USB_ADAP_TYPE]);
+	if (bcdev->micro_usb)
+		battery_chg_update_uusb_type(bcdev, pst->prop[USB_ADAP_TYPE]);
 }
 
 static void battery_chg_check_status_work(struct work_struct *work)
@@ -1275,6 +1277,17 @@ static enum power_supply_property usb_props[] = {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_USB_TYPE,
 	POWER_SUPPLY_PROP_TEMP,
+};
+
+static enum power_supply_property uusb_props[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
+	POWER_SUPPLY_PROP_USB_TYPE,
+	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SCOPE,
 };
 
@@ -1616,6 +1629,11 @@ static int battery_chg_init_psy(struct battery_chg_dev *bcdev)
 
 	psy_cfg.drv_data = bcdev;
 	psy_cfg.of_node = bcdev->dev->of_node;
+	if (bcdev->micro_usb) {
+		usb_psy_desc[USB_1_PORT_ID].properties = uusb_props;
+		usb_psy_desc[USB_1_PORT_ID].num_properties = ARRAY_SIZE(uusb_props);
+	}
+
 	bcdev->psy_list[PSY_TYPE_USB].psy =
 		devm_power_supply_register(bcdev->dev, &usb_psy_desc[USB_1_PORT_ID], &psy_cfg);
 	if (IS_ERR(bcdev->psy_list[PSY_TYPE_USB].psy)) {
@@ -2641,6 +2659,9 @@ static int register_extcon_conn_type(struct battery_chg_dev *bcdev)
 	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
 	int rc;
 
+	if (!bcdev->micro_usb)
+		return 0;
+
 	rc = read_property_id(bcdev, pst, USB_CONNECTOR_TYPE);
 	if (rc < 0) {
 		dev_err(bcdev->dev, "Failed to read prop USB_CONNECTOR_TYPE, rc=%d\n",
@@ -2780,6 +2801,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 	bcdev->restrict_fcc_ua = DEFAULT_RESTRICT_FCC_UA;
 	platform_set_drvdata(pdev, bcdev);
 	bcdev->fake_soc = -EINVAL;
+	bcdev->micro_usb = of_property_read_bool(bcdev->dev->of_node, "qcom,micro-usb");
 	rc = battery_chg_init_psy(bcdev);
 	if (rc < 0)
 		goto error;
