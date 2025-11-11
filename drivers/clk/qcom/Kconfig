@@ -750,4 +750,13 @@ config SDW_GCC_MONACO
 	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
 	  USB, SD/eMMC, etc.
 
+config SDW_DISPCC_MONACO
+	tristate "MONACO Display Clock Controller"
+	depends on SDW_GCC_MONACO
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc.
+	  MONACO devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
 endif
