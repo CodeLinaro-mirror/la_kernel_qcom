@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QCOM_SCM_ADDON_H
@@ -56,6 +57,7 @@ extern int qcom_scm_invoke_smc_legacy(phys_addr_t in_buf, size_t in_buf_size,
 extern int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 			size_t out_buf_size, int32_t *result, u64 *response_type,
 			unsigned int *data);
+extern int qcom_scm_tz_safety_enable_ffi(phys_addr_t buf, size_t size, uint8_t crc8);
 extern int qcom_scm_sec_wdog_deactivate(void);
 extern int qcom_scm_sec_wdog_trigger(void);
 extern int qcom_scm_spin_cpu(void);
@@ -184,6 +186,12 @@ static inline int qcom_scm_invoke_smc_legacy(phys_addr_t in_buf, size_t in_buf_s
 static inline int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 			size_t out_buf_size, int32_t *result, u64 *response_type,
 			unsigned int *data)
+{
+	return -EPERM;
+}
+
+static inline int qcom_scm_tz_safety_enable_ffi(phys_addr_t buf, size_t size,
+			uint8_t crc8)
 {
 	return -EPERM;
 }
