@@ -5,6 +5,7 @@
 
 #include <linux/cpumask.h>
 #include <linux/cpufreq.h>
+#include <linux/cpu_phys_log_map.h>
 #include <linux/mailbox_client.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -91,17 +92,26 @@ static void qcom_cpucp_fast_rx(struct mbox_client *cl, void *msg)
 {
 	struct qcom_cpucp_fast *data = &fast_data;
 	uint64_t mbox_rx_data = *((uint64_t *)msg);
-	uint32_t cpu = mbox_rx_data & FAST_MBOX_CPUMASK;
+	int logical_cpu, cpu = mbox_rx_data & FAST_MBOX_CPUMASK;
 
 	if (!cpumask_weight(&data->fast_cpus)) {
 		dev_dbg(cl->dev, "No CPUS are enabled for FAST\n");
 		return;
 	}
 
-	if (cpumask_test_cpu(cpu, &data->fast_cpus) ||
-		((cpu == FAST_MBOX_CPUMASK) && (data->last_cpu < nr_cpu_ids))) {
-		data->last_cpu = cpu;
-		sched_walt_oscillate(cpu);
+	logical_cpu = cpu;
+	if (cpu != FAST_MBOX_CPUMASK)
+		logical_cpu = cpu_phys_to_logical(cpu);
+
+	if (logical_cpu < 0) {
+		dev_err(cl->dev, "Invalid cpu=%d logical=%d\n", cpu, logical_cpu);
+		return;
+	}
+
+	if (cpumask_test_cpu(logical_cpu, &data->fast_cpus) ||
+			((logical_cpu == FAST_MBOX_CPUMASK) && (data->last_cpu < nr_cpu_ids))) {
+		data->last_cpu = logical_cpu;
+		sched_walt_oscillate(logical_cpu);
 	}
 }
 
@@ -331,6 +341,7 @@ static int qcom_cpucp_fast_probe(struct platform_device *pdev)
 		goto err;
 	}
 
+	cpu = cpu_phys_to_logical(cpu);
 	if (cpu >= nr_cpu_ids || !cpu_present(cpu)) {
 		dev_err(dev, "Invalid CPU%d\n", cpu);
 		goto err;
@@ -340,6 +351,11 @@ static int qcom_cpucp_fast_probe(struct platform_device *pdev)
 	if (!policy) {
 		dev_err(dev, "No policy for CPU:%d. Defer.\n", cpu);
 		ret = -EPROBE_DEFER;
+		goto err;
+	}
+
+	if (cpumask_weight(policy->related_cpus) <= 1) {
+		cpufreq_cpu_put(policy);
 		goto err;
 	}
 
