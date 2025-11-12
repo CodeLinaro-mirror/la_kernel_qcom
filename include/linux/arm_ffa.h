@@ -73,6 +73,11 @@
 #define FFA_FN64_MEM_PERM_GET		FFA_SMC_64(0x88)
 #define FFA_MEM_PERM_SET		FFA_SMC_32(0x89)
 #define FFA_FN64_MEM_PERM_SET		FFA_SMC_64(0x89)
+#define FFA_CONSOLE_LOG			FFA_SMC_32(0x8A)
+#define FFA_PARTITION_INFO_GET_REGS	FFA_SMC_64(0x8B)
+#define FFA_EL3_INTR_HANDLE		FFA_SMC_32(0x8C)
+#define FFA_MSG_SEND_DIRECT_REQ2	FFA_SMC_64(0x8D)
+#define FFA_MSG_SEND_DIRECT_RESP2	FFA_SMC_64(0x8E)
 
 /*
  * For some calls it is necessary to use SMC64 to pass or return 64-bit values.
@@ -107,6 +112,7 @@
 	 FIELD_PREP(FFA_MINOR_VERSION_MASK, (minor)))
 #define FFA_VERSION_1_0		FFA_PACK_VERSION_INFO(1, 0)
 #define FFA_VERSION_1_1		FFA_PACK_VERSION_INFO(1, 1)
+#define FFA_VERSION_1_2		FFA_PACK_VERSION_INFO(1, 2)
 
 /**
  * FF-A specification mentions explicitly about '4K pages'. This should
@@ -161,9 +167,12 @@ static inline void *ffa_dev_get_drvdata(struct ffa_device *fdev)
 	return dev_get_drvdata(&fdev->dev);
 }
 
+struct ffa_partition_info;
+
 #if IS_REACHABLE(CONFIG_ARM_FFA_TRANSPORT)
-struct ffa_device *ffa_device_register(const uuid_t *uuid, int vm_id,
-				       const struct ffa_ops *ops);
+struct ffa_device *
+ffa_device_register(const struct ffa_partition_info *part_info,
+		    const struct ffa_ops *ops);
 void ffa_device_unregister(struct ffa_device *ffa_dev);
 int ffa_driver_register(struct ffa_driver *driver, struct module *owner,
 			const char *mod_name);
@@ -171,9 +180,9 @@ void ffa_driver_unregister(struct ffa_driver *driver);
 bool ffa_device_is_valid(struct ffa_device *ffa_dev);
 
 #else
-static inline
-struct ffa_device *ffa_device_register(const uuid_t *uuid, int vm_id,
-				       const struct ffa_ops *ops)
+static inline struct ffa_device *
+ffa_device_register(const struct ffa_partition_info *part_info,
+		    const struct ffa_ops *ops)
 {
 	return NULL;
 }
@@ -214,6 +223,9 @@ extern const struct bus_type ffa_bus_type;
 
 /* The FF-A 1.0 partition structure lacks the uuid[4] */
 #define FFA_1_0_PARTITON_INFO_SZ	(8)
+
+/* Return the count of partitions deployed in the system */
+#define PARTITION_INFO_GET_RETURN_COUNT_ONLY	BIT(0)
 
 /* FFA transport related */
 struct ffa_partition_info {
@@ -263,6 +275,11 @@ struct ffa_indirect_msg_hdr {
 	u32 offset;
 	u32 send_recv_id;
 	u32 size;
+};
+
+/* For use with FFA_MSG_SEND_DIRECT_{REQ,RESP}2 which pass data via registers */
+struct ffa_send_direct_data2 {
+	unsigned long data[14]; /* x4-x17 */
 };
 
 struct ffa_mem_region_addr_range {
@@ -426,6 +443,8 @@ struct ffa_msg_ops {
 	int (*sync_send_receive)(struct ffa_device *dev,
 				 struct ffa_send_direct_data *data);
 	int (*indirect_send)(struct ffa_device *dev, void *buf, size_t sz);
+	int (*sync_send_receive2)(struct ffa_device *dev, const uuid_t *uuid,
+				  struct ffa_send_direct_data2 *data);
 };
 
 struct ffa_mem_ops {
@@ -459,5 +478,29 @@ struct ffa_ops {
 	const struct ffa_cpu_ops *cpu_ops;
 	const struct ffa_notifier_ops *notifier_ops;
 };
+
+static const int ffa_linux_errmap[] = {
+	/* better than switch case as long as return value is continuous */
+	0,		/* FFA_RET_SUCCESS */
+	-EOPNOTSUPP,	/* FFA_RET_NOT_SUPPORTED */
+	-EINVAL,	/* FFA_RET_INVALID_PARAMETERS */
+	-ENOMEM,	/* FFA_RET_NO_MEMORY */
+	-EBUSY,		/* FFA_RET_BUSY */
+	-EINTR,		/* FFA_RET_INTERRUPTED */
+	-EACCES,	/* FFA_RET_DENIED */
+	-EAGAIN,	/* FFA_RET_RETRY */
+	-ECANCELED,	/* FFA_RET_ABORTED */
+	-ENODATA,	/* FFA_RET_NO_DATA */
+	-EAGAIN,	/* FFA_RET_NOT_READY */
+};
+
+static inline int ffa_to_linux_errno(int errno)
+{
+	int err_idx = -errno;
+
+	if (err_idx >= 0 && err_idx < ARRAY_SIZE(ffa_linux_errmap))
+		return ffa_linux_errmap[err_idx];
+	return -EINVAL;
+}
 
 #endif /* _LINUX_ARM_FFA_H */
