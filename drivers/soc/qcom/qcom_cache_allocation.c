@@ -21,6 +21,7 @@
 #define CONFIG_QTI_GPU_RESOURCE_ENABLED 0
 #define K_F 1831  /* 19200000/1024/1024 * 100 */
 #define SAMPLING_MS 10
+#define RETRY_COUNT 3
 #define boost_dection(ptr, idx) ({ \
 	(ptr->cpu_freq_curr[idx] - ptr->cpu_freq_prev[idx]) \
 		> ptr->config->freq_cfg[idx].cpu_boost_thresh ? 1 : 0; })
@@ -241,14 +242,37 @@ static int cache_allocation_configure(struct cache_allocation *pdev)
 
 	ret = msc_system_set_partition(SLC, &msc_queries[APPS], &pdev->client_input[APPS]);
 	if (ret < 0) {
-		pr_err("fail to set cpu cache partition, ret=%d\n", ret);
+		if (ret == -EREMOTEIO) {
+			for (int i = 0; i < RETRY_COUNT; i++) {
+				ret = msc_system_set_partition(SLC, &msc_queries[APPS],
+							&pdev->client_input[APPS]);
+				if (ret < 0)
+					pr_warn("set APPS Retry %d failed, ret=%d\n",
+									i + 1, ret);
+				else
+					break;
+			}
+		} else
+			pr_err("fail to set cpu cache partition, ret=%d\n", ret);
 		return ret;
 	}
 
 	ret = msc_system_set_partition(SLC, &msc_queries[GPU], &pdev->client_input[GPU]);
 	if (ret < 0) {
-		msc_system_set_partition(SLC, &msc_queries[APPS], &cpu_gear_val);
-		pr_err("fail to set gpu cache partition, ret=%d\n", ret);
+		if (ret == -EREMOTEIO) {
+			for (int i = 0; i < RETRY_COUNT; i++) {
+				ret = msc_system_set_partition(SLC, &msc_queries[GPU],
+							&pdev->client_input[GPU]);
+				if (ret < 0)
+					pr_warn("set GPU Retry %d failed, ret=%d\n",
+									i + 1, ret);
+				else
+					break;
+			}
+		} else {
+			msc_system_set_partition(SLC, &msc_queries[APPS], &cpu_gear_val);
+			pr_err("fail to set gpu cache partition, ret=%d\n", ret);
+		}
 		return ret;
 	}
 
