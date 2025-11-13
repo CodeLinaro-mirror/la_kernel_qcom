@@ -437,13 +437,15 @@ static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 {
 	int i;
 	u32 s2cr_val;
+	u32 smr_val;
 
 	for (i = smmu->num_s2cr - 1; i >= 0; i--) {
 		s2cr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_S2CR(i));
-		if ((s2cr_val & ARM_SMMU_S2CR_TYPE) >> 16 == S2CR_TYPE_FAULT)
-			break; /* Skip invalid entries */
-		smmu_v2_debug_print("S2CR[%d]: val: %llx\n",
-				    i, s2cr_val);
+		smr_val  = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(i));
+		if (!(smr_val & ARM_SMMU_SMR_VALID))
+			break;
+		smmu_v2_debug_print("S2CR[%d]: smr_val:%llx s2cr_val: %llx\n",
+				    i, smr_val, s2cr_val);
 	}
 	smmu->num_s2cr = i + 1;
 	smmu->num_smr = smmu->num_s2cr; /* smr == s2cr */
