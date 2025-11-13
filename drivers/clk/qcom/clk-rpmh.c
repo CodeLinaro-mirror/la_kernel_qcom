@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk-provider.h>
@@ -383,6 +383,7 @@ DEFINE_CLK_RPMH_ARC(bi_tcxo, "xo.lvl", 0x3, 1);
 DEFINE_CLK_RPMH_ARC(bi_tcxo, "xo.lvl", 0x3, 2);
 DEFINE_CLK_RPMH_ARC(bi_tcxo, "xo.lvl", 0x3, 4);
 DEFINE_CLK_RPMH_ARC(qlink, "qphy.lvl", 0x1, 4);
+DEFINE_CLK_RPMH_ARC(xo_pad, "xo.lvl", 0x03, 1);
 DEFINE_CLK_RPMH_ARC(xo_pad, "xo.lvl", 0x03, 2);
 
 DEFINE_CLK_RPMH_VRM(ln_bb_clk1, _a2, "lnbclka1", 2);
@@ -429,10 +430,12 @@ DEFINE_CLK_RPMH_VRM(clk8, _a2, "clka8", 2);
 DEFINE_CLK_RPMH_VRM(div_clk1, _div2, "divclka1", 2);
 
 DEFINE_CLK_RPMH_VRM(c1a_e0, _div1, "C1A_E0", 1);
+DEFINE_CLK_RPMH_VRM(c1a_e0, _div2, "C1A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c2a_e0, _div1, "C2A_E0", 1);
 DEFINE_CLK_RPMH_VRM(c3a_e0, _div2, "C3A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c4a_e0, _div2, "C4A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c5a_e0, _div2, "C5A_E0", 2);
+DEFINE_CLK_RPMH_VRM(c6a_e0, _div1, "C6A_E0", 1);
 DEFINE_CLK_RPMH_VRM(c6a_e0, _div2, "C6A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c7a_e0, _div2, "C7A_E0", 2);
 DEFINE_CLK_RPMH_VRM(c8a_e0, _div2, "C8A_E0", 2);
@@ -978,6 +981,25 @@ static const struct clk_rpmh_desc clk_rpmh_alor = {
 	.num_clks = ARRAY_SIZE(alor_rpmh_clocks),
 };
 
+static struct clk_hw *seraph_rpmh_clocks[] = {
+	[RPMH_CXO_PAD_CLK]	= &clk_rpmh_xo_pad_div1.hw,
+	[RPMH_CXO_PAD_CLK_A]	= &clk_rpmh_xo_pad_div1_ao.hw,
+	[RPMH_CXO_CLK]		= &pineapple_bi_tcxo.hw,
+	[RPMH_CXO_CLK_A]	= &pineapple_bi_tcxo_ao.hw,
+	[RPMH_RF_CLK1]		= &clk_rpmh_c1a_e0_div2.hw,
+	[RPMH_RF_CLK1_A]	= &clk_rpmh_c1a_e0_div2_ao.hw,
+	[RPMH_LN_BB_CLK1]	= &clk_rpmh_c6a_e0_div1.hw,
+	[RPMH_LN_BB_CLK1_A]	= &clk_rpmh_c6a_e0_div1_ao.hw,
+	[RPMH_DIV_CLK1]		= &clk_rpmh_c7a_e0_div2.hw,
+	[RPMH_DIV_CLK1_A]	= &clk_rpmh_c7a_e0_div2_ao.hw,
+	[RPMH_IPA_CLK]		= &clk_rpmh_ipa.hw,
+};
+
+static const struct clk_rpmh_desc clk_rpmh_seraph = {
+	.clks = seraph_rpmh_clocks,
+	.num_clks = ARRAY_SIZE(seraph_rpmh_clocks),
+};
+
 static int clk_rpmh_probe(struct platform_device *pdev)
 {
 	struct clk_hw **hw_clks;
@@ -1083,6 +1105,7 @@ static const struct of_device_id clk_rpmh_match_table[] = {
 	{ .compatible = "qcom,canoe-rpmh-clk", .data = &clk_rpmh_canoe},
 	{ .compatible = "qcom,vienna-rpmh-clk", .data = &clk_rpmh_vienna},
 	{ .compatible = "qcom,alor-rpmh-clk", .data = &clk_rpmh_alor},
+	{ .compatible = "qcom,seraph-rpmh-clk", .data = &clk_rpmh_seraph},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, clk_rpmh_match_table);
