@@ -86,6 +86,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_AOSS_QMP": "m",
     "CONFIG_QCOM_BWMON": "m",
     "CONFIG_QCOM_CLK_RPMH": "m",
+    "CONFIG_QCOM_COMMAND_DB": "m",
     "CONFIG_QCOM_CPU_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_DCVS": "m",
     "CONFIG_QCOM_DCVS_FP": "m",
