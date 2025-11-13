@@ -255,6 +255,7 @@
 #define QCOM_ID_IPQ9570			513
 #define QCOM_ID_IPQ9574			514
 #define QCOM_ID_SM7315			515
+#define QCOM_ID_MONACOP                 517
 #define QCOM_ID_KHAJE			518
 #define QCOM_ID_SM8550			519
 #define QCOM_ID_IPQ5016			520
