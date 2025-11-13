@@ -304,7 +304,7 @@
 #define QCOM_ID_CHORA			724
 #define QCOM_ID_PIKACHU			736
 #define QCOM_ID_CANOEPSG		743
-#define QCOM_ID_COLIBRI			756
+#define QCOM_ID_SHIKRA			756
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and

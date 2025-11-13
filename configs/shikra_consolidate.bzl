@@ -1,4 +1,4 @@
-colibri_consolidate_config = {
+shikra_consolidate_config = {
     # keep sorted
     "CONFIG_ATOMIC64_SELFTEST": "m",
     "CONFIG_CMA_DEBUGFS": "y",

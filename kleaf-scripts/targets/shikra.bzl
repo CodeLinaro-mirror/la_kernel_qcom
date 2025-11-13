@@ -1,12 +1,12 @@
-load(":configs/colibri_consolidate.bzl", "colibri_consolidate_config")
-load(":configs/colibri_perf.bzl", "colibri_perf_config")
+load(":configs/shikra_consolidate.bzl", "shikra_consolidate_config")
+load(":configs/shikra_perf.bzl", "shikra_perf_config")
 load(":kleaf-scripts/android_build.bzl", "define_typical_android_build")
 load(":kleaf-scripts/image_opts.bzl", "boot_image_opts")
 load(":target_variants.bzl", "la_variants")
 
-target_name = "colibri"
+target_name = "shikra"
 
-def define_colibri():
+def define_shikra():
     for variant in la_variants:
         board_kernel_cmdline_extras = []
         board_bootconfig_extras = []
@@ -47,15 +47,15 @@ def define_colibri():
             )
 
     define_typical_android_build(
-        name = "colibri",
-        consolidate_config = colibri_consolidate_config,
-        perf_config = colibri_perf_config,
+        name = "shikra",
+        consolidate_config = shikra_consolidate_config,
+        perf_config = shikra_perf_config,
         consolidate_build_img_opts = consolidate_build_img_opts,
         perf_build_img_opts = perf_build_img_opts,
         consolidate_kwargs = {
-            "config_path": "configs/colibri_consolidate.bzl",
+            "config_path": "configs/shikra_consolidate.bzl",
         },
         perf_kwargs = {
-            "config_path": "configs/colibri_perf.bzl",
+            "config_path": "configs/shikra_perf.bzl",
         },
     )
