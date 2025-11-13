@@ -16,6 +16,7 @@ icc-debug.ko
 icc-bcm-voter.ko
 icc-rpmh.ko
 icc-clk.ko
+cmd-db.ko
 qcom_rpmh.ko
 debug-regulator.ko
 proxy-consumer.ko
