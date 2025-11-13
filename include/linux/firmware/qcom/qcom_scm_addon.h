@@ -46,6 +46,8 @@ extern int qcom_scm_request_encrypted_log(phys_addr_t buf,
 			bool is_full_tz_logs_enabled);
 extern bool qcom_scm_kgsl_set_smmu_aperture_available(void);
 extern int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank);
+extern int qcom_scm_kgsl_set_smmu_gos_aperture(unsigned int reg_index,
+			unsigned int num_context_bank);
 extern int qcom_scm_kgsl_init_regs(u32 gpu_req);
 extern int qcom_scm_multi_kgsl_init_regs(u32 gpu_req, u32 cmd);
 extern int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
@@ -155,6 +157,12 @@ static inline bool qcom_scm_kgsl_set_smmu_aperture_available(void)
 }
 
 static inline int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
+{
+	return -EPERM;
+}
+
+static inline int qcom_scm_kgsl_set_smmu_gos_aperture(unsigned int reg_index,
+			unsigned int num_context_bank)
 {
 	return -EPERM;
 }
