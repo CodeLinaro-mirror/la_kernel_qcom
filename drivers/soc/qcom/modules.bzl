@@ -31,6 +31,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/cx-ipeak",
+        out = "cx-ipeak.ko",
+        config = "CONFIG_QCOM_CX_IPEAK",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/cx_ipeak.c",
+            "include/soc/qcom/cx_ipeak.h",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/adsp_sleepmon",
         out = "adsp_sleepmon.ko",
         config = "CONFIG_QCOM_ADSP_SLEEPMON",
