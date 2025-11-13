@@ -174,6 +174,15 @@ config QTI_DYNAMIC_HW_THERMAL_TRIP
 	   as thermal zone and enable thermal zone sysfs interface to modify
 	   hardware mitigation threshold via SCMI communication.
 
+config QTI_RPM_SMD_COOLING_DEVICE
+	tristate "Qualcomm Technologies Inc. RPM SMD cooling device driver"
+	depends on MSM_RPM_SMD && THERMAL_OF
+	help
+	  This implements a mitigation device to send temperature band
+	  level to RPM hardware via SMD protocol. This mitigation device
+	  will be used by temperature reliability rules to restrict a
+	  railway at predefined voltage corner using RPM hardware.
+
 config QTI_THERMAL_LIMITS_DCVS
 	tristate "QTI LMH DCVS Driver"
 	depends on THERMAL && CPU_THERMAL

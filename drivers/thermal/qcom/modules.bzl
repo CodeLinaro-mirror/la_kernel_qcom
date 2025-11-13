@@ -269,6 +269,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/thermal/qcom/rpm_smd_cooling_device",
+        out = "rpm_smd_cooling_device.ko",
+        config = "CONFIG_QTI_RPM_SMD_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/rpm_smd_cooling_device.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/rpmsg/rpm-smd",
+        ],
+    )
+
+    registry.register(
         name = "drivers/thermal/qcom/msm_lmh_dcvs",
         out = "msm_lmh_dcvs.ko",
         config = "CONFIG_QTI_THERMAL_LIMITS_DCVS",
