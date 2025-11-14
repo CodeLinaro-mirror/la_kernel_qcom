@@ -13,6 +13,8 @@ msm_qmp.ko
 qcom_ipc_logging.ko
 qcom_glink_smem.ko
 qcom_glink.ko
+qrtr.ko
+qrtr-smd.ko
 smp2p.ko
 qcom-ipcc.ko
 pinctrl-msm.ko
