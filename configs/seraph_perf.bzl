@@ -13,6 +13,7 @@ seraph_perf_config = {
     "CONFIG_INPUT_PM8941_PWRKEY": "m",
     "CONFIG_IOMMU_IO_PGTABLE_CONTIG_HINT": "y",
     "CONFIG_IOMMU_IO_PGTABLE_FAST": "y",
+    "CONFIG_LEDS_QCOM_LPG": "m",
     "CONFIG_MEM_PROT": "m",
     "CONFIG_MFD_SPMI_PMIC": "m",
     "CONFIG_MSM_PERFORMANCE": "m",
