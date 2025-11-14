@@ -118,6 +118,10 @@ void gh_reset_vm_prop_table_entry(gh_vmid_t vmid)
 
 	for (vm_name = GH_SELF_VM + 1; vm_name < GH_VM_MAX; vm_name++) {
 		if (vmid == gh_vm_table[vm_name].vmid) {
+			kfree(gh_vm_table[vm_name].uri);
+			kfree(gh_vm_table[vm_name].guid);
+			kfree(gh_vm_table[vm_name].name);
+			kfree(gh_vm_table[vm_name].sign_auth);
 			gh_vm_table[vm_name].vmid = GH_VMID_INVAL;
 			gh_vm_table[vm_name].uri = NULL;
 			gh_vm_table[vm_name].guid = NULL;
