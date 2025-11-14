@@ -80,6 +80,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/qnoc-qos-rpm",
             "drivers/interconnect/qcom/icc-debug",
             "drivers/rpmsg/rpm-smd",
             "drivers/soc/qcom/smem",
@@ -185,6 +186,26 @@ def register_modules(registry):
             "drivers/soc/qcom/cmd-db",
             "drivers/soc/qcom/smem",
             "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-malabar",
+        out = "qnoc-malabar.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_MALABAR",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/malabar.c",
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+            "drivers/interconnect/qcom/rpm-ids.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos-rpm",
+            "drivers/interconnect/qcom/icc-rpm",
+            "drivers/interconnect/qcom/icc-debug",
             "kernel/trace/qcom_ipc_logging",
         ],
     )
