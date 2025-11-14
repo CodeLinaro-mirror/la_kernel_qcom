@@ -504,9 +504,6 @@ struct geni_i2c_clk_fld *geni_i2c_get_itr_value(struct geni_i2c_dev *gi2c)
 {
 	struct geni_i2c_clk_fld *itr;
 
-	if (!gi2c)
-		return NULL;
-
 	if (gi2c->is_i2c_rtl_based)
 		itr = geni_i2c_hub_clk_map + gi2c->clk_fld_idx;
 	else if (gi2c->old_i2c_freq)
@@ -2054,6 +2051,50 @@ static void geni_i2c_gsi_cancel_pending(struct geni_i2c_dev *gi2c, struct i2c_ms
 }
 
 /**
+ * geni_i2c_handle_error() - Handle error scenarios in GSI transfer
+ * @gi2c: geni i2c structure as a pointer
+ * @timeout: timeout value from transfer operation
+ * @i: current message index
+ * @num: total number of messages
+ * @msgs: i2c message array
+ *
+ * This function handles error scenarios by consolidating error handling
+ * logic for GSI transfers.
+ *
+ * Return: 0 for success or negative error code for failure.
+ */
+static int geni_i2c_handle_error(struct geni_i2c_dev *gi2c, int timeout,
+				     int i, int num, struct i2c_msg *msgs)
+{
+	u32 geni_ios = 0;
+
+	if (!timeout) {
+		I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
+			"I2C gsi xfer timeout:%u flags:%d addr:0x%x\n",
+			gi2c->xfer_timeout, gi2c->cur->flags,
+			gi2c->cur->addr);
+		geni_i2c_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base,
+					gi2c->ipcl);
+		gi2c->err = -ETIMEDOUT;
+
+		/* WAR: Set flag to mark cancel pending if IOS stuck */
+		geni_ios = geni_read_reg(gi2c->base, SE_GENI_IOS);
+		if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
+			I2C_LOG_ERR(gi2c->ipcl, false, gi2c->dev,
+				    "%s: IO lines not in good state\n",
+				    __func__);
+			/* doing pending cancel only rtl based SE's */
+			if (gi2c->is_i2c_rtl_based) {
+				gi2c->prev_cancel_pending = true;
+				return -EIO;
+			}
+		}
+	}
+
+	return gi2c->err;
+}
+
+/**
  * geni_i2c_gsi_xfer_out() - gi2c transfer out logic
  * @gi2c:geni i2c structure as a pointer
  * @ret: return value check from gsi_xfer_out
@@ -2088,6 +2129,11 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 	struct msm_gpi_tre *go_t = NULL;
 	unsigned long long start_time;
 	unsigned long long start_time_xfer = sched_clock();
+
+	if (!gi2c) {
+		dev_err(&adap->dev, "Adapter data not found\n");
+		return -EINVAL;
+	}
 
 	gi2c->gsi_err = false;
 	if (!gi2c->req_chan) {
@@ -2209,30 +2255,11 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			timeout = geni_i2c_gsi_tx_tre_optimization(gi2c, num, i, wr_idx - 1);
 		}
 
-		if (!timeout) {
-			u32 geni_ios = 0;
+		/* Handle error scenarios using the new sub-function */
+		ret = geni_i2c_handle_error(gi2c, timeout, i, num, msgs);
+		if (ret == -EIO)
+			goto geni_i2c_gsi_cancel_pending;
 
-			I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
-				"I2C gsi xfer timeout:%u flags:%d addr:0x%x\n",
-				gi2c->xfer_timeout, gi2c->cur->flags,
-				gi2c->cur->addr);
-			geni_i2c_se_dump_dbg_regs(&gi2c->i2c_rsc, gi2c->base,
-						gi2c->ipcl);
-			gi2c->err = -ETIMEDOUT;
-
-			/* WAR: Set flag to mark cancel pending if IOS stuck */
-			geni_ios = geni_read_reg(gi2c->base, SE_GENI_IOS);
-			if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
-				I2C_LOG_ERR(gi2c->ipcl, false, gi2c->dev,
-					    "%s: IO lines not in good state\n",
-					    __func__);
-					/* doing pending cancel only rtl based SE's */
-					if (gi2c->is_i2c_rtl_based) {
-						gi2c->prev_cancel_pending = true;
-						goto geni_i2c_gsi_cancel_pending;
-					}
-			}
-		}
 geni_i2c_err_prep_sg:
 	geni_i2c_err_prep_sg(gi2c);
 
@@ -2489,6 +2516,11 @@ static int geni_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 	int ret = 0;
 	u32 geni_ios = 0;
 	unsigned long long start_time;
+
+	if (!gi2c) {
+		dev_err(&adap->dev, "Adapter data not found\n");
+		return -EINVAL;
+	}
 
 	start_time = geni_capture_start_time(&gi2c->i2c_rsc, gi2c->ipc_log_kpi, __func__,
 					     gi2c->i2c_kpi);

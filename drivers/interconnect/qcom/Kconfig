@@ -341,6 +341,7 @@ config INTERCONNECT_QCOM_QOS
 config INTERCONNECT_QCOM_DEBUG
 	tristate "QCOM-specific interconnect debug features"
 	depends on INTERCONNECT_QCOM
+	depends on DEBUG_FS
 	help
 	  This driver provides debug features specific to
 	  Qualcomm Technologies, Inc. interconnect drivers. These features

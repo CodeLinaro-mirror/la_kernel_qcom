@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <asm/div64.h>
@@ -630,7 +630,7 @@ static int __init qcom_icc_bcm_voter_driver_init(void)
 {
 	return platform_driver_register(&qcom_icc_bcm_voter_driver);
 }
-module_init(qcom_icc_bcm_voter_driver_init);
+arch_initcall(qcom_icc_bcm_voter_driver_init);
 
 MODULE_AUTHOR("David Dai <daidavid1@codeaurora.org>");
 MODULE_DESCRIPTION("Qualcomm BCM Voter interconnect driver");

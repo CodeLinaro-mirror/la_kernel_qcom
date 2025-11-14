@@ -814,12 +814,7 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev,
 
 	skb = skb_recycler_alloc(dev, length, reset_skb);
 	if (likely(skb)) {
-		/* SKBs in the recycler are from various unknown sources.
-		 * Their truesize is unknown. We should set truesize
-		 * as the needed buffer size before using it.
-		 */
-		skb->truesize = SKB_TRUESIZE(SKB_DATA_ALIGN(len + NET_SKB_PAD));
-		skb->recycled_for_ds = 0;
+		skb_recycler_clear_flags(skb);
 #ifdef CONFIG_DEBUG_KMEMLEAK
 		kmemleak_update_trace(skb);
 		kmemleak_restore(skb, 1);
@@ -1034,18 +1029,13 @@ struct sk_buff *__netdev_alloc_skb_no_skb_reset(struct net_device *dev,
 
 	skb = skb_recycler_alloc(dev, length, reset_skb);
 	if (likely(skb)) {
-		/* SKBs in the recycler are from various unknown sources.
-		 * Their truesize is unknown. We should set truesize
-		 * as the needed buffer size before using it.
-		 */
-		skb->truesize = SKB_TRUESIZE(SKB_DATA_ALIGN(len + NET_SKB_PAD));
-		skb->fast_recycled = 0;
 #ifdef CONFIG_DEBUG_KMEMLEAK
 		kmemleak_update_trace(skb);
 		kmemleak_restore(skb, 1);
 		kmemleak_update_trace(skb->head);
 		kmemleak_restore(skb->head, 1);
 #endif
+		skb->fast_recycled = 0;
 		skb->fast_qdisc = 0;
 		return skb;
 	}
@@ -1058,12 +1048,6 @@ struct sk_buff *__netdev_alloc_skb_no_skb_reset(struct net_device *dev,
 			  SKB_ALLOC_RX, NUMA_NO_NODE);
 	if (!skb)
 		return NULL;
-
-	/* Set truesize as the needed buffer size
-	 * rather than the allocated size by __alloc_skb().
-	 */
-	if (length + NET_SKB_PAD < SKB_WITH_OVERHEAD(PAGE_SIZE))
-		skb->truesize = SKB_TRUESIZE(SKB_DATA_ALIGN(length + NET_SKB_PAD));
 
 	skb_reserve(skb, NET_SKB_PAD);
 	skb->dev = dev;
@@ -1841,6 +1825,12 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	new->queue_mapping = old->queue_mapping;
 
 	memcpy(&new->headers, &old->headers, sizeof(new->headers));
+#ifdef CONFIG_SKB_RECYCLER
+	/* Clear the skb recycler flags here to make sure any skb whose size
+	 * has been altered is not put back into recycler pool.
+	 */
+	skb_recycler_clear_flags(new);
+#endif
 	CHECK_SKB_FIELD(protocol);
 	CHECK_SKB_FIELD(csum);
 	CHECK_SKB_FIELD(hash);
@@ -2614,6 +2604,12 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 	if (!skb->sk || skb->destructor == sock_edemux)
 		skb->truesize += size - osize;
 
+#ifdef CONFIG_SKB_RECYCLER
+	/* Clear the skb recycler flags here to make sure any skb whose size
+	 * has been expanded is not put back into recycler.
+	 */
+	skb_recycler_clear_flags(skb);
+#endif
 	return 0;
 
 nofrags:
