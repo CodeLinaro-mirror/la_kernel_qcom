@@ -236,6 +236,9 @@
 
 #define MSM_PCIE_LTSSM_MASK (0x3f)
 
+#define PCI_INTERRUPT_LINE_INT_PIN_MASK  (0xffff00ff)
+#define PCI_INTERRUPT_LINE_INT_PIN_1     (0x00000100)
+
 #define PCIE_ATU_REGION_ENABLE BIT(31)
 #define PCIE_ATU_CFG_SHIFT_MODE BIT(28)
 #define TC_BDF_TO_SID_MAX_PCIE_SID	64
@@ -4996,6 +4999,42 @@ static int pcie_phy_init(struct msm_pcie_dev_t *dev)
 	return 0;
 }
 
+static void msm_pcie_remove_capability(struct msm_pcie_dev_t *pci, u8 cap)
+{
+	u8 next_cap_ptr, cap_ptr, cap_id, pre_cap_ptr = 0;
+	u16 reg;
+
+	reg = readl_relaxed(pci->dm_core + PCI_CAPABILITY_LIST);
+	cap_ptr = (reg & 0x00ff);
+
+	if (!cap_ptr)
+		return;
+
+	do {
+		reg = readl_relaxed(pci->dm_core + cap_ptr);
+		cap_id = (reg & 0x00ff);
+
+		if (cap_id > PCI_CAP_ID_MAX)
+			return;
+
+		if (cap_id == cap)
+			break;
+
+		pre_cap_ptr = cap_ptr;
+		cap_ptr = (reg & 0xff00) >> 8;
+	} while (cap_ptr);
+
+	if (!cap_ptr)
+		return;
+
+	next_cap_ptr = (reg & 0xff00) >> 8;
+
+	if (pre_cap_ptr == 0)
+		writeb(next_cap_ptr, pci->dm_core + PCI_CAPABILITY_LIST);
+	else
+		writeb(next_cap_ptr, pci->dm_core + pre_cap_ptr + 1);
+}
+
 static u16 msm_pci_find_ext_capability(struct msm_pcie_dev_t *pci, u8 cap)
 {
 	int pos = PCI_CFG_SPACE_SIZE;
@@ -5041,6 +5080,12 @@ static void msm_pcie_config_core_preset(struct msm_pcie_dev_t *pcie_dev)
 
 	/* enable write access to RO register */
 	msm_pcie_write_mask(pcie_dev->dm_core + PCIE_GEN3_MISC_CONTROL, 0, BIT(0));
+
+	/* Enable legacy IRQs */
+	val = readl_relaxed(pcie_dev->dm_core + PCI_INTERRUPT_LINE);
+	val &= PCI_INTERRUPT_LINE_INT_PIN_MASK;
+	val |= PCI_INTERRUPT_LINE_INT_PIN_1;
+	msm_pcie_write_reg(pcie_dev->dm_core, PCI_INTERRUPT_LINE, val);
 
 	/* Gen3 */
 	if (supported_link_speed >= PCI_EXP_LNKCAP_SLS_8_0GB) {
@@ -6511,13 +6556,13 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 		msm_pcie_write_mask(dev->parf + PCIE20_PARF_CFG_BITS_3, 0, BIT(8));
 	msm_pcie_write_mask(dev->dm_core + PCIE20_LANE_SKEW_OFF, 0, BIT(5));
 
+	msm_pcie_write_mask(dev->dm_core + PCIE_GEN3_MISC_CONTROL, 1, BIT(0));
 	/* override the vendor id */
-	if (dev->device_vendor_id) {
-		msm_pcie_write_mask(dev->dm_core + PCIE_GEN3_MISC_CONTROL, 1, BIT(0));
+	if (dev->device_vendor_id)
 		msm_pcie_write_reg(dev->dm_core, 0x0, dev->device_vendor_id);
-		msm_pcie_write_mask(dev->dm_core + PCIE_GEN3_MISC_CONTROL, 0, BIT(0));
-	}
 
+	msm_pcie_remove_capability(dev, PCI_CAP_ID_MSIX);
+	msm_pcie_write_mask(dev->dm_core + PCIE_GEN3_MISC_CONTROL, 0, BIT(0));
 	/* de-assert PCIe reset link to bring EP out of reset */
 
 	PCIE_INFO(dev, "PCIe: Release the reset of endpoint of RC%d.\n",
@@ -7303,7 +7348,9 @@ int msm_pcie_deenumerate(u32 rc_idx)
 	dev->enumerated = false;
 
 	mutex_unlock(&dev->enumerate_lock);
-	if (!dev->ecam_mode)
+	if (dev->ecam_mode)
+		pci_ecam_free(bridge->sysdata);
+	else
 		kfree(bridge->sysdata);
 
 	PCIE_DBG(dev, "RC%d: exit\n", dev->rc_idx);
@@ -8946,6 +8993,7 @@ static void msm_pcie_drv_connect_worker(struct work_struct *work)
 static int msm_pcie_i2c_ctrl_init(struct msm_pcie_dev_t *pcie_dev)
 {
 	int ret = 0, size;
+	struct i2c_client *client;
 	struct device_node *of_node, *i2c_client_node;
 	struct device *dev = &pcie_dev->pdev->dev;
 	struct pcie_i2c_ctrl *i2c_ctrl = &pcie_dev->i2c_ctrl;
@@ -8955,12 +9003,21 @@ static int msm_pcie_i2c_ctrl_init(struct msm_pcie_dev_t *pcie_dev)
 		PCIE_DBG(pcie_dev, "PCIe: RC%d: No i2c phandle found\n",
 			 pcie_dev->rc_idx);
 		return 0;
+	}
+
+	client = of_find_i2c_device_by_node(of_node);
+
+	if (!client) {
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: No i2c probe yet\n",
+			 pcie_dev->rc_idx);
+		return -EPROBE_DEFER;
 	} else {
-		if (!i2c_ctrl->client) {
-			PCIE_DBG(pcie_dev, "PCIe: RC%d: No i2c probe yet\n",
-				 pcie_dev->rc_idx);
-			return -EPROBE_DEFER;
-		}
+		i2c_ctrl->client_i2c_read = ntn3_i2c_read;
+		i2c_ctrl->client_i2c_write = ntn3_i2c_write;
+		i2c_ctrl->client_i2c_reset = ntn3_ep_reset_ctrl;
+		i2c_ctrl->client_i2c_dump_regs = ntn3_dump_regs;
+		i2c_ctrl->client_i2c_de_emphasis_wa = ntn3_de_emphasis_wa;
+		i2c_ctrl->client = client;
 	}
 
 	i2c_client_node = i2c_ctrl->client->dev.of_node;
@@ -10726,7 +10783,6 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client,
 {
 	int rc_index = -EINVAL;
 	enum i2c_client_id client_id = I2C_CLIENT_ID_INVALID;
-	struct pcie_i2c_ctrl *i2c_ctrl;
 	const struct of_device_id *match;
 	struct i2c_driver_data *data;
 
@@ -10754,18 +10810,6 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client,
 	if (rc_index >= MAX_RC_NUM) {
 		dev_err(&client->dev, "invalid RC index %d\n", rc_index);
 		return -EINVAL;
-	}
-
-	if (client_id == I2C_CLIENT_ID_NTN3) {
-		i2c_ctrl = &msm_pcie_dev[rc_index]->i2c_ctrl;
-		i2c_ctrl->client_i2c_read = ntn3_i2c_read;
-		i2c_ctrl->client_i2c_write = ntn3_i2c_write;
-		i2c_ctrl->client_i2c_reset = ntn3_ep_reset_ctrl;
-		i2c_ctrl->client_i2c_dump_regs = ntn3_dump_regs;
-		i2c_ctrl->client_i2c_de_emphasis_wa = ntn3_de_emphasis_wa;
-		i2c_ctrl->client = client;
-	} else {
-		dev_err(&client->dev, "invalid client id %d\n", client_id);
 	}
 
 	return 0;
