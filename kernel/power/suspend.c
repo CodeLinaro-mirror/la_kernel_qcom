@@ -32,6 +32,7 @@
 #include <linux/moduleparam.h>
 #include <linux/wakeup_reason.h>
 #include <trace/hooks/suspend.h>
+#include <soc/qcom/boot_stats.h>
 
 #include "power.h"
 
@@ -466,6 +467,10 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, true);
 			error = suspend_ops->enter(state);
+#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+			update_marker("M - Start System Resume");
+#endif
+			pr_info("Start System Resume\n");
 			trace_suspend_resume(TPS("machine_suspend"),
 				state, false);
 			trace_android_vh_early_resume_begin(NULL);
