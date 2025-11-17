@@ -54,6 +54,7 @@ static bool is_sched_lib_based_app(pid_t pid)
 	wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	if ((wts->lib_app_state & LIB_UPDATE_CNT_MAX) == lib_update_cnt) {
 		kfree(tmp_lib_name);
+		put_task_struct(p);
 		return !!(wts->lib_app_state & 0x80);
 	}
 
