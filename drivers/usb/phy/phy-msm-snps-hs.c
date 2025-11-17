@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -1065,15 +1065,9 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 	phy->phy.set_power		= msm_hsphy_set_power;
 	phy->phy.type			= USB_PHY_TYPE_USB2;
 
-	ret = usb_add_phy_dev(&phy->phy);
-	if (ret)
-		return ret;
-
 	ret = msm_hsphy_regulator_init(phy);
-	if (ret) {
-		usb_remove_phy(&phy->phy);
-		return ret;
-	}
+	if (ret)
+		goto err_ret;
 
 	INIT_WORK(&phy->vbus_draw_work, msm_hsphy_vbus_draw_work);
 	msm_hsphy_create_debugfs(phy);
@@ -1088,7 +1082,8 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 		msm_hsphy_enable_clocks(phy, true);
 	}
 
-	return 0;
+	/* Placed at the end to ensure the probe is complete */
+	ret = usb_add_phy_dev(&phy->phy);
 
 err_ret:
 	return ret;
