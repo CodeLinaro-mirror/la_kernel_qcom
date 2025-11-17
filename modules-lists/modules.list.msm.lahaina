@@ -17,6 +17,8 @@ debug-regulator.ko
 gdsc-regulator.ko
 gcc-sc7280.ko
 dispcc-sc7280.ko
+gcc-sm8350.ko
+dispcc-sm8350.ko
 smem.ko
 debug_symbol.ko
 socinfo.ko
