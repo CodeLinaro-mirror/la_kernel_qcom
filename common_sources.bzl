@@ -16,6 +16,7 @@ COPY_FILES = [
     "drivers/dma/qcom/gpi.c",
     "drivers/dma/dmaengine.h",
     "drivers/dma/virt-dma.h",
+    "drivers/gpio/gpio-virtio.c",
     "drivers/i2c/busses/i2c-qcom-geni.c",
     "drivers/spi/spi-geni-qcom.c",
     "drivers/virtio/virtio_input.c",

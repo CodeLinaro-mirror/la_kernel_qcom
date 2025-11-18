@@ -12,6 +12,7 @@ autogvm_perf_config = {
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
     "CONFIG_MSM_HAB": "m",
+    "CONFIG_GPIO_VIRTIO": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
