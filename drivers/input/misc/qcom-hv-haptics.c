@@ -857,7 +857,7 @@ struct haptics_chip {
 	struct device_node		*pbs_node;
 	struct class			hap_class;
 	struct regulator		*hpwr_vreg;
-	struct hrtimer			hbst_off_timer;
+	struct delayed_work		hbst_off_work;
 	struct notifier_block		hboost_nb;
 	struct notifier_block		lpass_ssr_nb;
 	struct mutex			status_lock;
@@ -1934,9 +1934,9 @@ static int haptics_wait_hboost_ready(struct haptics_chip *chip)
 	if (!(chip->wa_flags & SW_CTRL_HBST))
 		return 0;
 
-	if ((hrtimer_get_remaining(&chip->hbst_off_timer) > 0) ||
-			hrtimer_active(&chip->hbst_off_timer)) {
-		hrtimer_cancel(&chip->hbst_off_timer);
+	if (delayed_work_pending(&chip->hbst_off_work) ||
+			work_busy(&chip->hbst_off_work.work)) {
+		cancel_delayed_work_sync(&chip->hbst_off_work);
 		dev_dbg(chip->dev, "hboost is still on, ignore\n");
 		return 0;
 	}
@@ -2220,7 +2220,7 @@ static int haptics_wait_brake_complete(struct haptics_chip *chip)
 	return 0;
 }
 
-#define BOOST_VREG_OFF_DELAY_SECONDS	2
+#define BOOST_VREG_OFF_DELAY_MS	2000
 static int haptics_enable_play(struct haptics_chip *chip, bool en)
 {
 	struct haptics_play_info *play = &chip->play;
@@ -2258,17 +2258,9 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 		haptics_wait_brake_complete(chip);
 
 	if (chip->wa_flags & SW_CTRL_HBST) {
-		if (en) {
-			rc = haptics_boost_vreg_enable(chip, true);
-			if (rc < 0) {
-				dev_err(chip->dev, "Keep boost vreg on failed, rc=%d\n",
-						rc);
-				goto restore;
-			}
-		} else {
-			hrtimer_start(&chip->hbst_off_timer,
-					ktime_set(BOOST_VREG_OFF_DELAY_SECONDS, 0),
-					HRTIMER_MODE_REL);
+		if (!en) {
+			schedule_delayed_work(&chip->hbst_off_work,
+					msecs_to_jiffies(BOOST_VREG_OFF_DELAY_MS));
 		}
 	}
 
@@ -3499,6 +3491,15 @@ static int haptics_upload_effect(struct input_dev *dev,
 		goto restore;
 	}
 
+	if (chip->wa_flags & SW_CTRL_HBST) {
+		rc = haptics_boost_vreg_enable(chip, true);
+		if (rc < 0) {
+			dev_err(chip->dev, "Keep boost vreg on failed, rc=%d\n", rc);
+			goto restore;
+		} else {
+			dev_dbg(chip->dev, "boost vreg is enabled\n");
+		}
+	}
 	return 0;
 
 restore:
@@ -6736,10 +6737,10 @@ static bool is_swr_supported(struct haptics_chip *chip)
 	return true;
 }
 
-static enum hrtimer_restart haptics_disable_hbst_timer(struct hrtimer *timer)
+static void haptics_disable_hbst_work(struct work_struct *work)
 {
-	struct haptics_chip *chip = container_of(timer,
-			struct haptics_chip, hbst_off_timer);
+	struct haptics_chip *chip = container_of(work,
+			struct haptics_chip, hbst_off_work.work);
 	int rc;
 
 	rc = haptics_boost_vreg_enable(chip, false);
@@ -6747,8 +6748,6 @@ static enum hrtimer_restart haptics_disable_hbst_timer(struct hrtimer *timer)
 		dev_err(chip->dev, "disable boost vreg failed, rc=%d\n", rc);
 	else
 		dev_dbg(chip->dev, "boost vreg is disabled\n");
-
-	return HRTIMER_NORESTART;
 }
 
 static int haptics_boost_notifier(struct notifier_block *nb, unsigned long event, void *val)
@@ -6906,8 +6905,7 @@ static int haptics_probe(struct platform_device *pdev)
 	mutex_init(&chip->play.lock);
 	disable_irq_nosync(chip->fifo_empty_irq);
 	chip->fifo_empty_irq_en = false;
-	hrtimer_init(&chip->hbst_off_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	chip->hbst_off_timer.function = haptics_disable_hbst_timer;
+	INIT_DELAYED_WORK(&chip->hbst_off_work, haptics_disable_hbst_work);
 	INIT_DELAYED_WORK(&chip->stop_work, haptics_stop_constant_effect_play);
 	INIT_WORK(&chip->set_gain_work, haptics_set_gain_work);
 
@@ -7093,7 +7091,7 @@ static int haptics_suspend_config(struct device *dev)
 	 * hBoost if it's still enabled
 	 */
 	if (chip->wa_flags & SW_CTRL_HBST) {
-		hrtimer_cancel(&chip->hbst_off_timer);
+		cancel_delayed_work_sync(&chip->hbst_off_work);
 		haptics_boost_vreg_enable(chip, false);
 	}
 
