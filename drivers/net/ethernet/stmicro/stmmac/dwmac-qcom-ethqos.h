@@ -581,6 +581,7 @@ struct mac_params {
 	bool is_valid_eth_intf;
 	unsigned int link_speed;
 	char qoscfg_name[4];
+	char rsscfg_name[4];
 	bool wait_switch_rdy;
 };
 

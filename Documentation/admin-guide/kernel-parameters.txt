@@ -7457,4 +7457,6 @@
 
 	eqos=	[KNL] sets qos config at boot
 
+	erss=   [KNL] sets rss config at boot
+
 	ewait_switch_rdy=	[KNL] Sets wait for peer side switch ready before link up at boot up.
