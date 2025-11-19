@@ -152,11 +152,14 @@ static int st_asm330lhhx_get_default_xl_odr(struct st_asm330lhhx_hw *hw,
  * @wake_up_thershold_mg - wake-up threshold in mg
  *
  * wake-up thershold register val = (th_mg * 2 ^ 6) / (1000 * FS_XL)
+ * or
+ * wake-up threshold register val = (th_mg * 2 ^ 8) / (1000 * FS_XL)
  */
 static int st_asm330lhhx_set_wake_up_thershold(struct st_asm330lhhx_hw *hw,
 					       int wake_up_thershold_mg)
 {
 	u8 wake_up_thershold, max_th;
+	u8 weight = 0;
 	int tmp, err;
 	u8 fs_xl_g;
 
@@ -165,11 +168,30 @@ static int st_asm330lhhx_set_wake_up_thershold(struct st_asm330lhhx_hw *hw,
 		return err;
 
 	tmp = (wake_up_thershold_mg * 64) / (fs_xl_g * 1000);
+	if (tmp == 0) {
+		/* enable WAKE_THS_W */
+		weight = 1;
+		tmp = (wake_up_thershold_mg * 256) / (fs_xl_g * 1000);
+	}
 	wake_up_thershold = (u8)tmp;
 	max_th = ST_ASM330LHHX_WAKE_UP_THS_MASK >>
 		  __ffs(ST_ASM330LHHX_WAKE_UP_THS_MASK);
 	if (wake_up_thershold > max_th)
 		wake_up_thershold = max_th;
+
+	/* if threshold is zero adjust it to avoid burst events detection */
+	if (wake_up_thershold == 0) {
+		dev_warn(hw->dev,
+			 "estimated wake-up threshold to 0, adjusted to 1\n");
+		wake_up_thershold = 1;
+	}
+
+	err = st_asm330lhhx_write_with_mask_locked(hw,
+					   ST_ASM330LHHX_REG_WAKE_UP_DUR_ADDR,
+					   ST_ASM330LHHX_WAKE_UP_W_MASK,
+					   weight);
+	if (err < 0)
+		return err;
 
 	err = st_asm330lhhx_write_with_mask_locked(hw,
 					   ST_ASM330LHHX_REG_WAKE_UP_THS_ADDR,
