@@ -6489,6 +6489,11 @@ drain_data:
 
 		stmmac_get_rx_hwtstamp(priv, p, np, skb);
 		stmmac_rx_vlan(priv->dev, skb);
+
+		/* Workaround for sw vlan stripping issues with sph enabled. */
+		if (unlikely(skb_headlen(skb) < ETH_HLEN))
+			skb->len += 4;
+
 		skb->protocol = eth_type_trans(skb, priv->dev);
 
 		if (unlikely(!coe))
