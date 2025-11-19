@@ -20,6 +20,7 @@
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
 #include "common.h"
+#include "gdsc.h"
 #include "reset.h"
 #include "vdd-level.h"
 
@@ -375,6 +376,33 @@ static struct clk_branch eva_cc_mvs0c_shift_clk = {
 	},
 };
 
+static struct gdsc eva_cc_mvs0c_gdsc = {
+	.gdscr = 0x8034,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x6,
+	.pd = {
+		.name = "eva_cc_mvs0c_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mm",
+};
+
+static struct gdsc eva_cc_mvs0_gdsc = {
+	.gdscr = 0x8068,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x6,
+	.pd = {
+		.name = "eva_cc_mvs0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &eva_cc_mvs0c_gdsc.pd,
+	.supply = "vdd_mm",
+};
+
 static struct clk_regmap *eva_cc_seraph_clocks[] = {
 	[EVA_CC_AHB_CLK_SRC] = &eva_cc_ahb_clk_src.clkr,
 	[EVA_CC_MVS0_CLK] = &eva_cc_mvs0_clk.clkr,
@@ -409,6 +437,11 @@ static struct critical_clk_offset critical_clk_list[] = {
 	{ .offset = 0x8074, .mask = ACCU_CFG_MASK },
 };
 
+static struct gdsc *eva_cc_seraph_gdscs[] = {
+	[EVA_CC_MVS0_GDSC] = &eva_cc_mvs0_gdsc,
+	[EVA_CC_MVS0C_GDSC] = &eva_cc_mvs0c_gdsc,
+};
+
 static const struct qcom_reset_map eva_cc_seraph_resets[] = {
 	[EVA_CC_INTERFACE_BCR] = { 0x80a0 },
 	[EVA_CC_MVS0_BCR] = { 0x8064 },
@@ -436,6 +469,8 @@ static struct qcom_cc_desc eva_cc_seraph_desc = {
 	.num_clk_regulators = ARRAY_SIZE(eva_cc_seraph_regulators),
 	.critical_clk_en = critical_clk_list,
 	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
+	.gdscs = eva_cc_seraph_gdscs,
+	.num_gdscs = ARRAY_SIZE(eva_cc_seraph_gdscs),
 };
 
 static const struct of_device_id eva_cc_seraph_match_table[] = {
