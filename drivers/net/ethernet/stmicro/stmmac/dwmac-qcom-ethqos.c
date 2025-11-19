@@ -8474,9 +8474,12 @@ static int qcom_ethqos_suspend(struct device *dev)
 	}
 
 	if (ethqos->gdsc_off_on_suspend) {
-		if (ethqos->gdsc_emac) {
-			regulator_disable(ethqos->gdsc_emac);
-			ETHQOSDBG("Disabled <%s>\n", EMAC_GDSC_EMAC_NAME);
+		if (ethqos->current_phy_mode != DISABLE_PHY_AT_SUSPEND_ONLY &&
+		    ethqos->current_phy_mode != DISABLE_PHY_IMMEDIATELY) {
+			if (ethqos->gdsc_emac) {
+				regulator_disable(ethqos->gdsc_emac);
+				ETHQOSDBG("Disabled <%s>\n", EMAC_GDSC_EMAC_NAME);
+			}
 		}
 	}
 
@@ -8521,14 +8524,17 @@ static int qcom_ethqos_resume(struct device *dev)
 	}
 
 	if (ethqos->gdsc_off_on_suspend) {
-		if (ethqos->gdsc_emac) {
-			ret = regulator_enable(ethqos->gdsc_emac);
-			if (ret) {
-				ETHQOSERR("Can not enable <%s>\n", EMAC_GDSC_EMAC_NAME);
-				return ret;
+		if (ethqos->current_phy_mode != DISABLE_PHY_AT_SUSPEND_ONLY &&
+		    ethqos->current_phy_mode != DISABLE_PHY_IMMEDIATELY) {
+			if (ethqos->gdsc_emac) {
+				ret = regulator_enable(ethqos->gdsc_emac);
+				if (ret) {
+					ETHQOSERR("Can not enable <%s>\n", EMAC_GDSC_EMAC_NAME);
+					return ret;
+				}
 			}
+			ETHQOSDBG("Enabled <%s>\n", EMAC_GDSC_EMAC_NAME);
 		}
-		ETHQOSDBG("Enabled <%s>\n", EMAC_GDSC_EMAC_NAME);
 		if (ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME)
 			if (priv->mii)
 				priv->mii->reset(priv->mii);
