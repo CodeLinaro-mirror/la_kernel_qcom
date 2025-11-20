@@ -39,6 +39,17 @@ def define_make_vm_dtb_img(target, dtb_list, page_size):
         log = "info",
     )
 
+def define_make_vm_dtbo_img(target, dtbo_list):
+    compiled_dtbos = ["//soc-repo:{}_dtb_build/{}".format(target, t) for t in dtbo_list]
+
+    copy_to_dist_dir(
+        name = "{}_vm_dtbo_dist".format(target),
+        data = compiled_dtbos,
+        dist_dir = "out/msm-kernel-{}/dist".format(target),
+        flat = True,
+        log = "info",
+    )
+
 def define_single_autogvmlv_build(
         name,
         config_fragment,
@@ -134,6 +145,11 @@ def define_autogvmlv_build(
         seg_dtb_list = [dtb for dtb in dtb_list if "-vm-" in dtb]
 
         define_make_vm_dtb_img(name + "_" + variant, seg_dtb_list, vm_opts.dummy_img_size)
+
+        seg_dtbo_list = [dtbo for dtbo in dtbo_list if "-vm-" in dtbo]
+
+        define_make_vm_dtbo_img(name + "_" + variant, seg_dtbo_list)
+
         k_config = "kernel_aarch64_autogvmlv"
         if "debug" in variant:
             k_config = "kernel_aarch64_autogvmlv_debug"
