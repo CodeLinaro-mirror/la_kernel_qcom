@@ -7758,6 +7758,23 @@ static int qcom_ethqos_probe_config_dt(struct platform_device *pdev,
 		}
 	}
 
+	if (strlen(mparams.rsscfg_name) != 0) {
+		plat_dat->rss_en = true;
+
+		strscpy(plat_dat->rsscfg, mparams.rsscfg_name, sizeof(mparams.rsscfg_name));
+		memset(plat_dat->rx_queues_cfg, 0,
+		       (plat_dat->rx_queues_to_use * sizeof(struct stmmac_rxq_cfg)));
+		memset(plat_dat->tx_queues_cfg, 0,
+		       (plat_dat->tx_queues_to_use * sizeof(struct stmmac_txq_cfg)));
+
+		ret = stmmac_mtl_setup(pdev, plat_dat);
+
+		if (ret) {
+			stmmac_remove_config_dt(pdev, plat_dat);
+			return ret;
+		}
+	}
+
 	ETHQOSINFO("RX QOS queues = %d, TX QOS queues = %d RX queues = %d TX queues = %d\n",
 		   plat_dat->rx_qos_queues_to_use,
 		   plat_dat->tx_qos_queues_to_use,

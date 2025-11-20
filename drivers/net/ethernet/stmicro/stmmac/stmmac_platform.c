@@ -126,10 +126,10 @@ static struct stmmac_axi *stmmac_axi_setup(struct platform_device *pdev)
 	return axi;
 }
 
-static struct device_node *get_mtl_queue_config(struct device_node *node,
-						char *mtl_queue_str,
-						char *qoscfg_str,
-						bool *qos_config_found)
+static struct device_node *get_qos_mtl_queue_config(struct device_node *node,
+						    char *mtl_queue_str,
+						    char *qoscfg_str,
+						    bool *qos_config_found)
 {
 	const char *config_name;
 	u32 count = 0, i;
@@ -157,6 +157,39 @@ static struct device_node *get_mtl_queue_config(struct device_node *node,
 			*qos_config_found = true;
 			return node;
 		}
+	}
+
+	return node;
+}
+
+static struct device_node *get_rss_mtl_queue_config(struct device_node *node,
+						    char *mtl_queue_str,
+						    char *rsscfg_str)
+{
+	const char *config_name;
+	u32 count = 0, i;
+	int ret = 0;
+
+	count = of_property_count_elems_of_size(node, mtl_queue_str,
+						sizeof(u32)) - 1;
+
+	if (count < 0)
+		return NULL;
+
+	if (count == 0)
+		return of_parse_phandle(node, mtl_queue_str, 0);
+
+	for (i = count; i >= 0; i--) {
+		node = of_parse_phandle(node, mtl_queue_str, i);
+		if (!node)
+			return NULL;
+
+		ret = of_property_read_string(node, "qcom,config-name", &config_name);
+		if (ret < 0)
+			continue;
+
+		if (!strcasecmp(config_name, rsscfg_str))
+			return node;
 	}
 
 	return node;
@@ -192,10 +225,14 @@ int stmmac_mtl_setup(struct platform_device *pdev,
 	plat->tx_queues_cfg[0].mode_to_use = MTL_QUEUE_DCB;
 
 	if (strlen(plat->qoscfg) != 0)
-		rx_node = get_mtl_queue_config(pdev->dev.of_node,
-					       "snps,mtl-rx-config",
-					       plat->qoscfg,
-					       &qos_config_found);
+		rx_node = get_qos_mtl_queue_config(pdev->dev.of_node,
+						   "snps,mtl-rx-config",
+						   plat->qoscfg,
+						   &qos_config_found);
+	else if (strlen(plat->rsscfg) != 0)
+		rx_node = get_rss_mtl_queue_config(pdev->dev.of_node,
+						   "snps,mtl-rx-config",
+						   plat->rsscfg);
 	else
 		rx_node = of_parse_phandle(pdev->dev.of_node,
 					   "snps,mtl-rx-config",
@@ -205,10 +242,14 @@ int stmmac_mtl_setup(struct platform_device *pdev,
 		return ret;
 
 	if (strlen(plat->qoscfg) != 0)
-		tx_node = get_mtl_queue_config(pdev->dev.of_node,
-					       "snps,mtl-tx-config",
-					       plat->qoscfg,
-					       &qos_config_found);
+		tx_node = get_qos_mtl_queue_config(pdev->dev.of_node,
+						   "snps,mtl-tx-config",
+						   plat->qoscfg,
+						   &qos_config_found);
+	else if (strlen(plat->rsscfg) != 0)
+		tx_node = get_rss_mtl_queue_config(pdev->dev.of_node,
+						   "snps,mtl-tx-config",
+						   plat->rsscfg);
 	else
 		tx_node = of_parse_phandle(pdev->dev.of_node,
 					   "snps,mtl-tx-config", 0);
