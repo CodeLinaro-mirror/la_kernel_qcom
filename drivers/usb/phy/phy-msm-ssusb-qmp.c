@@ -822,8 +822,8 @@ static int msm_ssphy_power_enable(struct msm_ssphy_qmp *phy, bool on)
 	int ret = 0;
 
 	/*
-	 * Turn off the phy's LDOs when cable is disconnected for device mode
-	 * with external vbus_id indication.
+	 * Turn off the phy's LDOs when cable is disconnected for device
+	 * & none mode with external vbus_id indication.
 	 */
 	if (!host && !phy->cable_connected) {
 		if (on) {
@@ -832,12 +832,14 @@ static int msm_ssphy_power_enable(struct msm_ssphy_qmp *phy, bool on)
 				dev_err(phy->phy.dev,
 				"msm_ssusb_qmp_ldo_enable(1) failed, ret=%d\n",
 				ret);
+			msm_ssphy_modeled_d3_to_d0(phy);
 		} else {
 			ret = msm_ssusb_qmp_ldo_enable(phy, 0);
 			if (ret)
 				dev_err(phy->phy.dev,
 					"msm_ssusb_qmp_ldo_enable(0) failed, ret=%d\n",
 					ret);
+			msm_ssphy_modeled_d0_to_d3(phy);
 		}
 	}
 
@@ -886,7 +888,6 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 		msm_ssphy_qmp_enable_clks(phy, false);
 		phy->in_suspend = true;
 		msm_ssphy_power_enable(phy, 0);
-		msm_ssphy_modeled_d0_to_d3(phy);
 		if (!phy->fw_managed_pwr) {
 			/* Turn PHY GDSC OFF via GenPD framework */
 			ret = pm_runtime_put_sync(phy->phy.dev);
@@ -912,7 +913,6 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 				return ret;
 			}
 		}
-		msm_ssphy_modeled_d3_to_d0(phy);
 		msm_ssphy_power_enable(phy, 1);
 		msm_ssphy_qmp_enable_clks(phy, true);
 		if (!phy->cable_connected) {
