@@ -1858,6 +1858,7 @@ static struct gdsc cam_cc_camss_top_gdsc = {
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
 	.supply = "vdd_cx",
+	.path_name = "mmnoc",
 };
 
 static struct clk_regmap *cam_cc_chora_clocks[] = {

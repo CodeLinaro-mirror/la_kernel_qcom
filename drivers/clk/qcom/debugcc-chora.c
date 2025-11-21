@@ -573,9 +573,9 @@ static int gx_clkctl_debug_mux_sels[] = {
 
 static struct clk_debug_mux gx_clkctl_debug_mux = {
 	.priv = &debug_mux_priv,
-	.debug_offset = 0x4144,
+	.debug_offset = 0x144,
 	.post_div_offset = U32_MAX,
-	.cbcr_offset = 0x4088,
+	.cbcr_offset = 0x88,
 	.src_sel_mask = 0xFF,
 	.src_sel_shift = 0,
 	.post_div_mask = 0x1,
