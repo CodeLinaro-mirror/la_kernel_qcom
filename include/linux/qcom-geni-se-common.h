@@ -76,6 +76,7 @@ if (print) { \
 #define SE_GSI_EVENT_EN			(0xe18)
 #define SE_IRQ_EN			(0xe1c)
 #define DMA_GENERAL_CFG			(0xe30)
+#define SE_DMA_QSB_TRANS_CFG		(0xe38)
 #define SE_DMA_DEBUG_REG0		(0xE40)
 #define SE_DMA_TX_PTR_L			(0xC30)
 #define SE_DMA_TX_PTR_H			(0xC34)
