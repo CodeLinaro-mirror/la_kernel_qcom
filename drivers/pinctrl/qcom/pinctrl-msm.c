@@ -1860,6 +1860,7 @@ static void msm_gpio_setup_dir_connects(struct msm_pinctrl *pctrl)
 	struct irq_data *gpio_irq_data;
 	struct irq_domain *child_domain = pctrl->chip.irq.domain;
 
+	pr_debug("MSM_PINCTRL: setting up %u direct-connect(s)\n", n_dir_conns);
 	for (i = n_dir_conns; i > 0; i--) {
 		dc = &pctrl->soc->dir_conn[i];
 		dirconn_irq = dc->irq;
@@ -1869,13 +1870,19 @@ static void msm_gpio_setup_dir_connects(struct msm_pinctrl *pctrl)
 			continue;
 
 		gpio_irq = irq_create_mapping(child_domain, dc->gpio);
+		pr_debug("MSM_PINCTRL : %s: gpio=%d mapped to gpio_irq=%lu\n",
+			__func__, dc->gpio, (unsigned long)gpio_irq);
+
 		irq_set_parent(gpio_irq, dirconn_irq);
 		irq_set_chip_data(gpio_irq, &(pctrl->chip));
 		irq_set_chip_and_handler_name(gpio_irq, &msm_gpio_irq_chip, NULL, NULL);
 
 		gpio_irq_data = irq_get_irq_data(gpio_irq);
-		if (!gpio_irq_data)
+		if (!gpio_irq_data){
+			pr_err("MSM_PINCTRL : %s: gpio_irq_data NULL for gpio_irq=%lu\n",
+			        __func__, (unsigned long)gpio_irq);
 			continue;
+		}
 
 		irq_set_handler_data(dirconn_irq, gpio_irq_data);
 		msm_dirconn_cfg_reg(gpio_irq_data, offset);
@@ -2069,6 +2076,9 @@ static __maybe_unused int msm_pinctrl_resume(struct device *dev)
 {
 	struct msm_pinctrl *pctrl = dev_get_drvdata(dev);
 
+	pr_debug("MSM_PINCTRL: resume (dirconn=%d)\n", pctrl->n_dir_conns);
+	msm_gpio_setup_dir_connects(pctrl);
+	pr_debug("MSM_PINCTRL : %s: resume end\n", __func__);
 	return pinctrl_force_default(pctrl->pctrl);
 }
 
