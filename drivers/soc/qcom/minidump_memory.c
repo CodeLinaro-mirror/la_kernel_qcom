@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/align.h>
@@ -325,7 +325,11 @@ bool md_unregister_memory_dump(char *name)
 	md_entry.virt_addr = mdr.virt_addr;
 	md_entry.phys_addr = mdr.phys_addr;
 	md_entry.size = mdr.size;
+#if IS_ENABLED(CONFIG_64BIT)
 	page = virt_to_page(mdr.virt_addr);
+#else
+	page = virt_to_page((void *)mdr.virt_addr);
+#endif
 
 	if (msm_minidump_remove_region(&md_entry) < 0)
 		return false;
@@ -678,8 +682,13 @@ static ssize_t page_owner_handle_write(struct file *file,
 
 	if (size) {
 		if (size > (md_pageowner_dump_size / SZ_16K)) {
+#if IS_ENABLED(CONFIG_64BIT)
 			pr_err_ratelimited("size : %lu KB exceeds max size : %lu KB\n",
 				size, (md_pageowner_dump_size / SZ_16K));
+#else
+			pr_err_ratelimited("size : %lu KB exceeds max size : %zu KB\n",
+				size, (md_pageowner_dump_size / SZ_16K));
+#endif
 			goto err;
 		}
 		page_owner_handles_size = size * SZ_1K;
@@ -1011,8 +1020,13 @@ static ssize_t slab_owner_handle_write(struct file *file,
 
 	if (size) {
 		if (size > (md_slabowner_dump_size / SZ_16K)) {
+#if IS_ENABLED(CONFIG_64BIT)
 			pr_err_ratelimited("size : %lu KB exceeds max size : %lu KB\n",
 				size, (md_slabowner_dump_size / SZ_16K));
+#else
+			pr_err_ratelimited("size : %lu KB exceeds max size : %zu KB\n",
+				size, (md_slabowner_dump_size / SZ_16K));
+#endif
 			goto err;
 		}
 		slab_owner_handles_size = size * SZ_1K;
