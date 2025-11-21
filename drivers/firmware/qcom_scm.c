@@ -537,19 +537,15 @@ int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
 	 * data blob, so make sure it's physically contiguous, 4K aligned and
 	 * non-cachable to avoid XPU violations.
 	 *
-	 * For PIL calls the hypervisor like Gunyah or older QHEE creates SHM
-	 * Bridges for the blob buffers on behalf of Linux so we must not do it
-	 * ourselves hence use TZMem allocator only when these hypervisors are
-	 * not present.
+	 * For PIL calls the hypervisor creates SHM Bridges for the blob
+	 * buffers on behalf of Linus so we must not do it ourselves hence
+	 * not using the TZMem allocator here.
 	 *
 	 * If we pass a buffer that is already part of an SHM Bridge to this
 	 * call, it will fail.
 	 */
-	if (ctx && ctx->shm_bridge_needed)
-		mdata_buf = qcom_tzmem_alloc(__scm->mempool, size, GFP_KERNEL);
-	else
-		mdata_buf = dma_alloc_coherent(__scm->dev, size, &mdata_phys, GFP_KERNEL);
-
+	mdata_buf = dma_alloc_coherent(__scm->dev, size, &mdata_phys,
+				       GFP_KERNEL);
 	if (!mdata_buf)
 		return -ENOMEM;
 
@@ -563,10 +559,7 @@ int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
 	if (ret)
 		goto disable_clk;
 
-	if (ctx && ctx->shm_bridge_needed)
-		desc.args[1] = qcom_tzmem_to_phys(mdata_buf);
-	else
-		desc.args[1] = mdata_phys;
+	desc.args[1] = mdata_phys;
 
 	ret = qcom_scm_call(__scm->dev, &desc, &res);
 	qcom_scm_bw_disable();
@@ -575,22 +568,12 @@ disable_clk:
 	qcom_scm_clk_disable();
 
 out:
-	if (ret < 0) {
-		if (ctx && ctx->shm_bridge_needed)
-			qcom_tzmem_free(mdata_buf);
-		else
-			dma_free_coherent(__scm->dev, size, mdata_buf, mdata_phys);
-	} else {
-		if (ctx) {
-			if (ctx->shm_bridge_needed)
-				ctx->phys = qcom_tzmem_to_phys(mdata_buf);
-			else
-				ctx->phys = mdata_phys;
-			ctx->ptr = mdata_buf;
-			ctx->size = size;
-		} else {
-			dma_free_coherent(__scm->dev, size, mdata_buf, mdata_phys);
-		}
+	if (ret < 0 || !ctx) {
+		dma_free_coherent(__scm->dev, size, mdata_buf, mdata_phys);
+	} else if (ctx) {
+		ctx->ptr = mdata_buf;
+		ctx->phys = mdata_phys;
+		ctx->size = size;
 	}
 
 	return ret ? : res.result[0];
@@ -606,10 +589,7 @@ void qcom_scm_pas_metadata_release(struct qcom_scm_pas_metadata *ctx)
 	if (!ctx->ptr)
 		return;
 
-	if (ctx->shm_bridge_needed)
-		qcom_tzmem_free(ctx->ptr);
-	else
-		dma_free_coherent(__scm->dev, ctx->size, ctx->ptr, ctx->phys);
+	dma_free_coherent(__scm->dev, ctx->size, ctx->ptr, ctx->phys);
 
 	ctx->ptr = NULL;
 	ctx->phys = 0;

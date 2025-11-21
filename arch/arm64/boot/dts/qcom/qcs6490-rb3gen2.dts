@@ -555,7 +555,7 @@
 		};
 	};
 
-	typec-retimer@1c {
+	typec_retimer: typec-retimer@1c {
 		compatible = "onnn,nb7vpq904m";
 		reg = <0x1c>;
 
@@ -1160,6 +1160,7 @@
 &usb_1_qmpphy {
 	vdda-phy-supply = <&vreg_l6b_1p2>;
 	vdda-pll-supply = <&vreg_l1b_0p912>;
+	vdda-aux-supply = <&vreg_l7c_3p0>;
 
 	orientation-switch;
 	status = "okay";

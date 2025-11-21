@@ -2,6 +2,7 @@
 /* Copyright (c) 2010-2015, 2018-2019 The Linux Foundation. All rights reserved.
  * Copyright (C) 2015 Linaro Ltd.
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __QCOM_SCM_H
 #define __QCOM_SCM_H
@@ -110,7 +111,6 @@ struct qcom_scm_pas_metadata {
 	void *ptr;
 	dma_addr_t phys;
 	ssize_t size;
-	bool shm_bridge_needed;
 };
 
 extern int qcom_scm_pas_init_image(u32 peripheral, const void *metadata,

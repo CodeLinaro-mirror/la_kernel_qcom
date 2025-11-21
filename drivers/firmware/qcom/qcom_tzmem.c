@@ -33,6 +33,14 @@
 
 #include "qcom_tzmem.h"
 
+struct qcom_tzmem_area {
+	struct list_head list;
+	void *vaddr;
+	dma_addr_t paddr;
+	size_t size;
+	void *priv;
+};
+
 struct qcom_tzmem_pool {
 	struct gen_pool *genpool;
 	struct list_head areas;
@@ -118,6 +126,16 @@ static int32_t __qcom_tzmem_deregister(uint64_t handle)
 	return 0;
 }
 
+static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+{
+	return 0;
+}
+
+static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
+{
+
+}
+
 #elif IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE)
 
 #include <linux/firmware/qcom/qcom_scm.h>
@@ -161,7 +179,7 @@ notsupp:
 	return 0;
 }
 
-int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
 {
 	u64 pfn_and_ns_perm, ipfn_and_s_perm, size_and_flags;
 	int ret;
@@ -187,9 +205,8 @@ int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(qcom_tzmem_init_area);
 
-void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
+static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
 {
 	u64 *handle = area->priv;
 
@@ -199,7 +216,6 @@ void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
 	qcom_scm_shm_bridge_delete(qcom_tzmem_dev, *handle);
 	kfree(handle);
 }
-EXPORT_SYMBOL_GPL(qcom_tzmem_cleanup_area);
 
 static int32_t qcom_tzmem_list_add_locked(phys_addr_t paddr,
 						uint64_t handle)
