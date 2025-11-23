@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/interrupt.h>
+#include <linux/iommu.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -20,7 +21,6 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/firmware/qcom/qcom_scm.h>
-#include <linux/firmware/qcom/qcom_tzmem.h>
 #include <linux/regulator/consumer.h>
 #include <linux/remoteproc.h>
 #include <linux/soc/qcom/mdt_loader.h>
@@ -36,7 +36,6 @@
 #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
 
 #define MAX_ASSIGN_COUNT 3
-#define DEVMEM_ENTRY_SIZE 4
 
 struct adsp_data {
 	int crash_reason_smem;
@@ -113,12 +112,8 @@ struct qcom_adsp {
 	struct qcom_rproc_ssr ssr_subdev;
 	struct qcom_sysmon *sysmon;
 
-	struct qcom_scm_pas_metadata pas_metadata;
-	struct qcom_scm_pas_metadata dtb_pas_metadata;
-
-	struct qcom_devmem_table *devmem;
-	struct qcom_tzmem_area *tzmem;
-	unsigned long sid;
+	struct qcom_scm_pas_context *pas_ctx;
+	struct qcom_scm_pas_context *dtb_pas_ctx;
 };
 
 static void adsp_segment_dump(struct rproc *rproc, struct rproc_dump_segment *segment,
@@ -210,9 +205,9 @@ static int adsp_unprepare(struct rproc *rproc)
 	 * auth_and_reset() was successful, but in other cases clean it up
 	 * here.
 	 */
-	qcom_scm_pas_metadata_release(&adsp->pas_metadata);
+	qcom_scm_pas_metadata_release(adsp->pas_ctx);
 	if (adsp->dtb_pas_id)
-		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata);
+		qcom_scm_pas_metadata_release(adsp->dtb_pas_ctx);
 
 	return 0;
 }
@@ -233,16 +228,9 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 			return ret;
 		}
 
-		ret = qcom_mdt_pas_init(adsp->dev, adsp->dtb_firmware, adsp->dtb_firmware_name,
-					adsp->dtb_pas_id, adsp->dtb_mem_phys,
-					&adsp->dtb_pas_metadata);
-		if (ret)
-			goto release_dtb_firmware;
-
-		ret = qcom_mdt_load_no_init(adsp->dev, adsp->dtb_firmware, adsp->dtb_firmware_name,
-					    adsp->dtb_pas_id, adsp->dtb_mem_region,
-					    adsp->dtb_mem_phys, adsp->dtb_mem_size,
-					    &adsp->dtb_mem_reloc);
+		ret = qcom_mdt_pas_load(adsp->dtb_pas_ctx, adsp->dtb_firmware,
+					adsp->dtb_firmware_name, adsp->dtb_mem_region,
+					&adsp->dtb_mem_reloc);
 		if (ret)
 			goto release_dtb_metadata;
 	}
@@ -250,49 +238,26 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 	return 0;
 
 release_dtb_metadata:
-	qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata);
-
-release_dtb_firmware:
+	qcom_scm_pas_metadata_release(adsp->dtb_pas_ctx);
 	release_firmware(adsp->dtb_firmware);
 
 	return ret;
 }
 
-static int adsp_create_shmbridge(struct qcom_adsp *adsp)
+static void qcom_pas_unmap_carveout(struct rproc *rproc, phys_addr_t mem_phys, size_t size)
 {
-	struct qcom_tzmem_area *rproc_tzmem;
-	struct rproc *rproc = adsp->rproc;
-	int ret;
-
-	if (!rproc->has_iommu)
-		return 0;
-
-	rproc_tzmem = devm_kzalloc(adsp->dev, sizeof(*rproc_tzmem), GFP_KERNEL);
-	if (!rproc_tzmem)
-		return -ENOMEM;
-
-	rproc_tzmem->size = PAGE_ALIGN(adsp->mem_size);
-	rproc_tzmem->paddr = adsp->mem_phys;
-	ret = qcom_tzmem_init_area(rproc_tzmem);
-	if (ret) {
-		dev_err(adsp->dev,
-			"failed to create shmbridge for carveout: %d\n", ret);
-		return ret;
-	}
-
-	adsp->tzmem = rproc_tzmem;
-
-	return ret;
+	if (rproc->has_iommu)
+		iommu_unmap(rproc->domain, mem_phys, size);
 }
 
-static void adsp_delete_shmbridge(struct qcom_adsp *adsp)
+static int qcom_pas_map_carveout(struct rproc *rproc, phys_addr_t mem_phys, size_t size)
 {
-	struct rproc *rproc = adsp->rproc;
+	int ret = 0;
 
-	if (!rproc->has_iommu)
-		return;
-
-	qcom_tzmem_cleanup_area(adsp->tzmem);
+	if (rproc->has_iommu)
+		ret = iommu_map(rproc->domain, mem_phys, mem_phys, size,
+				IOMMU_READ | IOMMU_WRITE, GFP_KERNEL);
+	return ret;
 }
 
 static int adsp_start(struct rproc *rproc)
@@ -304,21 +269,9 @@ static int adsp_start(struct rproc *rproc)
 	if (ret)
 		return ret;
 
-	ret = qcom_map_unmap_carveout(rproc, adsp->mem_phys, adsp->mem_size, true, true, adsp->sid);
-	if (ret) {
-		dev_err(adsp->dev, "iommu mapping failed, ret: %d\n", ret);
-		goto disable_irqs;
-	}
-
-	ret = qcom_map_devmem(rproc, adsp->devmem, true, adsp->sid);
-	if (ret) {
-		dev_err(adsp->dev, "devmem iommu mapping failed, ret: %d\n", ret);
-		goto unmap_carveout;
-	}
-
 	ret = adsp_pds_enable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
 	if (ret < 0)
-		goto unmap_devmem;
+		goto disable_irqs;
 
 	ret = clk_prepare_enable(adsp->xo);
 	if (ret)
@@ -341,59 +294,62 @@ static int adsp_start(struct rproc *rproc)
 	}
 
 	if (adsp->dtb_pas_id) {
-		ret = qcom_scm_pas_auth_and_reset(adsp->dtb_pas_id);
+		ret = qcom_pas_map_carveout(rproc, adsp->dtb_mem_phys, adsp->dtb_mem_size);
+		if (ret)
+			goto disable_px_supply;
+
+		ret = qcom_scm_pas_prepare_and_auth_reset(adsp->dtb_pas_ctx);
 		if (ret) {
 			dev_err(adsp->dev,
 				"failed to authenticate dtb image and release reset\n");
-			goto disable_px_supply;
+			goto unmap_dtb_carveout;
 		}
 	}
 
-	ret = qcom_mdt_pas_init(adsp->dev, adsp->firmware, rproc->firmware, adsp->pas_id,
-				adsp->mem_phys, &adsp->pas_metadata);
-	if (ret)
-		goto disable_px_supply;
-
-	ret = qcom_mdt_load_no_init(adsp->dev, adsp->firmware, rproc->firmware, adsp->pas_id,
-				    adsp->mem_region, adsp->mem_phys, adsp->mem_size,
-				    &adsp->mem_reloc);
+	ret = qcom_mdt_pas_load(adsp->pas_ctx, adsp->firmware, rproc->firmware,
+				adsp->mem_region, &adsp->mem_reloc);
 	if (ret)
 		goto release_pas_metadata;
 
 	qcom_pil_info_store(adsp->info_name, adsp->mem_phys, adsp->mem_size);
 
-	ret = adsp_create_shmbridge(adsp);
+	ret = qcom_pas_map_carveout(rproc, adsp->mem_phys, adsp->mem_size);
 	if (ret)
 		goto release_pas_metadata;
 
-	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
+	ret = qcom_scm_pas_prepare_and_auth_reset(adsp->pas_ctx);
 	if (ret) {
 		dev_err(adsp->dev,
 			"failed to authenticate image and release reset\n");
-		goto release_pas_metadata;
+		goto unmap_carveout;
 	}
 
-	adsp_delete_shmbridge(adsp);
 	ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
 	if (ret == -ETIMEDOUT) {
 		dev_err(adsp->dev, "start timed out\n");
 		qcom_scm_pas_shutdown(adsp->pas_id);
-		goto release_pas_metadata;
+		goto unmap_carveout;
 	}
 
-	qcom_scm_pas_metadata_release(&adsp->pas_metadata);
+	qcom_scm_pas_metadata_release(adsp->pas_ctx);
 	if (adsp->dtb_pas_id)
-		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata);
+		qcom_scm_pas_metadata_release(adsp->dtb_pas_ctx);
 
 	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
 	adsp->firmware = NULL;
 
 	return 0;
 
+unmap_carveout:
+	qcom_pas_unmap_carveout(rproc, adsp->mem_phys, adsp->mem_size);
 release_pas_metadata:
-	qcom_scm_pas_metadata_release(&adsp->pas_metadata);
+	qcom_scm_pas_metadata_release(adsp->pas_ctx);
 	if (adsp->dtb_pas_id)
-		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata);
+		qcom_scm_pas_metadata_release(adsp->dtb_pas_ctx);
+
+unmap_dtb_carveout:
+	if (adsp->dtb_pas_id)
+		qcom_pas_unmap_carveout(rproc, adsp->dtb_mem_phys, adsp->dtb_mem_size);
 disable_px_supply:
 	if (adsp->px_supply)
 		regulator_disable(adsp->px_supply);
@@ -406,10 +362,6 @@ disable_xo_clk:
 	clk_disable_unprepare(adsp->xo);
 disable_proxy_pds:
 	adsp_pds_disable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
-unmap_devmem:
-	qcom_unmap_devmem(rproc, adsp->devmem, adsp->sid);
-unmap_carveout:
-	qcom_map_unmap_carveout(rproc, adsp->mem_phys, adsp->mem_size, false, true, adsp->sid);
 disable_irqs:
 	qcom_q6v5_unprepare(&adsp->q6v5);
 
@@ -453,10 +405,11 @@ static int adsp_stop(struct rproc *rproc)
 		ret = qcom_scm_pas_shutdown(adsp->dtb_pas_id);
 		if (ret)
 			dev_err(adsp->dev, "failed to shutdown dtb: %d\n", ret);
+
+		qcom_pas_unmap_carveout(rproc, adsp->dtb_mem_phys, adsp->dtb_mem_size);
 	}
 
-	qcom_unmap_devmem(rproc, adsp->devmem, adsp->sid);
-	qcom_map_unmap_carveout(rproc, adsp->mem_phys, adsp->mem_size, false, true, adsp->sid);
+	qcom_pas_unmap_carveout(rproc, adsp->mem_phys, adsp->mem_size);
 
 	handover = qcom_q6v5_unprepare(&adsp->q6v5);
 	if (handover)
@@ -487,12 +440,67 @@ static unsigned long adsp_panic(struct rproc *rproc)
 	return qcom_q6v5_panic(&adsp->q6v5);
 }
 
+static int qcom_pas_parse_firmware(struct rproc *rproc, const struct firmware *fw)
+{
+	size_t output_rt_size = MAX_RSCTABLE_SIZE;
+	struct qcom_adsp *pas = rproc->priv;
+	struct resource_table *table = NULL;
+	void *output_rt;
+	size_t table_sz;
+	int ret;
+
+	ret = qcom_register_dump_segments(rproc, fw);
+	if (ret) {
+		dev_err(pas->dev, "Error in registering dump segments\n");
+		return ret;
+	}
+
+	if (!rproc->has_iommu)
+		return ret;
+
+	ret = rproc_elf_load_rsc_table(rproc, fw);
+	if (ret)
+		dev_info(&rproc->dev, "Error in loading resource table from firmware\n");
+
+	table = rproc->table_ptr;
+	table_sz = rproc->table_sz;
+
+	/*
+	 * Qualcomm remote processor may rely on static and dynamic resources for
+	 * it to be functional. For most of the Qualcomm SoCs, when run with Gunyah
+	 * or older QHEE hypervisor, all the resources whether it is static or dynamic,
+	 * is managed by present hypervisor. Dynamic resources if it is present for
+	 * a remote processor will always be coming from secure world via SMC call
+	 * while static resources may be present in remote processor firmware binary
+	 * or it may be coming from SMC call along with dynamic resources.
+	 *
+	 * Here, we call rproc_elf_load_rsc_table() to check firmware binary has resources
+	 * or not and if it is not having then we pass NULL and zero as input resource
+	 * table pointer and size respectively to the argument of qcom_scm_pas_get_rsc_table()
+	 * and this is even true for Qualcomm remote processor who does follow remoteproc
+	 * framework.
+	 */
+	ret = qcom_scm_pas_get_rsc_table(pas->pas_ctx, table, table_sz, &output_rt,
+					 &output_rt_size);
+	if (ret) {
+		dev_err(pas->dev, "Error in getting resource table: %d\n", ret);
+		return ret;
+	}
+
+	kfree(rproc->cached_table);
+	rproc->cached_table = output_rt;
+	rproc->table_ptr = rproc->cached_table;
+	rproc->table_sz = output_rt_size;
+
+	return ret;
+}
+
 static const struct rproc_ops adsp_ops = {
 	.unprepare = adsp_unprepare,
 	.start = adsp_start,
 	.stop = adsp_stop,
 	.da_to_va = adsp_da_to_va,
-	.parse_fw = qcom_register_dump_segments,
+	.parse_fw = qcom_pas_parse_firmware,
 	.load = adsp_load,
 	.panic = adsp_panic,
 };
@@ -502,7 +510,7 @@ static const struct rproc_ops adsp_minidump_ops = {
 	.start = adsp_start,
 	.stop = adsp_stop,
 	.da_to_va = adsp_da_to_va,
-	.parse_fw = qcom_register_dump_segments,
+	.parse_fw = qcom_pas_parse_firmware,
 	.load = adsp_load,
 	.panic = adsp_panic,
 	.coredump = adsp_minidump,
@@ -740,58 +748,6 @@ static void adsp_unassign_memory_region(struct qcom_adsp *adsp)
 	}
 }
 
-static int adsp_devmem_init(struct qcom_adsp *adsp)
-{
-	unsigned int entry_size = DEVMEM_ENTRY_SIZE;
-	struct qcom_devmem_table *devmem_table;
-	struct rproc *rproc = adsp->rproc;
-	struct device *dev = adsp->dev;
-	struct qcom_devmem_info *info;
-	char *pname = "qcom,devmem";
-	size_t table_size;
-	int num_entries;
-	u32 i;
-
-	if (!rproc->has_iommu)
-		return 0;
-
-	/* devmem property is a set of n-tuple */
-	num_entries = of_property_count_u32_elems(dev->of_node, pname);
-	if (num_entries < 0) {
-		dev_err(adsp->dev, "No '%s' property present\n", pname);
-		return num_entries;
-	}
-
-	if (!num_entries || (num_entries % entry_size)) {
-		dev_err(adsp->dev, "All '%s' list entries need %d vals\n", pname,
-			entry_size);
-		return -EINVAL;
-	}
-
-	num_entries /= entry_size;
-	table_size = sizeof(*devmem_table) + sizeof(*info) * num_entries;
-	devmem_table = devm_kzalloc(dev, table_size, GFP_KERNEL);
-	if (!devmem_table)
-		return -ENOMEM;
-
-	devmem_table->num_entries = num_entries;
-	info = &devmem_table->entries[0];
-	for (i = 0; i < num_entries; i++, info++) {
-		of_property_read_u32_index(dev->of_node, pname,
-					   i * entry_size, (u32 *)&info->da);
-		of_property_read_u32_index(dev->of_node, pname,
-					   i * entry_size + 1, (u32 *)&info->pa);
-		of_property_read_u32_index(dev->of_node, pname,
-					   i * entry_size + 2, &info->len);
-		of_property_read_u32_index(dev->of_node, pname,
-					   i * entry_size + 3, &info->flags);
-	}
-
-	adsp->devmem = devmem_table;
-
-	return 0;
-}
-
 static int adsp_probe(struct platform_device *pdev)
 {
 	const struct adsp_data *desc;
@@ -832,6 +788,7 @@ static int adsp_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	rproc->has_iommu = of_property_present(pdev->dev.of_node, "iommus");
 	rproc->auto_boot = desc->auto_boot;
 	rproc_coredump_set_elf_info(rproc, ELFCLASS32, EM_NONE);
 
@@ -851,26 +808,6 @@ static int adsp_probe(struct platform_device *pdev)
 		adsp->dtb_pas_id = desc->dtb_pas_id;
 	}
 	platform_set_drvdata(pdev, adsp);
-
-	if (of_property_present(pdev->dev.of_node, "iommus")) {
-		struct of_phandle_args args;
-
-		ret = of_parse_phandle_with_args(pdev->dev.of_node, "iommus", "#iommu-cells",
-						 0, &args);
-		if (ret < 0)
-			return ret;
-
-		rproc->has_iommu = true;
-		adsp->sid = args.args[0];
-		of_node_put(args.np);
-		ret = adsp_devmem_init(adsp);
-		if (ret)
-			return ret;
-
-		adsp->pas_metadata.shm_bridge_needed = true;
-	} else {
-		rproc->has_iommu = false;
-	}
 
 	ret = device_init_wakeup(adsp->dev, true);
 	if (ret)
@@ -914,6 +851,23 @@ static int adsp_probe(struct platform_device *pdev)
 	}
 
 	qcom_add_ssr_subdev(rproc, &adsp->ssr_subdev, desc->ssr_name);
+
+	adsp->pas_ctx = qcom_scm_pas_context_init(adsp->dev, adsp->pas_id, adsp->mem_phys,
+						  adsp->mem_size);
+	if (IS_ERR(adsp->pas_ctx)) {
+		ret = PTR_ERR(adsp->pas_ctx);
+		goto detach_proxy_pds;
+	}
+
+	adsp->dtb_pas_ctx = qcom_scm_pas_context_init(adsp->dev, adsp->dtb_pas_id,
+						      adsp->dtb_mem_phys, adsp->dtb_mem_size);
+	if (IS_ERR(adsp->dtb_pas_ctx)) {
+		ret = PTR_ERR(adsp->dtb_pas_ctx);
+		goto detach_proxy_pds;
+	}
+
+	adsp->pas_ctx->has_iommu = rproc->has_iommu;
+	adsp->dtb_pas_ctx->has_iommu = rproc->has_iommu;
 	ret = rproc_add(rproc);
 	if (ret)
 		goto detach_proxy_pds;

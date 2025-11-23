@@ -171,6 +171,12 @@ static const struct msm_dp_desc msm_dp_desc_sa8775p[] = {
 	{ .io_start = 0x0af5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true,
 	  .max_streams = 2, .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_1],
 	},
+	{ .io_start = 0x22154000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true,
+	  .max_streams = 1, .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_0],
+	},
+	{ .io_start = 0x2215c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true,
+	  .max_streams = 1, .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_1],
+	},
 	{}
 };
 
@@ -233,6 +239,7 @@ static const struct of_device_id msm_dp_dt_match[] = {
 	{ .compatible = "qcom,sc8280xp-dp", .data = &msm_dp_desc_sc8280xp },
 	{ .compatible = "qcom,sc8280xp-edp", .data = &msm_edp_desc_sc8280xp },
 	{ .compatible = "qcom,sdm845-dp", .data = &msm_dp_desc_sc7180 },
+	{ .compatible = "qcom,sm6150-dp", .data = &msm_dp_desc_sc7180 },
 	{ .compatible = "qcom,sm8350-dp", .data = &msm_dp_desc_sm8350 },
 	{ .compatible = "qcom,sm8650-dp", .data = &msm_dp_desc_sm8650 },
 	{}
@@ -1846,7 +1853,7 @@ void msm_dp_display_disable_helper(struct msm_dp *dp, struct msm_dp_panel *msm_d
 		return;
 	}
 
-	msm_dp_ctrl_push_vcpf(msm_dp_display->ctrl, msm_dp_panel);
+	msm_dp_ctrl_push_idle(msm_dp_display->ctrl, msm_dp_panel);
 	msm_dp_ctrl_mst_stream_channel_slot_setup(msm_dp_display->ctrl, msm_dp_display->max_stream);
 	msm_dp_ctrl_mst_send_act(msm_dp_display->ctrl);
 }
@@ -1857,7 +1864,7 @@ void msm_dp_display_atomic_disable(struct msm_dp *msm_dp)
 
 	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
 
-	msm_dp_ctrl_push_idle(msm_dp_display->ctrl);
+	msm_dp_ctrl_push_idle(msm_dp_display->ctrl, msm_dp_display->panel);
 }
 
 void msm_dp_display_unprepare(struct msm_dp *msm_dp)
@@ -2028,7 +2035,7 @@ void msm_dp_bridge_hpd_notify(struct drm_bridge *bridge,
 		return;
 
 	if (!msm_dp_display->link_ready && status == connector_status_connected)
-		msm_dp_add_event(dp, EV_HPD_PLUG_INT, 0, 0);
+		msm_dp_hpd_plug_handle(dp, 0);
 	else if (msm_dp_display->link_ready && status == connector_status_disconnected)
-		msm_dp_add_event(dp, EV_HPD_UNPLUG_INT, 0, 0);
+		msm_dp_hpd_unplug_handle(dp, 0);
 }

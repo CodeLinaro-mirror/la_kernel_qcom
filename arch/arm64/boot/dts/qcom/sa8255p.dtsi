@@ -397,6 +397,11 @@
 			no-map;
 		};
 
+		audio_config: audio-config-region@ac600000 {
+			reg = <0x0 0xac600000 0x0 0x0a00000>;
+			no-map;
+		};
+
 		audio_mdf_mem: audio-mdf-region@ae000000 {
 			reg = <0x0 0xae000000 0x0 0x1000000>;
 			no-map;
@@ -1018,7 +1023,14 @@
 				reg = <0x0 0xa98000 0x0 0x4000>;
 				#address-cells = <1>;
 				#size-cells = <0>;
-				interrupts = <GIC_SPI 836 IRQ_TYPE_LEVEL_HIGH>;
+				interrupts = <GIC_SPI 835 IRQ_TYPE_LEVEL_HIGH>;
+				status = "disabled";
+			};
+
+			uart13: serial@a98000 {
+				compatible = "qcom,sa8255p-geni-uart";
+				reg = <0x0 0x00a98000 0x0 0x4000>;
+				interrupts = <GIC_SPI 835 IRQ_TYPE_LEVEL_HIGH>;
 				status = "disabled";
 			};
 		};
@@ -1437,6 +1449,7 @@
 			reg = <0x0 0x15000000 0x0 0x100000>;
 			#iommu-cells = <2>;
 			#global-interrupts = <2>;
+			dma-coherent;
 
 			interrupts = <GIC_SPI 119 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 120 IRQ_TYPE_LEVEL_HIGH>,
@@ -2881,5 +2894,10 @@
 			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
 			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
 			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+	};
+
+	uefi_log {
+		compatible = "qcom,nhlos-logs-mem", "qcom,nhlos-logs";
+		memory-region = <&uefi_log>;
 	};
 };

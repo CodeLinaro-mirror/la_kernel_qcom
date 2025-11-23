@@ -9,12 +9,38 @@
 #include "qcs615-dma-heaps.dtsi"
 
 / {
+	firmware {
+		qcom_mem_object {
+			compatible = "qcom,mem-object";
+		};
+
+		qcom_smcinvoke {
+			compatible = "qcom,smcinvoke";
+		};
+	};
+
 	reserved-memory {
 		dump_mem: mem_dump_region {
 			compatible = "shared-dma-pool";
 			alloc-ranges = <0 0x00000000 0 0xffffffff>;
 			reusable;
 			size = <0 0x2800000>;
+		};
+
+		qseecom_mem: qcom,qseecom {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x1400000>; /* 20M */
+		};
+
+		qseecom_ta_mem: qcom,qseecom-ta {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x1000000>; /* 16M */
 		};
 	};
 
@@ -303,6 +329,22 @@
 		byte-cntr-class-name = "coresight-tmc-etr-stream";
 	};
 
+	tgu@6b0c000 {
+		compatible = "arm,primecell", "qcom,coresight-tgu";
+		reg = <0x0 0x6b0c000 0x0 0x1000>;
+		reg-names = "tgu-base";
+		device-name = "tgu_ipcb";
+
+		clocks = <&aoss_qmp>;
+		clock-names = "apb_pclk";
+
+		arm,primecell-periphid = <0x0003b999>;
+		tgu-conditions = <4>;
+		tgu-regs = <4>;
+		tgu-steps = <3>;
+		tgu-timer-counters = <8>;
+	};
+
 	swao_csr: csr@6b0e000 {
 		compatible = "qcom,coresight-csr";
 		reg = <0x0 0x6b0e000 0x0 0x1000>;
@@ -328,5 +370,13 @@
 	qcom,secure-buffer {
 		compatible = "qcom,secure-buffer";
 		qcom,vmid-cp-camera-preview-ro;
+	};
+
+	qcom_tzlog: tz-log@146aa720 {
+		compatible = "qcom,tz-log";
+		reg = <0x0 0x146aa720 0x0 0x3000>;
+		qcom,hyplog-enabled;
+		hyplog-address-offset = <0x410>;
+		hyplog-size-offset = <0x414>;
 	};
 };

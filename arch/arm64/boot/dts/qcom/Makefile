@@ -20,6 +20,11 @@ dtb-$(CONFIG_ARCH_QCOM)	+= ipq9574-rdp433.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= ipq9574-rdp449.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= ipq9574-rdp453.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= ipq9574-rdp454.dtb
+
+monaco-addons-monza-dtbs:= monaco-monza.dtb monaco-addons-monza.dtbo
+
+dtb-$(CONFIG_ARCH_QCOM)	+= monaco-addons-monza.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= monaco-monza.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8916-acer-a1-724.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8916-alcatel-idol347.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8916-asus-z00l.dtb
@@ -115,6 +120,8 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs404-evb-1000.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs404-evb-4000.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs615-addons-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs615-ride.dtb
+dtb-$(CONFIG_ARCH_QCOM) += talos-addons-evk.dtb
+dtb-$(CONFIG_ARCH_QCOM) += talos-evk.dtb
 
 qcs8275-addons-iq-8275-evk-dtbs:= qcs8275-iq-8275-evk.dtb qcs8275-addons-iq-8275-evk.dtbo
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/input.h>
 #include <linux/module.h>
@@ -187,6 +187,8 @@ static const struct snd_soc_dapm_widget iq8_8275_evk_dapm_widgets[] = {
 static const struct snd_soc_dapm_route iq8_8275_evk_dapm_routes[] = {
 	{"Speaker", NULL, "MI2S_OUT_PINCTRL"},
 	{"DMic", NULL, "MI2S_OUT_PINCTRL"},
+	{"RX", NULL, "MI2S_OUT_PINCTRL"},
+	{"TX", NULL, "MI2S_OUT_PINCTRL"},
 };
 
 static const struct snd_soc_dapm_widget qcs8300_dapm_widgets[] = {
@@ -284,7 +286,8 @@ static void qcs9100_add_be_ops(struct snd_soc_card *card)
 	int i;
 
 	for_each_card_prelinks(card, i, link) {
-		if (link->no_pcm == 1) {
+		/* Apply BE ops to backend links and links with codecs */
+		if (link->no_pcm == 1 || link->num_codecs > 0) {
 			link->init = qcs9100_snd_init;
 			link->be_hw_params_fixup = qcs9100_be_hw_params_fixup;
 			link->ops = &qcs9100_be_ops;

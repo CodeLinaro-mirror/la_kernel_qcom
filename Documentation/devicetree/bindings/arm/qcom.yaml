@@ -916,10 +916,13 @@ properties:
           - enum:
               - qcom,qcs615-addons-ride
               - qcom,qcs615-ride
+              - qcom,talos-addons-evk
+              - qcom,talos-evk
           - const: qcom,qcs615
 
       - items:
           - enum:
+              - qcom,monaco-monza
               - qcom,qcs8275-iq-8275-evk-pro-sku
               - qcom,qcs8275-iq-8275-evk
               - qcom,qcs8300-addons-ride

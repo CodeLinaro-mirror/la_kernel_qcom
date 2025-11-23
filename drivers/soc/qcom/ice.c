@@ -6,6 +6,7 @@
  * Copyright (c) 2019, Google LLC
  * Copyright (c) 2023, Linaro Limited
  * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/bitfield.h>
@@ -595,6 +596,7 @@ struct qcom_ice *of_qcom_ice_get(struct device *dev)
 	void __iomem *base;
 	const __be32 *prop;
 	int len;
+	const char *status = NULL;
 
 
 	if (!dev || !dev->of_node)
@@ -624,6 +626,10 @@ struct qcom_ice *of_qcom_ice_get(struct device *dev)
 	if (!node)
 		return ERR_PTR(-EOPNOTSUPP);
 
+	of_property_read_string(node, "status", &status);
+	if (status && strcmp(status, "disabled") == 0)
+		return ERR_PTR(-EOPNOTSUPP);
+
 	pdev = of_find_device_by_node(node);
 	if (!pdev) {
 		dev_err(dev, "Cannot find device node %s\n", node->name);
@@ -647,8 +653,8 @@ struct qcom_ice *of_qcom_ice_get(struct device *dev)
 	if (!prop || len < 2 * sizeof(uint32_t))
 		pr_err("Property not found or invalid length\n");
 	else {
-		ice->min_freq = be32_to_cpu(prop);
-		ice->max_freq = be32_to_cpu(prop);
+		ice->min_freq = be32_to_cpu(prop[0]);
+		ice->max_freq = be32_to_cpu(prop[1]);
 	}
 
 	ice->link = device_link_add(dev, &pdev->dev, DL_FLAG_AUTOREMOVE_SUPPLIER);

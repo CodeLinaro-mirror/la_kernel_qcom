@@ -150,6 +150,30 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 
+		dp-dai-link {
+			link-name = "DISPLAY_PORT-RX";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_0>;
+			};
+
+			codec {
+				sound-dai = <&mdss_dp>;
+			};
+		};
+
+		hdmi-dai-link {
+			link-name = "HDMI_PORT-RX";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_1>;
+			};
+
+			codec {
+				sound-dai = <&lt9611_codec 0>;
+			};
+		};
+
 		wsa-dai-link {
 			link-name = "CODEC_DMA-LPAIF_WSA-RX-0";
 
@@ -495,6 +519,7 @@
 	lt9611_codec: hdmi-bridge@2b {
 		compatible = "lontium,lt9611uxc";
 		reg = <0x2b>;
+		#sound-dai-cells = <1>;
 
 		interrupts-extended = <&tlmm 24 IRQ_TYPE_EDGE_FALLING>;
 		reset-gpios = <&pm7250b_gpios 2 GPIO_ACTIVE_HIGH>;
@@ -555,7 +580,7 @@
 		};
 	};
 
-	typec-retimer@1c {
+	typec_retimer: typec-retimer@1c {
 		compatible = "onnn,nb7vpq904m";
 		reg = <0x1c>;
 
@@ -908,7 +933,7 @@
 };
 
 &remoteproc_wpss {
-	firmware-name = "qcom/qcs6490/wpss.mdt";
+	firmware-name = "qcom/qcs6490/wpss.mbn";
 	status = "okay";
 };
 
@@ -1160,6 +1185,7 @@
 &usb_1_qmpphy {
 	vdda-phy-supply = <&vreg_l6b_1p2>;
 	vdda-pll-supply = <&vreg_l1b_0p912>;
+	vdda-aux-supply = <&vreg_l7c_3p0>;
 
 	orientation-switch;
 	status = "okay";
