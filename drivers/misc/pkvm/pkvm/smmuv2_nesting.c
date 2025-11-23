@@ -341,6 +341,7 @@ static int smmuv2_write_global_region_1(struct smmu_v2_nested *smmu,
 	    offset <= ARM_SMMU_GR1_CBAR(ARM_SMMU_MAX_CBARS - 1)) {
 		return smmuv2_cbar_write(smmu, offset, (u32)val);
 	}
+
 	/* Handle general register writes based on access size */
 	void *reg_addr = (void *)((u64)smmu->base_va + ARM_SMMU_GLOBAL_REGION1_OFFSET + offset);
 
@@ -579,6 +580,15 @@ static int hw_profile_init(void)
 	for_each_smmu(smmu) {
 		u32 id0 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID0);
 		u32 id1 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID1);
+		u32 scr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sCR0);
+
+		/* Enable SMMU by default.
+		 * And enable unidentified stream and Stream match conflicts by default
+		 */
+		scr_val &= ~(ARM_SMMU_sCR0_CLIENTPD);
+		scr_val |= FIELD_PREP(ARM_SMMU_sCR0_USFCFG, 1) |
+			   FIELD_PREP(ARM_SMMU_sCR0_SMCFCFG, 1);
+		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sCR0, scr_val);
 
 		smmu->num_smr = id0 & ARM_SMMU_ID0_NUMSMRG;
 		smmu->num_s2cr = smmu->num_smr; /* smr == s2cr */
