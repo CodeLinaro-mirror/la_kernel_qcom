@@ -341,7 +341,8 @@ struct plat_stmmacenet_data {
 		(struct sk_buff *skb);
 	int (*handle_mac_err)(void *priv, int type, int chan);
 	int (*handle_prv_ioctl)(struct net_device *dev, struct ifreq *ifr,
-		int cmd);
+				int cmd);
+
 	void (*request_phy_wol)(void *plat);
 	int (*init_pps)(void *priv);
 	int mac2mac_speed;
