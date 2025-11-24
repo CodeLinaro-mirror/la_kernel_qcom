@@ -97,3 +97,4 @@ qcom_scmi_client.ko
 si_core_module.ko
 qcom_scm_smci.ko
 pkvm-geni.ko
+pkvm-smc-filter.ko
