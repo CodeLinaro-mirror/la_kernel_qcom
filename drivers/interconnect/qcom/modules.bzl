@@ -80,6 +80,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/qnoc-qos-rpm",
             "drivers/interconnect/qcom/icc-debug",
             "drivers/rpmsg/rpm-smd",
             "drivers/soc/qcom/smem",
@@ -94,6 +95,31 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/interconnect/qcom/canoe.c",
+            "drivers/interconnect/qcom/icc-rpmh.h",
+            "drivers/interconnect/qcom/qnoc-qos.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos",
+            "drivers/interconnect/qcom/icc-rpmh",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/interconnect/qcom/icc-bcm-voter",
+            "drivers/soc/qcom/qcom_rpmh",
+            "drivers/soc/qcom/cmd-db",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-chora",
+        out = "qnoc-chora.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_CHORA",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/chora.c",
             "drivers/interconnect/qcom/icc-rpmh.h",
             "drivers/interconnect/qcom/qnoc-qos.h",
         ],
@@ -165,6 +191,26 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/interconnect/qcom/qnoc-malabar",
+        out = "qnoc-malabar.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_MALABAR",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/malabar.c",
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+            "drivers/interconnect/qcom/rpm-ids.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos-rpm",
+            "drivers/interconnect/qcom/icc-rpm",
+            "drivers/interconnect/qcom/icc-debug",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
         name = "drivers/interconnect/qcom/qnoc-yupik",
         out = "qnoc-yupik.ko",
         config = "CONFIG_INTERCONNECT_QCOM_YUPIK",
@@ -220,6 +266,28 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/interconnect/qcom/bengal.c",
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/rpm-ids.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos-rpm",
+            "drivers/interconnect/qcom/icc-rpm",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/soc/qcom/smem",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-monaco",
+        out = "qnoc-monaco.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_MONACO",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/monaco.c",
             "drivers/interconnect/qcom/icc-rpm.h",
             "drivers/interconnect/qcom/rpm-ids.h",
             "drivers/interconnect/qcom/qnoc-qos-rpm.h",
@@ -314,6 +382,56 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/interconnect/qcom/alor.c",
+            "drivers/interconnect/qcom/icc-rpmh.h",
+            "drivers/interconnect/qcom/qnoc-qos.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos",
+            "drivers/interconnect/qcom/icc-rpmh",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/interconnect/qcom/icc-bcm-voter",
+            "drivers/soc/qcom/qcom_rpmh",
+            "drivers/soc/qcom/cmd-db",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-seraph",
+        out = "qnoc-seraph.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_SERAPH",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/seraph.c",
+            "drivers/interconnect/qcom/icc-rpmh.h",
+            "drivers/interconnect/qcom/qnoc-qos.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos",
+            "drivers/interconnect/qcom/icc-rpmh",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/interconnect/qcom/icc-bcm-voter",
+            "drivers/soc/qcom/qcom_rpmh",
+            "drivers/soc/qcom/cmd-db",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-pikachu",
+        out = "qnoc-pikachu.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_PIKACHU",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/pikachu.c",
             "drivers/interconnect/qcom/icc-rpmh.h",
             "drivers/interconnect/qcom/qnoc-qos.h",
         ],

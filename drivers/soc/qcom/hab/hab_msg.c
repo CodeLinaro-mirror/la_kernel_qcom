@@ -460,8 +460,13 @@ static int compressed_pfns_sanity_check(struct virtual_channel *vchan,
 	size_t exp_desc_size_expected;
 	int ret = 0;
 
-	exp_desc_size_expected = sizeof(struct export_desc) +
-		sizeof(struct compressed_pfns);
+	/*
+	 * Add 1 byte to the export desc size to avoid mismatch in size
+	 * coming from PVM/Host side, as to resolve error for payload[1]
+	 * in 6.12 kernel, as it is converted to payload[]
+	 */
+	exp_desc_size_expected = sizeof(struct export_desc) + 1
+		+ sizeof(struct compressed_pfns);
 
 	/*
 	 * We should do all the checks here.
@@ -556,11 +561,6 @@ static int hab_receive_export_desc(struct physical_channel *pchan,
 	 */
 	export->pchan = pchan;
 	export->vchan = vchan;
-
-	if (pchan->mem_proto == 1) {
-		export->vcid_remote = export->vcid_local;
-		export->vcid_local = vchan->id;
-	}
 	*exp_desc = &exp_desc_super->exp;
 
 	return 0;
@@ -583,6 +583,7 @@ static int hab_recv_and_enqueue_export_desc(struct physical_channel *pchan,
 
 	/* sanity for loopback payload (mmid & expid) will be checked later */
 	if (likely(!is_lb)) {
+		/* vcid_remote is from remote POV, expect same with local vcid */
 		if (vchan->id != exp_desc->vcid_remote) {
 			pr_err("exp_desc received on vc %x, not expected vc %x\n",
 				vchan->id, exp_desc->vcid_remote);
@@ -596,6 +597,10 @@ static int hab_recv_and_enqueue_export_desc(struct physical_channel *pchan,
 	exp_desc_super->is_loopback = is_lb;
 
 	if (pchan->mem_proto == 1) {
+		/* switch vcid local and remote before assigning to ack */
+		exp_desc->vcid_remote = exp_desc->vcid_local;
+		exp_desc->vcid_local = vchan->id;
+
 		ack_recvd = kzalloc(sizeof(*ack_recvd), GFP_ATOMIC);
 		if (!ack_recvd) {
 			ret = -ENOMEM;

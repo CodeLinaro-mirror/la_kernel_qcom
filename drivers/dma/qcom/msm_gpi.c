@@ -3272,6 +3272,8 @@ int gpi_terminate_all(struct dma_chan *chan)
 			stop_cmd_failed = true;
 		} else {
 			gpi_noop_tre(gpii_chan);
+			if (gpii->protocol == SE_PROTOCOL_UART)
+				gpi_free_chan_desc(gpii_chan);
 		}
 	}
 

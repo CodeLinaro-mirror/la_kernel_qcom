@@ -366,6 +366,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
+            "drivers/soc/qcom/cpu_phys_log_map",
         ],
     )
 
@@ -858,6 +859,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/soc/qcom/qcom_cpucp.c",
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
             "kernel/sched/walt/sched-walt",
         ],
     )
@@ -1051,6 +1053,20 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/rpm-smd-debug",
+        out = "rpm-smd-debug.ko",
+        config = "CONFIG_MSM_RPM_SMD_DEBUG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/rpm-smd-debug.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/rpmsg/rpm-smd",
         ],
     )
 
@@ -1675,6 +1691,68 @@ def register_modules(registry):
             "drivers/soc/qcom/debug_symbol.h",
             "drivers/soc/qcom/minidump_private.h",
             "drivers/soc/qcom/elf.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/minidump",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/core_hang_detect",
+        out = "core_hang_detect.ko",
+        config = "CONFIG_MSM_CORE_HANG_DETECT",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/core_hang_detect.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+        includes = ["include"],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slatecom_event",
+        out = "slatecom_event.ko",
+        config = "CONFIG_MSM_SLATECOM_EVENT",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slatecom_event.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/slate_events_bridge",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slate_events_bridge",
+        out = "slate_events_bridge.ko",
+        config = "CONFIG_MSM_SEB",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slate_events_bridge_rpmsg.h",
+            "drivers/soc/qcom/slate_events_bridge.h",
+            "drivers/soc/qcom/slate_events_bridge.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/slate_events_bridge_rpmsg",
+            "drivers/remoteproc/rproc_qcom_common",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slate_events_bridge_rpmsg",
+        out = "slate_events_bridge_rpmsg.ko",
+        config = "CONFIG_MSM_SEB_RPMSG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slate_events_bridge.h",
+            "drivers/soc/qcom/slate_events_bridge_rpmsg.h",
+            "drivers/soc/qcom/slate_events_bridge_rpmsg.c",
         ],
         deps = [
             # do not sort

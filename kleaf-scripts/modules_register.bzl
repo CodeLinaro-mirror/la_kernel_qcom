@@ -105,7 +105,7 @@ def _generate_ddk_target(
                 phony_configurations.append(obj)
 
     for module in matched_configurations:
-        deps = [":{}".format(module_names.get(dep)) for dep in module.deps if module_names.get(dep)]
+        deps = [":{}".format(module_names.get(dep)) for dep in module.deps if module_names.get(dep)] + module.lib_deps
         src_hdrs = [src for src in module.srcs if src.endswith(".h")]
         includes = (module.includes or []) + {paths.dirname(hdr): "" for hdr in src_hdrs}.keys()
 
@@ -172,6 +172,7 @@ def create_module_registry():
             config = None,
             conditional_srcs = None,
             deps = None,
+            lib_deps = None,
             includes = None,
             **kwargs):
         """Register a module with the registry.
@@ -213,6 +214,9 @@ def create_module_registry():
                 # do not sort
                 "arch/arm64/gunyah/gunyah_hypercall",
               ]
+          lib_deps: List of dependent libraries. This list is not filtered; it is
+            intended for use with ddk_library() rules. Add other types of dependencies
+            here at your peril.
           includes: See ddk_module() documentation.
           **kwargs: Additional ddk_module() arguments. See ddk_module() documentation.
         """
@@ -225,6 +229,7 @@ def create_module_registry():
             config = config,
             conditional_srcs = conditional_srcs,
             deps = deps or [],
+            lib_deps = lib_deps or [],
             includes = includes,
             extra_args = kwargs,
         ))

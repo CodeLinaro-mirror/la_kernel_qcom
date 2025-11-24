@@ -3091,6 +3091,38 @@ static int get_geni_se_i2c_hub(struct geni_i2c_dev *gi2c)
 #endif
 
 /**
+ * geni_se_handle_common_resources - Load and initialize common SE resources for I2C.
+ * @pdev: Pointer to the platform device structure.
+ * @gi2c: geni i2c structure as a pointer.
+ *
+ * This function attempts to load common SE resources for the I2C device from
+ * the device tree. If the resources are not explicitly defined in the DTSI,
+ * it falls back to initializing them with default values based on performance
+ * mode. For high-performance mode, it uses predefined vote values and bandwidth.
+ * For normal mode, it calculates bandwidth based on the configured clock frequency.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+static int geni_se_handle_common_resources(struct platform_device *pdev, struct geni_i2c_dev *gi2c)
+{
+	int ret;
+
+	ret = geni_se_get_common_resources(pdev, &gi2c->i2c_rsc);
+	if (ret) {
+		if (gi2c->is_high_perf) {
+			ret = geni_se_common_resources_init(&gi2c->i2c_rsc,
+							    I2C_CORE2X_VOTE, GENI_DEFAULT_BW,
+							    (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+		} else {
+			ret = geni_se_common_resources_init(&gi2c->i2c_rsc,
+							    GENI_DEFAULT_BW, GENI_DEFAULT_BW,
+							    Bps_to_icc(gi2c->clk_freq_out));
+		}
+	}
+	return ret;
+}
+
+/**
  * geni_i2c_resources_init: initialize clk, icc vote, read dt property
  * @pdev: Platform driver handle
  * @gi2c: geni i2c structure as a pointer
@@ -3167,16 +3199,7 @@ static int geni_i2c_resources_init(struct platform_device *pdev, struct geni_i2c
 		gi2c->is_i2c_rtl_based  = true;
 		dev_info(gi2c->dev, "%s: RTL based SE\n", __func__);
 	} else {
-		if (gi2c->is_high_perf)
-			ret =
-			geni_se_common_resources_init(&gi2c->i2c_rsc,
-						      I2C_CORE2X_VOTE, GENI_DEFAULT_BW,
-						      (DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
-		else
-			ret =
-			geni_se_common_resources_init(&gi2c->i2c_rsc,
-						      GENI_DEFAULT_BW, GENI_DEFAULT_BW,
-						      Bps_to_icc(gi2c->clk_freq_out));
+		ret = geni_se_handle_common_resources(pdev, gi2c);
 		if (ret) {
 			dev_err(&pdev->dev, "%s: Error - resources_init ret:%d\n",
 				__func__, ret);

@@ -126,6 +126,7 @@ struct qcom_snps_eusb2_hsphy {
 	void __iomem *base;
 
 	struct clk *ref_clk;
+	struct clk *ref_clk_src;
 	struct reset_control *phy_reset;
 
 	struct regulator_bulk_data vregs[EUSB2_NUM_VREGS];
@@ -188,7 +189,7 @@ static void qcom_eusb2_default_parameters(struct qcom_snps_eusb2_hsphy *phy)
 
 static int qcom_eusb2_ref_clk_init(struct qcom_snps_eusb2_hsphy *phy)
 {
-	unsigned long ref_clk_freq = clk_get_rate(phy->ref_clk);
+	unsigned long ref_clk_freq = clk_get_rate(phy->ref_clk_src);
 
 	switch (ref_clk_freq) {
 	case 19200000:
@@ -418,6 +419,11 @@ static int qcom_snps_eusb2_hsphy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy->phy_reset))
 		return PTR_ERR(phy->phy_reset);
 
+	phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
+	if (IS_ERR(phy->ref_clk_src))
+		return dev_err_probe(dev, PTR_ERR(phy->ref_clk_src),
+				     "failed to get ref clk src\n");
+
 	phy->ref_clk = devm_clk_get(dev, "ref");
 	if (IS_ERR(phy->ref_clk))
 		return dev_err_probe(dev, PTR_ERR(phy->ref_clk),
@@ -432,7 +438,7 @@ static int qcom_snps_eusb2_hsphy_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, ret,
 				     "failed to get regulator supplies\n");
 
-	phy->repeater = devm_of_phy_get_by_index(dev, np, 0);
+	phy->repeater = devm_of_phy_optional_get(dev, np, 0);
 	if (IS_ERR(phy->repeater))
 		return dev_err_probe(dev, PTR_ERR(phy->repeater),
 				     "failed to get repeater\n");

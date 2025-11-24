@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define NUM_TRS_ERS_URG_CMD_REGS 8
@@ -16,11 +16,17 @@
 #define COMP_AND_COPY	4
 #define COMP_OVERFLOW_DRY_RUN	5
 
-/* Event status codes */
+/*
+ * Event status codes
+ * OP_BUS_ERROR: Critical error. Device reset is needed.
+ * OP_COMP_TOO_BIG: If the dry-run compressed size larger than TD's size, will skip the
+ * compression. ed->size indicates the size after compression.
+ * OP_TIMED_OUT: HW watchdog failure.
+ */
 #define OP_OK		0x0
 #define OP_BUS_ERROR	0x1
-#define COMP_TOO_BIG	0x2
-#define DECOMP_CRC_ERR	0x3
+#define OP_COMP_TOO_BIG	0x2
+#define OP_DECOMP_CRC_ERR	0x3
 #define OP_NOOP		0x4
 #define OP_TIMED_OUT	0x5
 #define OP_URG_ONGOING	0xf

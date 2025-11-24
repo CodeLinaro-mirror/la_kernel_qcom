@@ -8,5 +8,6 @@ menu "Firmware Drivers"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/firmware/arm_scmi/Kconfig"
 source "$(KCONFIG_EXT_PREFIX)drivers/firmware/qcom/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/firmware/arm_ffa/Kconfig"
 
 endmenu

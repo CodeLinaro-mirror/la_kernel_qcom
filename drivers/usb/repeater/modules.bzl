@@ -22,3 +22,17 @@ def register_modules(registry):
             "drivers/usb/repeater/repeater",
         ],
     )
+
+    registry.register(
+        name = "drivers/usb/repeater/repeater-i2c-eusb2",
+        out = "repeater-i2c-eusb2.ko",
+        config = "CONFIG_I2C_EUSB2_REPEATER",
+        srcs = [
+            # do not sort
+            "drivers/usb/repeater/repeater-i2c-eusb2.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/usb/repeater/repeater",
+        ],
+    )

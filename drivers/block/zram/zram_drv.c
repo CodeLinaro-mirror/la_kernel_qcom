@@ -1904,6 +1904,10 @@ static void zram_compress_success_handler(struct qpace_event_descriptor *ed, int
 
 	pr_debug("comp-success-handler, index: %d\n", ed_index);
 
+	/* TODO: dump all QPACE_COMP_CORE_* registers */
+	if (qpace_check_compress_err(ed))
+		panic("Compression failed! err=%d, index=%d\n", ed->completion_code, ed_index);
+
 	if (zmeta->bio->bi_status == BLK_STS_IOERR) {
 		pr_debug("comp-success-handler, index: %d, bio failed\n", ed_index);
 
@@ -1994,8 +1998,8 @@ static void __maybe_unused zram_copy_failure_handler(struct qpace_event_descript
 
 static int zram_qpace_comp(void *unused)
 {
-	bool triggered_compress;
-	int n_entries_consumed;
+	int n_entries_consumed = 0;
+	size_t triggered_compress;
 	int overflow_consumed;
 
 	struct sched_attr attr = {
@@ -2025,7 +2029,7 @@ static int zram_qpace_comp(void *unused)
 			goto wait_for_comp_request;
 		}
 
-		qpace_wait_for_tr_consumption(COMPRESS_RING, false);
+		qpace_wait_for_tr_consumption(COMPRESS_RING, triggered_compress, false);
 
 		pr_debug("compression done\n");
 

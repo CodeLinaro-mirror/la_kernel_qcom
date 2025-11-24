@@ -1061,12 +1061,10 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 
 	phy->phy.dev = dev;
 
-	if (!(of_device_is_compatible(dev->of_node, "qcom,usb-snps-eusb2-fw-managed"))) {
-		ur = devm_usb_get_repeater_by_phandle(dev, "usb-repeater", 0);
-		if (IS_ERR(ur)) {
-			ret = PTR_ERR(ur);
-			goto err_ret;
-		}
+	ur = devm_usb_get_optional_repeater_by_phandle(dev, "usb-repeater", 0);
+	if (IS_ERR(ur)) {
+		ret = PTR_ERR(ur);
+		goto err_ret;
 	}
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
@@ -1114,10 +1112,10 @@ static int msm_eusb2_phy_probe(struct platform_device *pdev)
 		}
 	} else {
 
-		phy->ref_clk = devm_clk_get(dev, "ref_clk");
-		if (IS_ERR(phy->ref_clk)) {
-			dev_err(dev, "clk get failed for ref_clk\n");
-			ret = PTR_ERR(phy->ref_clk);
+		phy->ref_clk_src = devm_clk_get(dev, "ref_clk_src");
+		if (IS_ERR(phy->ref_clk_src)) {
+			dev_err(dev, "clk get failed for ref_clk_src\n");
+			ret = PTR_ERR(phy->ref_clk_src);
 			goto err_ret;
 		}
 

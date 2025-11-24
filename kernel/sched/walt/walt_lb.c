@@ -705,11 +705,6 @@ void walt_lb_tick(struct rq *rq)
 	if (walt_quiet_state)
 		return;
 
-	raw_spin_lock(&rq->__lock);
-	if (available_idle_cpu(prev_cpu) && is_reserved(prev_cpu) && !rq->active_balance)
-		clear_reserved(prev_cpu);
-	raw_spin_unlock(&rq->__lock);
-
 	if (is_storage_boost()) {
 		if (rq->cpu == 0) {
 			raw_spin_lock_irqsave(&walt_lb_migration_lock, flags);
@@ -722,8 +717,6 @@ void walt_lb_tick(struct rq *rq)
 
 	if (!walt_fair_task(p))
 		return;
-
-	walt_cfs_tick(rq);
 
 	if (!rq->misfit_task_load || storage_balance)
 		return;
@@ -1074,12 +1067,13 @@ static void walt_find_busiest_queue(void *unused, int dst_cpu,
 	if (walt_quiet_state)
 		return;
 
+	get_entry_instr(FIND_BUSIEST_QUEUE);
 	*done = 1;
 	*busiest = NULL;
 
 	/* if dst_cpu is having high irq load skip searching busy cpu for this */
 	if (sched_cpu_high_irqload(dst_cpu))
-		return;
+		goto out;
 
 	/*
 	 * same cluster means, there will only be 1
@@ -1107,6 +1101,8 @@ done:
 		*busiest = cpu_rq(busiest_cpu);
 
 	trace_walt_find_busiest_queue(dst_cpu, busiest_cpu, src_mask.bits[0]);
+out:
+	update_instruction_data(FIND_BUSIEST_QUEUE);
 }
 
 /*
@@ -1128,6 +1124,7 @@ static void walt_nohz_balancer_kick(void *unused, struct rq *rq,
 
 	*done = 1;
 
+	get_entry_instr(SCHED_NOHZ_BALANCER_KICK);
 	/*
 	 * tick path migration takes care of misfit task.
 	 * so we have to check for nr_running >= 2 here.
@@ -1136,6 +1133,7 @@ static void walt_nohz_balancer_kick(void *unused, struct rq *rq,
 		*flags = NOHZ_KICK_MASK;
 		trace_walt_nohz_balance_kick(rq);
 	}
+	update_instruction_data(SCHED_NOHZ_BALANCER_KICK);
 }
 
 static void walt_can_migrate_task(void *unused, struct task_struct *p,
@@ -1149,14 +1147,17 @@ static void walt_can_migrate_task(void *unused, struct task_struct *p,
 	if (walt_quiet_state)
 		return;
 
+	get_entry_instr(CAN_MIGRATE_TASK);
 	to_lower = check_for_higher_capacity(task_cpu(p), dst_cpu);
 	to_higher = check_for_higher_capacity(dst_cpu, task_cpu(p));
 
 	if (_walt_can_migrate_task(p, dst_cpu, to_lower,
 				to_higher, true))
-		return;
+		goto out;
 
 	*can_migrate = 0;
+out:
+	update_instruction_data(CAN_MIGRATE_TASK);
 }
 
 static void walt_sched_newidle_balance(void *unused, struct rq *this_rq,
@@ -1175,10 +1176,12 @@ static void walt_sched_newidle_balance(void *unused, struct rq *this_rq,
 	if (walt_quiet_state)
 		return;
 
+	get_entry_instr(SCHED_NEWIDLE_BALANCE);
 	if (this_rq->ttwu_pending)
 		done = 0;
 	else
 		walt_newidle_balance(this_rq, rf, pulled_task, done, false);
+	update_instruction_data(SCHED_NEWIDLE_BALANCE);
 }
 
 u64 oscillate_ts_ns;
@@ -1279,6 +1282,7 @@ static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
 	if (unlikely(walt_disabled))
 		return;
 
+	get_entry_instr(FIND_NEW_ILB);
 	/*
 	 * if WALT doesn't find any target cpu return -1 this ensures
 	 * scheduler core skips in further cpu selections.
@@ -1294,7 +1298,7 @@ static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
 				continue;
 			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
 				*ilb = cpu;
-				return;
+				goto out;
 			}
 		}
 	}
@@ -1319,7 +1323,7 @@ static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
 				continue;
 			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
 				*ilb = cpu;
-				return;
+				goto out;
 			}
 
 		}
@@ -1340,7 +1344,7 @@ static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
 				continue;
 			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
 				*ilb = cpu;
-				return;
+				goto out;
 			}
 		}
 
@@ -1350,10 +1354,12 @@ static void walt_find_new_ilb(void *unused, struct cpumask *nohz_idle_cpus_mask,
 				continue;
 			if (available_idle_cpu(cpu) && cpu_online(cpu)) {
 				*ilb = cpu;
-				return;
+				goto out;
 			}
 		}
 	}
+out:
+	update_instruction_data(FIND_NEW_ILB);
 }
 
 void walt_lb_init(void)

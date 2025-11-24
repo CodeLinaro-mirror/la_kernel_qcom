@@ -654,6 +654,7 @@ struct dwc3_msm {
 
 	bool			wcd_usbss;
 	bool			dynamic_disable;
+	bool			read_u1u2;
 
 	struct dentry		*dbg_dir;
 #define PM_QOS_REQ_DYNAMIC	0
@@ -3413,13 +3414,12 @@ static void mdwc3_usb2_phy_soft_reset(struct dwc3_msm *mdwc)
 static void mdwc3_update_u1u2_value(struct dwc3 *dwc)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
-	static bool read_u1u2;
 
 	/* cache DT based initial value once */
-	if (!read_u1u2) {
+	if (!mdwc->read_u1u2) {
 		mdwc->cached_dis_u1_entry_quirk = dwc->dis_u1_entry_quirk;
 		mdwc->cached_dis_u2_entry_quirk = dwc->dis_u2_entry_quirk;
-		read_u1u2 = true;
+		mdwc->read_u1u2 = true;
 		dbg_log_string("cached_dt_param: u1_disable:%d u2_disable:%d\n",
 			mdwc->cached_dis_u1_entry_quirk, mdwc->cached_dis_u2_entry_quirk);
 	}
@@ -3909,15 +3909,20 @@ static void dwc3_msm_orientation_gpio_init(struct dwc3_msm *mdwc)
 	int rc;
 
 	mdwc->orientation_gpio = of_get_named_gpio(dev->of_node, "gpios", 0);
+
+	/*
+	 * If the GPIO is not defined or invalid, simply disable the
+	 * orientation feature – this is not an error condition.
+	 */
 	if (!gpio_is_valid(mdwc->orientation_gpio)) {
-		dev_err(dev, "Failed to get gpio\n");
+		dev_dbg(dev, "Orientation GPIO not defined, feature disabled\n");
 		return;
 	}
 
 	rc = devm_gpio_request_one(dev, mdwc->orientation_gpio,
 				   GPIOF_IN, "dwc3-msm-orientation");
 	if (rc < 0) {
-		dev_err(dev, "Failed to request gpio\n");
+		dev_err(dev, "failed to request orientation GPIO ret=%d\n", rc);
 		mdwc->orientation_gpio = -EINVAL;
 		return;
 	}
@@ -4018,14 +4023,19 @@ static void enable_usb_pdc_interrupt(struct dwc3_msm *mdwc, bool enable)
 		 * during bus-suspend case, irrespective of the speed of the connected
 		 * device, both eDM and eDP line will be pulled high (XeSE1).
 		 */
-		if (mdwc->use_eusb2_phy)
+		if (mdwc->use_eusb2_phy) {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_RISING, enable);
-		else
+
+			configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
+				IRQ_TYPE_EDGE_RISING, enable);
+		} else {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_FALLING, enable);
+		}
 
 	} else if (mdwc->phy_flags & PHY_HSFS_MODE) {
 		/*
@@ -4034,14 +4044,19 @@ static void enable_usb_pdc_interrupt(struct dwc3_msm *mdwc, bool enable)
 		 * during bus-suspend case, irrespective of the speed of the connected
 		 * device, both eDM and eDP line will be pulled high (XeSE1).
 		 */
-		if (mdwc->use_eusb2_phy)
+		if (mdwc->use_eusb2_phy) {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_RISING, enable);
-		else
+
+			configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
+				IRQ_TYPE_EDGE_RISING, enable);
+		} else {
 			configure_usb_wakeup_interrupt(mdwc,
 				&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
 				IRQ_TYPE_EDGE_FALLING, enable);
+		}
 
 	} else {
 		/* When in host mode, with no device connected, set the HS

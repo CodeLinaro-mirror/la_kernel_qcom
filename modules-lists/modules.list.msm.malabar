@@ -13,6 +13,7 @@ midpoint.ko
 clk-scmi.ko
 sched-walt.ko
 sched-walt-debug.ko
+rpm-smd.ko
 cmd-db.ko
 qcom_rpmh.ko
 crm-v2.ko
@@ -30,9 +31,8 @@ tcsrcc-canoe.ko
 videocc-canoe.ko
 smem.ko
 socinfo.ko
-icc-bcm-voter.ko
 icc-debug.ko
-icc-rpmh.ko
+icc-rpm.ko
 qcom_cpucp.ko
 cpucp_fast.ko
 qcom_scmi_vendor.ko
@@ -71,9 +71,8 @@ qcom_hwspinlock.ko
 qcom_aoss.ko
 qrtr.ko
 msm_qmp.ko
-qnoc-qos.ko
-qnoc-canoe.ko
-qnoc-alor.ko
+qnoc-qos-rpm.ko
+qnoc-malabar.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko
 iommu-logger.ko

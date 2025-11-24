@@ -9,8 +9,14 @@
 #include <linux/dma-buf.h>
 #include <linux/firmware/qcom/si_object.h>
 
-#define SI_CORE_MEM_OBJ_SHARE 0
-#define SI_CORE_MEM_OBJ_LEND  1
+#define SI_CORE_MEM_OBJ_SHARE     0
+#define SI_CORE_MEM_OBJ_LEND      1
+
+/* When UNCACHED flag is used the use-case owner must perform explicit cache
+ * maintenance operations, i.e. cache flush and invalidate on the memory
+ * shared with QTEE.
+ */
+#define SI_CORE_MEM_OBJ_UNCACHED  16
 
 struct si_object *init_si_mem_object_user(struct dma_buf *dma_buf,
 	void (*release)(void *), void *private);
@@ -31,6 +37,8 @@ struct si_object *init_si_mem_object_sg(struct sg_table *sgt, uint64_t tag,
 					uint32_t flags, void (*release)(void *),
 					void *private);
 
+int dma_map_mem_object(struct si_object *object, unsigned int nents);
+void dma_unmap_mem_object(struct si_object *object, unsigned int nents);
 /* For 'mem_object_to_dma_buf' and 'is_mem_object' caller should own the 'object',
  * (i.e. someone should have already called '__get_si_object').
  */

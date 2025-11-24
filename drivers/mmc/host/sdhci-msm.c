@@ -35,6 +35,8 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/mmc/sdio_func.h>
+#include <soc/qcom/sdhci-msm.h>
 
 #include <soc/qcom/ice.h>
 
@@ -5446,8 +5448,9 @@ skip_removing_qos:
 	sdhci_pltfm_free(pdev);
 }
 
-static void sdhci_msm_toggle_dat1_gpio(struct sdhci_host *host)
+void sdhci_msm_toggle_dat1_gpio(struct sdio_func *func)
 {
+	struct sdhci_host *host = mmc_priv(func->card->host);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	struct device *dev = mmc_dev(host->mmc);
@@ -5496,6 +5499,7 @@ static void sdhci_msm_toggle_dat1_gpio(struct sdhci_host *host)
 
 	dev_dbg(dev, "Successfully toggled SDIO DAT1 via GPIO\n");
 }
+EXPORT_SYMBOL_GPL(sdhci_msm_toggle_dat1_gpio);
 
 static __maybe_unused int sdhci_msm_runtime_suspend(struct device *dev)
 {
@@ -5557,9 +5561,6 @@ static __maybe_unused int sdhci_msm_runtime_resume(struct device *dev)
 
 	sdhci_msm_vote_pmqos(msm_host->mmc,
 			msm_host->sdhci_qos->active_mask);
-
-	if (msm_host->pinctrl_state_gpio && msm_host->mmc->card)
-		sdhci_msm_toggle_dat1_gpio(host);
 
 skip_qos:
 	ret = sdhci_msm_ice_resume(msm_host);

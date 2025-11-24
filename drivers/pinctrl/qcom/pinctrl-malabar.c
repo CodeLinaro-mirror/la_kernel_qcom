@@ -1762,8 +1762,19 @@ static const struct msm_pingroup malabar_groups[] = {
 static struct pinctrl_qup malabar_qup_regs[] = {
 };
 
-static const struct msm_gpio_wakeirq_map malabar_pdc_map[] = {
-
+static const struct msm_gpio_wakeirq_map malabar_mpm_map[] = {
+	{ 0, 84 }, { 3, 32 }, { 4, 39 }, { 6, 7 }, { 8, 11 }, { 9, 14 }, { 10, 55 },
+	{ 11, 9 }, { 12, 47 }, { 13, 36 }, { 14, 24 }, { 15, 17 }, { 16, 18 },
+	{ 17, 27 }, { 20, 25 }, { 21, 29 }, { 23, 30 }, { 26, 31 }, { 27, 75 },
+	{ 28, 68 }, { 30, 43 }, { 34, 33 }, { 36, 85 }, { 39, 79 }, { 40, 40 },
+	{ 43, 8 }, { 47, 69 }, { 51, 45 }, { 53, 48 }, { 56, 62 }, { 57, 46 },
+	{ 58, 19 }, { 59, 51 }, { 60, 52 }, { 61, 70 }, { 62, 53 }, { 65, 35 },
+	{ 66, 49 }, { 69, 54 }, { 70, 41 }, { 71, 50 }, { 72, 28 }, { 74, 56 },
+	{ 75, 57 }, { 77, 42 }, { 78, 61 }, { 79, 76 }, { 80, 64 }, { 81, 78 },
+	{ 82, 44 }, { 85, 60 }, { 86, 66 }, { 88, 77 }, { 91, 58 }, { 92, 20 },
+	{ 93, 59 }, { 94, 12 }, { 96, 38 }, { 97, 21 }, { 98, 63 }, { 99, 71 },
+	{ 100, 34 }, { 102, 65 }, { 103, 23 }, { 104, 37 }, { 106, 72 }, { 107, 67 },
+	{ 108, 73 }, { 110, 16 }, { 111, 74 }, { 113, 26 },
 };
 
 static const struct msm_pinctrl_soc_data malabar_tlmm = {
@@ -1776,8 +1787,8 @@ static const struct msm_pinctrl_soc_data malabar_tlmm = {
 	.ngpios = 115,
 	.qup_regs = malabar_qup_regs,
 	.nqup_regs = ARRAY_SIZE(malabar_qup_regs),
-	.wakeirq_map = malabar_pdc_map,
-	.nwakeirq_map = ARRAY_SIZE(malabar_pdc_map),
+	.wakeirq_map = malabar_mpm_map,
+	.nwakeirq_map = ARRAY_SIZE(malabar_mpm_map),
 	.egpio_func = 11,
 };
 

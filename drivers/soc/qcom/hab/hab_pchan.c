@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include "hab.h"
 
@@ -51,14 +51,14 @@ static void hab_pchan_free(struct kref *ref)
 	write_unlock_bh(&pchan->habdev->pchan_lock);
 
 	/* check vchan leaking */
-	read_lock(&pchan->vchans_lock);
+	read_lock_bh(&pchan->vchans_lock);
 	list_for_each_entry(vchan, &pchan->vchannels, pnode) {
 		/* no logging on the owner. it might have been gone */
 		pr_warn("leaking vchan id %X remote %X refcnt %d\n",
 				vchan->id, vchan->otherend_id,
 				get_refcnt(vchan->refcount));
 	}
-	read_unlock(&pchan->vchans_lock);
+	read_unlock_bh(&pchan->vchans_lock);
 
 	kfree(pchan);
 }

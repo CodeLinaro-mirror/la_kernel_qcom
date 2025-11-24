@@ -71,4 +71,4 @@ def define_hamoa():
         ],
     )
 
-    native.exports_files(["modules-lists/modules.list.msm.x1p42100"])
+    native.exports_files(["modules-lists/modules.list.msm.hamoa"])

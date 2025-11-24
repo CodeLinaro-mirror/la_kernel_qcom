@@ -2,7 +2,7 @@ build.config.msm.autogvm
 build.config.msm.sun
 build.config.msm.sun.allyes
 build.config.msm.canoe
-build.config.msm.canoe.le
+build.config.msm.alor.le
 build.config.msm.bengal
 build.config.msm.lahaina
 build.config.msm.monaco
@@ -13,4 +13,4 @@ build.config.msm.gen3auto
 build.config.msm.hamoa
 build.config.msm.malabar
 build.config.msm.pikachu
-build.config.msm.colibri
+build.config.msm.shikra
