@@ -241,3 +241,16 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v7.h",
         ],
     )
+
+    registry.register(
+        name = "drivers/phy/qualcomm/phy-qcom-sgmii-eth",
+        out = "phy-qcom-sgmii-eth.ko",
+        config = "CONFIG_PHY_QCOM_SGMII_ETH",
+        srcs = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-sgmii-eth.c",
+            "drivers/phy/qualcomm/phy-qcom-qmp-pcs-sgmii.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v5.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v5.h",
+        ],
+    )

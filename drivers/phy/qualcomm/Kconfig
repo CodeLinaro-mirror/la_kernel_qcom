@@ -145,6 +145,16 @@ config PHY_QCOM_QMP_COMBO
 	  required for the USB controller to communicate with the USB host
 	  in Super-Speed mode.
 
+config PHY_QCOM_SGMII_ETH
+	tristate "Qualcomm DWMAC SGMII SerDes/PHY driver"
+	depends on OF && (ARCH_QCOM || COMPILE_TEST)
+	depends on HAS_IOMEM
+	select GENERIC_PHY
+	help
+	  Enable this to support the Qualcomm SGMII SerDes/PHY used with the
+	  DesignWare MAC Ethernet controller on Qualcomm SoCs. This is required
+	  for proper SGMII link configuration between the MAC and external PHY.
+
 config PHY_QCOM_QMP_USB
 	tristate "Qualcomm QMP USB PHY Driver"
 	select GENERIC_PHY
