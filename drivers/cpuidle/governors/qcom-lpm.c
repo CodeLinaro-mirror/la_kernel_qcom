@@ -47,8 +47,20 @@
 
 #define UPDATE_REASON(i, u)			(BIT(u) << (MAX_LPM_CPUS * i))
 
+u32 premature_resi_div_cpu = U32_MAX;
+u32 resi_fact = PRED_RESI_FACT;
+u32 pred_active_time = PRED_ACTIVE_TIME;
+u32 pred_timer_add = PRED_TIMER_ADD;
+u32 pred_premature_cnt = PRED_PREMATURE_CNT;
+u32 ipi_pred_ref_stddev = IPI_PRED_REF_STDDEV;
+u32 pred_ref_stddev = PRED_REF_STDDEV;
+
+bool premature_ext_disabled;
+bool cluster_bias_disabled;
+bool bias_disabled;
 bool prediction_disabled;
 bool sleep_disabled = true;
+
 static bool suspend_in_progress;
 static bool traces_registered;
 static struct cluster_governor *cluster_gov_ops;

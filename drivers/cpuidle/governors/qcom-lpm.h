@@ -11,13 +11,27 @@
 
 #define MAX_LPM_CPUS		8
 #define MAXSAMPLES		5
+#define PRED_RESI_FACT		1
+#define MAX_PRED_TIMER_ADD	1000
 #define PRED_TIMER_ADD		100
 #define PRED_PREMATURE_CNT	3
 #define PRED_REF_STDDEV		500
+#define PRED_ACTIVE_TIME	0
+#define IPI_PRED_REF_STDDEV	500
 #define CLUST_SMPL_INVLD_TIME	40000
 #define CLUST_BIAS_TIME_MSEC	10
 #define MAX_CLUSTER_STATES	4
 
+extern u32 premature_resi_div_cpu;
+extern u32 pred_active_time;
+extern u32 resi_fact;
+extern u32 pred_timer_add;
+extern u32 pred_premature_cnt;
+extern u32 pred_ref_stddev;
+extern u32 ipi_pred_ref_stddev;
+extern bool bias_disabled;
+extern bool cluster_bias_disabled;
+extern bool premature_ext_disabled;
 extern bool sleep_disabled;
 extern bool prediction_disabled;
 
