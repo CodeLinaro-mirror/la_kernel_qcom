@@ -215,6 +215,12 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 /* Required for polling for 100 msecs */
 #define POLL_WAIT_TIMEOUT_MSEC	100
 
+#if IS_ENABLED(CONFIG_MSM_GPI_DMA_DEBUG)
+#define GSI_STOP_RX_TIMEOUT	2500
+#else
+#define GSI_STOP_RX_TIMEOUT	750
+#endif
+
 /* Required for polling for 25 msecs */
 #define CMD_DONE_TIMEOUT_MSEC	25
 
@@ -4484,7 +4490,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 					"%s: Stop Rx Engine\n", __func__);
 			timeout = wait_for_completion_timeout
 				(&msm_port->xfer,
-				msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC));
+				msecs_to_jiffies(GSI_STOP_RX_TIMEOUT));
 
 			if (!timeout)
 				UART_LOG_DBG(msm_port->ipc_log_misc,
@@ -4884,6 +4890,7 @@ static int msm_geni_serial_reconfigure_baud_rate(struct uart_port *uport)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	struct ktermios *termios = port->current_termios;
 	int ret;
+	unsigned int wait_time = POLL_WAIT_TIMEOUT_MSEC;
 	unsigned long long start_time;
 
 	start_time = geni_capture_start_time(&port->se, port->ipc_log_kpi,
@@ -4912,8 +4919,9 @@ static int msm_geni_serial_reconfigure_baud_rate(struct uart_port *uport)
 	msm_geni_serial_stop_rx(uport);
 
 	if (!uart_console(uport)) {
-		if (!wait_for_completion_timeout(&port->xfer,
-						 msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC)))
+		if (port->xfer_mode == GENI_GPI_DMA)
+			wait_time = GSI_STOP_RX_TIMEOUT;
+		if (!wait_for_completion_timeout(&port->xfer, msecs_to_jiffies(wait_time)))
 			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 				     "%s:Timeout for stop_rx\n", __func__);
 	}
@@ -5013,7 +5021,7 @@ static void msm_geni_serial_set_termios(struct uart_port *uport,
 {
 	unsigned int baud;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
-	unsigned long poll_wait_time;
+	unsigned int poll_wait_time = POLL_WAIT_TIMEOUT_MSEC;
 	unsigned long long start_time;
 
 	start_time = geni_capture_start_time(&port->se, port->ipc_log_kpi,
@@ -5048,8 +5056,9 @@ static void msm_geni_serial_set_termios(struct uart_port *uport,
 	msm_geni_serial_stop_rx(uport);
 
 	if (!uart_console(uport)) {
-		poll_wait_time = msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC);
-		if (!wait_for_completion_timeout(&port->xfer, poll_wait_time))
+		if (port->xfer_mode == GENI_GPI_DMA)
+			poll_wait_time = GSI_STOP_RX_TIMEOUT;
+		if (!wait_for_completion_timeout(&port->xfer, msecs_to_jiffies(poll_wait_time)))
 			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 				     "%s:Timeout for stop_rx\n", __func__);
 	}
@@ -6245,6 +6254,13 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 			msm_geni_serial_allow_rx(port);
 		ret = -EBUSY;
 		goto exit_runtime_suspend;
+	}
+
+	if (port->xfer_mode == GENI_GPI_DMA &&
+	    !wait_for_completion_timeout(&port->xfer, msecs_to_jiffies(GSI_STOP_RX_TIMEOUT))) {
+		UART_LOG_DBG(port->ipc_log_pwr, dev,
+			     "%s: timeout for gsi cancel rx\n", __func__);
+		return -ETIMEDOUT;
 	}
 
 	geni_status = geni_read_reg(port->uport.membase, SE_GENI_STATUS);
