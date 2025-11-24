@@ -251,6 +251,7 @@ hamoa_perf_config = {
     "CONFIG_SLIMBUS": "m",
     "CONFIG_SLIM_QCOM_NGD_CTRL": "m",
     "CONFIG_SM_VIDEOCC_8550": "m",
+    "CONFIG_SERIAL_PKVM_GENI": "m",
     "CONFIG_SND_USB_AUDIO_QMI": "n",
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
