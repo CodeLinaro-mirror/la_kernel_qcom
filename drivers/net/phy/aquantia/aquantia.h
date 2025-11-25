@@ -179,7 +179,7 @@ struct aqr107_priv {
 	unsigned long leds_active_low;
 };
 
-#if IS_REACHABLE(CONFIG_HWMON)
+#if IS_REACHABLE(CONFIG_HWMON) && IS_BUILTIN(CONFIG_AQUANTIA_PHY)
 int aqr_hwmon_probe(struct phy_device *phydev);
 #else
 static inline int aqr_hwmon_probe(struct phy_device *phydev) { return 0; }
