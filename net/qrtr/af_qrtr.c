@@ -1257,13 +1257,20 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 		ipc = qrtr_port_lookup(cb->dst_port);
 		if (!ipc) {
 			kfree_skb(skb);
+			pr_err("%s: Lookup error\n", __func__);
 			return -ENODEV;
 		}
 
 		if (sock_queue_rcv_skb(&ipc->sk, skb)) {
+			pr_err("%s: skb queuing error\n", __func__);
 			qrtr_port_put(ipc);
 			goto err;
 		}
+		if (svc_id == 0x1000)
+			QRTR_INFO(qrtr_debug,
+				  "Queued to skb:RX DATA:Len:0x%x src[0x%x:0x%x] dst[0x%x:0x%x]\n",
+				   skb->len, cb->src_node, cb->src_port,
+				   cb->dst_node, cb->dst_port);
 
 		/* Force wakeup based on services */
 		if (!xa_load(&node->no_wake_svc, svc_id))
@@ -2271,6 +2278,15 @@ static int qrtr_recvmsg(struct socket *sock, struct msghdr *msg,
 		addr->sq_node = cb->src_node;
 		addr->sq_port = cb->src_port;
 		msg->msg_namelen = sizeof(*addr);
+
+		if (cb->src_node == 0x3) {
+			if (skb) {
+				QRTR_INFO(qrtr_debug,
+					  "%s: tgid[%d]/pid[%d]: %s from src[%x/%x] len=%d",
+					  __func__, current->tgid, current->pid,
+					  current->comm, cb->src_node, cb->src_port, skb->len);
+			}
+		}
 	}
 
 out:
