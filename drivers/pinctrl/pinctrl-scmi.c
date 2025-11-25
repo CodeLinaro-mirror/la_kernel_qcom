@@ -103,7 +103,7 @@ static int pinctrl_gpio_get(struct gpio_chip *gc, unsigned int offset)
 	int ret;
 	unsigned int gpio = gc->base + offset;
 
-	config = PIN_CONFIG_INPUT_VALUE;
+	config = PIN_CONFIG_LEVEL;
 	ret = pinctrl_gpio_get_config(gpio, &config);
 	if (ret)
 		return ret;
@@ -116,7 +116,7 @@ static void pinctrl_gpio_set(struct gpio_chip *gc, unsigned int offset, int val)
 	unsigned long config;
 	unsigned int gpio = gc->base + offset;
 
-	config = PIN_CONF_PACKED(PIN_CONFIG_OUTPUT, val);
+	config = PIN_CONF_PACKED(PIN_CONFIG_LEVEL, val);
 	pinctrl_gpio_set_config(gpio, config);
 }
 
