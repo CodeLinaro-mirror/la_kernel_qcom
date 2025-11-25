@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /* Connection tracking via netlink socket. Allows for user space
  * protocol helpers and general trouble making from userspace.
  *
@@ -2014,8 +2015,10 @@ static void ctnetlink_change_mark(struct nf_conn *ct,
 
 	mark = ntohl(nla_get_be32(cda[CTA_MARK]));
 	newmark = (READ_ONCE(ct->mark) & mask) ^ mark;
-	if (newmark != READ_ONCE(ct->mark))
+	if (newmark != READ_ONCE(ct->mark)) {
 		WRITE_ONCE(ct->mark, newmark);
+		nf_conntrack_event_cache(IPCT_MARK, ct);
+	}
 }
 #endif
 
