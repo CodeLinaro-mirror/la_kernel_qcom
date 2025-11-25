@@ -1760,7 +1760,9 @@ static inline int _zram_req_queue(struct qpace_control *qpace_ctl,
 	tmp_output_page = qpace_ctl->output_queue->request_arr[arr_offset].out_page;
 
 	pos = qpace_ctl->qpace_queue_op(qpace_ctl->ring, zmeta->page, tmp_output_page);
-
+	/* if get_ring failed because of suspend */
+	if (pos < 0)
+		return pos;
 	qpace_ctl->output_queue->request_arr[pos].zmeta = zmeta;
 
 	qpace_ctl->queue_size++;
@@ -1818,7 +1820,11 @@ static int comp_request_submit(struct qpace_request_meta *zmeta)
 	mutex_lock(&comp_control.queue_lock);
 	queue_ret = _zram_req_queue(&comp_control, zmeta);
 
-	if (queue_ret) {
+	/*
+	 * suspend errors are not placed on overflow_list
+	 * which will be handled by upper layer function
+	 */
+	if (queue_ret == -ENOMEM) {
 		mutex_lock(&comp_control.queue_overflow_list_lock);
 		queue_ret = _zram_req_queue_overflow_list_insert(&comp_control, zmeta);
 		mutex_unlock(&comp_control.queue_overflow_list_lock);
@@ -1869,6 +1875,7 @@ static int enqueue_from_overflow_list(struct qpace_control *qpace_ctl)
 
 			list_del(&zmeta->list_node);
 			qpace_ctl->overflow_list_count--;
+			/* wait lock hold, no need to check return value */
 			_zram_req_queue(qpace_ctl, zmeta);
 			consumed++;
 		}
@@ -2012,7 +2019,6 @@ static int zram_qpace_comp(void *unused)
 	while (!kthread_should_stop()) {
 		pr_debug("waiting for comp work\n");
 		wait_for_completion(&comp_control.work_available);
-
 		get_qpace();
 		pr_debug("kthread: about to kick off compression\n");
 
@@ -2047,6 +2053,8 @@ static int zram_qpace_comp(void *unused)
 		* Grabbing this lock also prevents starvation for the requests coming
 		* from the overflow list, by preventing new submissions going to the
 		* now-empty compression queue until we fully empty the overflow list.
+		*
+		* As get_qpace() called, it is holding wakelock.
 		*/
 		mutex_lock(&comp_control.queue_lock);
 		comp_control.queue_size -= n_entries_consumed;
