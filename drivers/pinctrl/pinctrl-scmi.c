@@ -81,14 +81,6 @@ static int pinctrl_gpio_get_direction(struct gpio_chip *gc, unsigned int offset)
 	return -EINVAL;
 }
 
-static int pinctrl_gpio_direction_output_wrapper(struct gpio_chip *gc,
-						unsigned int offset, int val)
-{
-	unsigned int gpio = gc->base + offset;
-
-	return pinctrl_gpio_direction_output(gpio);
-}
-
 static int pinctrl_gpio_direction_input_wrapper(struct gpio_chip *gc,
 						unsigned int offset)
 {
@@ -118,6 +110,21 @@ static void pinctrl_gpio_set(struct gpio_chip *gc, unsigned int offset, int val)
 
 	config = PIN_CONF_PACKED(PIN_CONFIG_LEVEL, val);
 	pinctrl_gpio_set_config(gpio, config);
+}
+
+static int pinctrl_gpio_direction_output_wrapper(struct gpio_chip *gc,
+						unsigned int offset, int val)
+{
+	int ret;
+	unsigned int gpio = gc->base + offset;
+
+	ret = pinctrl_gpio_direction_output(gpio);
+	if (ret)
+		return ret;
+
+	pinctrl_gpio_set(gc, offset, val);
+
+	return 0;
 }
 
 static int pinctrl_gc_to_func(struct gpio_chip *gc)
