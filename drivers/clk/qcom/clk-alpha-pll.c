@@ -2553,10 +2553,67 @@ static int alpha_pll_lucid_5lpe_prepare(struct clk_hw *hw)
 	return 0;
 }
 
+static int __alpha_pll_lucid_5lpe_set_rate(struct clk_hw *hw, unsigned long rate,
+				      unsigned long prate, u32 latch_bit, u32 latch_ack)
+{
+	struct clk_alpha_pll *pll = to_clk_alpha_pll(hw);
+	unsigned long rrate;
+	u32 val, l, alpha_width = pll_alpha_width(pll);
+	u64 a;
+	int ret;
+
+	rrate = alpha_pll_round_rate(rate, prate, &l, &a, alpha_width);
+
+	ret = alpha_pll_check_rate_margin(hw, rrate, rate);
+	if (ret < 0)
+		return ret;
+
+	regmap_update_bits(pll->clkr.regmap, PLL_L_VAL(pll), LUCID_EVO_PLL_L_VAL_MASK, l);
+	regmap_write(pll->clkr.regmap, PLL_ALPHA_VAL(pll), a);
+
+	/*
+	 * Latch the new L and ALPHA values. This is only necessary when the
+	 * PLL is in RUN or STANDBY. If the PLL is in RESET, then the latch
+	 * interface is disabled and the ACK won't assert. The PLL will
+	 * automatically latch the values when transitioning out of RESET.
+	 */
+	regmap_read(pll->clkr.regmap, PLL_MODE(pll), &val);
+	if (val & PLL_RESET_N) {
+		/* Latch the PLL input */
+		ret = regmap_update_bits(pll->clkr.regmap, PLL_MODE(pll), latch_bit, latch_bit);
+		if (ret)
+			return ret;
+
+		/* Wait for 2 reference cycles before checking the ACK bit. */
+		udelay(1);
+		regmap_read(pll->clkr.regmap, PLL_MODE(pll), &val);
+		if (!(val & latch_ack)) {
+			WARN_CLK(&pll->clkr.hw, 1,
+				 "Lucid PLL latch failed. Output may be unstable!\n");
+			return -EINVAL;
+		}
+
+		/* Return the latch input to 0 */
+		ret = regmap_update_bits(pll->clkr.regmap, PLL_MODE(pll), latch_bit, 0);
+		if (ret)
+			return ret;
+	}
+
+	if (clk_hw_is_enabled(hw)) {
+		ret = wait_for_pll_enable_lock(pll);
+		if (ret)
+			return ret;
+	}
+
+	/* Wait for PLL output to stabilize */
+	udelay(100);
+	return 0;
+}
+
 static int alpha_pll_lucid_5lpe_set_rate(struct clk_hw *hw, unsigned long rate,
 					 unsigned long prate)
 {
-	return __alpha_pll_trion_set_rate(hw, rate, prate,
+	return __alpha_pll_lucid_5lpe_set_rate(hw, rate, prate,
 					  LUCID_5LPE_PLL_LATCH_INPUT,
 					  LUCID_5LPE_ALPHA_PLL_ACK_LATCH);
 }
