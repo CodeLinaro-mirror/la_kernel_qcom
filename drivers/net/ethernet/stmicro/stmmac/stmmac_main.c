@@ -99,7 +99,13 @@ MODULE_PARM_DESC(phyaddr, "Physical device address");
 
 #define L3_L4_Rx_Filter_Chan_Num	1
 
+/* Keep flow ctrl off for auto targets */
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+static int flow_ctrl = FLOW_OFF;
+#else
 static int flow_ctrl = FLOW_AUTO;
+#endif
+
 module_param(flow_ctrl, int, 0644);
 MODULE_PARM_DESC(flow_ctrl, "Flow control ability [on/off]");
 
@@ -1177,8 +1183,11 @@ static void stmmac_validate(struct phylink_config *config,
 	phylink_set(mac_supported, 1000baseT_Full);
 	phylink_set(mac_supported, 1000baseKX_Full);
 
+	/* Disable support for flow control for auto*/
+#if !IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
 	phylink_set(mac_supported, Autoneg);
 	phylink_set(mac_supported, Pause);
+#endif
 	phylink_set(mac_supported, Asym_Pause);
 	phylink_set_port_modes(mac_supported);
 
