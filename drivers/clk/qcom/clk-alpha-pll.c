@@ -2997,7 +2997,11 @@ void clk_lucid_evo_pll_configure(struct clk_alpha_pll *pll, struct regmap *regma
 		return;
 	}
 
-	lval |= TRION_PLL_CAL_VAL << LUCID_EVO_PLL_CAL_L_VAL_SHIFT;
+	if (config->cal_l)
+		lval |= config->cal_l << LUCID_EVO_PLL_CAL_L_VAL_SHIFT;
+	else
+		lval |= TRION_PLL_CAL_VAL << LUCID_EVO_PLL_CAL_L_VAL_SHIFT;
+
 	lval |= TRION_PLL_CAL_VAL << LUCID_OLE_PLL_PROCESS_CAL_L_VAL_SHIFT;
 	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_L_VAL, lval);
 	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_ALPHA_VAL, config->alpha);
