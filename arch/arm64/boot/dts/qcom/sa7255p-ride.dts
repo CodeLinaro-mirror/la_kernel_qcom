@@ -9,6 +9,7 @@
 
 #include "sa7255p.dtsi"
 #include "sa7255p-scmi.dtsi"
+#include "sa7255p-pmics.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. SA7255P Ride";
@@ -102,6 +103,34 @@
 	power-domain-names = "power";
 
 	status = "disabled";
+};
+
+&pmm8654au_0_thermal {
+	thermal-sensors = <&scmi23_sensor 0>;
+};
+
+&pmm8654au_1_thermal {
+	thermal-sensors = <&scmi23_sensor 1>;
+};
+
+&pmm8654au_2_thermal {
+	thermal-sensors = <&scmi23_sensor 2>;
+};
+
+&pmm8654au_3_thermal {
+	thermal-sensors = <&scmi23_sensor 3>;
+};
+
+&pmm8654au_4_thermal {
+	thermal-sensors = <&scmi23_sensor 7>;
+};
+
+&pmm8654au_5_thermal {
+	thermal-sensors = <&scmi23_sensor 9>;
+};
+
+&pmm8654au_6_thermal {
+	thermal-sensors = <&scmi23_sensor 14>;
 };
 
 &tlmm {
@@ -201,6 +230,10 @@
 };
 
 &scmi15 {
+	status = "okay";
+};
+
+&scmi23 {
 	status = "okay";
 };
 
