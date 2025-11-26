@@ -45,6 +45,9 @@ usb_f_ccid.ko
 usb_f_cdev.ko
 usb_f_gsi.ko
 usb_f_qdss.ko
+cqhci.ko
+sdhci-msm.ko
+qcom_ice.ko
 smp2p.ko
 qseecom_proxy.ko
 qcom_ice.ko
