@@ -34,6 +34,13 @@ def register_modules(registry):
                     "drivers/firmware/qcom/si_core/si_core_ffa.c",
                 ],
             },
+            "CONFIG_QCOM_SI_CORE_DOORBELL": {
+                True: [
+                    # do not sort
+                    "drivers/firmware/qcom/si_core/si_core_irq.c",
+                    "drivers/firmware/qcom/si_core/si_core_irq.h",
+                ],
+            },
         },
         deps = [
             # do not sort
