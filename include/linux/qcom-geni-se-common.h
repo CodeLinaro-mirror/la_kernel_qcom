@@ -56,6 +56,7 @@ if (print) { \
 
 #define QTIMER_BIN		(0x220)
 #define TIMESTAMP_DATA_SIZE	8
+#define MINIMUM_BUS_VOTE	1
 
 /* In KHz */
 #define DEFAULT_SE_CLK	19200
@@ -220,6 +221,7 @@ static inline int geni_common_icc_set_bw(struct geni_se *se, void *ipcl)
 		if (i == 0)
 			avg_bw = se->icc_paths[i].avg_bw / 100;
 
+		avg_bw = avg_bw ? avg_bw : MINIMUM_BUS_VOTE;
 		ret = icc_set_bw(se->icc_paths[i].path, avg_bw, peak_bw);
 		if (ret) {
 			dev_err_ratelimited(se->dev, "ICC BW voting failed on path '%s': %d\n",
