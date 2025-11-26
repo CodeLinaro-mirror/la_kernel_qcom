@@ -271,6 +271,22 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
+	} else if (!strcmp(name, "CHORA")) {
+		soc_sched_lib_name_capacity = 4;
+		/*
+		 * Trailblazer settings
+		 */
+		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[1] = 1000000;
+		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+		pipeline_swap_util_th = 100;
+		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
+
+		/*
+		 * Do not put the whole cluster at Fmin during thermal halt condition.
+		 */
+		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+
 	} else if (!strcmp(name, "VIENNA") || !strcmp(name, "VIENNAP")) {
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
