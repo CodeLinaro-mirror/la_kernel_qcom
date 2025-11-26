@@ -1455,11 +1455,11 @@ static void log_cpu_freq(void *unused,
 
 static void register_cpufreq_log(void)
 {
+	int cpu;
 	struct md_region md_entry;
 	size_t freq_hist_sz;
 	max_cluster = 0;
 #if IS_ENABLED(CONFIG_SMP)
-	int cpu;
 	for_each_possible_cpu(cpu) {
 		if (topology_cluster_id(cpu) > max_cluster)
 			max_cluster = topology_cluster_id(cpu);
@@ -1483,6 +1483,92 @@ static void register_cpufreq_log(void)
 	register_trace_android_vh_cpufreq_resolve_freq(log_cpu_freq, NULL);
 	register_trace_android_vh_cpufreq_fast_switch(log_cpu_freq, NULL);
 	register_trace_android_vh_cpufreq_target(log_cpu_freq, NULL);
+
+#if IS_ENABLED(CONFIG_ARM)
+	struct cpufreq_policy **policy_array =
+		(struct cpufreq_policy **)DEBUG_SYMBOL_LOOKUP(cpufreq_cpu_data);
+	if (IS_ERR_OR_NULL(policy_array))
+		return;
+
+	/* Register cpufreq_cpu_data array */
+	memset(&md_entry, 0, sizeof(md_entry));
+	md_entry.virt_addr = (uintptr_t)policy_array;
+	md_entry.phys_addr = virt_to_phys((void *)policy_array);
+	md_entry.size = sizeof(void *) * nr_cpu_ids;
+	strscpy(md_entry.name, "CPUFREQDATA", sizeof(md_entry.name));
+	if (msm_minidump_add_region(&md_entry) < 0)
+		pr_err("Failed to add cpufreq_cpu_data in Minidump\n");
+
+	/* Register each CPU's cpufreq_policy, freq_table, and governor */
+	for_each_possible_cpu(cpu) {
+		struct cpufreq_policy *policy = policy_array[cpu];
+
+		if (!policy)
+			continue;
+
+		/* Validate policy is not vmalloc'd before using virt_to_phys */
+		if (is_vmalloc_addr(policy)) {
+			pr_warn("Skipping vmalloc'd policy for CPU%d\n", cpu);
+			continue;
+		}
+
+		/* cpufreq_policy structure */
+		memset(&md_entry, 0, sizeof(md_entry));
+		scnprintf(md_entry.name, sizeof(md_entry.name), "CPUFREQPOL%d", cpu);
+		md_entry.virt_addr = (uintptr_t)policy;
+		md_entry.phys_addr = virt_to_phys(policy);
+		md_entry.size = sizeof(struct cpufreq_policy);
+		if (msm_minidump_add_region(&md_entry) < 0)
+			pr_err("Failed to add cpu policy in Minidump\n");
+
+		/* freq_table if present */
+		if (policy->freq_table) {
+			int table_entries = 0;
+			const int MAX_FREQ_ENTRIES = 200; /* Reasonable upper bound */
+			struct cpufreq_frequency_table *pos = policy->freq_table;
+
+			/* Validate freq_table is not vmalloc'd */
+			if (is_vmalloc_addr(policy->freq_table)) {
+				pr_warn("Skipping vmalloc'd freq_table for CPU%d\n", cpu);
+				goto skip_freq_table;
+			}
+
+			/* Count entries until sentinel */
+			while (pos->frequency != CPUFREQ_TABLE_END &&
+				table_entries < MAX_FREQ_ENTRIES) {
+				table_entries++;
+				pos++;
+			}
+
+			memset(&md_entry, 0, sizeof(md_entry));
+			scnprintf(md_entry.name, sizeof(md_entry.name), "CPUFREQTAB%d", cpu);
+			md_entry.virt_addr = (uintptr_t)policy->freq_table;
+			md_entry.phys_addr = virt_to_phys(policy->freq_table);
+			md_entry.size = sizeof(struct cpufreq_frequency_table) *
+				(table_entries + 1);
+			if (msm_minidump_add_region(&md_entry) < 0)
+				pr_err("Failed to add cpu table info in Minidump\n");
+		}
+
+skip_freq_table:
+		/* governor if present */
+		if (policy->governor) {
+			/* Validate governor is not vmalloc'd */
+			if (is_vmalloc_addr(policy->governor)) {
+				pr_warn("Skipping vmalloc'd governor for CPU%d\n", cpu);
+				continue;
+			}
+
+			memset(&md_entry, 0, sizeof(md_entry));
+			scnprintf(md_entry.name, sizeof(md_entry.name), "CPUFREQGOV%d", cpu);
+			md_entry.virt_addr = (uintptr_t)policy->governor;
+			md_entry.phys_addr = virt_to_phys(policy->governor);
+			md_entry.size = sizeof(struct cpufreq_governor);
+			if (msm_minidump_add_region(&md_entry) < 0)
+				pr_err("Failed to add cpu governor in Minidump\n");
+		}
+	}
+#endif /* CONFIG_ARM */
 }
 #else
 static inline void register_cpufreq_log(void) {}
