@@ -5,6 +5,7 @@ shikra_perf_config = {
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
     "CONFIG_ARM_SMMU_QCOM": "m",
     "CONFIG_ARM_SMMU_SELFTEST": "n",
+    "CONFIG_CLK_SHIKRA_GCC": "m",
     "CONFIG_COMMON_CLK_QCOM": "m",
     "CONFIG_DMABUF_HEAPS_SYSTEM": "y",
     "CONFIG_EDAC_KRYO_ARM64": "m",
