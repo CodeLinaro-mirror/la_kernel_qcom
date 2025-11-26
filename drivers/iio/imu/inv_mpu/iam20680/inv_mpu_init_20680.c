@@ -242,13 +242,18 @@ int inv_mpu_initialize(struct inv_mpu_state *st)
 	plat = &st->plat_data;
 
 	/* reset to ensure correct power-up */
-	inv_plat_single_write(st, REG_PWR_MGMT_1, BIT_H_RESET);
+	result = inv_plat_single_write(st, REG_PWR_MGMT_1, BIT_H_RESET);
+	if (result)
+		return result;
+
 	msleep(100);
 
 	/* read whoami, do a reset and retry in case power-up is still not correct */
 	result = inv_plat_read(st, REG_WHO_AM_I, 1, &v);
 	if (result || v == 0x00 || v == 0xff) {
-		inv_plat_single_write(st, REG_PWR_MGMT_1, BIT_H_RESET);
+		result = inv_plat_single_write(st, REG_PWR_MGMT_1, BIT_H_RESET);
+		if (result)
+			return result;
 		msleep(100);
 		result = inv_plat_read(st, REG_WHO_AM_I, 1, &v);
 	}
