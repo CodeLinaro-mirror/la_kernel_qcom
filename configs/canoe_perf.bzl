@@ -162,6 +162,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_CPU_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_CPUSS_SLEEP_STATS_V4": "m",
     "CONFIG_QCOM_CPUSS_TELEMETRY": "m",
+    "CONFIG_QCOM_CPU_PHYS_LOG_MAP": "m",
     "CONFIG_QCOM_CRM_V2": "m",
     "CONFIG_QCOM_DCC_V2": "m",
     "CONFIG_QCOM_DCVS": "m",
