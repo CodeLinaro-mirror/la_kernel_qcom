@@ -1368,6 +1368,20 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/qcom_dbl",
+        out = "qcom_dbl.ko",
+        config = "CONFIG_QCOM_DBL",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_dbl.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/remoteproc/rproc_qcom_common",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/smp2p",
         out = "smp2p.ko",
         config = "CONFIG_QCOM_SMP2P",
