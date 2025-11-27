@@ -1743,7 +1743,9 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 				sband = wiphy->bands[NL80211_BAND_6GHZ];
 		}
 
-		sband = wiphy->bands[NL80211_BAND_6GHZ];
+		if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+			sband = wiphy->bands[NL80211_BAND_6GHZ];
+
 		if (!sband)
 			return false;
 
