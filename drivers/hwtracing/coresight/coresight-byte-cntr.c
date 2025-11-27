@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021, 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/interrupt.h>
@@ -11,6 +11,7 @@
 #include <linux/delay.h>
 #include <linux/uaccess.h>
 #include <linux/property.h>
+#include <linux/jiffies.h>
 
 #include "coresight-priv.h"
 #include "coresight-byte-cntr.h"
@@ -32,8 +33,12 @@ static void tmc_etr_read_bytes(struct byte_cntr *byte_cntr_data, long offset,
 
 	actual = tmc_etr_buf_get_data(etr_buf, offset, *len, bufp);
 	*len = actual;
-	if (actual == bytes || (actual + (uint32_t)offset) % bytes == 0)
-		atomic_dec(&byte_cntr_data->irq_cnt);
+	if ((actual == bytes || (actual + (uint32_t)offset) % bytes == 0)) {
+		if (atomic_dec_if_positive(&byte_cntr_data->irq_cnt) < 0) {
+			/* Counter was already zero, restore it */
+			atomic_inc(&byte_cntr_data->irq_cnt);
+		}
+	}
 }
 
 
@@ -93,6 +98,7 @@ static ssize_t tmc_etr_byte_cntr_read(struct file *fp, char __user *data,
 	char *bufp = NULL;
 	long actual;
 	int ret = 0;
+	long rwp_offset, req_size = 0;
 
 	if (!data)
 		return -EINVAL;
@@ -112,12 +118,36 @@ static ssize_t tmc_etr_byte_cntr_read(struct file *fp, char __user *data,
 
 	if (byte_cntr_data->enable) {
 		if (!atomic_read(&byte_cntr_data->irq_cnt)) {
+			rwp_offset = tmc_get_rwp_offset(tmcdrvdata);
+			req_size = ((rwp_offset < byte_cntr_data->offset) ?
+				    tmcdrvdata->size : 0)
+				    + rwp_offset - byte_cntr_data->offset;
 			mutex_unlock(&byte_cntr_data->byte_cntr_lock);
-			if (wait_event_interruptible(byte_cntr_data->wq,
+			ret = wait_event_interruptible_timeout(byte_cntr_data->wq,
 				atomic_read(&byte_cntr_data->irq_cnt) > 0
-				|| !byte_cntr_data->enable))
-				return -ERESTARTSYS;
+				|| !byte_cntr_data->enable
+				|| (req_size > byte_cntr_data->block_size),
+				msecs_to_jiffies(5000));
 			mutex_lock(&byte_cntr_data->byte_cntr_lock);
+			if (!ret) {
+				dev_dbg(&tmcdrvdata->csdev->dev,
+					"timeout: irq_cnt: %d, req_size: 0x%lx, rwp offset %lx, offset %lx\n",
+					atomic_read(&byte_cntr_data->irq_cnt),
+					req_size, rwp_offset, byte_cntr_data->offset);
+				byte_cntr_data->rwp_offset = rwp_offset;
+				actual = tmc_etr_flush_remaining_bytes(tmcdrvdata,
+						byte_cntr_data->offset, len, &bufp);
+				if (actual > 0) {
+					len = actual;
+					goto copy;
+				} else {
+					ret = -EINVAL;
+					goto err0;
+				}
+			} else if (ret < 0) {
+				mutex_unlock(&byte_cntr_data->byte_cntr_lock);
+				return -ERESTARTSYS;
+			}
 			if (!byte_cntr_data->read_active) {
 				actual = tmc_etr_flush_remaining_bytes(tmcdrvdata,
 						byte_cntr_data->offset, len, &bufp);
