@@ -13,7 +13,7 @@ canoe_consolidate_config = {
     "CONFIG_MHI_BUS_DEBUG": "y",
     "CONFIG_MSM_GPI_DMA_DEBUG": "y",
     "CONFIG_PAGE_OWNER": "y",
-    "CONFIG_QCOM_CPU_PHYS_LOG_MAP": "m",
+    "CONFIG_QCOM_CPU_PHYS_LOG_MAP": "n",
     "CONFIG_QCOM_DYNAMIC_MEMORY_DUMP": "y",
     "CONFIG_QTI_PMIC_GLINK_CLIENT_DEBUG": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
