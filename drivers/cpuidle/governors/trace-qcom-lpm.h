@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #if !defined(_TRACE_QCOM_LPM_H) || defined(TRACE_HEADER_MULTI_READ)
@@ -14,14 +14,15 @@
 
 TRACE_EVENT(lpm_gov_select,
 
-	TP_PROTO(int idx, s64 qos, u64 sleep, u64 reason),
+	TP_PROTO(int idx, s64 qos, u64 sleep, u64 bias_ns, u64 reason),
 
-	TP_ARGS(idx, qos, sleep, reason),
+	TP_ARGS(idx, qos, sleep, bias_ns, reason),
 
 	TP_STRUCT__entry(
 			 __field(int, idx)
 			 __field(s64, qos)
 			 __field(u64, sleep)
+			 __field(u64, bias_ns)
 			 __field(u64, reason)
 	),
 
@@ -29,11 +30,13 @@ TRACE_EVENT(lpm_gov_select,
 		       __entry->idx = idx;
 		       __entry->qos = qos;
 		       __entry->sleep = sleep;
+		       __entry->bias_ns = bias_ns;
 		       __entry->reason = reason;
 	),
 
-	TP_printk("state:%d qos-us:%lld sleep-us:%llu reason:%#llx",
-		  __entry->idx, __entry->qos, __entry->sleep, __entry->reason)
+	TP_printk("state:%d qos-us:%lld sleep-us:%llu bias_ns:%llu reason:%#llx",
+		  __entry->idx, __entry->qos, __entry->sleep, __entry->bias_ns,
+		  __entry->reason)
 );
 
 TRACE_EVENT(gov_pred_select,
@@ -60,13 +63,13 @@ TRACE_EVENT(gov_pred_select,
 
 TRACE_EVENT(gov_pred_hist,
 
-	TP_PROTO(int idx, int residency, int tmr),
+	TP_PROTO(int idx, u64 residency, int tmr),
 
-	TP_ARGS(idx, tmr, residency),
+	TP_ARGS(idx, residency, tmr),
 
 	TP_STRUCT__entry(
 			 __field(int, idx)
-			 __field(int, residency)
+			 __field(u64, residency)
 			 __field(int, tmr)
 	),
 
@@ -76,7 +79,7 @@ TRACE_EVENT(gov_pred_hist,
 		       __entry->tmr = tmr;
 	),
 
-	TP_printk("idx:%d residency=%d, tmr=%d", __entry->idx, __entry->residency, __entry->tmr)
+	TP_printk("idx:%d residency=%llu, tmr=%d", __entry->idx, __entry->residency, __entry->tmr)
 );
 
 #endif /* _TRACE_QCOM_LPM_H */

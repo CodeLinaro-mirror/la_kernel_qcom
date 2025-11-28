@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QCOM_LPM_H__
@@ -32,13 +32,13 @@ struct qcom_cluster_node {
 
 struct history_lpm {
 	int mode[MAXSAMPLES];
-	uint32_t resi[MAXSAMPLES];
+	u64 resi[MAXSAMPLES];
 	int nsamp;
 	uint32_t samples_idx;
 };
 
 struct history_ipi {
-	uint32_t interval[MAXSAMPLES];
+	u64 interval[MAXSAMPLES];
 	uint32_t current_ptr;
 	ktime_t cpu_idle_resched_ts;
 };

@@ -173,7 +173,7 @@ static void biastimer_start(uint32_t time_ns)
  * @cpu_gov:  targeted cpu's lpm data structure
  * @duration_ns:  cpu's scheduler sleep length
  */
-static uint64_t find_deviation(struct lpm_cpu *cpu_gov, int *samples_history,
+static uint64_t find_deviation(struct lpm_cpu *cpu_gov, u64 *samples_history,
 			       u64 duration_ns)
 {
 	uint64_t max, avg, stddev;
@@ -661,7 +661,7 @@ done:
 		reason |= UPDATE_REASON(i, LPM_SELECT_STATE_SCHED_BIAS);
 	}
 
-	trace_lpm_gov_select(i, latency_req, duration_ns, reason);
+	trace_lpm_gov_select(i, latency_req, duration_ns, cpu_gov->bias, reason);
 	trace_gov_pred_select(cpu_gov->pred_type, cpu_gov->predicted, htime);
 
 	return i;
@@ -703,7 +703,7 @@ static void lpm_idle_enter(void *unused, int *state, struct cpuidle_device *dev)
 	if (cpu_gov->ipi_pending) {
 		reason = UPDATE_REASON(*state, LPM_SELECT_STATE_IPI_PENDING);
 		*state = 0;
-		trace_lpm_gov_select(*state, 0xdeaffeed, 0xdeaffeed, reason);
+		trace_lpm_gov_select(*state, 0xdeaffeed, 0xdeaffeed, cpu_gov->bias, reason);
 	}
 	spin_unlock_irqrestore(&cpu_gov->lock, flags);
 }
