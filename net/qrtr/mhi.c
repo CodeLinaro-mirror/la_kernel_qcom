@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/mhi.h>
@@ -21,6 +21,7 @@ struct qrtr_mhi_dev {
 	struct device *dev;
 	struct completion prepared;
 	struct completion ringfull;
+	bool abort_tx;
 };
 
 /* From MHI to QRTR */
@@ -91,9 +92,20 @@ static int qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 	int rc;
 
 	do {
+		if (READ_ONCE(qdev->abort_tx)) {
+			kfree_skb(skb);
+			return -EIO;
+		}
+
 		rc = __qcom_mhi_qrtr_send(ep, skb);
 		if (rc == -EAGAIN) {
 			reinit_completion(&qdev->ringfull);
+			if (READ_ONCE(qdev->abort_tx)) {
+				if (skb->sk)
+					sock_put(skb->sk);
+				kfree_skb(skb);
+				return -EIO;
+			}
 			wait_for_completion(&qdev->ringfull);
 		}
 	} while (rc == -EAGAIN);
@@ -171,6 +183,10 @@ static int qcom_mhi_qrtr_probe(struct mhi_device *mhi_dev,
 static void qcom_mhi_qrtr_remove(struct mhi_device *mhi_dev)
 {
 	struct qrtr_mhi_dev *qdev = dev_get_drvdata(&mhi_dev->dev);
+
+	WRITE_ONCE(qdev->abort_tx, true);
+	complete_all(&qdev->prepared);
+	complete_all(&qdev->ringfull);
 
 	qrtr_endpoint_unregister(&qdev->ep);
 	mhi_unprepare_from_transfer(mhi_dev);
