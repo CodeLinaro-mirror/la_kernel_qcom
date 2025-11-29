@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -1119,6 +1119,19 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	}
 
 	qrtr_log_rx_msg(node, skb);
+
+	/* When rx_queue of control port is full, processing of tx_resume
+	 * on worker thread will get delayed. If that happens, any ongoing
+	 * tx will be blocked. Process it here if in thread context to avoid
+	 * this issue.
+	 */
+	if (cb->type == QRTR_TYPE_RESUME_TX && cb->dst_node == qrtr_local_nid) {
+		if (ep->in_thread) {
+			qrtr_tx_resume(node, skb);
+			return 0;
+		}
+	}
+
 	/* All control packets and non-local destined data packets should be
 	 * queued to the worker for forwarding handling.
 	 */
