@@ -687,6 +687,23 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/clk/qcom/debugcc-chora",
+        out = "debugcc-chora.ko",
+        config = "CONFIG_SM_DEBUGCC_CHORA",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-debug.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/debugcc-chora.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-dummy",
+            "drivers/clk/qcom/clk-qcom",
+        ],
+    )
+
+    registry.register(
         name = "drivers/clk/qcom/debugcc-khaje",
         out = "debugcc-khaje.ko",
         config = "CONFIG_SM_DEBUGCC_KHAJE",
@@ -993,6 +1010,36 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/dispcc-chora",
+        out = "dispcc-chora.ko",
+        config = "CONFIG_SM_DISPCC_CHORA",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-alpha-pll.h",
+            "drivers/clk/qcom/clk-branch.h",
+            "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-rcg.h",
+            "drivers/clk/qcom/clk-regmap-divider.h",
+            "drivers/clk/qcom/clk-regmap-mux.h",
+            "drivers/clk/qcom/clk-regmap.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/dispcc-chora.c",
+            "drivers/clk/qcom/gdsc.h",
+            "drivers/clk/qcom/reset.h",
+            "drivers/clk/qcom/vdd-class.h",
+            "drivers/clk/qcom/vdd-level.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-qcom",
+            "drivers/clk/qcom/gdsc-regulator",
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
+            "drivers/soc/qcom/minidump",
         ],
     )
 
@@ -1749,6 +1796,35 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/gpucc-chora",
+        out = "gpucc-chora.ko",
+        config = "CONFIG_SM_GPUCC_CHORA",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-alpha-pll.h",
+            "drivers/clk/qcom/clk-branch.h",
+            "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-rcg.h",
+            "drivers/clk/qcom/clk-regmap-divider.h",
+            "drivers/clk/qcom/clk-regmap-mux.h",
+            "drivers/clk/qcom/clk-regmap.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/gdsc.h",
+            "drivers/clk/qcom/gpucc-chora.c",
+            "drivers/clk/qcom/reset.h",
+            "drivers/clk/qcom/vdd-class.h",
+            "drivers/clk/qcom/vdd-level.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-qcom",
+            "drivers/clk/qcom/gdsc-regulator",
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
         ],
     )
 

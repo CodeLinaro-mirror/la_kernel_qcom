@@ -22,11 +22,13 @@ qcom_soc_wdt.ko
 debug-regulator.ko
 debugcc-canoe.ko
 dispcc-canoe.ko
+dispcc-chora.ko
 evacc-canoe.ko
 gcc-alor.ko
 gcc-canoe.ko
 tcsrcc-chora.ko
 gcc-chora.ko
+qcom-cpufreq-hw.ko
 gdsc-regulator.ko
 gpucc-canoe.ko
 tcsrcc-canoe.ko
