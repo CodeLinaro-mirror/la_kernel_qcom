@@ -448,6 +448,13 @@ static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 		smmu_v2_debug_print("S2CR[%d]: smr_val:%llx s2cr_val: %llx\n",
 				    i, smr_val, s2cr_val);
 	}
+	/* Reset remaining SMRs and S2CRs */
+	for (int j = i; j >= 0; j--) {
+		smr_val  = 0x0;
+		s2cr_val = FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_FAULT);
+		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_S2CR(j), s2cr_val);
+		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_SMR(j), smr_val);
+	}
 	smmu->num_s2cr = i + 1;
 	smmu->num_smr = smmu->num_s2cr; /* smr == s2cr */
 	WARN_ON(smmu->num_s2cr == 0);
