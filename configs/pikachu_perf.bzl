@@ -44,6 +44,7 @@ pikachu_perf_config = {
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SOCINFO": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
     "CONFIG_QTI_IOMMU_SUPPORT": "m",
     "CONFIG_REGULATOR_STUB": "m",
     "CONFIG_ZRAM_BACKEND_ZSTD": "n",
