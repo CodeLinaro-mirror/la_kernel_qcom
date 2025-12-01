@@ -1394,6 +1394,22 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/smsm",
+        out = "smsm.ko",
+        config = "CONFIG_QCOM_SMSM",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/smsm.c",
+        ],
+        deps = [
+            # do not sort
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/smp2p_sleepstate",
         out = "smp2p_sleepstate.ko",
         config = "CONFIG_QCOM_SMP2P_SLEEPSTATE",
