@@ -40,6 +40,6 @@ struct hib_bio_batch {
 	struct blk_plug		plug;
 };
 
-extern struct file *hiber_bdev;
+extern struct block_device *hiber_bdev;
 
 #endif /* __SOC_QCOM_HIBERNATION_H__ */
