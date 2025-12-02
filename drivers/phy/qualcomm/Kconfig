@@ -24,6 +24,15 @@ config PHY_QCOM_UFS_V4
 	  This is required to enable UFS on QCOM chipset.
 	  To compile this driver as a module, choose M here.
 
+config PHY_QCOM_UFS_V4_CROW
+	tristate "Qualcomm Technologies, Inc. UFS Crow Phy Driver"
+	depends on PHY_QCOM_UFS
+	help
+	  This configuration option adds support for the UFS
+	  PHY present on QCOM Crow chipsets.
+	  This is required to enable UFS on crow, volcano, chora chipsets.
+	  To compile this driver as a module, choose M here.
+
 config PHY_QCOM_UFS_V4_GEN3AUTO
 	tristate "Qualcomm Technologies, Inc. UFS gen3auto Phy Driver"
 	depends on PHY_QCOM_UFS
