@@ -825,21 +825,17 @@ int rpmh_rsc_send_data(struct rsc_drv *drv, const struct tcs_request *msg, int c
 	write_tcs_reg_sync(drv, drv->regs[RSC_DRV_CMD_ENABLE], tcs_id, 0);
 	write_tcs_reg_sync(drv, drv->regs[RSC_DRV_CMD_WAIT_FOR_CMPL], tcs_id, 0);
 
+	__tcs_buffer_write(drv, tcs_id, 0, msg);
+
+	/* Clear stale IRQs if any */
+	writel_relaxed(BIT(tcs_id), drv->tcs_base + drv->regs[RSC_DRV_IRQ_CLEAR]);
+
 	if (msg->wait_for_compl || (msg->state == RPMH_ACTIVE_ONLY_STATE &&
 	    tcs->type != ACTIVE_TCS))
 		enable_tcs_irq(drv, tcs_id, true);
 	else
 		enable_tcs_irq(drv, tcs_id, false);
 
-	/*
-	 * These two can be done after the lock is released because:
-	 * - We marked "tcs_in_use" under lock.
-	 * - Once "tcs_in_use" has been marked nobody else could be writing
-	 *   to these registers until the interrupt goes off.
-	 * - The interrupt can't go off until we trigger w/ the last line
-	 *   of __tcs_set_trigger() below.
-	 */
-	__tcs_buffer_write(drv, tcs_id, 0, msg);
 	__tcs_set_trigger(drv, tcs_id, true);
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
 	ipc_log_string(drv->ipc_log_ctx, "TCS trigger: m=%d wait_for_compl=%u",
