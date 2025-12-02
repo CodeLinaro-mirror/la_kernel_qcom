@@ -165,6 +165,17 @@ config ARM_SMMU_SELFTEST
 
 	  If unsure, say N.
 
+config IOMMU_TLBSYNC_DEBUG
+	bool "TLB sync timeout debug"
+	depends on ARM_SMMU
+	help
+	  Collects the SMMU system state information after the
+	  first TLB sync timeout failure by calling BUG() from
+	  a workqueue thread. Note to use this only on debug
+	  builds.
+
+	  If unsure, say N here.
+
 config QCOM_LAZY_MAPPING
 	tristate "Reference counted iommu-mapping support"
 	depends on QCOM_DMABUF_HEAPS
