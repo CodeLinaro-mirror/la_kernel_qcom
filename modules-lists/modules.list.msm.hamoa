@@ -13,6 +13,8 @@ msm_qmp.ko
 qcom_ipc_logging.ko
 qcom_glink_smem.ko
 qcom_glink.ko
+qrtr.ko
+qrtr-smd.ko
 smp2p.ko
 qcom-ipcc.ko
 pinctrl-msm.ko
@@ -74,7 +76,12 @@ phy-qcom-snps-eusb2.ko
 phy-qcom-qmp-combo.ko
 phy-qcom-qmp-usb.ko
 dwc3-msm.ko
+videocc-sm8550.ko
+camcc-x1e80100.ko
+debugcc-x1e80100.ko
 msm_geni_serial.ko
 i2c-msm-geni.ko
 msm_gpi.ko
 spi-msm-geni.ko
+arm_ffa.ko
+arm_ffa_transport.ko

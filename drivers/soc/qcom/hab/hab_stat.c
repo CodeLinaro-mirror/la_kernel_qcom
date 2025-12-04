@@ -60,7 +60,7 @@ int hab_stat_show_vchan(struct hab_driver *driver,
 				pchan->vmid_remote, pchan->sequence_tx,
 				pchan->sequence_rx, pchan->status, pchan->vcnt);
 
-			read_lock(&pchan->vchans_lock);
+			read_lock_bh(&pchan->vchans_lock);
 			list_for_each_entry(vc, &pchan->vchannels, pnode) {
 				ret = hab_stat_buffer_print(buf, size,
 					"%08X(%d:%d:%d:%ld:%ld:%d) ", vc->id,
@@ -72,7 +72,7 @@ int hab_stat_show_vchan(struct hab_driver *driver,
 					vc->rx_inflight);
 			}
 			ret = hab_stat_buffer_print(buf, size, "\n");
-			read_unlock(&pchan->vchans_lock);
+			read_unlock_bh(&pchan->vchans_lock);
 		}
 		read_unlock_bh(&dev->pchan_lock);
 	}

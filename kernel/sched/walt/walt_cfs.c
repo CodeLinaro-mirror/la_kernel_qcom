@@ -1469,13 +1469,8 @@ void walt_cfs_tick(struct rq *rq)
 		(struct walt_task_struct *)android_task_vendor_data(rq->curr);
 	bool skip_mvp;
 
-	if (unlikely(walt_disabled))
-		return;
-
-	raw_spin_lock(&rq->__lock);
-
 	if (list_empty(&wts->mvp_list) || (wts->mvp_list.next == NULL))
-		goto out;
+		return;
 
 	/* Reschedule if RQ's skip_mvp state changes */
 	skip_mvp = wrq->skip_mvp;
@@ -1487,9 +1482,6 @@ void walt_cfs_tick(struct rq *rq)
 	if (((skip_mvp != wrq->skip_mvp) ||
 		(wrq->mvp_tasks.next != &wts->mvp_list)) && rq->cfs.h_nr_running > 1)
 		resched_curr(rq);
-
-out:
-	raw_spin_unlock(&rq->__lock);
 }
 
 /*

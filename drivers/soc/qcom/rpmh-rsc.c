@@ -962,6 +962,7 @@ static void print_tcs_info(struct rsc_drv *drv, int tcs_id, unsigned long *accl,
 	u32 addr, data, msgid, sts, irq_sts;
 	bool in_use = test_bit(tcs_id, drv->tcs_in_use);
 	int i;
+	u32 irq_enable;
 
 	sts = read_tcs_reg(drv, drv->regs[RSC_DRV_STATUS], tcs_id);
 	cmds_enabled = read_tcs_reg(drv, drv->regs[RSC_DRV_CMD_ENABLE], tcs_id);
@@ -970,6 +971,9 @@ static void print_tcs_info(struct rsc_drv *drv, int tcs_id, unsigned long *accl,
 
 	if (!req)
 		goto print_tcs_data;
+
+	irq_enable = readl_relaxed(drv->tcs_base + drv->regs[RSC_DRV_IRQ_ENABLE]);
+	pr_warn("TCS IRQ enable %u\n", irq_enable);
 
 	data = read_tcs_reg(drv, drv->regs[RSC_DRV_CONTROL], tcs_id);
 	irq_sts = readl_relaxed(drv->tcs_base + drv->regs[RSC_DRV_IRQ_STATUS]);
@@ -1429,10 +1433,12 @@ int rpmh_rsc_init_fast_path(struct rsc_drv *drv, const struct tcs_request *msg, 
 
 	tcs_id = drv->ch[ch].tcs[FAST_PATH_TCS].offset;
 
+	spin_lock_irq(&drv->lock);
 	/* We won't use the AMC IRQ to confirm if the TCS is free */
 	enable_tcs_irq(drv, tcs_id, false);
 
 	__tcs_buffer_write(drv, tcs_id, 0, msg);
+	spin_unlock_irq(&drv->lock);
 
 	return 0;
 }

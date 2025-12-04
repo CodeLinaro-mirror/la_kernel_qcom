@@ -201,6 +201,15 @@ config QCOM_MDT_LOADER
 	tristate
 	select QCOM_SCM
 
+config MSM_RPM_SMD_DEBUG
+	tristate "RPM SMD debug driver"
+	depends on DEBUG_FS && MSM_RPM_SMD
+	help
+	  This driver provides the debugfs node interface to the user so that
+	  user can directly writes the required votes (active, sleep and wake)
+	  in to this interface then this driver sends the respective votes to
+	  RPM so that RPM apply these votes to corresponding resources.
+
 config QCOM_PCIE_PDC
 	tristate "Qualcomm Technologies, Inc. (QTI) PCIe PDC driver"
 	depends on (QCOM_CRM || QCOM_CRM_V2) && (ARCH_QCOM || COMPILE_TEST)
@@ -310,6 +319,14 @@ config QCOM_SMEM
 	  Say y here to enable support for the Qualcomm Shared Memory Manager.
 	  The driver provides an interface to items in a heap shared among all
 	  processors in a Qualcomm platform.
+
+config QCOM_DBL
+	tristate "Qualcomm Doorbell driver (QCOM_DBL)"
+	help
+	  Say y here to enable support for the Qualcomm Doorbell driver.
+	  This driver allows clients to vote/unvote on a shared doorbell
+	  register to keep remote subsystem out of low power mode and
+          supports both synchronous and asynchronous voting.
 
 config QCOM_MEMORY_DUMP_V2
 	tristate "QCOM Memory Dump V2 Support"
@@ -594,6 +611,32 @@ config MSM_BOOT_STATS
 	  display init, total boot time.
 	  This figures are reported in mpm sleep clock cycles and have a
 	  resolution of 31 bits as 1 bit is used as an overflow check.
+
+config MSM_SEB
+        tristate "Provide APIs to send and receive events from Slate chipset"
+        help
+          SEB(Slate event bridge) communicates to Slate over rpmsg driver to
+          send or receive events from Slate. The button events received from
+          Slate are send to input framework. The driver provides functionality
+          for a client to register a callback to receive events from a group.
+
+config MSM_SEB_RPMSG
+        tristate "Provide support for slate event GLINK channel"
+        depends on MSM_SEB
+        help
+          SEB_RPMSG informs SEB driver if GLINK channel has been
+          opened by remote processor. It doesn't maintain state machine
+          and is probed when Slate opens channel and removed when the
+          channel is closed by remote processor.
+
+config MSM_SLATECOM_EVENT
+        tristate "provide support for slate sensor event Communication"
+        depends on MSM_SEB
+        help
+         Create a slate_com_event device node for user space communication.
+         This event driver register for AON event bridge to receive sensor
+         up and down and notifies upper layer HAL about sensor stataus
+         through uevent via netlink socket.
 
 config QCOM_EUD
 	tristate "QTI Embedded USB Debugger (EUD)"

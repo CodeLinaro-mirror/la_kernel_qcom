@@ -178,12 +178,12 @@ config ARCH_PIKACHU
           chipset or if you are unsure,
           say 'N' here.
 
-config ARCH_COLIBRI
-        bool "Enable support for Qualcomm Technologies, Inc. COLIBRI"
+config ARCH_SHIKRA
+        bool "Enable support for Qualcomm Technologies, Inc. SHIKRA"
         depends on ARCH_QCOM
         help
 	  This enables support for Qualcomm Technologies, Inc.'s
-	  COLIBRI chipset.
+	  SHIKRA chipset.
 	  If you do not wish to build a kernel that runs on this
 	  chipset or if you are unsure, say 'N' here.
 

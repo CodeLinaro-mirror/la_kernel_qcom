@@ -56,6 +56,7 @@ if (print) { \
 
 #define QTIMER_BIN		(0x220)
 #define TIMESTAMP_DATA_SIZE	8
+#define MINIMUM_BUS_VOTE	1
 
 /* In KHz */
 #define DEFAULT_SE_CLK	19200
@@ -76,6 +77,7 @@ if (print) { \
 #define SE_GSI_EVENT_EN			(0xe18)
 #define SE_IRQ_EN			(0xe1c)
 #define DMA_GENERAL_CFG			(0xe30)
+#define SE_DMA_QSB_TRANS_CFG		(0xe38)
 #define SE_DMA_DEBUG_REG0		(0xE40)
 #define SE_DMA_TX_PTR_L			(0xC30)
 #define SE_DMA_TX_PTR_H			(0xC34)
@@ -213,9 +215,13 @@ static inline int geni_common_icc_set_bw(struct geni_se *se, void *ipcl)
 	u32 avg_bw, peak_bw;
 
 	for (i = 0; i < ARRAY_SIZE(se->icc_paths); i++) {
-		avg_bw = se->icc_paths[i].avg_bw / 100;
+		avg_bw = se->icc_paths[i].avg_bw;
 		peak_bw = se->icc_paths[i].avg_bw;
 
+		if (i == 0)
+			avg_bw = se->icc_paths[i].avg_bw / 100;
+
+		avg_bw = avg_bw ? avg_bw : MINIMUM_BUS_VOTE;
 		ret = icc_set_bw(se->icc_paths[i].path, avg_bw, peak_bw);
 		if (ret) {
 			dev_err_ratelimited(se->dev, "ICC BW voting failed on path '%s': %d\n",

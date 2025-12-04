@@ -34,8 +34,13 @@ proxy-consumer.ko
 bam_dma.ko
 stub-regulator.ko
 clk-smd-rpm.ko
+gcc-monaco.ko
+dispcc-monaco.ko
+gpucc-monaco.ko
+debugcc-monaco.ko
 icc-rpm.ko
 qnoc-qos-rpm.ko
+qnoc-monaco.ko
 spmi-pmic-arb.ko
 regmap-spmi.ko
 nvmem_qcom-spmi-sdam.ko

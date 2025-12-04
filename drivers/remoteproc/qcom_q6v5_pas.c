@@ -1230,7 +1230,8 @@ static int adsp_stop(struct rproc *rproc)
 	add_mpss_dsm_mem_ssr_dump(adsp);
 
 	/* collect subdev coredump */
-	if (adsp->q6_subdev && !(rproc->dump_conf == RPROC_COREDUMP_DISABLED)) {
+	if (adsp->q6_subdev && rproc->state == RPROC_CRASHED &&
+		!(rproc->dump_conf == RPROC_COREDUMP_DISABLED)) {
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
 			ret = qcom_elf_dump(&adsp->q6_subdev[i].dump_segments,
 				adsp->q6_subdev[i].dev, rproc->elf_class);
@@ -1356,6 +1357,28 @@ static int adsp_attach(struct rproc *rproc)
 
 	return ret;
 }
+
+static const struct adsp_data monaco_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.uses_elf64 = false,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data monaco_modem_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.uses_elf64 = true,
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+};
 
 static const struct rproc_ops adsp_ops = {
 	.unprepare = adsp_unprepare,
@@ -1648,6 +1671,31 @@ void qcom_rproc_update_recovery_status(struct rproc *rproc, bool enable, bool lo
 }
 EXPORT_SYMBOL_GPL(qcom_rproc_update_recovery_status);
 
+static void adsp_parse_subdev_fw(struct qcom_adsp *adsp)
+{
+	const char *subdev_fw_name = NULL;
+	int i, count, ret;
+
+	if (!adsp->q6_subdev || !adsp->q6_subdev_count)
+		return;
+
+	count = of_property_read_string_array(adsp->dev->of_node, "subdev-firmware-name", NULL, 0);
+	if (count <= 0)
+		return;
+
+	adsp->q6_subdev_count = min_t(int, adsp->q6_subdev_count, count);
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		ret = of_property_read_string_index(adsp->dev->of_node,
+			"subdev-firmware-name", i, &subdev_fw_name);
+		if (ret < 0) {
+			dev_err(adsp->dev, "Failed to read subdev firmware: %d\n", ret);
+			return;
+		}
+		adsp->q6_subdev[i].firmware_name = subdev_fw_name;
+		subdev_fw_name = NULL;
+	}
+}
+
 static ssize_t q6v5_read_debugfs(struct file *file, char __user *buf,
 				 size_t count, loff_t *ppos)
 {
@@ -1822,6 +1870,9 @@ static int adsp_probe(struct platform_device *pdev)
 		adsp->dtb_firmware_name = dtb_fw_name;
 		adsp->dtb_pas_id = desc->dtb_pas_id;
 	}
+
+	adsp_parse_subdev_fw(adsp);
+
 	platform_set_drvdata(pdev, adsp);
 
 	ret = device_init_wakeup(adsp->dev, true);
@@ -2911,6 +2962,52 @@ static const struct adsp_data khaje_mpss_resource = {
 	.both_dumps = true,
 };
 
+static const struct adsp_data chora_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
+	.auto_boot = true,
+};
+
+static const struct adsp_data chora_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data chora_wpss_resource = {
+	.crash_reason_smem = 626,
+	.firmware_name = "wpss.mdt",
+	.pas_id = 6,
+	.minidump_id = 4,
+	.load_state = "wpss",
+	.uses_elf64 = true,
+	.ssr_name = "wpss",
+	.sysmon_name = "wpss",
+	.ssctl_id = 0x19,
+};
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -2997,6 +3094,11 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,khaje-adsp-pas", .data = &khaje_adsp_resource},
 	{ .compatible = "qcom,khaje-cdsp-pas", .data = &khaje_cdsp_resource},
 	{ .compatible = "qcom,khaje-modem-pas", .data = &khaje_mpss_resource},
+	{ .compatible = "qcom,monaco-adsp-pas", .data = &monaco_adsp_resource},
+	{ .compatible = "qcom,monaco-modem-pas", .data = &monaco_modem_resource},
+	{ .compatible = "qcom,chora-adsp-pas", .data = &chora_adsp_resource},
+	{ .compatible = "qcom,chora-modem-pas", .data = &chora_mpss_resource},
+	{ .compatible = "qcom,chora-wpss-pas", .data = &chora_wpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

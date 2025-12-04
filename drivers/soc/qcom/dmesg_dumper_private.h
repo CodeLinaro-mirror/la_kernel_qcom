@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _DMESG_DUMPER_PRIVATE_H
@@ -18,7 +18,7 @@
 #define ALIGN_LEN					16
 #define AES_256_ENCRYPTED_KEY_SIZE	256
 
-#define REC_TIME_NUM	8
+#define REC_TIME_NUM	64
 #define DDUMP_MAX_RETRY			5000
 
 /**

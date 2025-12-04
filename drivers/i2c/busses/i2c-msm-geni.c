@@ -1105,9 +1105,13 @@ static void gi2c_ev_cb(struct dma_chan *ch, struct msm_gpi_cb const *cb_str,
 			geni_i2c_err(gi2c, I2C_BUS_PROTO);
 		if (m_stat & M_GP_IRQ_4_EN)
 			geni_i2c_err(gi2c, I2C_ARB_LOST);
-		complete(&gi2c->xfer);
+
+		if (cb_str->cb_event == MSM_GPI_QUP_NOTIFY)
+			complete(&gi2c->xfer);
 		break;
 	default:
+		I2C_LOG_ERR(gi2c->ipcl, false, gi2c->dev, "%s: Unknown event type: %d\n",
+			    __func__, cb_str->cb_event);
 		break;
 	}
 	if (cb_str->cb_event != MSM_GPI_QUP_NOTIFY) {
@@ -3863,4 +3867,3 @@ module_init(i2c_dev_init);
 module_exit(i2c_dev_exit);
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:i2c_geni");
-

@@ -1,4 +1,4 @@
-colibri_consolidate_config = {
+shikra_consolidate_config = {
     # keep sorted
     "CONFIG_ATOMIC64_SELFTEST": "m",
     "CONFIG_CMA_DEBUGFS": "y",
@@ -8,6 +8,7 @@ colibri_consolidate_config = {
     "CONFIG_DETECT_HUNG_TASK": "y",
     "CONFIG_LKDTM": "m",
     "CONFIG_LOCK_TORTURE_TEST": "m",
+    "CONFIG_MSM_RPM_SMD_DEBUG": "m",
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_PAGE_POISONING": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",

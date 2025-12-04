@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /* Register offsets from gpi-top */
@@ -9,12 +9,21 @@
 		(0x17800 + (0x4 * (k)) + (0x80 * (n)))
 #define GPI_GPII_n_CH_k_CNTXT_0_OFFS(n, k) \
 		(0x20000 + (0x4000 * (n)) + (0x80 * (k)))
+#define GPI_GPII_n_CH_k_CNTXT_1_OFFS(n, k) \
+		(0x20004 + (0x4000 * (n)) + (0x80 * (k)))
 #define GPI_GPII_n_CH_k_CNTXT_2_OFFS(n, k) \
 		(0x20008 + (0x4000 * (n)) + (0x80 * (k)))
+#define GPI_GPII_n_CH_k_CNTXT_3_OFFS(n, k) \
+		(0x2000C + (0x4000 * (n)) + (0x80 * (k)))
 #define GPI_GPII_n_CH_k_CNTXT_4_OFFS(n, k) \
 		(0x20010 + (0x4000 * (n)) + (0x80 * (k)))
+#define GPI_GPII_n_CH_k_CNTXT_5_OFFS(n, k) \
+		(0x20014 + (0x4000 * (n)) + (0x80 * (k)))
 #define GPI_GPII_n_CH_k_CNTXT_6_OFFS(n, k) \
 		(0x20018 + (0x4000 * (n)) + (0x80 * (k)))
+#define GPI_GPII_n_CH_k_CNTXT_7_OFFS(n, k) \
+		(0x2001C + (0x4000 * (n)) + (0x80 * (k)))
+
 #define GPI_GPII_n_CH_k_RE_FETCH_READ_PTR(n, k) \
 		(0x20054 + (0x4000 * (n)) + (0x80 * (k)))
 
@@ -59,14 +68,22 @@
 #define GPI_GPII_n_CH_CMD_DISABLE_HID (49)
 
 /* EV Context Array */
-#define GPI_GPII_n_EV_CH_k_CNTXT_0_OFFS(n, k) \
-		(0x21000 + (0x4000 * (n)) + (0x80 * (k)))
-#define GPI_GPII_n_EV_CH_k_CNTXT_2_OFFS(n, k) \
-		(0x21008 + (0x4000 * (n)) + (0x80 * (k)))
-#define GPI_GPII_n_EV_CH_k_CNTXT_4_OFFS(n, k) \
-		(0x21010 + (0x4000 * (n)) + (0x80 * (k)))
-#define GPI_GPII_n_EV_CH_k_CNTXT_6_OFFS(n, k) \
-		(0x21018 + (0x4000 * (n)) + (0x80 * (k)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_0_OFFS(n) \
+	(0x21000 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_1_OFFS(n) \
+	(0x21004 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_2_OFFS(n) \
+	(0x21008 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_3_OFFS(n) \
+	(0x2100c + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_4_OFFS(n) \
+	(0x21010 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_5_OFFS(n) \
+	(0x21014 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_6_OFFS(n) \
+	(0x21018 + (0x4000 * (n)))
+#define GPI_GPII_n_EV_CH_0_CNTXT_7_OFFS(n) \
+	(0x2101C + (0x4000 * (n)))
 
 #define GPI_GPII_n_EV_CH_k_CNTXT_0_ELEMENT_SIZE_BMSK (0xFF000000)
 #define GPI_GPII_n_EV_CH_k_CNTXT_0_ELEMENT_SIZE_SHFT (24)
@@ -108,6 +125,8 @@ enum CNTXT_OFFS {
 	(0x22100 + (0x4000 * (n)) + (0x8 * (k)))
 #define GPI_GPII_n_EV_CH_CMD_OFFS(n) \
 	(0x23010 + (0x4000 * (n)))
+#define GPI_GPII_n_GSI_MCS_CODE_VER(n) \
+	(0x23048 + (0x4000 * (n)))
 #define GPI_GPII_n_EV_CH_CMD_OPCODE_BMSK (0xFF000000)
 #define GPI_GPII_n_EV_CH_CMD_OPCODE_SHFT (24)
 #define GPI_GPII_n_EV_CH_CMD_CHID_BMSK (0xFF)

@@ -9,6 +9,7 @@ camcc-canoe.ko
 clk-dummy.ko
 clk-qcom.ko
 clk-rpmh.ko
+cpu_phys_log_map.ko
 midpoint.ko
 clk-scmi.ko
 sched-walt.ko
@@ -77,6 +78,7 @@ qrtr.ko
 msm_qmp.ko
 qnoc-qos.ko
 qnoc-canoe.ko
+qnoc-chora.ko
 qnoc-alor.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko

@@ -34,7 +34,9 @@
 		.out_bit = 1,                                                     \
 		.intr_enable_bit = 0,                                             \
 		.intr_status_bit = 0,                                             \
-		.intr_target_bit = 5,                                             \
+		.intr_target_bit = 8,		                                  \
+		.intr_wakeup_enable_bit = 7,	                                  \
+		.intr_wakeup_present_bit = 6,	                                  \
 		.intr_target_kpss_val = 3,                                        \
 		.intr_raw_status_bit = 4,                                         \
 		.intr_polarity_bit = 1,                                           \
@@ -2121,8 +2123,20 @@ static const struct msm_pinctrl_soc_data chora_tlmm = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data chora_vm_tlmm = {
+	.pins = chora_pins,
+	.npins = ARRAY_SIZE(chora_pins),
+	.functions = chora_functions,
+	.nfunctions = ARRAY_SIZE(chora_functions),
+	.groups = chora_groups,
+	.ngroups = ARRAY_SIZE(chora_groups),
+	.ngpios = 152,
+	.egpio_func = 11,
+};
+
 static const struct of_device_id chora_tlmm_of_match[] = {
 	{ .compatible = "qcom,chora-tlmm", .data = &chora_tlmm },
+	{ .compatible = "qcom,chora-vm-tlmm", .data = &chora_vm_tlmm },
 	{},
 };
 

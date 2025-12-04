@@ -507,21 +507,28 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	struct waltgov_policy *wg_policy = wg_cpu->wg_policy;
 	bool is_rollover = wg_cpu->flags & WALT_CPUFREQ_ROLLOVER_BIT;
 	bool is_rtg_boost = wg_cpu->walt_load.rtgb_active;
-	bool is_hiload;
+	bool is_hiload = false;
 	bool employ_ed_boost = wg_cpu->walt_load.ed_active && sysctl_ed_boost_pct;
 	unsigned long pl = wg_cpu->walt_load.pl;
 	unsigned long nbl = scale_time_to_util(wg_cpu->walt_load.non_boosted_load);
 	unsigned long min_util = *util;
 
-	if (is_rtg_boost && (!cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) ||
-				!is_state1())) {
+	/* for uclamped cpu ignore adjustments */
+	if (is_uclamped_cpu(wg_cpu->cpu)) {
+		if (employ_ed_boost)
+			wg_cpu->reasons |= CPUFREQ_REASON_EARLY_DET_BIT;
+
+		return;
+	}
+
+	if (!is_uclamped_cpu(wg_cpu->cpu) && is_rtg_boost &&
+	    (!cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) || !is_state1())) {
 		wg_policy->rtg_boost_flag = true;
 		wg_cpu->rtg_boost_flag = true;
 	}
 
-	is_hiload = is_rollover && (nbl >= mult_frac(wg_policy->avg_cap,
-				   wg_policy->tunables->hispeed_load,
-				   100));
+	is_hiload = !is_uclamped_cpu(wg_cpu->cpu) && is_rollover &&
+		(nbl >= mult_frac(wg_policy->avg_cap, wg_policy->tunables->hispeed_load, 100));
 
 	if (cpumask_test_cpu(wg_cpu->cpu, cpu_partial_halt_mask) &&
 			is_state1())
@@ -544,7 +551,7 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	 * sysctl_sched_conservative_pl is not set we would like to go ahead
 	 * with pl frequency to be inflated based on target load for that zone.
 	 */
-	if (wg_policy->tunables->pl) {
+	if (!is_uclamped_cpu(wg_cpu->cpu) && wg_policy->tunables->pl) {
 		if (sysctl_sched_conservative_pl) {
 			wg_policy->conservative_pl_flag = true;
 			wg_cpu->conservative_pl_flag = true;
@@ -556,7 +563,6 @@ static void waltgov_walt_adjust(struct waltgov_cpu *wg_cpu, unsigned long cpu_ut
 	if (employ_ed_boost)
 		wg_cpu->reasons |= CPUFREQ_REASON_EARLY_DET_BIT;
 
-	*util = uclamp_rq_util_with(cpu_rq(wg_cpu->cpu), *util, NULL);
 	*util = max(min_util, *util);
 }
 
@@ -580,6 +586,7 @@ static unsigned int waltgov_next_freq_shared(struct waltgov_cpu *wg_cpu, u64 tim
 			j_nl = mult_frac(j_nl, boost + 100, 100);
 		}
 
+		j_util = uclamp_rq_util_with(cpu_rq(j_wg_cpu->cpu), j_util, NULL);
 		if (j_util > util) {
 			util = j_util;
 			wg_policy->driving_cpu = j;

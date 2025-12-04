@@ -215,6 +215,12 @@ static bool con_enabled = IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE_DEFAULT_ENAB
 /* Required for polling for 100 msecs */
 #define POLL_WAIT_TIMEOUT_MSEC	100
 
+#if IS_ENABLED(CONFIG_MSM_GPI_DMA_DEBUG)
+#define GSI_STOP_RX_TIMEOUT	2500
+#else
+#define GSI_STOP_RX_TIMEOUT	750
+#endif
+
 /* Required for polling for 25 msecs */
 #define CMD_DONE_TIMEOUT_MSEC	25
 
@@ -628,7 +634,10 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	u32 dma_tx_max_burst_size = 0, dma_rx_ptr_l = 0, dma_rx_ptr_h = 0;
 	u32 dma_rx_attr = 0, dma_rx_max_burst_size = 0, dma_if_en = 0;
 	u32 geni_clk_ctrl_ro = 0, fifo_if_disable_ro = 0;
-
+	u32 geni_output_ctrl = 0, geni_fw_multilock_msa_ro = 0;
+	u32 geni_clk_sel = 0, geni_m_irq_enable = 0;
+	u32 se_gsi_event_en = 0, se_irq_en = 0;
+	u32 dma_if_en_ro = 0, dma_general_cfg = 0, dma_qsb_trans_cfg = 0;
 
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	void __iomem *base = uport->membase;
@@ -694,6 +703,15 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	dma_if_en = geni_read_reg(base, SE_DMA_IF_EN);
 	geni_clk_ctrl_ro = geni_read_reg(base, GENI_CLK_CTRL_RO);
 	fifo_if_disable_ro = geni_read_reg(base, GENI_IF_DISABLE_RO);
+	geni_output_ctrl = geni_read_reg(base, GENI_OUTPUT_CTRL);
+	geni_fw_multilock_msa_ro = geni_read_reg(base, GENI_FW_MULTILOCK_MSA_RO);
+	geni_clk_sel = geni_read_reg(base, SE_GENI_CLK_SEL);
+	geni_m_irq_enable = geni_read_reg(base, M_IRQ_ENABLE);
+	se_gsi_event_en = geni_read_reg(base, SE_GSI_EVENT_EN);
+	se_irq_en = geni_read_reg(base, SE_IRQ_EN);
+	dma_if_en_ro = geni_read_reg(base, DMA_IF_EN_RO);
+	dma_general_cfg = geni_read_reg(base, DMA_GENERAL_CFG);
+	dma_qsb_trans_cfg = geni_read_reg(base, SE_DMA_QSB_TRANS_CFG);
 
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 		     "%s: m_cmd0:0x%x, m_irq_status:0x%x, geni_status:0x%x, geni_ios:0x%x\n",
@@ -746,6 +764,27 @@ void geni_se_dump_dbg_regs(struct uart_port *uport)
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 		     "dma_if_en:0x%x, geni_clk_ctrl:0x%x fifo_if_disable:0x%x\n",
 		     dma_if_en, geni_clk_ctrl_ro, fifo_if_disable_ro);
+
+	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+		     "geni_output_ctrl:0x%x, geni_fw_multilock_msa_ro:0x%x\n",
+		     geni_output_ctrl, geni_fw_multilock_msa_ro);
+
+	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+		     "geni_clk_sel:0x%x, geni_m_irq_enable:0x%x\n",
+		      geni_clk_sel, geni_m_irq_enable);
+
+	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+		     "se_gsi_event_en:0x%x, se_irq_en:0x%x, dma_qsb_trans_cfg:0x%x\n",
+		     se_gsi_event_en, se_irq_en, dma_qsb_trans_cfg);
+
+	UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+		     "dma_if_en_ro:0x%x, dma_general_cfg:0x%x\n",
+		     dma_if_en_ro, dma_general_cfg);
+
+	if (IS_ENABLED(CONFIG_MSM_GPI_DMA) && port->xfer_mode == GENI_GPI_DMA &&
+	    port->gsi && port->gsi->tx_c)
+		gpi_dump_for_geni(port->gsi->tx_c);
+
 }
 
 int msm_geni_serial_resources_on(struct msm_geni_serial_port *port)
@@ -776,7 +815,7 @@ int msm_geni_serial_resources_on(struct msm_geni_serial_port *port)
 	}
 
 	UART_LOG_DBG(port->ipc_log_misc, port->uport.dev, "%s: ICC BW voting\n", __func__);
-	ret = geni_common_icc_set_bw(&port->se, port->ipc_log_misc);
+	ret = geni_icc_set_bw(&port->se);
 	if (ret) {
 		UART_LOG_DBG(port->ipc_log_misc, port->uport.dev,
 			     "%s: Error %d ICC BW voting failed\n", __func__, ret);
@@ -1375,8 +1414,9 @@ static int vote_clock_off(struct uart_port *uport)
 	UART_LOG_DBG(port->ipc_log_pwr, uport->dev,
 		     "Enter %s:%s ioctl_count:%d\n",
 		     __func__, current->comm, port->ioctl_count);
-	if (!pm_runtime_enabled(uport->dev)) {
-		dev_err(uport->dev, "RPM not available.Can't enable clocks\n");
+	if (!pm_runtime_enabled(uport->dev) || !pm_runtime_active(uport->dev)) {
+		dev_err(uport->dev,
+			"RPM not available or not active, clock status read would fail\n");
 		return -EPERM;
 	}
 	if (!port->ioctl_count) {
@@ -2174,10 +2214,16 @@ static void msm_geni_deallocate_chan(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 
-	dma_release_channel(msm_port->gsi->rx_c);
-	dma_release_channel(msm_port->gsi->tx_c);
-	msm_port->gsi->rx_c = NULL;
-	msm_port->gsi->tx_c = NULL;
+	if (msm_port->gsi->rx_c) {
+		dma_release_channel(msm_port->gsi->rx_c);
+		msm_port->gsi->rx_c = NULL;
+	}
+
+	if (msm_port->gsi->tx_c) {
+		dma_release_channel(msm_port->gsi->tx_c);
+		msm_port->gsi->tx_c = NULL;
+	}
+	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "DMA channel release done\n");
 }
 
 static int msm_geni_allocate_chan(struct uart_port *uport)
@@ -2640,7 +2686,6 @@ static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 	if (!msm_port->gsi_rx_done) {
 		UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 			     "%s: gsi_rx not yet done\n", __func__);
-		atomic_set(&msm_port->stop_rx_inprogress, 0);
 		return;
 	}
 	if (msm_port->gsi->rx_c)
@@ -2660,6 +2705,7 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 	struct device *rx_dev = msm_port->wrapper_dev;
 	int i, k, index = 0;
 
+	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "Start: GSI Rx xfer\n");
 	if (!msm_port->port_setup) {
 		dev_err(uport->dev, "%s: Port setup not yet done\n", __func__);
 		return -EAGAIN;
@@ -2732,7 +2778,7 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 	}
 	dma_async_issue_pending(msm_port->gsi->rx_c);
 	msm_port->gsi_rx_done = true;
-
+	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "End: GSI Rx xfer\n");
 	return 0;
 exit_gsi_xfer_rx:
 	for (i = 0; i < NUM_RX_BUF; i++) {
@@ -2742,6 +2788,7 @@ exit_gsi_xfer_rx:
 	}
 	msm_geni_deallocate_chan(uport);
 	msm_port->gsi_rx_done = false;
+	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "GSI Rx xfer failed\n");
 	return -EIO;
 }
 
@@ -3805,8 +3852,9 @@ static int msm_geni_serial_handle_dma_rx(struct uart_port *uport, bool drop_rx)
 		return 0;
 	}
 
-	/* Check RX buffer data for faulty pattern*/
-	check_rx_buf((char *)msm_port->rx_buf, uport, rx_bytes);
+	if (msm_port->wakeup_byte)
+		/* Check RX buffer data for faulty pattern */
+		check_rx_buf((char *)msm_port->rx_buf, uport, rx_bytes);
 
 	if (drop_rx)
 		return 0;
@@ -4414,6 +4462,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 	struct device *tx_dev = msm_port->wrapper_dev;
 	int ret = 0, j = 0, i, timeout;
 	unsigned long long start_time;
+	int usage_count = atomic_read(&uport->dev->power.usage_count);
 
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "%s: %d\n", __func__, true);
 	msm_port->port_state = UART_PORT_SHUTDOWN_IN_PROGRESS;
@@ -4426,7 +4475,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		console_stop(uport->cons);
 		disable_irq(uport->irq);
 	} else {
-		if (!msm_port->ioctl_count)
+		if (!usage_count)
 			msm_geni_serial_power_on(uport);
 
 		if (msm_port->xfer_mode == GENI_GPI_DMA) {
@@ -4441,7 +4490,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 					"%s: Stop Rx Engine\n", __func__);
 			timeout = wait_for_completion_timeout
 				(&msm_port->xfer,
-				msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC));
+				msecs_to_jiffies(GSI_STOP_RX_TIMEOUT));
 
 			if (!timeout)
 				UART_LOG_DBG(msm_port->ipc_log_misc,
@@ -4453,11 +4502,10 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev,
 					     "%s:GSI DMA-Rx ch\n", __func__);
-				dma_release_channel(msm_port->gsi->rx_c);
 				if (msm_port->rx_wq)
 					flush_workqueue(msm_port->rx_wq);
 
-				for (i = 0; i < 4; i++) {
+				for (i = 0; i < NUM_RX_BUF; i++) {
 					if (msm_port->dma_addr[i]) {
 						geni_se_common_iommu_free_buf(rx_dev,
 								      &msm_port->dma_addr[i],
@@ -4466,6 +4514,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 						msm_port->rx_gsi_buf[i] = NULL;
 					}
 				}
+				dma_release_channel(msm_port->gsi->rx_c);
 				msm_port->gsi->rx_c = NULL;
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev, "%s: Rx unmap buf done\n",
@@ -4475,7 +4524,6 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev, "%s:GSI DMA-Tx ch\n",
 					     __func__);
-				dma_release_channel(msm_port->gsi->tx_c);
 				if (msm_port->tx_wq)
 					flush_workqueue(msm_port->tx_wq);
 
@@ -4488,6 +4536,7 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 						     uport->dev, "%s: Tx unmap buf done\n",
 						     __func__);
 				}
+				dma_release_channel(msm_port->gsi->tx_c);
 				msm_port->gsi->tx_c = NULL;
 			}
 		} else {
@@ -4841,6 +4890,7 @@ static int msm_geni_serial_reconfigure_baud_rate(struct uart_port *uport)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	struct ktermios *termios = port->current_termios;
 	int ret;
+	unsigned int wait_time = POLL_WAIT_TIMEOUT_MSEC;
 	unsigned long long start_time;
 
 	start_time = geni_capture_start_time(&port->se, port->ipc_log_kpi,
@@ -4869,8 +4919,9 @@ static int msm_geni_serial_reconfigure_baud_rate(struct uart_port *uport)
 	msm_geni_serial_stop_rx(uport);
 
 	if (!uart_console(uport)) {
-		if (!wait_for_completion_timeout(&port->xfer,
-						 msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC)))
+		if (port->xfer_mode == GENI_GPI_DMA)
+			wait_time = GSI_STOP_RX_TIMEOUT;
+		if (!wait_for_completion_timeout(&port->xfer, msecs_to_jiffies(wait_time)))
 			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 				     "%s:Timeout for stop_rx\n", __func__);
 	}
@@ -4970,7 +5021,7 @@ static void msm_geni_serial_set_termios(struct uart_port *uport,
 {
 	unsigned int baud;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
-	unsigned long poll_wait_time;
+	unsigned int poll_wait_time = POLL_WAIT_TIMEOUT_MSEC;
 	unsigned long long start_time;
 
 	start_time = geni_capture_start_time(&port->se, port->ipc_log_kpi,
@@ -5005,8 +5056,9 @@ static void msm_geni_serial_set_termios(struct uart_port *uport,
 	msm_geni_serial_stop_rx(uport);
 
 	if (!uart_console(uport)) {
-		poll_wait_time = msecs_to_jiffies(POLL_WAIT_TIMEOUT_MSEC);
-		if (!wait_for_completion_timeout(&port->xfer, poll_wait_time))
+		if (port->xfer_mode == GENI_GPI_DMA)
+			poll_wait_time = GSI_STOP_RX_TIMEOUT;
+		if (!wait_for_completion_timeout(&port->xfer, msecs_to_jiffies(poll_wait_time)))
 			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 				     "%s:Timeout for stop_rx\n", __func__);
 	}
@@ -6075,10 +6127,26 @@ static void msm_geni_serial_remove(struct platform_device *pdev)
 	if (port->pm_auto_suspend_disable)
 		pm_runtime_allow(&pdev->dev);
 	uart_remove_one_port(drv, &port->uport);
+
 	if (port->gsi_mode) {
-		destroy_workqueue(port->tx_wq);
-		destroy_workqueue(port->rx_wq);
+		/* Cancel specific works and wait for any running instance to finish */
+		cancel_work_sync(&port->tx_xfer_work);
+		cancel_work_sync(&port->tx_cancel_work);
+		cancel_work_sync(&port->rx_cancel_work);
+
+		if (port->gsi && port->gsi->tx_c)
+			dmaengine_pause(port->gsi->tx_c);
+
+		if (port->tx_wq) {
+			destroy_workqueue(port->tx_wq);
+			port->tx_wq = NULL;
+		}
+		if (port->rx_wq) {
+			destroy_workqueue(port->rx_wq);
+			port->rx_wq = NULL;
+		}
 		msm_geni_serial_cleanup_timestamp_resources(port);
+		msm_geni_deallocate_chan(&port->uport);
 	}
 	if (port->rx_dma) {
 		geni_se_common_iommu_free_buf(port->wrapper_dev, &port->rx_dma,
@@ -6097,7 +6165,7 @@ static void msm_geni_serial_remove(struct platform_device *pdev)
 	device_remove_file(port->uport.dev, &dev_attr_capture_kpi);
 	debugfs_remove(port->dbg);
 
-	dev_info(&pdev->dev, "%s driver removed %d\n", __func__, true);
+	dev_dbg(&pdev->dev, "%s: driver removed\n", __func__);
 }
 
 /*
@@ -6186,6 +6254,13 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 			msm_geni_serial_allow_rx(port);
 		ret = -EBUSY;
 		goto exit_runtime_suspend;
+	}
+
+	if (port->xfer_mode == GENI_GPI_DMA &&
+	    !wait_for_completion_timeout(&port->xfer, msecs_to_jiffies(GSI_STOP_RX_TIMEOUT))) {
+		UART_LOG_DBG(port->ipc_log_pwr, dev,
+			     "%s: timeout for gsi cancel rx\n", __func__);
+		return -ETIMEDOUT;
 	}
 
 	geni_status = geni_read_reg(port->uport.membase, SE_GENI_STATUS);

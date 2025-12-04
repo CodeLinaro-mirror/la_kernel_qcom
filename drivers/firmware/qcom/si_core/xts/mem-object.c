@@ -178,7 +178,10 @@ static int map_via_ffa_abi(struct mem_object *mo)
 		goto out;
 	}
 
-	if (mo->dma_buf) { // DMA-mapped
+	/* A DMA API such as dma_alloc_coherent() was used to allocate
+	 * this memory
+	 */
+	if (sg_dma_address(sgl)) {
 		for_each_sg(sgl, sg, nents, i) {
 			total_len += sg_dma_len(sg);
 		}
@@ -264,8 +267,16 @@ static int map_via_shm_bridge(struct mem_object *mo)
 		perms_list = &hlos_perms;
 		nelems = 1;
 
-		mo->shm_mapping_info.p_addr = page_to_phys(sg_page(sgl));
-		mo->shm_mapping_info.p_addr_len = sgl->length;
+		/* A DMA API such as dma_alloc_coherent() was used to allocate
+		 * this memory
+		 */
+		if (sg_dma_address(sgl)) {
+			mo->shm_mapping_info.p_addr = sg_dma_address(sgl);
+			mo->shm_mapping_info.p_addr_len = sg_dma_len(sgl);
+		} else  {
+			mo->shm_mapping_info.p_addr = page_to_phys(sg_page(sgl));
+			mo->shm_mapping_info.p_addr_len = sgl->length;
+		}
 	}
 
 	mo->shm_mapping_info.perms = QCOM_SCM_PERM_RW;
@@ -449,7 +460,10 @@ static unsigned long mo_prepare_ffa(struct si_object *object, struct si_arg args
 		ffa->offset = mo->ffa_mapping_info.offset;
 		ffa->size = mo->ffa_mapping_info.size;
 		/* append cacheability info to upper nibble */
-		ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
+		if (mo->flags & SI_CORE_MEM_OBJ_UNCACHED)
+			ffa->mem_attr = CACHE_UNCACHED | mo->ffa_mapping_info.mem_attr;
+		else
+			ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
 
 		args[0].b.size = sizeof(*ffa);
 
@@ -495,7 +509,10 @@ static unsigned long mo_prepare_shm(struct si_object *object, struct si_arg args
 		shm->p_addr = mo->shm_mapping_info.p_addr;
 		shm->len = mo->shm_mapping_info.p_addr_len;
 		/* append cacheability info to upper nibble */
-		shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
+		if (mo->flags & SI_CORE_MEM_OBJ_UNCACHED)
+			shm->perms = CACHE_UNCACHED | mo->shm_mapping_info.perms;
+		else
+			shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
 
 		args[0].b.size = sizeof(*shm);
 
@@ -598,7 +615,10 @@ static int map_memory_obj_ffa(struct si_arg args[])
 		ffa->offset = mo->ffa_mapping_info.offset;
 		ffa->size = mo->ffa_mapping_info.size;
 		/* append cacheability info to upper nibble */
-		ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
+		if (mo->flags & SI_CORE_MEM_OBJ_UNCACHED)
+			ffa->mem_attr = CACHE_UNCACHED | mo->ffa_mapping_info.mem_attr;
+		else
+			ffa->mem_attr = CACHE_NS_CACHED | mo->ffa_mapping_info.mem_attr;
 
 		pr_info("%s ffa-mapped %llx %lx\n",
 			si_object_name(object), ffa->ffa_handle, ffa->size);
@@ -666,7 +686,10 @@ static int map_memory_obj_shm(struct si_arg args[])
 		shm->p_addr = mo->shm_mapping_info.p_addr;
 		shm->len = mo->shm_mapping_info.p_addr_len;
 		/* append cacheability info to upper nibble */
-		shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
+		if (mo->flags & SI_CORE_MEM_OBJ_UNCACHED)
+			shm->perms = CACHE_UNCACHED | mo->shm_mapping_info.perms;
+		else
+			shm->perms = CACHE_NS_CACHED | mo->shm_mapping_info.perms;
 
 		pr_info("%s shm-mapped %llx %llx\n",
 			si_object_name(object), shm->p_addr, shm->len);
@@ -942,6 +965,49 @@ struct si_object *init_si_mem_object_sg(struct sg_table *sgt, uint64_t tag,
 }
 EXPORT_SYMBOL_GPL(init_si_mem_object_sg);
 
+int dma_map_mem_object(struct si_object *object, unsigned int nents)
+{
+	struct mem_object *mo;
+	struct scatterlist *sglist;
+	int count;
+
+	if (!is_mem_object(object)) {
+		pr_err("dma-mapping a non-memory object.\n");
+		return -EINVAL;
+	}
+
+	mo = to_mem_object(object);
+	sglist = mo->map.sgt->sgl;
+
+	/* Create a DMA mapping and flush the cache line */
+	count = dma_map_sg(&mem_object_pdev->dev, sglist, nents, DMA_TO_DEVICE);
+	if (!count) {
+		pr_err("dma_map_sg() failed memory object %s\n", si_object_name(object));
+		return -EINVAL;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dma_map_mem_object);
+
+void dma_unmap_mem_object(struct si_object *object, unsigned int nents)
+{
+	struct mem_object *mo;
+	struct scatterlist *sglist;
+
+	if (!is_mem_object(object)) {
+		pr_err("dma-unmapping a non-memory object.\n");
+		return;
+	}
+
+	mo = to_mem_object(object);
+	sglist = mo->map.sgt->sgl;
+
+	/* Remove the DMA mapping and invalidate the cache line */
+	dma_unmap_sg(&mem_object_pdev->dev, sglist, nents, DMA_TO_DEVICE);
+}
+EXPORT_SYMBOL_GPL(dma_unmap_mem_object);
+
 struct sg_table *mem_object_to_sgt(struct si_object *object)
 {
 	if (is_mem_object(object))
@@ -1035,12 +1101,6 @@ ssize_t mem_objects_show(struct kobject *kobj, struct kobj_attribute *attr, char
 
 int mem_object_init(struct platform_device *pdev)
 {
-	int ret;
-
-	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
-	if (ret)
-		return ret;
-
 	/* Select memory object type: default to SHMBridge. */
 	mem_ops.release = mo_release;
 	mem_ops.prepare = mo_prepare;
