@@ -341,6 +341,7 @@ malabar_perf_config = {
     "CONFIG_SLIM_QCOM_NGD_CTRL": "m",
     "CONFIG_SM_DISPCC_MALABAR": "m",
     "CONFIG_SM_GCC_MALABAR": "m",
+    "CONFIG_SM_GPUCC_MALABAR": "m",
     "CONFIG_SND_USB_AUDIO_QMI": "m",
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPI_QCOM_GENI": "m",
