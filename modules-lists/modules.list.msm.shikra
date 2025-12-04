@@ -61,3 +61,7 @@ nvmem_qcom-spmi-sdam.ko
 rtc-pm8xxx.ko
 pmic-pon-log.ko
 spmi-pmic-arb.ko
+rpm-smd-regulator.ko
+debug-regulator.ko
+proxy-consumer.ko
+qti-fixed-regulator.ko
