@@ -34,3 +34,4 @@ qcom_glink_rpm.ko
 clk-qcom.ko
 clk-dummy.ko
 icc-clk.ko
+gcc-shikra.ko
