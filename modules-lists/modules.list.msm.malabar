@@ -25,6 +25,7 @@ dispcc-canoe.ko
 evacc-canoe.ko
 gcc-alor.ko
 gcc-canoe.ko
+gcc-malabar.ko
 gdsc-regulator.ko
 gpucc-canoe.ko
 tcsrcc-canoe.ko
