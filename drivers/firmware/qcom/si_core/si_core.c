@@ -1448,7 +1448,11 @@ static void si_core_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id si_core_match[] = {
-	{ .compatible = "qcom,mem-object", }, {}
+	/* qcom,mem-object is deprecated, only here for backward
+	 * compatibility.
+	 */
+	{ .compatible = "qcom,mem-object", },
+	{ .compatible = "qcom,si-core", }, {}
 };
 
 static struct platform_driver si_core_plat_driver = {
