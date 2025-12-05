@@ -94,3 +94,4 @@ sdhci-msm.ko
 msm_sharedmem.ko
 nvmem_qfprom.ko
 qcom-cpufreq-hw.ko
+rtc-pm8xxx.ko
