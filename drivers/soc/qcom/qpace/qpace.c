@@ -93,6 +93,8 @@ static void __iomem *qpace_gen_cmd_regs;
 static struct icc_path *qpace_interconnect;
 static struct device *qpace_dev;
 static struct dev_pm_qos_request qos_req;
+DEFINE_STATIC_KEY_FALSE(qpace_drv_probed);
+EXPORT_SYMBOL_GPL(qpace_drv_probed);
 
 /*
  * =============================================================================
@@ -1298,6 +1300,9 @@ static int qpace_probe(struct platform_device *pdev)
 		goto power_off;
 
 	qpace_dev = dev;
+	/*  initialization has been completed before other CPUs observe qpace_drv_probed */
+	smp_mb();
+	static_branch_enable(&qpace_drv_probed);
 
 	return ret;
 
