@@ -103,8 +103,8 @@
 	};
 
 	sound: sound {
-		compatible = "qcom,qcm6490-sndcard";
-		model = "qcm6490-idp-snd-card";
+		compatible = "qcom,qcm6490-idp-sndcard";
+		model = "QCM6490-IDP";
 
 		audio-routing =
 			"SpkrLeft IN", "WSA_SPK1 OUT",
@@ -170,18 +170,6 @@
 
 			codec {
 				sound-dai = <&lpass_va_macro 0>;
-			};
-		};
-
-		vi-feedback-dai-link {
-			link-name = "CODEC_DMA-LPAIF_WSA-TX-0";
-
-			cpu {
-				sound-dai = <&q6apmbedai WSA_CODEC_DMA_TX_0>;
-			};
-
-			codec {
-				sound-dai = <&swr2 6>, <&lpass_wsa_macro 2>;
 			};
 		};
 	};
