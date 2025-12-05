@@ -80,40 +80,35 @@ struct gic_quirk {
 
 static struct dentry *debugfs_dir;
 static char debugfs_buf[NR_CPUS];
+static u64 cpu_mpidr_map[NR_CPUS];
 
-static int process_cpu_index(struct device_node *np, int cpu_index, int clss)
+static void get_cpu_mpidr(void *mpidr)
 {
-	struct device_node *dev_phandle;
-	const __be32 *reg;
-	u32 cpu_mpidr = 0;
+	*(uint64_t *)mpidr = read_cpuid_mpidr() & MPIDR_HWID_BITMASK;
+}
+
+static void get_cpu_mpidr_map(void)
+{
+	int i = 0, cpu;
+	u64 mpidr;
+
+	for_each_possible_cpu(cpu) {
+		smp_call_function_single(cpu, get_cpu_mpidr, &mpidr, true);
+		cpu_mpidr_map[i++] = mpidr;
+	}
+}
+
+static int process_cpu_index(int cpu_index, int clss)
+{
 	int ret;
-	int pcpu;
 
-	pcpu = cpu_logical_to_phys(cpu_index);
-	if (pcpu < 0)
-		return pcpu;
-
-	dev_phandle = of_parse_phandle(np, "qcom,gic-cpulist", pcpu);
-	if (!dev_phandle) {
-		pr_err("Invalid CPU index: %d\n", pcpu);
-		return -EINVAL;
-	}
-	reg = of_get_property(dev_phandle, "reg", NULL);
-	if (!reg) {
-		pr_err("Failed to get reg property for CPU%d\n", pcpu);
-		ret = -EINVAL;
-		goto dec_node;
-	}
-	cpu_mpidr = be32_to_cpu(reg[1]);
-	ret = qcom_scm_set_gic_cpuclass(cpu_mpidr, clss);
+	ret = qcom_scm_set_gic_cpuclass(cpu_mpidr_map[cpu_index], clss);
 	if (ret) {
-		pr_err("Runtime CPU configuration for GIC failed for CPU%d at address 0x%x\n",
-				pcpu, cpu_mpidr);
+		pr_err("Runtime CPU configuration for GIC failed for CPU%d at address 0x%llx\n",
+				cpu_index, cpu_mpidr_map[cpu_index]);
+		ret = -EINVAL;
 	}
 
-
-dec_node:
-	of_node_put(dev_phandle);
 	return ret;
 }
 
@@ -125,7 +120,6 @@ static ssize_t cpu_select_read(struct file *file, char __user *buf, size_t count
 static ssize_t cpu_select_write(struct file *file, const char __user *buf, size_t count,
 		loff_t *ppos)
 {
-	struct device_node *np = file->f_inode->i_private;
 	int num_cpus = cpumask_weight(cpu_possible_mask);
 	int valid_cpu_count = 0;
 	char *kbuf;
@@ -182,7 +176,7 @@ static ssize_t cpu_select_write(struct file *file, const char __user *buf, size_
 	for (i = 0; i < num_cpus; i++) {
 		if (valid_cpus[i] == 1 &&
 				!cpumask_test_cpu(i, &gic_routing_data.gic_routing_class0_cpus)) {
-			ret = process_cpu_index(np, i, 0);
+			ret = process_cpu_index(i, 0);
 			if (ret < 0) {
 				count = ret;
 				goto unlock;
@@ -191,7 +185,7 @@ static ssize_t cpu_select_write(struct file *file, const char __user *buf, size_
 			cpumask_clear_cpu(i, &gic_routing_data.gic_routing_class1_cpus);
 		} else if (valid_cpus[i] == -1 && cpumask_test_cpu(i, cpu_online_mask) &&
 				!cpumask_test_cpu(i, &gic_routing_data.gic_routing_class1_cpus)) {
-			ret = process_cpu_index(np, i, 1);
+			ret = process_cpu_index(i, 1);
 			if (ret < 0) {
 				count = ret;
 				goto unlock;
@@ -797,13 +791,15 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 	runtime_cpu_class_en = of_property_read_bool(pdev->dev.of_node,
 			"qcom,gic-runtime-cpu-class-en");
 
+	get_cpu_mpidr_map();
+
 	for (i = 0; i < cpus_len; i++) {
 		dev_phandle = of_parse_phandle(pdev->dev.of_node, "qcom,gic-class0-cpus", i);
 		if (dev_phandle) {
 			cpu = of_cpu_node_to_id(dev_phandle);
 			if (cpu >= 0) {
 				if (runtime_cpu_class_en) {
-					rc = process_cpu_index(pdev->dev.of_node, cpu, 0);
+					rc = process_cpu_index(cpu, 0);
 					if (rc < 0)
 						return rc;
 				}
@@ -827,7 +823,7 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 			cpu = of_cpu_node_to_id(dev_phandle);
 			if (cpu >= 0) {
 				if (runtime_cpu_class_en) {
-					rc = process_cpu_index(pdev->dev.of_node, cpu, 1);
+					rc = process_cpu_index(cpu, 1);
 					if (rc < 0)
 						return rc;
 				}
@@ -854,6 +850,7 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 
 	gic_routing_data.gic_affinity_cpuhp_state = rc;
 	pr_info("GIC Interrupt Routing Driver Registered\n");
+
 	return 0;
 }
 
