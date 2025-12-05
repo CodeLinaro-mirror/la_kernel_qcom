@@ -51,10 +51,9 @@ void __fetch__async_reqs(struct si_object_invoke_ctx *oic);
 
 /* FFA related API. */
 
-/* 571217bb-16d2-543f-917e-c4f04237a774 */
+/* f2266662-48cb-5335-b3f2-a1942a5677aa */
 #define QTEE_SP_FFA_UUID                                                    \
-	UUID_INIT(0x571217bb, 0x16d2, 0x543f, 0x91, 0x7e, 0xc4, 0xf0, 0x42, \
-		  0x37, 0xa7, 0x74)
+	UUID_INIT(0xf2266662, 0x48cb, 0x5335, 0xb3, 0xf2, 0xa1, 0x94, 0x2a, 0x56, 0x77, 0xaa)
 
 #ifdef CONFIG_QCOM_SI_CORE_MEM_FFA
 
