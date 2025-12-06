@@ -1792,8 +1792,20 @@ static const struct msm_pinctrl_soc_data malabar_tlmm = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data malabar_vm_tlmm = {
+	.pins = malabar_pins,
+	.npins = ARRAY_SIZE(malabar_pins),
+	.functions = malabar_functions,
+	.nfunctions = ARRAY_SIZE(malabar_functions),
+	.groups = malabar_groups,
+	.ngroups = ARRAY_SIZE(malabar_groups),
+	.ngpios = 115,
+	.egpio_func = 11,
+};
+
 static const struct of_device_id malabar_tlmm_of_match[] = {
 	{ .compatible = "qcom,malabar-pinctrl", .data = &malabar_tlmm },
+	{ .compatible = "qcom,malabar-vm-tlmm", .data = &malabar_vm_tlmm },
 	{},
 };
 
