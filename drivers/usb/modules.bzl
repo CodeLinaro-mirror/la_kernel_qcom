@@ -5,6 +5,7 @@ load(":drivers/usb/pd/modules.bzl", register_pd = "register_modules")
 load(":drivers/usb/phy/modules.bzl", register_phy = "register_modules")
 load(":drivers/usb/redriver/modules.bzl", register_redriver = "register_modules")
 load(":drivers/usb/repeater/modules.bzl", register_repeater = "register_modules")
+load(":drivers/usb/typec/mux/modules.bzl", register_typec_mux = "register_modules")
 load(":drivers/usb/typec/ucsi/modules.bzl", register_typec_ucsi = "register_modules")
 
 def register_modules(registry):
@@ -15,4 +16,5 @@ def register_modules(registry):
     register_phy(registry)
     register_redriver(registry)
     register_repeater(registry)
+    register_typec_mux(registry)
     register_typec_ucsi(registry)
