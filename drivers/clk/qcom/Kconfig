@@ -893,4 +893,13 @@ config SM_GCC_MALABAR
 	  Malabar devices.
 	  Say Y if you want to use peripheral devices such as UART, SPI, I2C, USB,
 	  SD/UFS, Camera, Video etc.
+
+config SM_DISPCC_MALABAR
+	tristate "Malabar Display Clock Controller"
+	depends on SM_GCC_MALABAR
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc
+	  Malabar devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
 endif
