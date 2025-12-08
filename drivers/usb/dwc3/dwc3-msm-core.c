@@ -48,6 +48,9 @@
 #include <linux/usb/composite.h>
 #include <linux/usb/typec.h>
 #include <linux/usb/typec_mux.h>
+#include <linux/usb/typec_altmode.h>
+#include <linux/usb/typec_dp.h>
+#include <linux/usb/typec_retimer.h>
 #include <linux/soc/qcom/wcd939x-i2c.h>
 #include <linux/usb/repeater.h>
 #include <linux/pm_domain.h>
@@ -3977,6 +3980,65 @@ static void dwc3_msm_typec_switch_set(struct dwc3_msm *mdwc, int orientation)
 	typec_switch_put(sw);
 }
 
+
+static void dwc3_msm_enable_usb(struct dwc3_msm *mdwc)
+{
+	struct typec_retimer *retimer;
+	struct typec_retimer_state retimer_state;
+	int ret;
+
+	retimer = fwnode_typec_retimer_get(mdwc->dev->fwnode);
+	if (IS_ERR(retimer)) {
+		dev_err(mdwc->dev, "failed to acquire retimer-switch\n");
+		return;
+	}
+
+	retimer_state.alt = NULL;
+	retimer_state.data = NULL;
+	retimer_state.mode = TYPEC_STATE_USB;
+
+	ret = typec_retimer_set(retimer, &retimer_state);
+	if (ret)
+		dev_err(mdwc->dev, "failed to setup retimer to DP: %d\n", ret);
+
+	typec_retimer_put(retimer);
+}
+
+static void dwc3_msm_enable_dp(struct dwc3_msm *mdwc, u16 svid, int pin_assign, int hpd_state, int hpd_irq)
+{
+	struct typec_retimer *retimer;
+	struct typec_retimer_state retimer_state;
+	struct typec_displayport_data dp_data = {};
+	struct typec_altmode dp_alt;
+	int ret;
+
+	dp_data.status = DP_STATUS_ENABLED;
+	if (hpd_state)
+		dp_data.status |= DP_STATUS_HPD_STATE;
+	if (hpd_irq)
+		dp_data.status |= DP_STATUS_IRQ_HPD;
+	dp_data.conf = DP_CONF_SET_PIN_ASSIGN(pin_assign);
+
+	dp_alt.svid = svid;
+	dp_alt.mode = USB_TYPEC_DP_MODE;
+
+	retimer = fwnode_typec_retimer_get(mdwc->dev->fwnode);
+	if (IS_ERR(retimer)) {
+		dev_err(mdwc->dev, "failed to acquire retimer-switch\n");
+		return;
+	}
+
+	retimer_state.alt = &dp_alt;
+	retimer_state.data = &dp_data;
+	retimer_state.mode = TYPEC_DP_STATE_C + (pin_assign - DP_PIN_ASSIGN_C);
+
+	ret = typec_retimer_set(retimer, &retimer_state);
+	if (ret)
+		dev_err(mdwc->dev, "failed to setup retimer to DP: %d\n", ret);
+
+	typec_retimer_put(retimer);
+}
+
 static void msm_dwc3_perf_vote_enable(struct dwc3_msm *mdwc, bool enable);
 
 static void configure_usb_wakeup_interrupt(struct dwc3_msm *mdwc,
@@ -5917,7 +5979,7 @@ static void dwc3_msm_set_dp_only_params(struct dwc3_msm *mdwc)
 	phy_set_mode_ext(mdwc->usb3_phy, PHY_MODE_INVALID, DP_4_LANE);
 }
 
-int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
+int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes, int orientation, u16 svid, int pin_assign, int hpd_state, int hpd_irq)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 	int ret = 0;
@@ -5926,6 +5988,11 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes)
 		dev_err(dev, "dwc3-msm is not initialized yet.\n");
 		return -EAGAIN;
 	}
+
+	if (dp_connected)
+		dwc3_msm_enable_dp(mdwc, svid, pin_assign, hpd_state, hpd_irq);
+	else
+		dwc3_msm_enable_usb(mdwc);
 
 	dev_dbg(dev, "lanes %d, connect %d\n", lanes, dp_connected);
 	/* flush any pending work */
@@ -6035,9 +6102,9 @@ exit:
 }
 EXPORT_SYMBOL(dwc3_msm_set_dp_mode);
 
-int dwc3_msm_release_ss_lane(struct device *dev)
+int dwc3_msm_release_ss_lane(struct device *dev, bool dp_connected, int lanes, int orientation, u16 svid, int pin_assign, int hpd_state, int hpd_irq)
 {
-	return dwc3_msm_set_dp_mode(dev, true, 4);
+	return dwc3_msm_set_dp_mode(dev, dp_connected, lanes, orientation, svid, pin_assign, hpd_state, hpd_irq);
 }
 EXPORT_SYMBOL(dwc3_msm_release_ss_lane);
 

@@ -290,8 +290,8 @@ void dwc3_tx_fifo_resize_request(struct usb_ep *ep, bool qdss_enable);
 int msm_data_fifo_config(struct usb_ep *ep, unsigned long addr, u32 size,
 	u8 dst_pipe_idx);
 int msm_dwc3_reset_dbm_ep(struct usb_ep *ep);
-int dwc3_msm_set_dp_mode(struct device *dev, bool connected, int lanes);
-int dwc3_msm_release_ss_lane(struct device *dev);
+int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes, int orientation, u16 svid, int mode, int hpd_state, int hpd_irq);
+int dwc3_msm_release_ss_lane(struct device *dev, bool dp_connected, int lanes, int orientation, u16 svid, int mode, int hpd_state, int hpd_irq);
 int msm_ep_update_ops(struct usb_ep *ep);
 int msm_ep_clear_ops(struct usb_ep *ep);
 int msm_ep_set_mode(struct usb_ep *ep, enum usb_hw_ep_mode mode);
