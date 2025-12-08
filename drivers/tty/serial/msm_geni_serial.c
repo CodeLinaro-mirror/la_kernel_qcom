@@ -1764,6 +1764,40 @@ static void msm_geni_serial_poll_tx_done(struct uart_port *uport)
 	geni_write_reg(irq_clear, uport->membase, SE_GENI_M_IRQ_CLEAR);
 }
 
+static void msm_uart_log_tx_kpi(struct uart_port *uport)
+{
+	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+	u64 comp_time, sw_time, exec_time;
+	u32 len;
+
+	if (!msm_port->uart_kpi)
+		return;
+
+	msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.len = msm_port->xmit_size;
+	msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.time_stamp = sched_clock();
+
+	len = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.len;
+	comp_time = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.time_stamp;
+
+	/* SW time */
+	sw_time = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_sw.time_stamp;
+	exec_time = comp_time - sw_time;
+	UART_LOG_DBG(msm_port->ipc_log_kpi, uport->dev,
+		     "%s: TX SW time: %llu nsec(%llu usec) for bytes: %d with freq: %d index: %d\n",
+		     __func__, exec_time, (exec_time / 1000), len, msm_port->cur_baud,
+		     msm_port->kpi_comp_idx);
+
+	/* HW time */
+	sw_time = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_hw.time_stamp;
+	exec_time = comp_time - sw_time;
+	UART_LOG_DBG(msm_port->ipc_log_kpi, uport->dev,
+		     "%s: TX HW time: %llu nsec(%llu usec) for bytes: %d with freq: %d index: %d\n",
+		     __func__, exec_time, (exec_time / 1000), len, msm_port->cur_baud,
+		     msm_port->kpi_comp_idx);
+
+	msm_port->kpi_comp_idx = (msm_port->kpi_comp_idx + 1) % UART_KPI_TX_RX_INSTANCES;
+}
+
 #ifdef CONFIG_CONSOLE_POLL
 static int msm_geni_serial_get_char(struct uart_port *uport)
 {
@@ -2115,6 +2149,7 @@ static void msm_geni_uart_gsi_tx_cb(void *ptr)
 	else
 		geni_se_tx_dma_unprep(&msm_port->se, msm_port->tx_dma, msm_port->xmit_size);
 
+	msm_uart_log_tx_kpi(uport);
 	uport->icount.tx += msm_port->xmit_size;
 	msm_port->tx_dma = (dma_addr_t)NULL;
 	msm_port->xmit_size = 0;
@@ -2183,10 +2218,13 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 	struct tty_port *tport = &uport->state->port;
 	unsigned int rx_bytes = rx_cb->length;
 	u8 idx = msm_port->rx_buf_idx;
+	unsigned long long start_time;
 	int ret;
 
 	UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 		     "%s: Start\n", __func__);
+	start_time = geni_capture_start_time(&msm_port->se, msm_port->ipc_log_kpi,
+					     __func__, msm_port->uart_kpi);
 
 	if (!msm_port->rx_gsi_buf[idx]) {
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev, "%s: Invalid Rx buffer\n", __func__);
@@ -2206,6 +2244,8 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 
 	msm_geni_uart_rx_queue_dma_tre(idx, uport);
 	msm_port->rx_buf_idx = (idx + 1) % 4;
+	geni_capture_stop_time(&msm_port->se, msm_port->ipc_log_kpi, __func__,
+			       msm_port->uart_kpi, start_time, 0, 0);
 	UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
 		     "%s: End\n", __func__);
 }
@@ -2527,6 +2567,10 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 	int ret = 0, index = 0, timeout;
 	unsigned char *tail_ptr = NULL;
 	bool skip_time_stamp = false;
+	unsigned long long start_time;
+
+	start_time = geni_capture_start_time(&msm_port->se, msm_port->ipc_log_kpi,
+					     __func__, msm_port->uart_kpi);
 
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 		     "%s: Start\n", __func__);
@@ -2604,6 +2648,11 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 	    && !setup_timestamp_tre_pair(msm_port, uport, &index))
 		return;
 
+	if (msm_port->uart_kpi) {
+		msm_port->uart_kpi_tx[msm_port->kpi_idx].xfer_req_sw.len = msm_port->xmit_size;
+		msm_port->uart_kpi_tx[msm_port->kpi_idx].xfer_req_sw.time_stamp = sched_clock();
+	}
+
 	msm_port->gsi->tx_desc = dmaengine_prep_slave_sg(msm_port->gsi->tx_c,
 							 msm_port->gsi->tx_sg,
 							 index, DMA_MEM_TO_DEV,
@@ -2631,6 +2680,9 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 					      (POLL_WAIT_TIMEOUT_MSEC));
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 		     "%s: End\n", __func__);
+	geni_capture_stop_time(&msm_port->se, msm_port->ipc_log_kpi, __func__,
+			       msm_port->uart_kpi, start_time,
+			       msm_port->xmit_size, msm_port->cur_baud);
 
 	return;
 exit_gsi_tx_xfer:
@@ -2640,6 +2692,8 @@ exit_gsi_tx_xfer:
 	msm_geni_deallocate_chan(uport);
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
 		     "%s: Failed to prep Tx descriptor", __func__);
+	geni_capture_stop_time(&msm_port->se, msm_port->ipc_log_kpi, __func__,
+			       msm_port->uart_kpi, start_time, 0, 0);
 }
 
 static void msm_geni_uart_gsi_cancel_tx(struct work_struct *work)
@@ -2704,7 +2758,10 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 	struct msm_gpi_tre *go_t = &msm_port->gsi->rx_go_t;
 	struct device *rx_dev = msm_port->wrapper_dev;
 	int i, k, index = 0;
+	unsigned long long start_time;
 
+	start_time = geni_capture_start_time(&msm_port->se, msm_port->ipc_log_kpi,
+					     __func__, msm_port->uart_kpi);
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "Start: GSI Rx xfer\n");
 	if (!msm_port->port_setup) {
 		dev_err(uport->dev, "%s: Port setup not yet done\n", __func__);
@@ -2779,6 +2836,8 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 	dma_async_issue_pending(msm_port->gsi->rx_c);
 	msm_port->gsi_rx_done = true;
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "End: GSI Rx xfer\n");
+	geni_capture_stop_time(&msm_port->se, msm_port->ipc_log_kpi, __func__,
+			       msm_port->uart_kpi, start_time, 0, 0);
 	return 0;
 exit_gsi_xfer_rx:
 	for (i = 0; i < NUM_RX_BUF; i++) {
@@ -3932,36 +3991,12 @@ static int msm_geni_serial_handle_dma_tx(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 	struct tty_port *tport = &uport->state->port;
-	unsigned int len = 0;
-	unsigned long long exec_time = 0, sw_time, comp_time;
 
 	uart_xmit_advance(uport, msm_port->xmit_size);
 	if (msm_port->tx_dma && !msm_port->split_dma_tre.immediate_dma_in_progress)
 		geni_se_tx_dma_unprep(&msm_port->se, msm_port->tx_dma, msm_port->xmit_size);
 
-	if (msm_port->uart_kpi) {
-		msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.len =
-									msm_port->xmit_size;
-		msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.time_stamp =
-									sched_clock();
-		len = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.len;
-		comp_time = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_comp.time_stamp;
-		sw_time = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_sw.time_stamp;
-		exec_time = comp_time - sw_time;
-		UART_LOG_DBG(msm_port->ipc_log_kpi, uport->dev,
-			     "%s:TX transfer time %llu nsec(%llu usec) for %d bytes with freq %d index:%d\n",
-			     __func__, exec_time, (exec_time / 1000), len,
-			     msm_port->cur_baud, msm_port->kpi_comp_idx);
-		sw_time = msm_port->uart_kpi_tx[msm_port->kpi_comp_idx].xfer_req_hw.time_stamp;
-		exec_time = comp_time - sw_time;
-		UART_LOG_DBG(msm_port->ipc_log_kpi, uport->dev,
-			     "%s:TX Hardware time %llu nsec(%llu usec) for %d bytes with freq %d index:%d\n",
-			     __func__, exec_time, (exec_time / 1000), len,
-			     msm_port->cur_baud, msm_port->kpi_comp_idx);
-		msm_port->kpi_comp_idx++;
-		if (msm_port->kpi_comp_idx >= UART_KPI_TX_RX_INSTANCES)
-			msm_port->kpi_comp_idx = 0;
-	}
+	msm_uart_log_tx_kpi(uport);
 
 	uport->icount.tx += msm_port->xmit_size;
 	msm_port->tx_dma = (dma_addr_t)NULL;
