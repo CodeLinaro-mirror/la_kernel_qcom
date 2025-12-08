@@ -39,8 +39,8 @@
 #define BC_NOTIFY_IND			0x07
 #define BC_BATTERY_STATUS_GET		0x30
 #define BC_BATTERY_STATUS_SET		0x31
-#define BC_USB_STATUS_GET		0x32
-#define BC_USB_STATUS_SET		0x33
+#define BC_USB_STATUS_GET(port_id)	(0x32 | (port_id) << 16)
+#define BC_USB_STATUS_SET(port_id)	(0x33 | (port_id) << 16)
 #define BC_WLS_STATUS_GET		0x34
 #define BC_WLS_STATUS_SET		0x35
 #define BC_SHIP_MODE_REQ_SET		0x36
@@ -70,9 +70,16 @@ enum usb_connector_type {
 	USB_CONNECTOR_TYPE_MICRO_USB,
 };
 
+enum usb_port_id {
+	USB_1_PORT_ID,
+	USB_2_PORT_ID,
+	NUM_USB_PORTS,
+};
+
 enum psy_type {
 	PSY_TYPE_BATTERY,
 	PSY_TYPE_USB,
+	PSY_TYPE_USB_2,
 	PSY_TYPE_WLS,
 	PSY_TYPE_MAX,
 };
@@ -132,6 +139,8 @@ enum usb_property_id {
 	USB_TYPEC_COMPLIANT,
 	USB_SCOPE,
 	USB_CONNECTOR_TYPE,
+	F_ACTIVE,
+	USB_NUM_PORTS,
 	USB_PROP_MAX,
 };
 
@@ -285,7 +294,7 @@ struct battery_chg_dev {
 	u32				thermal_fcc_ua;
 	u32				restrict_fcc_ua;
 	u32				last_fcc_ua;
-	u32				usb_icl_ua;
+	u32				usb_icl_ua[NUM_USB_PORTS];
 	u32				thermal_fcc_step;
 	u32				connector_type;
 	u32				usb_prev_mode;
@@ -293,6 +302,7 @@ struct battery_chg_dev {
 	u8				chg_ctrl_start_thr;
 	u8				chg_ctrl_end_thr;
 	bool				chg_ctrl_en;
+	bool				usb_active[NUM_USB_PORTS];
 	/* To track the driver initialization status */
 	bool				initialized;
 	bool				notify_en;
@@ -300,6 +310,7 @@ struct battery_chg_dev {
 #ifdef CONFIG_QTI_CHARGER_NFC_VREG
 	struct bharger_regulator	nfc_vreg;
 #endif
+	unsigned int			num_usb_ports;
 };
 
 static const int battery_prop_map[BATT_PROP_MAX] = {
@@ -605,7 +616,7 @@ int qti_battery_charger_get_prop(const char *name,
 		return -EINVAL;
 
 	if (strcmp(name, "battery") && strcmp(name, "usb") &&
-	    strcmp(name, "wireless"))
+	    strcmp(name, "usb-2") && strcmp(name, "wireless"))
 		return -EINVAL;
 
 	psy = power_supply_get_by_name(name);
@@ -687,8 +698,22 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 		}
 
 		break;
-	case BC_USB_STATUS_GET:
+	case BC_USB_STATUS_GET(USB_1_PORT_ID):
 		pst = &bcdev->psy_list[PSY_TYPE_USB];
+		if (validate_message(bcdev, resp_msg, len) &&
+		    resp_msg->property_id < pst->prop_count) {
+			pst->prop[resp_msg->property_id] = resp_msg->value;
+			ack_set = true;
+		}
+
+		break;
+	case BC_USB_STATUS_GET(USB_2_PORT_ID):
+		if (bcdev->num_usb_ports < 2) {
+			pr_debug("opcode: %u for missing USB_2 port\n",
+					resp_msg->hdr.opcode);
+			break;
+		}
+		pst = &bcdev->psy_list[PSY_TYPE_USB_2];
 		if (validate_message(bcdev, resp_msg, len) &&
 		    resp_msg->property_id < pst->prop_count) {
 			pst->prop[resp_msg->property_id] = resp_msg->value;
@@ -705,8 +730,15 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 		}
 
 		break;
+	case BC_USB_STATUS_SET(USB_2_PORT_ID):
+		if (bcdev->num_usb_ports < 2) {
+			pr_debug("opcode: %u for missing USB_2 port\n",
+					resp_msg->hdr.opcode);
+			break;
+		}
+		fallthrough;
 	case BC_BATTERY_STATUS_SET:
-	case BC_USB_STATUS_SET:
+	case BC_USB_STATUS_SET(USB_1_PORT_ID):
 	case BC_WLS_STATUS_SET:
 		if (validate_message(bcdev, data, len))
 			ack_set = true;
@@ -833,66 +865,90 @@ static void battery_chg_update_uusb_type(struct battery_chg_dev *bcdev,
 	}
 }
 
-static struct power_supply_desc usb_psy_desc;
+static struct power_supply_desc usb_psy_desc[NUM_USB_PORTS];
 
 static void battery_chg_update_usb_type_work(struct work_struct *work)
 {
 	struct battery_chg_dev *bcdev = container_of(work,
 					struct battery_chg_dev, usb_type_work);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
-	int rc;
+	struct power_supply_desc *desc;
+	struct psy_state *pst;
+	int rc, i;
 
-	rc = read_property_id(bcdev, pst, USB_ADAP_TYPE);
-	if (rc < 0) {
-		pr_err("Failed to read USB_ADAP_TYPE rc=%d\n", rc);
-		return;
+	for (i = 0; i < NUM_USB_PORTS; i++) {
+		if (!bcdev->usb_active[i])
+			continue;
+
+		bcdev->usb_active[i] = false;
+
+		switch (i) {
+		case USB_1_PORT_ID:
+			pst = &bcdev->psy_list[PSY_TYPE_USB];
+			break;
+		case USB_2_PORT_ID:
+			pst = &bcdev->psy_list[PSY_TYPE_USB_2];
+			break;
+		default:
+			pr_err_ratelimited("USB port %d not supported\n", i);
+			continue;
+		}
+
+		desc = &usb_psy_desc[i];
+
+		rc = read_property_id(bcdev, pst, USB_ADAP_TYPE);
+		if (rc < 0) {
+			pr_err("Failed to read USB_ADAP_TYPE rc=%d\n", rc);
+			continue;
+		}
+
+		if (pst->prop[USB_ADAP_TYPE] == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
+			desc->type = POWER_SUPPLY_TYPE_USB;
+			pr_debug("Unknown USB adapter type\n");
+			continue;
+		}
+
+		/* Reset usb_icl_ua whenever USB adapter type changes */
+		if (pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_SDP &&
+		    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_CDP &&
+		    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_PD)
+			bcdev->usb_icl_ua[i] = 0;
+
+		pr_debug("usb_adap_type: %u\n", pst->prop[USB_ADAP_TYPE]);
+
+		switch (pst->prop[USB_ADAP_TYPE]) {
+		case POWER_SUPPLY_USB_TYPE_SDP:
+			desc->type = POWER_SUPPLY_TYPE_USB;
+			break;
+		case POWER_SUPPLY_USB_TYPE_DCP:
+		case POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID:
+		case QTI_POWER_SUPPLY_USB_TYPE_HVDCP:
+		case QTI_POWER_SUPPLY_USB_TYPE_HVDCP_3:
+		case QTI_POWER_SUPPLY_USB_TYPE_HVDCP_3P5:
+			desc->type = POWER_SUPPLY_TYPE_USB_DCP;
+			break;
+		case POWER_SUPPLY_USB_TYPE_CDP:
+			desc->type = POWER_SUPPLY_TYPE_USB_CDP;
+			break;
+		case POWER_SUPPLY_USB_TYPE_ACA:
+			desc->type = POWER_SUPPLY_TYPE_USB_ACA;
+			break;
+		case POWER_SUPPLY_USB_TYPE_C:
+			desc->type = POWER_SUPPLY_TYPE_USB_TYPE_C;
+			break;
+		case POWER_SUPPLY_USB_TYPE_PD:
+		case POWER_SUPPLY_USB_TYPE_PD_DRP:
+		case POWER_SUPPLY_USB_TYPE_PD_PPS:
+			desc->type = POWER_SUPPLY_TYPE_USB_PD;
+			break;
+		default:
+			desc->type = POWER_SUPPLY_TYPE_USB;
+			break;
+		}
 	}
 
-	if (pst->prop[USB_ADAP_TYPE] == POWER_SUPPLY_USB_TYPE_UNKNOWN) {
-		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB;
-		pr_debug("Unknown USB adapter type\n");
-		return;
-	}
-
-	/* Reset usb_icl_ua whenever USB adapter type changes */
-	if (pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_SDP &&
-	    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_CDP &&
-	    pst->prop[USB_ADAP_TYPE] != POWER_SUPPLY_USB_TYPE_PD)
-		bcdev->usb_icl_ua = 0;
-
-	pr_debug("usb_adap_type: %u\n", pst->prop[USB_ADAP_TYPE]);
-
-	switch (pst->prop[USB_ADAP_TYPE]) {
-	case POWER_SUPPLY_USB_TYPE_SDP:
-		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB;
-		break;
-	case POWER_SUPPLY_USB_TYPE_DCP:
-	case POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID:
-	case QTI_POWER_SUPPLY_USB_TYPE_HVDCP:
-	case QTI_POWER_SUPPLY_USB_TYPE_HVDCP_3:
-	case QTI_POWER_SUPPLY_USB_TYPE_HVDCP_3P5:
-		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB_DCP;
-		break;
-	case POWER_SUPPLY_USB_TYPE_CDP:
-		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB_CDP;
-		break;
-	case POWER_SUPPLY_USB_TYPE_ACA:
-		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB_ACA;
-		break;
-	case POWER_SUPPLY_USB_TYPE_C:
-		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB_TYPE_C;
-		break;
-	case POWER_SUPPLY_USB_TYPE_PD:
-	case POWER_SUPPLY_USB_TYPE_PD_DRP:
-	case POWER_SUPPLY_USB_TYPE_PD_PPS:
-		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB_PD;
-		break;
-	default:
-		usb_psy_desc.type = POWER_SUPPLY_TYPE_USB;
-		break;
-	}
-
-	battery_chg_update_uusb_type(bcdev, pst->prop[USB_ADAP_TYPE]);
+	/* Only call update for USB_1_PORT_ID to maintain backward compatibility */
+	if (i == USB_1_PORT_ID)
+		battery_chg_update_uusb_type(bcdev, pst->prop[USB_ADAP_TYPE]);
 }
 
 static void battery_chg_check_status_work(struct work_struct *work)
@@ -977,8 +1033,19 @@ static void handle_notification(struct battery_chg_dev *bcdev, void *data,
 		if (bcdev->shutdown_volt_mv > 0)
 			schedule_work(&bcdev->battery_check_work);
 		break;
-	case BC_USB_STATUS_GET:
+	case BC_USB_STATUS_GET(USB_1_PORT_ID):
+		bcdev->usb_active[USB_1_PORT_ID] = true;
 		pst = &bcdev->psy_list[PSY_TYPE_USB];
+		schedule_work(&bcdev->usb_type_work);
+		break;
+	case BC_USB_STATUS_GET(USB_2_PORT_ID):
+		if (bcdev->num_usb_ports < 2) {
+			pr_debug("notification: %u for missing USB_2 port\n",
+					notification);
+			break;
+		}
+		bcdev->usb_active[USB_2_PORT_ID] = true;
+		pst = &bcdev->psy_list[PSY_TYPE_USB_2];
 		schedule_work(&bcdev->usb_type_work);
 		break;
 	case BC_WLS_STATUS_GET:
@@ -1113,9 +1180,9 @@ static const char *get_usb_type_name(u32 usb_type)
 	return "Unknown";
 }
 
-static int usb_psy_set_icl(struct battery_chg_dev *bcdev, u32 prop_id, int val)
+static int usb_psy_set_icl(struct battery_chg_dev *bcdev,
+		struct psy_state *pst, u32 prop_id, int val)
 {
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
 	u32 temp;
 	int rc;
 
@@ -1132,7 +1199,10 @@ static int usb_psy_set_icl(struct battery_chg_dev *bcdev, u32 prop_id, int val)
 	case POWER_SUPPLY_USB_TYPE_CDP:
 		break;
 	default:
-		bcdev->usb_icl_ua = 0;
+		if (!strcmp(pst->psy->desc->name, "usb-2"))
+			bcdev->usb_icl_ua[USB_2_PORT_ID] = 0;
+		else
+			bcdev->usb_icl_ua[USB_1_PORT_ID] = 0;
 		return -EINVAL;
 	}
 
@@ -1152,7 +1222,11 @@ static int usb_psy_set_icl(struct battery_chg_dev *bcdev, u32 prop_id, int val)
 		pr_err("Failed to set ICL (%u uA) rc=%d\n", temp, rc);
 	} else {
 		pr_debug("Set ICL to %u\n", temp);
-		bcdev->usb_icl_ua = temp;
+
+		if (!strcmp(pst->psy->desc->name, "usb-2"))
+			bcdev->usb_icl_ua[USB_2_PORT_ID] = temp;
+		else
+			bcdev->usb_icl_ua[USB_1_PORT_ID] = temp;
 	}
 
 	return rc;
@@ -1163,11 +1237,15 @@ static int usb_psy_get_prop(struct power_supply *psy,
 		union power_supply_propval *pval)
 {
 	struct battery_chg_dev *bcdev = power_supply_get_drvdata(psy);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
+	struct psy_state *pst;
 	int prop_id, rc;
 
-	pval->intval = -ENODATA;
+	if (!strcmp(psy->desc->name, "usb-2"))
+		pst = &bcdev->psy_list[PSY_TYPE_USB_2];
+	else
+		pst = &bcdev->psy_list[PSY_TYPE_USB];
 
+	pval->intval = -ENODATA;
 	prop_id = get_property_id(pst, prop);
 	if (prop_id < 0)
 		return prop_id;
@@ -1188,8 +1266,13 @@ static int usb_psy_set_prop(struct power_supply *psy,
 		const union power_supply_propval *pval)
 {
 	struct battery_chg_dev *bcdev = power_supply_get_drvdata(psy);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
+	struct psy_state *pst;
 	int prop_id, rc = 0;
+
+	if (!strcmp(psy->desc->name, "usb-2"))
+		pst = &bcdev->psy_list[PSY_TYPE_USB_2];
+	else
+		pst = &bcdev->psy_list[PSY_TYPE_USB];
 
 	prop_id = get_property_id(pst, prop);
 	if (prop_id < 0)
@@ -1197,7 +1280,7 @@ static int usb_psy_set_prop(struct power_supply *psy,
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
-		rc = usb_psy_set_icl(bcdev, prop_id, pval->intval);
+		rc = usb_psy_set_icl(bcdev, pst, prop_id, pval->intval);
 		break;
 	default:
 		break;
@@ -1231,24 +1314,46 @@ static enum power_supply_property usb_props[] = {
 	POWER_SUPPLY_PROP_SCOPE,
 };
 
-static struct power_supply_desc usb_psy_desc = {
-	.name			= "usb",
-	.type			= POWER_SUPPLY_TYPE_USB,
-	.properties		= usb_props,
-	.num_properties		= ARRAY_SIZE(usb_props),
-	.get_property		= usb_psy_get_prop,
-	.set_property		= usb_psy_set_prop,
-	.usb_types = BIT(POWER_SUPPLY_USB_TYPE_UNKNOWN) |
-		     BIT(POWER_SUPPLY_USB_TYPE_SDP)     |
-		     BIT(POWER_SUPPLY_USB_TYPE_DCP)     |
-		     BIT(POWER_SUPPLY_USB_TYPE_CDP)     |
-		     BIT(POWER_SUPPLY_USB_TYPE_ACA)     |
-		     BIT(POWER_SUPPLY_USB_TYPE_C)       |
-		     BIT(POWER_SUPPLY_USB_TYPE_PD)      |
-		     BIT(POWER_SUPPLY_USB_TYPE_PD_DRP)  |
-		     BIT(POWER_SUPPLY_USB_TYPE_PD_PPS)  |
-		     BIT(POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID),
-	.property_is_writeable	= usb_psy_prop_is_writeable,
+static struct power_supply_desc usb_psy_desc[NUM_USB_PORTS] = {
+	[USB_1_PORT_ID] = {
+		.name			= "usb",
+		.type			= POWER_SUPPLY_TYPE_USB,
+		.properties		= usb_props,
+		.num_properties		= ARRAY_SIZE(usb_props),
+		.get_property		= usb_psy_get_prop,
+		.set_property		= usb_psy_set_prop,
+		.usb_types = BIT(POWER_SUPPLY_USB_TYPE_UNKNOWN) |
+			     BIT(POWER_SUPPLY_USB_TYPE_SDP)     |
+			     BIT(POWER_SUPPLY_USB_TYPE_DCP)     |
+			     BIT(POWER_SUPPLY_USB_TYPE_CDP)     |
+			     BIT(POWER_SUPPLY_USB_TYPE_ACA)     |
+			     BIT(POWER_SUPPLY_USB_TYPE_C)       |
+			     BIT(POWER_SUPPLY_USB_TYPE_PD)      |
+			     BIT(POWER_SUPPLY_USB_TYPE_PD_DRP)  |
+			     BIT(POWER_SUPPLY_USB_TYPE_PD_PPS)  |
+			     BIT(POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID),
+		.property_is_writeable	= usb_psy_prop_is_writeable,
+	},
+
+	[USB_2_PORT_ID] = {
+		.name			= "usb-2",
+		.type			= POWER_SUPPLY_TYPE_USB,
+		.properties		= usb_props,
+		.num_properties		= ARRAY_SIZE(usb_props),
+		.get_property		= usb_psy_get_prop,
+		.set_property		= usb_psy_set_prop,
+		.usb_types = BIT(POWER_SUPPLY_USB_TYPE_UNKNOWN) |
+			     BIT(POWER_SUPPLY_USB_TYPE_SDP)     |
+			     BIT(POWER_SUPPLY_USB_TYPE_DCP)     |
+			     BIT(POWER_SUPPLY_USB_TYPE_CDP)     |
+			     BIT(POWER_SUPPLY_USB_TYPE_ACA)     |
+			     BIT(POWER_SUPPLY_USB_TYPE_C)       |
+			     BIT(POWER_SUPPLY_USB_TYPE_PD)      |
+			     BIT(POWER_SUPPLY_USB_TYPE_PD_DRP)  |
+			     BIT(POWER_SUPPLY_USB_TYPE_PD_PPS)  |
+			     BIT(POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID),
+		.property_is_writeable	= usb_psy_prop_is_writeable,
+	}
 };
 
 #define CHARGE_CTRL_START_THR_MIN	50
@@ -1536,17 +1641,46 @@ static const struct power_supply_desc batt_psy_desc = {
 static int battery_chg_init_psy(struct battery_chg_dev *bcdev)
 {
 	struct power_supply_config psy_cfg = {};
+	struct psy_state *pst;
 	int rc;
 
 	psy_cfg.drv_data = bcdev;
 	psy_cfg.of_node = bcdev->dev->of_node;
 	bcdev->psy_list[PSY_TYPE_USB].psy =
-		devm_power_supply_register(bcdev->dev, &usb_psy_desc, &psy_cfg);
+		devm_power_supply_register(bcdev->dev, &usb_psy_desc[USB_1_PORT_ID], &psy_cfg);
 	if (IS_ERR(bcdev->psy_list[PSY_TYPE_USB].psy)) {
 		rc = PTR_ERR(bcdev->psy_list[PSY_TYPE_USB].psy);
 		bcdev->psy_list[PSY_TYPE_USB].psy = NULL;
 		pr_err("Failed to register USB power supply, rc=%d\n", rc);
 		return rc;
+	}
+
+	pst = &bcdev->psy_list[PSY_TYPE_USB];
+	rc = read_property_id(bcdev, pst, USB_NUM_PORTS);
+	if (rc < 0) {
+		pr_debug("Failed to read prop USB_NUM_PORTS, rc=%d\n", rc);
+		bcdev->num_usb_ports = 1;
+	} else if (pst->prop[USB_NUM_PORTS] > NUM_USB_PORTS) {
+		pr_err("Number of USB ports detected as supported:%d, greater than 2\n",
+			pst->prop[USB_NUM_PORTS]);
+		return -EINVAL;
+	} else if (pst->prop[USB_NUM_PORTS] != bcdev->num_usb_ports) {
+		pr_err("Number of USB ports detected as supported:%d, configured in apps:%d\n",
+			pst->prop[USB_NUM_PORTS], bcdev->num_usb_ports);
+		bcdev->num_usb_ports = 1;
+	}
+
+	if (bcdev->num_usb_ports == 2) {
+		bcdev->usb_active[USB_2_PORT_ID] = true;
+		bcdev->psy_list[PSY_TYPE_USB_2].psy =
+			devm_power_supply_register(bcdev->dev,
+				&usb_psy_desc[USB_2_PORT_ID], &psy_cfg);
+		if (IS_ERR(bcdev->psy_list[PSY_TYPE_USB_2].psy)) {
+			rc = PTR_ERR(bcdev->psy_list[PSY_TYPE_USB_2].psy);
+			bcdev->psy_list[PSY_TYPE_USB_2].psy = NULL;
+			pr_err("Failed to register USB_2 power supply, rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	bcdev->psy_list[PSY_TYPE_WLS].psy =
@@ -1575,6 +1709,7 @@ static void battery_chg_subsys_up_work(struct work_struct *work)
 {
 	struct battery_chg_dev *bcdev = container_of(work,
 					struct battery_chg_dev, subsys_up_work);
+	struct psy_state *pst;
 	int rc;
 
 	battery_chg_notify_enable(bcdev);
@@ -1594,12 +1729,22 @@ static void battery_chg_subsys_up_work(struct work_struct *work)
 				bcdev->last_fcc_ua, rc);
 	}
 
-	if (bcdev->usb_icl_ua) {
-		rc = usb_psy_set_icl(bcdev, USB_INPUT_CURR_LIMIT,
-				bcdev->usb_icl_ua);
+	if (bcdev->usb_icl_ua[USB_1_PORT_ID]) {
+		pst = &bcdev->psy_list[PSY_TYPE_USB];
+		rc = usb_psy_set_icl(bcdev, pst, USB_INPUT_CURR_LIMIT,
+				bcdev->usb_icl_ua[USB_1_PORT_ID]);
 		if (rc < 0)
 			pr_err("Failed to set ICL(%u uA), rc=%d\n",
-				bcdev->usb_icl_ua, rc);
+				bcdev->usb_icl_ua[USB_1_PORT_ID], rc);
+	}
+
+	if (bcdev->num_usb_ports == 2 && bcdev->usb_icl_ua[USB_2_PORT_ID]) {
+		pst = &bcdev->psy_list[PSY_TYPE_USB_2];
+		rc = usb_psy_set_icl(bcdev, pst, USB_INPUT_CURR_LIMIT,
+				bcdev->usb_icl_ua[USB_2_PORT_ID]);
+		if (rc < 0)
+			pr_err("Failed to set USB-2 ICL(%u uA), rc=%d\n",
+				bcdev->usb_icl_ua[USB_2_PORT_ID], rc);
 	}
 }
 
@@ -1722,6 +1867,13 @@ static int wireless_fw_update(struct battery_chg_dev *bcdev, bool force)
 	if (rc < 0)
 		goto out;
 
+	if (bcdev->num_usb_ports == 2 && !pst->prop[USB_ONLINE]) {
+		pst = &bcdev->psy_list[PSY_TYPE_USB_2];
+		rc = read_property_id(bcdev, pst, USB_ONLINE);
+		if (rc < 0)
+			goto out;
+	}
+
 	if (!pst->prop[USB_ONLINE]) {
 		pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
 		rc = read_property_id(bcdev, pst, BATT_CAPACITY);
@@ -1802,6 +1954,70 @@ out:
 	return rc;
 }
 
+static ssize_t qti_charger_ro_show(const struct class *c,
+				const struct class_attribute *attr, char *buf,
+				int psy_type, int prop_id)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	struct psy_state *pst = &bcdev->psy_list[psy_type];
+	int rc;
+
+	rc = read_property_id(bcdev, pst, prop_id);
+	if (rc < 0)
+		return rc;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", (int)pst->prop[prop_id]);
+}
+
+#define QTI_CHARGER_RO_SHOW(name, psy_type, prop_id)			\
+	static ssize_t name##_show(const struct class *c,			\
+					const struct class_attribute *attr,	\
+					char *buf)			\
+	{								\
+		return qti_charger_ro_show(c, attr, buf, psy_type, prop_id); \
+	}								\
+	static CLASS_ATTR_RO(name)
+
+#define QTI_CHARGER_RW_SHOW(name, psy_type, prop_id)			\
+	static ssize_t name##_show(const struct class *c,			\
+					const struct class_attribute *attr,	\
+					char *buf)			\
+	{								\
+		return qti_charger_ro_show(c, attr, buf, psy_type, prop_id); \
+	}								\
+	static CLASS_ATTR_RW(name)
+
+#define QTI_CHARGER_RW_PROP_SHOW(name, field)				\
+	static ssize_t name##_show(const struct class *c,			\
+					const struct class_attribute *attr,	\
+					char *buf)			\
+	{								\
+		struct battery_chg_dev *bcdev = container_of(c,		\
+				struct battery_chg_dev, battery_class);	\
+		return scnprintf(buf, PAGE_SIZE, "%d\n", bcdev->field);	\
+	}								\
+	static CLASS_ATTR_RW(name)
+
+#define QTI_CHARGER_TYPE_RO_SHOW(name, psy, psy_type, prop_id)		\
+	static ssize_t name##_show(const struct class *c,			\
+					const struct class_attribute *attr,	\
+					char *buf)			\
+	{								\
+		struct battery_chg_dev *bcdev = container_of(c,		\
+				struct battery_chg_dev, battery_class);	\
+		struct psy_state *pst = &bcdev->psy_list[psy_type];	\
+		int rc;							\
+									\
+		rc = read_property_id(bcdev, pst, prop_id);		\
+		if (rc < 0)						\
+			return rc;					\
+									\
+		return scnprintf(buf, PAGE_SIZE, "%s\n",		\
+				get_##psy##_type_name(pst->prop[prop_id]));	\
+	}								\
+	static CLASS_ATTR_RO(name)
+
 static ssize_t wireless_fw_update_time_ms_store(const struct class *c,
 				const struct class_attribute *attr,
 				const char *buf, size_t count)
@@ -1815,15 +2031,7 @@ static ssize_t wireless_fw_update_time_ms_store(const struct class *c,
 	return count;
 }
 
-static ssize_t wireless_fw_update_time_ms_show(const struct class *c,
-				const struct class_attribute *attr, char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-
-	return scnprintf(buf, PAGE_SIZE, "%u\n", bcdev->wls_fw_update_time_ms);
-}
-static CLASS_ATTR_RW(wireless_fw_update_time_ms);
+QTI_CHARGER_RW_PROP_SHOW(wireless_fw_update_time_ms, wls_fw_update_time_ms);
 
 static ssize_t wireless_fw_crc_store(const struct class *c,
 					const struct class_attribute *attr,
@@ -1905,22 +2113,7 @@ static ssize_t wireless_fw_update_store(const struct class *c,
 }
 static CLASS_ATTR_WO(wireless_fw_update);
 
-static ssize_t wireless_type_show(const struct class *c,
-				const struct class_attribute *attr, char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_WLS];
-	int rc;
-
-	rc = read_property_id(bcdev, pst, WLS_ADAP_TYPE);
-	if (rc < 0)
-		return rc;
-
-	return scnprintf(buf, PAGE_SIZE, "%s\n",
-			get_wls_type_name(pst->prop[WLS_ADAP_TYPE]));
-}
-static CLASS_ATTR_RO(wireless_type);
+QTI_CHARGER_TYPE_RO_SHOW(wireless_type, wls, PSY_TYPE_WLS, WLS_ADAP_TYPE);
 
 static ssize_t charge_control_en_store(const struct class *c,
 				const struct class_attribute *attr,
@@ -1964,39 +2157,15 @@ static ssize_t charge_control_en_show(const struct class *c,
 }
 static CLASS_ATTR_RW(charge_control_en);
 
-static ssize_t usb_typec_compliant_show(const struct class *c,
-				const struct class_attribute *attr, char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
-	int rc;
+QTI_CHARGER_RO_SHOW(usb_typec_compliant, PSY_TYPE_USB, USB_TYPEC_COMPLIANT);
 
-	rc = read_property_id(bcdev, pst, USB_TYPEC_COMPLIANT);
-	if (rc < 0)
-		return rc;
+QTI_CHARGER_RO_SHOW(usb_num_ports, PSY_TYPE_USB, USB_NUM_PORTS);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n",
-			(int)pst->prop[USB_TYPEC_COMPLIANT]);
-}
-static CLASS_ATTR_RO(usb_typec_compliant);
+QTI_CHARGER_TYPE_RO_SHOW(usb_real_type, usb, PSY_TYPE_USB, USB_REAL_TYPE);
 
-static ssize_t usb_real_type_show(const struct class *c,
-				const struct class_attribute *attr, char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
-	int rc;
+QTI_CHARGER_RO_SHOW(usb_2_typec_compliant, PSY_TYPE_USB_2, USB_TYPEC_COMPLIANT);
 
-	rc = read_property_id(bcdev, pst, USB_REAL_TYPE);
-	if (rc < 0)
-		return rc;
-
-	return scnprintf(buf, PAGE_SIZE, "%s\n",
-			get_usb_type_name(pst->prop[USB_REAL_TYPE]));
-}
-static CLASS_ATTR_RO(usb_real_type);
+QTI_CHARGER_TYPE_RO_SHOW(usb_2_real_type, usb, PSY_TYPE_USB_2, USB_REAL_TYPE);
 
 static ssize_t restrict_cur_store(const struct class *c,
 				const struct class_attribute *attr,
@@ -2022,17 +2191,7 @@ static ssize_t restrict_cur_store(const struct class *c,
 
 	return count;
 }
-
-static ssize_t restrict_cur_show(const struct class *c,
-				const struct class_attribute *attr,
-				char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-
-	return scnprintf(buf, PAGE_SIZE, "%u\n", bcdev->restrict_fcc_ua);
-}
-static CLASS_ATTR_RW(restrict_cur);
+QTI_CHARGER_RW_PROP_SHOW(restrict_cur, restrict_fcc_ua);
 
 static ssize_t restrict_chg_store(const struct class *c,
 				const struct class_attribute *attr,
@@ -2054,17 +2213,7 @@ static ssize_t restrict_chg_store(const struct class *c,
 
 	return count;
 }
-
-static ssize_t restrict_chg_show(const struct class *c,
-				const struct class_attribute *attr,
-				char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", bcdev->restrict_chg_en);
-}
-static CLASS_ATTR_RW(restrict_chg);
+QTI_CHARGER_RW_PROP_SHOW(restrict_chg, restrict_chg_en);
 
 static ssize_t fake_soc_store(const struct class *c,
 				const struct class_attribute *attr,
@@ -2086,17 +2235,7 @@ static ssize_t fake_soc_store(const struct class *c,
 
 	return count;
 }
-
-static ssize_t fake_soc_show(const struct class *c,
-				const struct class_attribute *attr,
-				char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", bcdev->fake_soc);
-}
-static CLASS_ATTR_RW(fake_soc);
+QTI_CHARGER_RW_PROP_SHOW(fake_soc, fake_soc);
 
 static ssize_t wireless_boost_en_store(const struct class *c,
 					const struct class_attribute *attr,
@@ -2118,25 +2257,10 @@ static ssize_t wireless_boost_en_store(const struct class *c,
 	return count;
 }
 
-static ssize_t wireless_boost_en_show(const struct class *c,
-					const struct class_attribute *attr,
-					char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_WLS];
-	int rc;
+QTI_CHARGER_RW_SHOW(wireless_boost_en, PSY_TYPE_WLS, WLS_BOOST_EN);
 
-	rc = read_property_id(bcdev, pst, WLS_BOOST_EN);
-	if (rc < 0)
-		return rc;
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[WLS_BOOST_EN]);
-}
-static CLASS_ATTR_RW(wireless_boost_en);
-
-static ssize_t moisture_detection_en_store(const struct class *c,
-					const struct class_attribute *attr,
+static ssize_t _moisture_detection_en_store(const struct class *c,
+					const struct class_attribute *attr, enum psy_type type,
 					const char *buf, size_t count)
 {
 	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
@@ -2147,7 +2271,7 @@ static ssize_t moisture_detection_en_store(const struct class *c,
 	if (kstrtobool(buf, &val))
 		return -EINVAL;
 
-	rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_USB],
+	rc = write_property_id(bcdev, &bcdev->psy_list[type],
 				USB_MOISTURE_DET_EN, val);
 	if (rc < 0)
 		return rc;
@@ -2155,74 +2279,31 @@ static ssize_t moisture_detection_en_store(const struct class *c,
 	return count;
 }
 
-static ssize_t moisture_detection_en_show(const struct class *c,
+static ssize_t moisture_detection_en_store(const struct class *c,
 					const struct class_attribute *attr,
-					char *buf)
+					const char *buf, size_t count)
 {
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
-	int rc;
-
-	rc = read_property_id(bcdev, pst, USB_MOISTURE_DET_EN);
-	if (rc < 0)
-		return rc;
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n",
-			pst->prop[USB_MOISTURE_DET_EN]);
+	return _moisture_detection_en_store(c, attr, PSY_TYPE_USB, buf, count);
 }
-static CLASS_ATTR_RW(moisture_detection_en);
 
-static ssize_t moisture_detection_status_show(const struct class *c,
+QTI_CHARGER_RW_SHOW(moisture_detection_en, PSY_TYPE_USB, USB_MOISTURE_DET_EN);
+
+static ssize_t moisture_detection_usb_2_en_store(const struct class *c,
 					const struct class_attribute *attr,
-					char *buf)
+					const char *buf, size_t count)
 {
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
-	int rc;
-
-	rc = read_property_id(bcdev, pst, USB_MOISTURE_DET_STS);
-	if (rc < 0)
-		return rc;
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n",
-			pst->prop[USB_MOISTURE_DET_STS]);
+	return _moisture_detection_en_store(c, attr, PSY_TYPE_USB_2, buf, count);
 }
-static CLASS_ATTR_RO(moisture_detection_status);
 
-static ssize_t resistance_show(const struct class *c,
-					const struct class_attribute *attr,
-					char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
-	int rc;
+QTI_CHARGER_RW_SHOW(moisture_detection_usb_2_en, PSY_TYPE_USB_2, USB_MOISTURE_DET_EN);
 
-	rc = read_property_id(bcdev, pst, BATT_RESISTANCE);
-	if (rc < 0)
-		return rc;
+QTI_CHARGER_RO_SHOW(moisture_detection_status, PSY_TYPE_USB, USB_MOISTURE_DET_STS);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n", pst->prop[BATT_RESISTANCE]);
-}
-static CLASS_ATTR_RO(resistance);
+QTI_CHARGER_RO_SHOW(moisture_detection_usb_2_status, PSY_TYPE_USB_2, USB_MOISTURE_DET_STS);
 
-static ssize_t soh_show(const struct class *c,
-			const struct class_attribute *attr, char *buf)
-{
-	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
-						battery_class);
-	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
-	int rc;
+QTI_CHARGER_RO_SHOW(resistance, PSY_TYPE_BATTERY, BATT_RESISTANCE);
 
-	rc = read_property_id(bcdev, pst, BATT_SOH);
-	if (rc < 0)
-		return rc;
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", pst->prop[BATT_SOH]);
-}
-static CLASS_ATTR_RO(soh);
+QTI_CHARGER_RO_SHOW(soh, PSY_TYPE_BATTERY, BATT_SOH);
 
 static int battery_chg_ship_mode(struct battery_chg_dev *bcdev)
 {
@@ -2330,6 +2411,7 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_ship_mode_en.attr,
 	&class_attr_restrict_chg.attr,
 	&class_attr_restrict_cur.attr,
+	&class_attr_usb_num_ports.attr,
 	&class_attr_usb_real_type.attr,
 	&class_attr_usb_typec_compliant.attr,
 	&class_attr_charge_control_en.attr,
@@ -2362,6 +2444,35 @@ static struct attribute *battery_class_pmw6100_attrs[] = {
 	NULL,
 };
 ATTRIBUTE_GROUPS(battery_class_pmw6100);
+
+static struct attribute *battery_class_usb_2_attrs[] = {
+	&class_attr_soh.attr,
+	&class_attr_resistance.attr,
+	&class_attr_moisture_detection_status.attr,
+	&class_attr_moisture_detection_usb_2_status.attr,
+	&class_attr_moisture_detection_en.attr,
+	&class_attr_moisture_detection_usb_2_en.attr,
+	&class_attr_wireless_boost_en.attr,
+	&class_attr_fake_soc.attr,
+	&class_attr_wireless_fw_update.attr,
+	&class_attr_wireless_fw_force_update.attr,
+	&class_attr_wireless_fw_version.attr,
+	&class_attr_wireless_fw_crc.attr,
+	&class_attr_wireless_fw_update_time_ms.attr,
+	&class_attr_wireless_type.attr,
+	&class_attr_ship_mode_en.attr,
+	&class_attr_restrict_chg.attr,
+	&class_attr_restrict_cur.attr,
+	&class_attr_usb_num_ports.attr,
+	&class_attr_usb_real_type.attr,
+	&class_attr_usb_2_real_type.attr,
+	&class_attr_usb_typec_compliant.attr,
+	&class_attr_usb_2_typec_compliant.attr,
+	&class_attr_charge_control_en.attr,
+	&class_attr_battery_parallel_cell_count.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(battery_class_usb_2);
 
 #ifdef CONFIG_DEBUG_FS
 static void battery_chg_add_debugfs(struct battery_chg_dev *bcdev)
@@ -2398,6 +2509,10 @@ static int battery_chg_parse_dt(struct battery_chg_dev *bcdev)
 				&bcdev->shutdown_volt_mv);
 
 	bcdev->ship_mode_immediate = of_property_read_bool(node, "qcom,ship-mode-immediate");
+	if (of_property_read_bool(bcdev->dev->of_node, "qcom,multiport-usb"))
+		bcdev->num_usb_ports = 2;
+	else
+		bcdev->num_usb_ports = 1;
 
 	rc = read_property_id(bcdev, pst, BATT_CHG_CTRL_LIM_MAX);
 	if (rc < 0) {
@@ -2715,12 +2830,18 @@ static int battery_chg_probe(struct platform_device *pdev)
 	bcdev->psy_list[PSY_TYPE_BATTERY].opcode_set = BC_BATTERY_STATUS_SET;
 	bcdev->psy_list[PSY_TYPE_USB].map = usb_prop_map;
 	bcdev->psy_list[PSY_TYPE_USB].prop_count = USB_PROP_MAX;
-	bcdev->psy_list[PSY_TYPE_USB].opcode_get = BC_USB_STATUS_GET;
-	bcdev->psy_list[PSY_TYPE_USB].opcode_set = BC_USB_STATUS_SET;
+	bcdev->psy_list[PSY_TYPE_USB].opcode_get = BC_USB_STATUS_GET(USB_1_PORT_ID);
+	bcdev->psy_list[PSY_TYPE_USB].opcode_set = BC_USB_STATUS_SET(USB_1_PORT_ID);
 	bcdev->psy_list[PSY_TYPE_WLS].map = wls_prop_map;
 	bcdev->psy_list[PSY_TYPE_WLS].prop_count = WLS_PROP_MAX;
 	bcdev->psy_list[PSY_TYPE_WLS].opcode_get = BC_WLS_STATUS_GET;
 	bcdev->psy_list[PSY_TYPE_WLS].opcode_set = BC_WLS_STATUS_SET;
+	bcdev->usb_active[USB_1_PORT_ID] = true;
+
+	bcdev->psy_list[PSY_TYPE_USB_2].map = usb_prop_map;
+	bcdev->psy_list[PSY_TYPE_USB_2].prop_count = USB_PROP_MAX;
+	bcdev->psy_list[PSY_TYPE_USB_2].opcode_get = BC_USB_STATUS_GET(USB_2_PORT_ID);
+	bcdev->psy_list[PSY_TYPE_USB_2].opcode_set = BC_USB_STATUS_SET(USB_2_PORT_ID);
 
 	for (i = 0; i < PSY_TYPE_MAX; i++) {
 		bcdev->psy_list[i].prop =
@@ -2793,7 +2914,9 @@ static int battery_chg_probe(struct platform_device *pdev)
 
 	bcdev->battery_class.name = "qcom-battery";
 
-	if (of_device_is_compatible(dev->of_node, "qcom,pmw6100-battery-charger"))
+	if (bcdev->num_usb_ports == 2)
+		bcdev->battery_class.class_groups = battery_class_usb_2_groups;
+	else if (of_device_is_compatible(dev->of_node, "qcom,pmw6100-battery-charger"))
 		bcdev->battery_class.class_groups = battery_class_pmw6100_groups;
 	else
 		bcdev->battery_class.class_groups = battery_class_groups;
