@@ -98,10 +98,6 @@
 
 };
 
-&connector_usb1 {
-	status = "disabled";
-};
-
 &i2c1 {
 	qcom,load-firmware;
 	qcom,xfer-mode = <1>;
@@ -552,17 +548,4 @@
 		bias-bus-hold;
 	};
 
-};
-
-&usb1_id_det_default {
-	status = "disabled";
-};
-
-&usb_1 {
-	dr_mode = "host";
-	vbus_dwc3-supply = <&vbus_supply_regulator_1>;
-
-	ports {
-		status = "disabled";
-	};
 };
