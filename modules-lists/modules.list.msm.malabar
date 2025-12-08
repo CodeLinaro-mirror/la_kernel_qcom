@@ -22,6 +22,7 @@ qcom_soc_wdt.ko
 debug-regulator.ko
 debugcc-canoe.ko
 dispcc-canoe.ko
+dispcc-malabar.ko
 evacc-canoe.ko
 gcc-alor.ko
 gcc-canoe.ko
