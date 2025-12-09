@@ -469,6 +469,20 @@ recover:
 	if (!qxpcs->intr_en) {
 		switch (qxpcs->phy_interface) {
 		case PHY_INTERFACE_MODE_USXGMII:
+			if (qxpcs->needs_aneg) {
+				ret = qcom_xpcs_poll_bit_set(qxpcs,
+							     DW_VR_MII_AN_INTR_STS,
+							     DW_VR_MII_ANCMPLT_INTR);
+
+				if (ret < 0)
+					goto recover;
+				else
+					XPCSDBG("XPCS AN completed\n");
+				ret = qcom_xpcs_read(qxpcs, DW_VR_MII_AN_INTR_STS);
+				/* Clear the IOC status */
+				ret &= ~DW_VR_MII_ANCMPLT_INTR;
+				qcom_xpcs_write(qxpcs, DW_VR_MII_AN_INTR_STS, ret);
+			}
 			/* Check for Link status */
 			ret = qcom_xpcs_poll_bit_set(qxpcs,
 						     DW_SR_MII_MMD_STS, DW_SR_MII_STS_LINK_STS);
@@ -482,19 +496,6 @@ recover:
 						     DW_SR_MII_PCS_STS1, DW_SR_XS_PCS_STS1);
 			if (ret < 0) {
 				XPCSDBG("Link is down try to recover\n");
-				goto recover;
-			}
-			/* Check for block lock status */
-			ret = qcom_xpcs_poll_bit_set(qxpcs,
-						     DW_SR_MII_PCS_KR_STS2, DW_LAT_BL);
-			if (ret < 0) {
-				XPCSDBG("DW_LAT_BL goto recover\n");
-				goto recover;
-			}
-			/* Check for block error  status */
-			ret = qcom_xpcs_poll_reset(qxpcs, DW_SR_MII_PCS_KR_STS2, DW_ERR_BLK);
-			if (ret < 0) {
-				XPCSDBG("DW_ERR_BLK goto recover\n");
 				goto recover;
 			}
 		}
