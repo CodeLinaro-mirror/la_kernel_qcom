@@ -210,6 +210,7 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v7.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v7.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v8.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-usb43-qserdes-com-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-lalb-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-pll.h",
@@ -223,6 +224,7 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v6-n4.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v6_20.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v7.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-usb43-pcs-v8.h",
         ],
     )
@@ -274,6 +276,7 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v5.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v6.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v7.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-aon-v6.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-dp-com-v3.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-dp-phy.h",
@@ -300,6 +303,7 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v7.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v7.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v8.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-usb43-qserdes-com-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-lalb-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-pll.h",
@@ -313,6 +317,7 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v6-n4.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v6_20.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v7.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v8.h",
         ],
     )
 
