@@ -4264,6 +4264,12 @@ static void stmmac_flush_tx_descriptors(struct stmmac_priv *priv, int queue)
 	 */
 	wmb();
 
+	/* Suspend and xmit are happening in parallel context */
+	if (unlikely(!netif_device_present(priv->dev))) {
+		WARN_ON(1);
+		return;
+	}
+
 	tx_q->tx_tail_addr = tx_q->dma_tx_phy + (tx_q->cur_tx * desc_size);
 	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, queue);
 }
