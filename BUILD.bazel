@@ -22,7 +22,13 @@ load(
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
 load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
-load(":kleaf-scripts/targets/malabar.bzl", "define_malabar")
+load(
+    ":kleaf-scripts/targets/malabar.bzl",
+    "define_malabar",
+    "define_malabar_oemvm",
+    "define_malabar_tuivm",
+)
+load(":kleaf-scripts/targets/malabar_vms.bzl", "define_malabar_vms")
 load(":kleaf-scripts/targets/monaco.bzl", "define_monaco")
 load(":kleaf-scripts/targets/pikachu.bzl", "define_pikachu")
 load(":kleaf-scripts/targets/seraph.bzl", "define_seraph")
@@ -336,6 +342,12 @@ define_lahaina()
 define_hamoa()
 
 define_malabar()
+
+define_malabar_oemvm()
+
+define_malabar_tuivm()
+
+define_malabar_vms()
 
 define_monaco()
 
