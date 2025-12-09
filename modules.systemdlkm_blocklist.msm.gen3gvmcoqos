@@ -1,2 +1,33 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+
+blocklist 6lowpan
+blocklist aqc111
+blocklist can-bcm
+blocklist can-dev
+blocklist can-gw
+blocklist can
+blocklist can-raw
+blocklist cdc_eem
+blocklist cdc_ncm
+blocklist diag
+blocklist ftdi_sio
+blocklist gzvm
+blocklist ieee802154_6lowpan
+blocklist ieee802154
+blocklist ieee802154_socket
+blocklist mac802154
+blocklist nfc
+blocklist nhc_dest
+blocklist nhc_fragment
+blocklist nhc_hop
+blocklist nhc_ipv6
+blocklist nhc_mobility
+blocklist nhc_routing
+blocklist nhc_udp
+blocklist r8153_ecm
+blocklist rtl8150
+blocklist slcan
+blocklist usbserial
+blocklist vcan
+blocklist wwan
