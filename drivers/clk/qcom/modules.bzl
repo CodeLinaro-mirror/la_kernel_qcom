@@ -801,6 +801,23 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/clk/qcom/debugcc-malabar",
+        out = "debugcc-malabar.ko",
+        config = "CONFIG_SM_DEBUGCC_MALABAR",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-debug.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/debugcc-malabar.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-dummy",
+            "drivers/clk/qcom/clk-qcom",
+        ],
+    )
+
+    registry.register(
         name = "drivers/clk/qcom/debugcc-monaco",
         out = "debugcc-monaco.ko",
         config = "CONFIG_SDW_DEBUGCC_MONACO",
