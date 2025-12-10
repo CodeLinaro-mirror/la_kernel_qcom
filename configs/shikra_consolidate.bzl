@@ -12,5 +12,6 @@ shikra_consolidate_config = {
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_PAGE_POISONING": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
+    "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_TORTURE_TEST": "m",
 }
