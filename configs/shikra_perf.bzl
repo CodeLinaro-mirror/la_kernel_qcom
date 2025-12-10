@@ -50,6 +50,7 @@ shikra_perf_config = {
     "CONFIG_QCOM_SMP2P": "m",
     "CONFIG_QCOM_SMP2P_SLEEPSTATE": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
     "CONFIG_QRTR": "m",
     "CONFIG_QRTR_SMD": "m",
     "CONFIG_QTI_IOMMU_SUPPORT": "m",
