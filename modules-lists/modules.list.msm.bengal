@@ -95,3 +95,4 @@ sdhci-msm.ko
 msm_sharedmem.ko
 nvmem_qfprom.ko
 qcom-cpufreq-hw.ko
+qseecom_proxy.ko
