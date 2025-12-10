@@ -61,6 +61,9 @@ bool qcom_tzmem_get_status(void)
 
 static int qcom_tzmem_init(void)
 {
+	dev_warn(qcom_tzmem_dev,
+		 "MODE_GENERIC active: SHM bridge *NOT* enabled. Enable QCOM_TZMEM_MODE_SHMBRIDGE for security.\n");
+
 	return 0;
 }
 
