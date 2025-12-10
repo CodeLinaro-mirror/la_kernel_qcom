@@ -68,6 +68,7 @@ qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
 qcom-scm.ko
+qcom-mpm.ko
 qcom_hwspinlock.ko
 qcom_aoss.ko
 qrtr.ko
