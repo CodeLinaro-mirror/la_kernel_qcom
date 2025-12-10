@@ -211,6 +211,7 @@
 #define QCOM_ID_IPQ8174			399
 #define QCOM_ID_IPQ6018			402
 #define QCOM_ID_IPQ6028			403
+#define QCOM_ID_SM8350                  415
 #define QCOM_ID_SDM429W			416
 #define QCOM_ID_SM4250			417
 #define QCOM_ID_SM4250P			420
@@ -220,7 +221,7 @@
 #define QCOM_ID_SM6350			434
 #define QCOM_ID_QCM2150			436
 #define QCOM_ID_SDA429W			437
-#define QCOM_ID_SM8350			439
+#define QCOM_ID_SM8350P			439
 #define QCOM_ID_QCM2290			441
 #define QCOM_ID_SM7125			443
 #define QCOM_ID_SM6115			444
@@ -245,6 +246,8 @@
 #define QCOM_ID_SC7180P			495
 #define QCOM_ID_QCM6490			497
 #define QCOM_ID_QCS6490			498
+#define QCOM_ID_SM8325			501
+#define QCOM_ID_SM8325P			502
 #define QCOM_ID_IPQ5000			503
 #define QCOM_ID_IPQ0509			504
 #define QCOM_ID_IPQ0518			505
