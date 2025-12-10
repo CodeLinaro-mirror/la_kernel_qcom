@@ -60,6 +60,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/thermal/qcom/lmh_cpu_vdd_cdev",
+        out = "lmh_cpu_vdd_cdev.ko",
+        config = "CONFIG_QTI_LMH_CPU_VDD_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/lmh_cpu_vdd_cdev.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/thermal/qcom/max31760_fan",
         out = "max31760_fan.ko",
         config = "CONFIG_MAX31760_FAN_CONTROLLER",
@@ -182,6 +192,16 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/thermal/qcom/thermal_config.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/thermal/qcom/regulator_cdev",
+        out = "regulator_cdev.ko",
+        config = "CONFIG_REGULATOR_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/regulator_cdev.c",
         ],
     )
 
