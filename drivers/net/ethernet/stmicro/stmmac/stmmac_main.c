@@ -3381,6 +3381,11 @@ static void stmmac_dma_interrupt(struct stmmac_priv *priv)
 						 DMA_DIR_RXTX);
 
 	for (chan = 0; chan < tx_channel_count; chan++) {
+		if (unlikely(status[chan] == rbu_err)) {
+			if (priv->plat->handle_mac_err)
+				priv->plat->handle_mac_err(priv, RBU_ERR, chan);
+		}
+
 		if (unlikely(status[chan] & tx_hard_error_bump_tc)) {
 			/* Try to bump up the dma threshold on this failure */
 			if (unlikely(priv->xstats.threshold != SF_DMA_MODE) &&
@@ -3400,6 +3405,8 @@ static void stmmac_dma_interrupt(struct stmmac_priv *priv)
 			}
 		} else if (unlikely(status[chan] == tx_hard_error)) {
 			stmmac_tx_err(priv, chan);
+			if (priv->plat->handle_mac_err)
+				priv->plat->handle_mac_err(priv, FBE_ERR, chan);
 		}
 	}
 }

@@ -266,15 +266,21 @@ static int stmmac_mdio_read(struct stmmac_priv *priv, int data, u32 value)
 	u32 v;
 
 	if (readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
-			       100, 10000))
+			       100, 10000)) {
+		if (priv->plat->handle_mac_err)
+			priv->plat->handle_mac_err(priv, PHY_RW_ERR, 0);
 		return -EBUSY;
+	}
 
 	writel(data, priv->ioaddr + mii_data);
 	writel(value, priv->ioaddr + mii_address);
 
 	if (readl_poll_timeout(priv->ioaddr + mii_address, v, !(v & MII_BUSY),
-			       100, 10000))
+			       100, 10000)) {
+		if (priv->plat->handle_mac_err)
+			priv->plat->handle_mac_err(priv, PHY_RW_ERR, 0);
 		return -EBUSY;
+	}
 
 	/* Read the data from the MII data register */
 	return readl(priv->ioaddr + mii_data) & MII_DATA_MASK;
