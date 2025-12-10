@@ -793,3 +793,6 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_enable);
 MODULE_DESCRIPTION("TrustZone memory allocator for Qualcomm firmware drivers");
 MODULE_AUTHOR("Bartosz Golaszewski <bartosz.golaszewski@linaro.org>");
 MODULE_LICENSE("GPL");
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+MODULE_SOFTDEP("pre: arm_ffa arm_ffa_transport");
+#endif
