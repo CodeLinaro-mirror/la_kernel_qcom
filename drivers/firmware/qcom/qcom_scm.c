@@ -2416,6 +2416,27 @@ int qcom_scm_camera_update_camnoc_qos(uint32_t use_case_id,
 }
 EXPORT_SYMBOL_GPL(qcom_scm_camera_update_camnoc_qos);
 
+int qcom_scm_tsens_reinit(int *tsens_ret)
+{
+	unsigned int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_TSENS,
+		.cmd = QCOM_SCM_TSENS_INIT_ID,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	struct qcom_scm_res res;
+
+	if (SCM_NOT_INITIALIZED())
+		return -ENODEV;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+	if (tsens_ret)
+		*tsens_ret = res.result[0];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_tsens_reinit);
+
 static int qcom_scm_reboot(struct device *dev)
 {
 	struct qcom_scm_desc desc = {
