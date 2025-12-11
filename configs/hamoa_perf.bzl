@@ -96,6 +96,7 @@ hamoa_perf_config = {
     "CONFIG_NVMEM_QCOM_QFPROM": "m",
     "CONFIG_NVMEM_SPMI_SDAM": "m",
     "CONFIG_PCI_MSM": "m",
+    "CONFIG_PHY_NXP_PTN3222": "m",
     "CONFIG_PHY_QCOM_EUSB2_REPEATER": "m",
     "CONFIG_PHY_QCOM_QMP": "m",
     "CONFIG_PHY_QCOM_QMP_COMBO": "m",
