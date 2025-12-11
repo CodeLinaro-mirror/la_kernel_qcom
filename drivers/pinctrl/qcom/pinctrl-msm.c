@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/delay.h>
@@ -92,6 +92,7 @@ struct msm_pinctrl {
 	struct msm_gpio_regs *gpio_regs;
 	struct msm_tile *msm_tile_regs;
 	bool hibernation;
+	bool deep_sleep_support;
 };
 
 static struct msm_pinctrl *msm_pinctrl_data;
@@ -1813,7 +1814,8 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 	struct msm_pinctrl *pctrl = msm_pinctrl_data;
 	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
 
-	if (event == PM_HIBERNATION_PREPARE) {
+	if (event == PM_HIBERNATION_PREPARE ||
+		(event == PM_SUSPEND_PREPARE &&	pctrl->deep_sleep_support)) {
 		pctrl->gpio_regs = kcalloc(soc->ngroups,
 			sizeof(*pctrl->gpio_regs), GFP_KERNEL);
 		if (pctrl->gpio_regs == NULL)
@@ -1827,7 +1829,8 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 			}
 		}
 		pctrl->hibernation = true;
-	} else if (event == PM_POST_HIBERNATION) {
+	} else if (event == PM_POST_HIBERNATION ||
+		(event == PM_POST_SUSPEND && pctrl->deep_sleep_support)) {
 		kfree(pctrl->gpio_regs);
 		kfree(pctrl->msm_tile_regs);
 		pctrl->gpio_regs = NULL;
@@ -1904,20 +1907,23 @@ static void msm_pinctrl_hibernation_resume(void)
 	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
 	void __iomem *tile_addr = NULL;
 
-	if (likely(!pctrl->hibernation) || !pctrl->gpio_regs || !pctrl->msm_tile_regs)
+	if (likely(!pctrl->hibernation) ||
+		!pctrl->deep_sleep_support || !pctrl->gpio_regs)
 		return;
-	for (i = 0; i < soc->ntiles; i++) {
-		if (soc->tiles)
-			tile_addr = pctrl->regs[i] + soc->dir_conn_addr[i];
-		else
-			tile_addr = pctrl->regs[0] + soc->dir_conn_addr[i];
-		pr_err("The tile addr generated is 0x%lx\n", (u64)tile_addr);
-		for (j = 0; j < 8; j++)
-			writel_relaxed(pctrl->msm_tile_regs[i].dir_con_regs[j],
-					tile_addr + j*4);
-	}
 
-    /* Restore normal gpios */
+	if (pctrl->msm_tile_regs) {
+		for (i = 0; i < soc->ntiles; i++) {
+			if (soc->tiles)
+				tile_addr = pctrl->regs[i] + soc->dir_conn_addr[i];
+			else
+				tile_addr = pctrl->regs[0] + soc->dir_conn_addr[i];
+			pr_err("The tile addr generated is 0x%lx\n", (u64)tile_addr);
+			for (j = 0; j < 8; j++)
+				writel_relaxed(pctrl->msm_tile_regs[i].dir_con_regs[j],
+						tile_addr + j*4);
+		}
+	}
+	/* Restore normal gpios */
 	for (i = 0; i < soc->ngpios; i++) {
 		pgroup = &soc->groups[i];
 		msm_writel_ctl(pctrl->gpio_regs[i].ctl_reg, pctrl, pgroup);
@@ -1939,6 +1945,8 @@ static void msm_pinctrl_hibernation_resume(void)
 			msm_writel_io(pctrl->gpio_regs[i].io_reg,
 					pctrl, pgroup);
 	}
+
+	msm_gpio_setup_dir_connects(pctrl);
 }
 
 static struct syscore_ops msm_pinctrl_pm_ops = {
@@ -1961,8 +1969,38 @@ static __maybe_unused int msm_pinctrl_resume(struct device *dev)
 	return pinctrl_force_default(pctrl->pctrl);
 }
 
-SIMPLE_DEV_PM_OPS(msm_pinctrl_dev_pm_ops, msm_pinctrl_suspend,
-		  msm_pinctrl_resume);
+#ifdef CONFIG_HIBERNATION
+static __maybe_unused int msm_pinctrl_freeze(struct device *dev)
+{
+	msm_pinctrl_hibernation_suspend();
+
+	return msm_pinctrl_suspend(dev);
+}
+
+static __maybe_unused int msm_pinctrl_restore(struct device *dev)
+{
+	int ret;
+
+	ret = msm_pinctrl_resume(dev);
+	if (ret)
+		return ret;
+
+	msm_pinctrl_hibernation_resume();
+
+	return 0;
+}
+#endif
+
+const struct dev_pm_ops __maybe_unused msm_pinctrl_dev_pm_ops = {
+	.suspend = msm_pinctrl_suspend,
+	.resume = msm_pinctrl_resume,
+#ifdef CONFIG_HIBERNATION
+	.freeze_late = msm_pinctrl_freeze,
+	.thaw = msm_pinctrl_resume,
+	.restore_early = msm_pinctrl_restore,
+#endif
+	.poweroff = msm_pinctrl_suspend,
+};
 
 EXPORT_SYMBOL(msm_pinctrl_dev_pm_ops);
 
@@ -2176,12 +2214,16 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 		return -ENOMEM;
 
 	pctrl->hibernation = false;
+	pctrl->deep_sleep_support = false;
 	pctrl->dev = &pdev->dev;
 	pctrl->soc = soc_data;
 	pctrl->chip = msm_gpio_template;
 	pctrl->intr_target_use_scm = of_device_is_compatible(
 					pctrl->dev->of_node,
 					"qcom,ipq8064-pinctrl");
+	if (of_property_read_bool(pctrl->dev->of_node,
+				"qcom,support-deepsleep"))
+		pctrl->deep_sleep_support = true;
 
 	raw_spin_lock_init(&pctrl->lock);
 
