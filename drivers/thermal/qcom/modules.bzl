@@ -132,6 +132,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/thermal/qcom/cx_ipeak_cdev",
+        out = "cx_ipeak_cdev.ko",
+        config = "CONFIG_QTI_CX_IPEAK_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/cx_ipeak_cdev.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/thermal/qcom/qti_devfreq_cdev",
         out = "qti_devfreq_cdev.ko",
         config = "CONFIG_QTI_DEVFREQ_CDEV",
@@ -255,6 +265,20 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/thermal/qcom/rpm_smd_cooling_device",
+        out = "rpm_smd_cooling_device.ko",
+        config = "CONFIG_QTI_RPM_SMD_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/rpm_smd_cooling_device.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/rpmsg/rpm-smd",
         ],
     )
 
