@@ -358,6 +358,7 @@ malabar_perf_config = {
     "CONFIG_SM_DEBUGCC_ALOR": "m",
     "CONFIG_SM_DEBUGCC_CANOE": "m",
     "CONFIG_SM_DISPCC_CANOE": "m",
+    "CONFIG_SM_DISPCC_MALABAR": "m",
     "CONFIG_SM_EVACC_CANOE": "m",
     "CONFIG_SM_GCC_ALOR": "m",
     "CONFIG_SM_GCC_CANOE": "m",
