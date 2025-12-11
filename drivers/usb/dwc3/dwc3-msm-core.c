@@ -7306,11 +7306,9 @@ static void msm_dwc3_perf_vote_work(struct work_struct *w)
 	    (mdwc->qos_req_state == PM_QOS_REQ_DYNAMIC && count >= threshold))
 		in_perf_mode = true;
 
-	pr_debug("%s: in_perf_mode:%u, interrupts in last sample:%u\n",
-		 __func__, in_perf_mode, count);
-
 	mdwc->irq_cnt = new;
-	msm_dwc3_perf_vote_update(mdwc, in_perf_mode);
+	if (cpu_latency_qos_request_active(&mdwc->pm_qos_req_dma))
+		msm_dwc3_perf_vote_update(mdwc, in_perf_mode);
 
 	/*
 	 * in PM_QOS_REQ_DEFAULT and PM_QOS_REQ_PERF, both delay is 100ms,
@@ -7343,9 +7341,9 @@ static void msm_dwc3_perf_vote_enable(struct dwc3_msm *mdwc, bool enable)
 		schedule_delayed_work(&mdwc->perf_vote_work,
 				msecs_to_jiffies(PM_QOS_DEFAULT_SAMPLE_MS));
 	} else {
+		cancel_delayed_work_sync(&mdwc->perf_vote_work);
 		if (!cpu_latency_qos_request_active(&mdwc->pm_qos_req_dma))
 			return;
-		cancel_delayed_work_sync(&mdwc->perf_vote_work);
 		msm_dwc3_perf_vote_update(mdwc, false);
 		cpu_latency_qos_remove_request(&mdwc->pm_qos_req_dma);
 	}
