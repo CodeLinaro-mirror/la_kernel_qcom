@@ -337,3 +337,13 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom-scm",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/bcl_off_cdev",
+        out = "bcl_off_cdev.ko",
+        config = "CONFIG_QTI_BCL_OFF_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/bcl_off_cdev.c",
+        ],
+    )
