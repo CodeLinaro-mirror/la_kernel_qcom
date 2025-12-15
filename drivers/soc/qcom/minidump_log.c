@@ -29,6 +29,7 @@
 #include <linux/vmalloc.h>
 #include <linux/panic_notifier.h>
 #include "debug_symbol.h"
+
 #ifdef CONFIG_QCOM_MINIDUMP_PSTORE
 #include <linux/math64.h>
 #include <linux/of.h>
@@ -66,6 +67,16 @@
 #include "minidump_memory.h"
 #endif
 #include "../../../kernel/time/tick-internal.h"
+
+#if IS_ENABLED(CONFIG_ARM64)
+#define GET_PC(regs) instruction_pointer(regs)
+#define GET_LR(regs) ((regs)->regs[30])
+#define GET_SP(regs) ((regs)->sp)
+#elif IS_ENABLED(CONFIG_ARM)
+#define GET_PC(regs) instruction_pointer(regs)
+#define GET_LR(regs) ((regs)->uregs[14])
+#define GET_SP(regs) ((regs)->uregs[13])
+#endif
 
 #ifdef CONFIG_QCOM_DYN_MINIDUMP_STACK
 
@@ -999,17 +1010,18 @@ static void md_reg_context_data(struct pt_regs *regs)
 {
 	int nbytes = 128;
 
-	if (user_mode(regs) ||  !regs->pc)
+	if (user_mode(regs) ||  !GET_PC(regs))
 		return;
 
-	md_dump_data(regs->pc - nbytes, nbytes * 2, "PC");
-	md_dump_data(regs->regs[30] - nbytes, nbytes * 2, "LR");
-	md_dump_data(regs->sp - nbytes, nbytes * 2, "SP");
+	md_dump_data(GET_PC(regs) - nbytes, nbytes * 2, "PC");
+	md_dump_data(GET_LR(regs) - nbytes, nbytes * 2, "LR");
+	md_dump_data(GET_SP(regs) - nbytes, nbytes * 2, "SP");
 }
 
 static inline void md_dump_panic_regs(void)
 {
 	struct pt_regs regs;
+#if IS_ENABLED(CONFIG_ARM64)
 	u64 tmp1, tmp2;
 
 	/* Lifted from crash_setup_regs() */
@@ -1048,12 +1060,41 @@ static inline void md_dump_panic_regs(void)
 		: "r" (&regs)
 		: "memory"
 		);
-
+#elif IS_ENABLED(CONFIG_ARM)
+	__asm__ __volatile__ (
+		"str r0, [%0, #0]\n"
+		"str r1, [%0, #4]\n"
+		"str r2, [%0, #8]\n"
+		"str r3, [%0, #12]\n"
+		"str r4, [%0, #16]\n"
+		"str r5, [%0, #20]\n"
+		"str r6, [%0, #24]\n"
+		"str r7, [%0, #28]\n"
+		"str r8, [%0, #32]\n"
+		"str r9, [%0, #36]\n"
+		"str r10, [%0, #40]\n"
+		"str r11, [%0, #44]\n"
+		"str r12, [%0, #48]\n"
+		"mov r1, sp\n"
+		"str r1, [%0, #52]\n"
+		"mov r1, lr\n"
+		"str r1, [%0, #56]\n"
+		"mov r1, pc\n"
+		"str r1, [%0, #60]\n"
+		// --- Add CPSR capture here ---
+		"mrs r1, cpsr\n"              // Read CPSR into r1
+		"str r1, [%0, #64]\n"         // Store CPSR at offset 64 (next after pc)
+		:
+		: "r" (&regs)
+		: "memory", "r1"
+	);
+#endif
 	seq_buf_printf(md_cntxt_seq_buf, "PANIC CPU : %d\n",
 				   raw_smp_processor_id());
 	md_reg_context_data(&regs);
 }
 
+#if IS_ENABLED(CONFIG_SMP)
 static void md_dump_other_cpus_context(void)
 {
 	int cpu;
@@ -1065,6 +1106,8 @@ static void md_dump_other_cpus_context(void)
 		md_reg_context_data(&regs);
 	}
 }
+
+#endif
 
 static int md_die_context_notify(struct notifier_block *self,
 				 unsigned long val, void *data)
@@ -1087,7 +1130,11 @@ static int md_die_context_notify(struct notifier_block *self,
 
 static struct notifier_block md_die_context_nb = {
 	.notifier_call = md_die_context_notify,
+#if IS_ENABLED(CONFIG_ARM64)
 	.priority = INT_MAX - 2, /* < msm watchdog die notifier */
+#else
+	.priority = INT_MAX, /* < msm watchdog die notifier */
+#endif
 };
 
 static void md_ipi_stop(void *unused, struct pt_regs *regs)
@@ -1095,7 +1142,7 @@ static void md_ipi_stop(void *unused, struct pt_regs *regs)
 	unsigned int cpu = smp_processor_id();
 
 	per_cpu(regs_before_stop, cpu) = *regs;
-	dump_stack_minidump(regs->sp);
+	dump_stack_minidump(GET_SP(regs));
 }
 #endif
 
@@ -1140,9 +1187,14 @@ void md_dump_process(void)
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_CPU_CONTEXT
 	if (!md_cntxt_seq_buf)
 		goto dump_rq;
+#if IS_ENABLED(CONFIG_SMP)
 	if (raw_smp_processor_id() != die_cpu)
 		md_dump_panic_regs();
 	md_dump_other_cpus_context();
+#else
+    // For single-core, only dump current CPU context
+	md_dump_panic_regs();
+#endif //CONFIG_SMP
 dump_rq:
 #endif
 	md_dump_next_event();
@@ -1165,7 +1217,11 @@ static int md_panic_handler(struct notifier_block *this,
 
 static struct notifier_block md_panic_blk = {
 	.notifier_call = md_panic_handler,
+#if IS_ENABLED(CONFIG_ARM64)
 	.priority = INT_MAX - 3, /* < msm watchdog panic notifier */
+#else
+	.priority = INT_MAX, /* < msm watchdog panic notifier */
+#endif
 };
 
 static int md_register_minidump_entry(char *name, u64 virt_addr,
@@ -1384,7 +1440,11 @@ static void log_cpu_freq(void *unused,
 			unsigned int old_target_freq)
 {
 	uint32_t index;
-	int cluster = topology_cluster_id(policy->cpu);
+	int cluster = 0;
+
+#if IS_ENABLED(CONFIG_SMP)
+	cluster = topology_cluster_id(policy->cpu);
+#endif
 
 	if (cluster > max_cluster)
 		return;
@@ -1398,11 +1458,14 @@ static void register_cpufreq_log(void)
 	int cpu;
 	struct md_region md_entry;
 	size_t freq_hist_sz;
-
+	max_cluster = 0;
+#if IS_ENABLED(CONFIG_SMP)
 	for_each_possible_cpu(cpu) {
 		if (topology_cluster_id(cpu) > max_cluster)
 			max_cluster = topology_cluster_id(cpu);
 	}
+#endif
+
 	freq_hist_sz = sizeof(struct freq_hist) * (max_cluster + 1);
 
 	cpuclk_log = kzalloc(freq_hist_sz, GFP_KERNEL);
@@ -1420,6 +1483,92 @@ static void register_cpufreq_log(void)
 	register_trace_android_vh_cpufreq_resolve_freq(log_cpu_freq, NULL);
 	register_trace_android_vh_cpufreq_fast_switch(log_cpu_freq, NULL);
 	register_trace_android_vh_cpufreq_target(log_cpu_freq, NULL);
+
+#if IS_ENABLED(CONFIG_ARM)
+	struct cpufreq_policy **policy_array =
+		(struct cpufreq_policy **)DEBUG_SYMBOL_LOOKUP(cpufreq_cpu_data);
+	if (IS_ERR_OR_NULL(policy_array))
+		return;
+
+	/* Register cpufreq_cpu_data array */
+	memset(&md_entry, 0, sizeof(md_entry));
+	md_entry.virt_addr = (uintptr_t)policy_array;
+	md_entry.phys_addr = virt_to_phys((void *)policy_array);
+	md_entry.size = sizeof(void *) * nr_cpu_ids;
+	strscpy(md_entry.name, "CPUFREQDATA", sizeof(md_entry.name));
+	if (msm_minidump_add_region(&md_entry) < 0)
+		pr_err("Failed to add cpufreq_cpu_data in Minidump\n");
+
+	/* Register each CPU's cpufreq_policy, freq_table, and governor */
+	for_each_possible_cpu(cpu) {
+		struct cpufreq_policy *policy = policy_array[cpu];
+
+		if (!policy)
+			continue;
+
+		/* Validate policy is not vmalloc'd before using virt_to_phys */
+		if (is_vmalloc_addr(policy)) {
+			pr_warn("Skipping vmalloc'd policy for CPU%d\n", cpu);
+			continue;
+		}
+
+		/* cpufreq_policy structure */
+		memset(&md_entry, 0, sizeof(md_entry));
+		scnprintf(md_entry.name, sizeof(md_entry.name), "CPUFREQPOL%d", cpu);
+		md_entry.virt_addr = (uintptr_t)policy;
+		md_entry.phys_addr = virt_to_phys(policy);
+		md_entry.size = sizeof(struct cpufreq_policy);
+		if (msm_minidump_add_region(&md_entry) < 0)
+			pr_err("Failed to add cpu policy in Minidump\n");
+
+		/* freq_table if present */
+		if (policy->freq_table) {
+			int table_entries = 0;
+			const int MAX_FREQ_ENTRIES = 200; /* Reasonable upper bound */
+			struct cpufreq_frequency_table *pos = policy->freq_table;
+
+			/* Validate freq_table is not vmalloc'd */
+			if (is_vmalloc_addr(policy->freq_table)) {
+				pr_warn("Skipping vmalloc'd freq_table for CPU%d\n", cpu);
+				goto skip_freq_table;
+			}
+
+			/* Count entries until sentinel */
+			while (pos->frequency != CPUFREQ_TABLE_END &&
+				table_entries < MAX_FREQ_ENTRIES) {
+				table_entries++;
+				pos++;
+			}
+
+			memset(&md_entry, 0, sizeof(md_entry));
+			scnprintf(md_entry.name, sizeof(md_entry.name), "CPUFREQTAB%d", cpu);
+			md_entry.virt_addr = (uintptr_t)policy->freq_table;
+			md_entry.phys_addr = virt_to_phys(policy->freq_table);
+			md_entry.size = sizeof(struct cpufreq_frequency_table) *
+				(table_entries + 1);
+			if (msm_minidump_add_region(&md_entry) < 0)
+				pr_err("Failed to add cpu table info in Minidump\n");
+		}
+
+skip_freq_table:
+		/* governor if present */
+		if (policy->governor) {
+			/* Validate governor is not vmalloc'd */
+			if (is_vmalloc_addr(policy->governor)) {
+				pr_warn("Skipping vmalloc'd governor for CPU%d\n", cpu);
+				continue;
+			}
+
+			memset(&md_entry, 0, sizeof(md_entry));
+			scnprintf(md_entry.name, sizeof(md_entry.name), "CPUFREQGOV%d", cpu);
+			md_entry.virt_addr = (uintptr_t)policy->governor;
+			md_entry.phys_addr = virt_to_phys(policy->governor);
+			md_entry.size = sizeof(struct cpufreq_governor);
+			if (msm_minidump_add_region(&md_entry) < 0)
+				pr_err("Failed to add cpu governor in Minidump\n");
+		}
+	}
+#endif /* CONFIG_ARM */
 }
 #else
 static inline void register_cpufreq_log(void) {}

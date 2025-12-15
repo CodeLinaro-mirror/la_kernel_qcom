@@ -48,8 +48,12 @@
 #include "stmmac_xdp.h"
 #include <linux/reset.h>
 #include <linux/of_mdio.h>
+#ifdef CONFIG_DWMAC_QCOM_VER3
+#include "dwmac4.h"
+#else
 #include "dwmac1000.h"
 #include "dwxgmac2.h"
+#endif
 #include "hwif.h"
 #include <linux/micrel_phy.h>
 #include <linux/marvell_phy.h>
@@ -93,7 +97,15 @@ MODULE_PARM_DESC(phyaddr, "Physical device address");
 #define STMMAC_XDP_TX		BIT(1)
 #define STMMAC_XDP_REDIRECT	BIT(2)
 
+#define L3_L4_Rx_Filter_Chan_Num	1
+
+/* Keep flow ctrl off for auto targets */
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+static int flow_ctrl = FLOW_OFF;
+#else
 static int flow_ctrl = FLOW_AUTO;
+#endif
+
 module_param(flow_ctrl, int, 0644);
 MODULE_PARM_DESC(flow_ctrl, "Flow control ability [on/off]");
 
@@ -589,8 +601,10 @@ static inline u32 stmmac_cdc_adjust(struct stmmac_priv *priv)
 static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 				   struct dma_desc *p, struct sk_buff *skb, u32 queue)
 {
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
 	u32 pktid;
 	void __iomem *ioaddr = priv->hw->pcsr;
+#endif
 	bool found = false;
 	struct skb_shared_hwtstamps shhwtstamp;
 	u64 ns = 0;
@@ -601,9 +615,10 @@ static void stmmac_get_tx_hwtstamp(struct stmmac_priv *priv,
 	/* exit if skb doesn't support hw tstamp */
 	if (likely(!skb || !(skb_shinfo(skb)->tx_flags & SKBTX_IN_PROGRESS)))
 		return;
-
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
 	if (priv->plat->insert_ts_pktid)
 		pktid = readl(ioaddr + XGMAC_TXTIMESTAMP_PKTID);
+#endif
 	/* check tx tstamp status */
 	if (stmmac_get_tx_timestamp_status(priv, p)) {
 		stmmac_get_timestamp(priv, p, priv->adv_ts, &ns);
@@ -1168,8 +1183,11 @@ static void stmmac_validate(struct phylink_config *config,
 	phylink_set(mac_supported, 1000baseT_Full);
 	phylink_set(mac_supported, 1000baseKX_Full);
 
+	/* Disable support for flow control for auto*/
+#if !IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
 	phylink_set(mac_supported, Autoneg);
 	phylink_set(mac_supported, Pause);
+#endif
 	phylink_set(mac_supported, Asym_Pause);
 	phylink_set_port_modes(mac_supported);
 
@@ -4082,7 +4100,6 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	enum request_irq_err irq_err;
-	cpumask_t cpu_mask;
 	int irq_idx = 0;
 	char *int_name;
 	int ret;
@@ -4192,9 +4209,8 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 			irq_idx = i;
 			goto irq_error;
 		}
-		cpumask_clear(&cpu_mask);
-		cpumask_set_cpu(i % num_online_cpus(), &cpu_mask);
-		irq_set_affinity_hint(priv->rx_irq[i], &cpu_mask);
+		irq_set_affinity_hint(priv->rx_irq[i],
+				      cpumask_of(i % num_online_cpus()));
 	}
 
 	/* Request Tx MSI irq */
@@ -4215,9 +4231,8 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 			irq_idx = i;
 			goto irq_error;
 		}
-		cpumask_clear(&cpu_mask);
-		cpumask_set_cpu(i % num_online_cpus(), &cpu_mask);
-		irq_set_affinity_hint(priv->tx_irq[i], &cpu_mask);
+		irq_set_affinity_hint(priv->tx_irq[i],
+				      cpumask_of(i % num_online_cpus()));
 	}
 
 	return 0;
@@ -4399,6 +4414,208 @@ void stmmac_program_l4_filter(struct stmmac_priv *priv, struct l4_filter_info *f
 	}
 }
 
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+static int STMMAC_handle_prv_ioctl_filter_ipv4(struct net_device *dev,
+					       struct ifreq *ifr)
+{
+	struct l3_l4_ipv4_filter *filter;
+	int ret = 0;
+	unsigned long missing;
+	int cur_filter_num;
+	bool enable = false;
+	struct stmmac_priv *priv;
+	u32 value = 0;
+	bool udp = false;
+
+	priv = netdev_priv(dev);
+
+	if (!ifr || !ifr->ifr_ifru.ifru_data)
+		return -EINVAL;
+
+	if (priv->app_l3_l4_filters == priv->dma_cap.l3l4fnum) {
+		pr_err("no more L3/L4 filters can be added\n");
+		return -EOPNOTSUPP;
+	}
+
+	filter = kzalloc(sizeof(*filter), GFP_KERNEL);
+	if (!filter)
+		return -ENOMEM;
+
+	missing = copy_from_user(filter, ifr->ifr_ifru.ifru_data,
+				 sizeof(*filter));
+	if (missing)
+		return -EFAULT;
+
+	if (!stmmac_is_ipv4_filter_valid(filter))
+		return -EOPNOTSUPP;
+
+	if (!priv->app_l3_l4_filters) {
+		ETHQOSDBG("installing first filter\n");
+		/*enable dynamic mapping*/
+		value = readl_relaxed(priv->ioaddr + MTL_RXQ_DMA_MAP0);
+		value |= MTL_RXQ0_DDMACH;
+		writel_relaxed(value, priv->ioaddr + MTL_RXQ_DMA_MAP0);
+
+		/* Enable L3/L4 filtering*/
+		value = readl_relaxed(priv->ioaddr + GMAC_PACKET_FILTER);
+		value |= GMAC_PACKET_FILTER_IPFE;
+		value |= GMAC_PACKET_FILTER_RA;
+		writel_relaxed(value, priv->ioaddr + GMAC_PACKET_FILTER);
+	}
+
+	priv->app_l3_l4_filters++;
+	cur_filter_num = priv->app_l3_l4_filters - 1;
+
+	/* Enable DMA channel mapping */
+	value = readl_relaxed(priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));
+	value |= GMAC_DMACHEN;
+
+	/* Write DMA channel number for matched filter */
+	value |= (GMAC_DMCHN & (L3_L4_Rx_Filter_Chan_Num << 24));
+
+	if (filter->src_addr || filter->dest_addr)
+		enable = true;
+
+	if (filter->src_addr) {
+		/*enable L3 src addr */
+		value |= GMAC_L3SAM0;
+		/* enable L3 src mask */
+		value |= (GMAC_L3HSBM & (filter->src_addr_mask << 6));
+		/* write L3 src addr */
+		writel_relaxed(filter->src_addr, priv->ioaddr + GMAC_L3_ADDR0((cur_filter_num)));
+	}
+
+	if (filter->dest_addr) {
+		/*enable L3 dest addr */
+		value |= GMAC_L3DAM0;
+		/* enable  L3 dest mask */
+		value |= (GMAC_L3HDBM & (filter->dest_addr_mask << 11));
+		/* write L3 dest addr */
+		writel_relaxed(filter->dest_addr, priv->ioaddr + GMAC_L3_ADDR1(cur_filter_num));
+	}
+
+	if (filter->l4_filter.l4_proto_number == IPPROTO_UDP)
+		udp = true;
+
+	/*write to GMAC_L3_L4_Control register*/
+	writel_relaxed(value, priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));
+
+	stmmac_program_l4_filter(priv, &filter->l4_filter, cur_filter_num, udp);
+
+	return ret;
+}
+
+static int STMMAC_handle_prv_ioctl_filter_ipv6(struct net_device *dev,
+					       struct ifreq *ifr)
+{
+	struct l3_l4_ipv6_filter *filter;
+	int ret = 0;
+	unsigned long missing;
+	int cur_filter_num;
+	struct stmmac_priv *priv;
+	u32 value = 0;
+	bool udp = false;
+
+	priv = netdev_priv(dev);
+
+	if (!ifr || !ifr->ifr_ifru.ifru_data)
+		return -EINVAL;
+
+	if (priv->app_l3_l4_filters == priv->dma_cap.l3l4fnum) {
+		pr_err("no more L3/L4 filters can be added\n");
+		return -EOPNOTSUPP;
+	}
+
+	filter = kzalloc(sizeof(*filter), GFP_KERNEL);
+	if (!filter)
+		return -ENOMEM;
+
+	missing = copy_from_user(filter, ifr->ifr_ifru.ifru_data,
+				 sizeof(*filter));
+	if (missing)
+		return -EFAULT;
+
+	if (!stmmac_is_ipv6_filter_valid(filter))
+		return -EOPNOTSUPP;
+
+	if (!priv->app_l3_l4_filters) {
+		ETHQOSDBG("installing first filter\n");
+		/*enable dynamic mapping*/
+		value = readl_relaxed(priv->ioaddr + MTL_RXQ_DMA_MAP0);
+		value |= MTL_RXQ0_DDMACH;
+		writel_relaxed(value, priv->ioaddr + MTL_RXQ_DMA_MAP0);
+
+		/* Enable L3/L4 filtering*/
+		value = readl_relaxed(priv->ioaddr + GMAC_PACKET_FILTER);
+		value |= GMAC_PACKET_FILTER_IPFE;
+		value |= GMAC_PACKET_FILTER_RA;
+		writel_relaxed(value, priv->ioaddr + GMAC_PACKET_FILTER);
+	}
+
+	priv->app_l3_l4_filters++;
+	cur_filter_num = priv->app_l3_l4_filters - 1;
+
+	/* Enable DMA channel mapping */
+	value = readl_relaxed(priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));
+	value |= GMAC_DMACHEN;
+
+	/* Write DMA channel number for matched filter */
+	value |= (GMAC_DMCHN & (L3_L4_Rx_Filter_Chan_Num << 24));
+
+	/* enable L3 protocol */
+	value |= GMAC_L3PEN0;
+
+	if (stmmac_is_ipv6_addr_valid(filter)) {
+		if (filter->src_or_dest_ip)
+			/* enable L3 src addr */
+			value |= GMAC_L3SAM0;
+		else
+			/* enable L3 dest addr */
+			value |= GMAC_L3DAM0;
+
+		/* enableL3 src mask */
+		value |= (GMAC_L3HSBM & ((filter->src_or_dest_addr_mask & 0x1f) << 6));
+
+		/* continue writing L3 mask */
+		value |= (GMAC_L3HDBM & ((filter->src_or_dest_addr_mask & 0x60) << 6));
+
+		/*write to GMAC_L3_L4_Control register*/
+		writel_relaxed(value, priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));
+
+		/* write L3 addr */
+		value = filter->src_or_dest_addr[0] << 24 |
+				filter->src_or_dest_addr[1] << 16 |
+				filter->src_or_dest_addr[2] << 8 |
+				filter->src_or_dest_addr[3];
+		writel_relaxed(value, priv->ioaddr + GMAC_L3_ADDR3(cur_filter_num));
+
+		value = filter->src_or_dest_addr[4] << 24 |
+				filter->src_or_dest_addr[5] << 16 |
+				filter->src_or_dest_addr[6] << 8 |
+				filter->src_or_dest_addr[7];
+		writel_relaxed(value, priv->ioaddr + GMAC_L3_ADDR2(cur_filter_num));
+
+		value = filter->src_or_dest_addr[8] << 24 |
+				filter->src_or_dest_addr[9] << 16 |
+				filter->src_or_dest_addr[10] << 8 |
+				filter->src_or_dest_addr[11];
+		writel_relaxed(value, priv->ioaddr + GMAC_L3_ADDR1(cur_filter_num));
+
+		value = filter->src_or_dest_addr[12] << 24 |
+				filter->src_or_dest_addr[13] << 16 |
+				filter->src_or_dest_addr[14] << 8 |
+				filter->src_or_dest_addr[15];
+		writel_relaxed(value, priv->ioaddr + GMAC_L3_ADDR0(cur_filter_num));
+	}
+
+	if (filter->l4_filter.l4_proto_number == IPPROTO_UDP)
+		udp = true;
+
+	stmmac_program_l4_filter(priv, &filter->l4_filter, cur_filter_num, udp);
+
+	return ret;
+}
+#else
 static int STMMAC_handle_prv_ioctl_filter_ipv4(struct net_device *dev,
 					       struct ifreq *ifr)
 {
@@ -4534,6 +4751,7 @@ static int STMMAC_handle_prv_ioctl_filter_ipv6(struct net_device *dev,
 
 	return ret;
 }
+#endif
 
 static int STMMAC_add_ptp_filters(struct net_device *dev)
 {
@@ -4550,6 +4768,17 @@ static int STMMAC_add_ptp_filters(struct net_device *dev)
 		return -ENOMEM;
 
 	if (!priv->app_l3_l4_filters) {
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+		/*enable dynamic mapping*/
+		read_value = (u32)readl(priv->ioaddr + MTL_RXQ_DMA_MAP0);
+		read_value |= MTL_RXQ0_DDMACH;
+		writel(read_value, priv->ioaddr + MTL_RXQ_DMA_MAP0);
+
+		/*config to receive unmatched packets too*/
+		read_value = (u32)readl(priv->ioaddr + GMAC_PACKET_FILTER);
+		read_value |= GMAC_PACKET_FILTER_RA;
+		writel(read_value, priv->ioaddr + GMAC_PACKET_FILTER);
+#else
 		/*enable dynamic mapping*/
 		read_value = (u32)readl(priv->ioaddr + XGMAC_MTL_RXQ_DMA_MAP0);
 		read_value |= XGMAC_QDDMACH;
@@ -4559,6 +4788,7 @@ static int STMMAC_add_ptp_filters(struct net_device *dev)
 		read_value = (u32)readl(priv->ioaddr + XGMAC_PACKET_FILTER);
 		read_value |= XGMAC_FILTER_RA;
 		writel(read_value, priv->ioaddr + XGMAC_PACKET_FILTER);
+#endif
 	}
 
 	/* Add PTP over UDP filter */
@@ -8440,12 +8670,16 @@ int stmmac_dvr_probe(struct device *device,
 
 	/* MTU range: 46 - hw-specific max */
 	ndev->min_mtu = ETH_ZLEN - ETH_HLEN;
+
+#if !IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
 	if (priv->plat->has_xgmac)
 		ndev->max_mtu = XGMAC_JUMBO_LEN;
-	else if ((priv->plat->enh_desc) || (priv->synopsys_id >= DWMAC_CORE_4_00))
+#else
+	if (priv->plat->enh_desc || priv->synopsys_id >= DWMAC_CORE_4_00)
 		ndev->max_mtu = JUMBO_LEN;
 	else
 		ndev->max_mtu = SKB_MAX_HEAD(NET_SKB_PAD + NET_IP_ALIGN);
+#endif
 	/* Will not overwrite ndev->max_mtu if plat->maxmtu > ndev->max_mtu
 	 * as well as plat->maxmtu < ndev->min_mtu which is a invalid range.
 	 */

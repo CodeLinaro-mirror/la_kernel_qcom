@@ -116,7 +116,6 @@ struct stmmac_axi {
 
 #define EST_GCL		1024
 struct stmmac_est {
-	struct mutex lock;
 	int enable;
 	u32 btr_reserve[2];
 	u32 btr_offset[2];
@@ -341,7 +340,8 @@ struct plat_stmmacenet_data {
 		(struct sk_buff *skb);
 	int (*handle_mac_err)(void *priv, int type, int chan);
 	int (*handle_prv_ioctl)(struct net_device *dev, struct ifreq *ifr,
-		int cmd);
+				int cmd);
+
 	void (*request_phy_wol)(void *plat);
 	int (*init_pps)(void *priv);
 	int mac2mac_speed;

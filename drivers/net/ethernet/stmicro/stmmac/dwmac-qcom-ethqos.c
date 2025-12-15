@@ -3576,16 +3576,11 @@ static void ethqos_serdes_loopback_v3_1(struct plat_stmmacenet_data *plat, bool 
 	struct qcom_ethqos *ethqos = plat->bsp_priv;
 	u32 read_value = (u32)readl_relaxed(ethqos->ioaddr + MAC_AN_CONTROL);
 
-	if (on) {
-		rgmii_updatel(ethqos, SGMII_PHY_CNTRL1_SGMII_TX_TO_RX_LOOPBACK_EN,
-			      SGMII_PHY_CNTRL1_SGMII_TX_TO_RX_LOOPBACK_EN,
-			      EMAC_WRAPPER_SGMII_PHY_CNTRL1);
+	if (on)
 		read_value |= MAC_ELE;
-	} else {
-		rgmii_updatel(ethqos, SGMII_PHY_CNTRL1_SGMII_TX_TO_RX_LOOPBACK_EN, 0,
-			      EMAC_WRAPPER_SGMII_PHY_CNTRL1);
+	else
 		read_value &= ~MAC_ELE;
-	}
+
 	writel_relaxed(read_value, ethqos->ioaddr + MAC_AN_CONTROL);
 }
 
@@ -8474,9 +8469,12 @@ static int qcom_ethqos_suspend(struct device *dev)
 	}
 
 	if (ethqos->gdsc_off_on_suspend) {
-		if (ethqos->gdsc_emac) {
-			regulator_disable(ethqos->gdsc_emac);
-			ETHQOSDBG("Disabled <%s>\n", EMAC_GDSC_EMAC_NAME);
+		if (ethqos->current_phy_mode != DISABLE_PHY_AT_SUSPEND_ONLY &&
+		    ethqos->current_phy_mode != DISABLE_PHY_IMMEDIATELY) {
+			if (ethqos->gdsc_emac) {
+				regulator_disable(ethqos->gdsc_emac);
+				ETHQOSDBG("Disabled <%s>\n", EMAC_GDSC_EMAC_NAME);
+			}
 		}
 	}
 
@@ -8521,14 +8519,17 @@ static int qcom_ethqos_resume(struct device *dev)
 	}
 
 	if (ethqos->gdsc_off_on_suspend) {
-		if (ethqos->gdsc_emac) {
-			ret = regulator_enable(ethqos->gdsc_emac);
-			if (ret) {
-				ETHQOSERR("Can not enable <%s>\n", EMAC_GDSC_EMAC_NAME);
-				return ret;
+		if (ethqos->current_phy_mode != DISABLE_PHY_AT_SUSPEND_ONLY &&
+		    ethqos->current_phy_mode != DISABLE_PHY_IMMEDIATELY) {
+			if (ethqos->gdsc_emac) {
+				ret = regulator_enable(ethqos->gdsc_emac);
+				if (ret) {
+					ETHQOSERR("Can not enable <%s>\n", EMAC_GDSC_EMAC_NAME);
+					return ret;
+				}
 			}
+			ETHQOSDBG("Enabled <%s>\n", EMAC_GDSC_EMAC_NAME);
 		}
-		ETHQOSDBG("Enabled <%s>\n", EMAC_GDSC_EMAC_NAME);
 		if (ethqos->current_phy_mode == DISABLE_PHY_SUSPEND_ENABLE_RESUME)
 			if (priv->mii)
 				priv->mii->reset(priv->mii);

@@ -67,6 +67,9 @@
 #define GMAC_L4_ADDR(reg)		(0x904 + (reg) * 0x30)
 #define GMAC_L3_ADDR0(reg)		(0x910 + (reg) * 0x30)
 #define GMAC_L3_ADDR1(reg)		(0x914 + (reg) * 0x30)
+#define GMAC_L3_ADDR2(reg)		(0x918 + (reg) * 0x30)
+#define GMAC_L3_ADDR3(reg)		(0x91c + (reg) * 0x30)
+
 #define GMAC_TIMESTAMP_STATUS		0x00000b20
 
 /* RX Queues Routing */
@@ -327,6 +330,10 @@ enum power_event {
 #define GMAC_L4DP0			GENMASK(31, 16)
 #define GMAC_L4DP0_SHIFT		16
 #define GMAC_L4SP0			GENMASK(15, 0)
+#define GMAC_L3HSBM			GENMASK(10, 6)
+#define GMAC_L3HDBM			GENMASK(15, 11)
+#define GMAC_DMCHN			BIT(24)
+#define GMAC_DMACHEN			BIT(28)
 
 /* MAC Timestamp Status */
 #define GMAC_TIMESTAMP_AUXTSTRIG	BIT(2)
@@ -354,6 +361,8 @@ enum power_event {
 #define MTL_RXQ_DMA_Q04MDMACH(x)	((x) << 0)
 #define MTL_RXQ_DMA_QXMDMACH_MASK(x)	GENMASK(11 + (8 * ((x) - 1)), 8 * (x))
 #define MTL_RXQ_DMA_QXMDMACH(chan, q)	((chan) << (8 * (q)))
+#define MTL_RXQ0_DDMACH			BIT(4)
+
 #ifdef CONFIG_DWMAC_QCOM_VER3
 #define MTL_CHAN_BASE_ADDR		0x00008000
 #define MTL_CHAN_BASE_OFFSET		0x1000

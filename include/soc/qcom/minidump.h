@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __MINIDUMP_H
@@ -31,12 +31,21 @@ enum minidump_entry_cmd {
  * @size:	Number of byte to dump from @address location
  *		it should be 4 byte aligned.
  */
+
+#if IS_ENABLED(CONFIG_64BIT)
+typedef u64 md_addr_t;
+typedef u64 md_size_t;
+#else
+typedef u32 md_addr_t;
+typedef u32 md_size_t;
+#endif
+
 struct md_region {
 	char	name[MAX_NAME_LENGTH + 1];
 	u32	id;
-	u64	virt_addr;
-	u64	phys_addr;
-	u64	size;
+	md_addr_t	virt_addr;
+	md_addr_t	phys_addr;
+	md_size_t	size;
 };
 
 struct md_pending_region {
