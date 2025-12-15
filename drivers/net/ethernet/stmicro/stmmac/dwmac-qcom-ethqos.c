@@ -389,6 +389,7 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.rgmii_config_loopback_en = false,
 	.dma_addr_width = 40,
 	.link_clk_name = "phyaux",
+	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
 	.has_hdma = true,
 	.needs_sgmii_loopback = true,
 	.needs_serdes_reset = true,

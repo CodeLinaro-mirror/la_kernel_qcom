@@ -242,6 +242,7 @@ struct dwxgmac_addrs {
 #define STMMAC_FLAG_RX_CLK_RUNS_IN_LPI		BIT(10)
 #define STMMAC_FLAG_EN_TX_LPI_CLOCKGATING	BIT(11)
 #define STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY	BIT(12)
+#define STMMAC_FLAG_USE_THREADED_NAPI	BIT(13)
 
 struct plat_stmmacenet_data {
 	u32 snps_id;
