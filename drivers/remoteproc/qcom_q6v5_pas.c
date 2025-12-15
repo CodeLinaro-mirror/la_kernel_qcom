@@ -2856,7 +2856,6 @@ static const struct adsp_data lahaina_adsp_resource = {
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
 	.uses_elf64 = true,
-	.auto_boot = true,
 };
 
 static const struct adsp_data lahaina_cdsp_resource = {
@@ -2882,6 +2881,19 @@ static const struct adsp_data lahaina_mpss_resource = {
 	.uses_elf64 = true,
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data lahaina_slpi_resource = {
+	.crash_reason_smem = 424,
+	.firmware_name = "slpi.mdt",
+	.pas_id = 12,
+	.load_state = "slpi",
+	.ssr_name = "dsps",
+	.uses_elf64 = true,
+	.sysmon_name = "slpi",
+	.ssctl_id = 0x16,
 	.decrypt_shutdown = true,
 	.both_dumps = true,
 };
@@ -3278,6 +3290,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,lahaina-adsp-pas", .data = &lahaina_adsp_resource},
 	{ .compatible = "qcom,lahaina-cdsp-pas", .data = &lahaina_cdsp_resource},
 	{ .compatible = "qcom,lahaina-modem-pas", .data = &lahaina_mpss_resource},
+	{ .compatible = "qcom,lahaina-slpi-pas", .data = &lahaina_slpi_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
