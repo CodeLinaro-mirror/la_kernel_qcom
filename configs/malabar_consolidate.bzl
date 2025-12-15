@@ -21,6 +21,7 @@ malabar_consolidate_config = {
     "CONFIG_RUNTIME_TESTING_MENU": "y",
     "CONFIG_SCHED_WALT": "m",
     "CONFIG_SCHED_WALT_DEBUG": "m",
+    "CONFIG_SDHCI_MSM_DBG": "y",
     "CONFIG_TORTURE_TEST": "m",
     "CONFIG_UFS_DBG": "y",
     "CONFIG_USB_LINK_LAYER_TEST": "m",
