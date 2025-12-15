@@ -1268,10 +1268,13 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 	 * kernel boot till USB phy driver is initialized based on cable status,
 	 * keep LDOs on here.
 	 */
-	if (phy->eud_enable_reg && readl_relaxed(phy->eud_enable_reg)) {
-		msm_hsphy_modeled_d3_to_d0(phy);
-		msm_hsphy_enable_power(phy, true);
+	if (phy->eud_enable_reg) {
 		msm_hsphy_enable_clocks(phy, true);
+		if (readl_relaxed(phy->eud_enable_reg)) {
+			msm_hsphy_modeled_d3_to_d0(phy);
+			msm_hsphy_enable_power(phy, true);
+		} else
+			msm_hsphy_enable_clocks(phy, false);
 	}
 
 	/* Placed at the end to ensure the probe is complete */
