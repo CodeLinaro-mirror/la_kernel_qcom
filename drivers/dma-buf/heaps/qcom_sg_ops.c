@@ -565,49 +565,28 @@ void qcom_sg_buffer_init(struct qcom_sg_buffer *buffer)
 {
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
-	kref_init(&buffer->kref);
 }
 EXPORT_SYMBOL_GPL(qcom_sg_buffer_init);
 
-static void qcom_sg_release_rcu_cb(struct rcu_head *rcu)
+void qcom_sg_release(void *buffer)
 {
-	struct qcom_sg_buffer *buffer = container_of(rcu, struct qcom_sg_buffer, rcu);
-
-	if (buffer->free)
-		buffer->free(buffer);
-}
-
-/* Releases memory associated with buffer */
-void qcom_sg_release(struct kref *kref)
-{
-	struct qcom_sg_buffer *buffer;
-
-	buffer = container_of(kref, struct qcom_sg_buffer, kref);
-	mem_buf_vmperm_free(buffer->vmperm);
-
-	/*
-	 * Ensure all pre-existing RCU readers have completed before scheduling
-	 * final cleanup. Readers may still hold references to the embedded kref
-	 * within vmperm, and freeing the buffer prematurely could lead to a
-	 * use-after-free. The actual release is deferred to an RCU callback to
-	 * avoid blocking in this context.
-	 */
-
-	call_rcu(&buffer->rcu, qcom_sg_release_rcu_cb);
+	struct qcom_sg_buffer *buf = (struct qcom_sg_buffer *)buffer;
+	mem_buf_vmperm_free(buf->vmperm);
+	if (buf->free)
+		buf->free(buf);
 }
 EXPORT_SYMBOL_GPL(qcom_sg_release);
 
 /*
  * Attempt return to the default security state, and
  * cleanup lazily-freed iommu mappings.
- * Drops the initial refcount from qcom_sg_buffer_init()
  */
 static void qcom_sg_exit(struct qcom_sg_buffer *buffer)
 {
 	mem_buf_vmperm_try_reclaim(buffer->vmperm, false);
 
 	msm_dma_buf_freed(buffer);
-	kref_put(&buffer->kref, qcom_sg_release);
+	qcom_sg_release(buffer);
 }
 
 void qcom_sg_dmabuf_release(struct dma_buf *dmabuf)

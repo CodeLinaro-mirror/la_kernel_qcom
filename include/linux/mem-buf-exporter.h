@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  *  Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- *  Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ *  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _MEM_BUF_EXPORTER_H
@@ -50,21 +50,23 @@ mem_buf_dma_buf_export(struct dma_buf_export_info *exp_info,
  * Will not be freed by mem_buf_vmperm_free().
  */
 struct mem_buf_vmperm *mem_buf_vmperm_alloc(struct sg_table *sgt,
-	void (*release)(struct kref *), struct kref *kref);
+		void (*sg_release)(void *),
+		void *buffer);
 
 /*
  * A dmabuf which permantently belongs to the given VMs & permissions.
  */
 struct mem_buf_vmperm *mem_buf_vmperm_alloc_staticvm(struct sg_table *sgt, int *vmids, int *perms,
-		u32 nr_acl_entries, void (*release)(struct kref *), struct kref *);
+		u32 nr_acl_entries, void (*sg_release)(void *),
+		void *buffer);
 
 /*
  * A dmabuf in the "MEMACCEPT" state.
  */
 struct mem_buf_vmperm *mem_buf_vmperm_alloc_accept(struct sg_table *sgt,
 	gh_memparcel_handle_t memparcel_hdl, int *vmids, int *perms,
-	unsigned int nr_acl_entries, void (*release)(struct kref *),
-	struct kref *);
+	unsigned int nr_acl_entries, void (*sg_release)(void *),
+	void *buffer);
 
 /*
  * Attempt to return to the default security state. For memory in the
