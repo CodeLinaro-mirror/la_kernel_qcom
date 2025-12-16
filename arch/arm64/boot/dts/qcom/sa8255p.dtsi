@@ -490,8 +490,8 @@
 		dcc: dma@40ff000 {
 			compatible = "qcom,dcc-v3", "qcom,dcc";
 			reg = <0x0 0x040ff000 0x0 0x1000>,
-			      <0x0 0x040b8800 0x0 0x6000>;
-			qcom,dcc-offset = <0x38800>;
+			      <0x0 0x040a3000 0x0 0x1b800>;
+			qcom,dcc-offset = <0x23000>;
 		};
 
 		ipcc0: mailbox@408000 {
