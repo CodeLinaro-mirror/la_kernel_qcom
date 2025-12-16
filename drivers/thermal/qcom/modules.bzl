@@ -347,3 +347,21 @@ def register_modules(registry):
             "drivers/thermal/qcom/bcl_off_cdev.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/qti_qmi_sensor",
+        out = "qti_qmi_sensor.ko",
+        config = "CONFIG_QTI_QMI_SENSOR",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/qmi_sensors.h",
+            "drivers/thermal/qcom/qmi_sensors.c",
+            "drivers/thermal/qcom/thermal_sensor_service_v01.c",
+            "drivers/thermal/qcom/thermal_sensor_service_v01.h",
+            "drivers/thermal/qcom/thermal_zone_internal.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qmi_helpers",
+        ],
+    )
