@@ -4482,6 +4482,11 @@ static void sdhci_msm_vote_pmqos(struct mmc_host *mmc, int cpu)
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	struct qos_cpu_group *qcg;
 
+	if (!msm_host->sdhci_qos) {
+		dev_dbg(&msm_host->pdev->dev, "QoS instance is uninitialized\n");
+		return;
+	}
+
 	qcg = cpu_to_group(msm_host->sdhci_qos, cpu);
 	if (!qcg) {
 		dev_dbg(&msm_host->pdev->dev, "QoS group is undefined\n");
@@ -4577,13 +4582,15 @@ static int sdhci_msm_setup_qos(struct sdhci_msm_host *msm_host)
 {
 	struct platform_device *pdev = msm_host->pdev;
 	struct sdhci_msm_qos_req *qr = msm_host->sdhci_qos;
-	struct qos_cpu_group *qcg = qr->qcg;
+	struct qos_cpu_group *qcg = NULL;
 	struct mmc_host *mmc = msm_host->mmc;
 	struct sdhci_host *host = mmc_priv(mmc);
 	int i, err;
 
 	if (!msm_host->sdhci_qos)
 		return 0;
+
+	qcg = qr->qcg;
 
 	/* Affine irq to first set of mask */
 	if (IS_ENABLED(CONFIG_SMP))
