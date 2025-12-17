@@ -31,7 +31,12 @@ load(
 load(":kleaf-scripts/targets/malabar_vms.bzl", "define_malabar_vms")
 load(":kleaf-scripts/targets/monaco.bzl", "define_monaco")
 load(":kleaf-scripts/targets/pikachu.bzl", "define_pikachu")
-load(":kleaf-scripts/targets/seraph.bzl", "define_seraph")
+load(
+    ":kleaf-scripts/targets/seraph.bzl",
+    "define_seraph",
+    "define_seraph_tuivm",
+)
+load(":kleaf-scripts/targets/seraph_vms.bzl", "define_seraph_vms")
 load(":kleaf-scripts/targets/shikra.bzl", "define_shikra")
 load(
     ":kleaf-scripts/targets/sun.bzl",
@@ -322,6 +327,10 @@ define_sun_tuivm()
 define_sun_oemvm()
 
 define_seraph()
+
+define_seraph_tuivm()
+
+define_seraph_vms()
 
 define_sun_vms()
 

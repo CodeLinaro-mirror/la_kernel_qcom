@@ -45,9 +45,14 @@ vm_target_bases = [
     "sun",
     "canoe",
     "malabar",
+    "seraph",
 ]
 
-vm_targets = ["{}-{}".format(t, vt) for t in vm_target_bases for vt in vm_types]
+vm_targets = [
+    "{}-{}".format(t, vt)
+    for t in vm_target_bases
+    for vt in (["tuivm"] if "seraph" in t else vm_types)
+]
 
 vm_variants = [
     # keep sorted
