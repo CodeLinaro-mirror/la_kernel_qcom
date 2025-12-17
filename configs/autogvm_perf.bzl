@@ -8,7 +8,6 @@ autogvm_perf_config = {
     "CONFIG_ARM64_PMEM": "y",
     "CONFIG_COMMON_CLK_QCOM": "m",
     "CONFIG_CRYPTO_DEV_QCOM_RNG": "m",
-    "CONFIG_PTP_QCOM_CLOCK_TSC_VM": "m",
     "CONFIG_VIOSPMI_MSM_PMIC_ARB": "m",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
