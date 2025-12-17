@@ -1604,7 +1604,7 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 response:
 	if (!req_msg->enable && ret != -EINVAL && ret != -ENODEV) {
 		mutex_lock(&chip->mutex);
-		if (info_idx >= 0) {
+		if (info_idx >= 0 && uadev[pcm_card_num].info) {
 			info = &uadev[pcm_card_num].info[info_idx];
 			uaudio_dev_intf_cleanup(
 					uadev[pcm_card_num].udev,
