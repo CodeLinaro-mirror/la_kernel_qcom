@@ -32,6 +32,10 @@ COPY_FILES = [
     "drivers/net/pcs/pcs-xpcs-wx.c",
     "drivers/net/phy/aquantia/aquantia_leds.c",
     "drivers/net/phy/aquantia/aquantia_firmware.c",
+    "drivers/phy/qualcomm/phy-qcom-sgmii-eth.c",
+    "drivers/phy/qualcomm/phy-qcom-qmp-pcs-sgmii.h",
+    "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v5.h",
+    "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v5.h",
     # cfg80211.ko files start
     "net/wireless/ap.c",
     "net/wireless/certs/sforshee.hex",
