@@ -114,6 +114,7 @@ malabar_perf_config = {
     "CONFIG_MMC_CQHCI": "m",
     "CONFIG_MMC_SDHCI_MSM": "m",
     "CONFIG_MODULE_SIG_ALL": "n",
+    "CONFIG_MPM_LEGACY": "m",
     "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_MSM_GPI_DMA": "m",
     "CONFIG_MSM_PERFORMANCE": "m",
