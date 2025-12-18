@@ -189,58 +189,74 @@ static void biastimer_start(s64 time_ns)
  *		    threshold then use average of these past samples as
  *		    predicted value.
  * @cpu_gov:  targeted cpu's lpm data structure
+ * @samples_history:  samples history for past residency or ipi arrival history
  * @duration_ns:  cpu's scheduler sleep length
+ * @is_ipi:  samples history is for ipi arrival
  */
-static s64 find_deviation(struct lpm_cpu *cpu_gov, s64 *samples_history, s64 duration_ns)
+static u64 find_deviation(struct lpm_cpu *cpu_gov, s64 *samples_history,
+			  s64 duration_ns, bool is_ipi)
 {
-	s64 max, avg, stddev;
-	s64 thresh = LLONG_MAX;
+	s64 value, stddev_sqrt;
+	u64 stddev, max, min;
+	u64 max_thresh = U64_MAX;
+	u64 min_thresh = 0;
+	u64 avg, avg_sq;
 	struct cpuidle_driver *drv = cpu_gov->drv;
-	int divisor, i, last_level = drv->state_count - 1;
+	int divisor, i;
+	int last_level = drv->state_count - 1;
 	struct cpuidle_state *max_state = &drv->states[last_level];
+	u32 ref_stddev = pred_ref_stddev;
+
+	if (is_ipi)
+		ref_stddev = ipi_pred_ref_stddev;
 
 	do {
 		max = avg = divisor = stddev = 0;
+		min = S64_MAX;
 		for (i = 0; i < MAXSAMPLES; i++) {
-			s64 value = samples_history[i];
+			value = samples_history[i];
+			value = ktime_to_us(value);
+			if (value <= min_thresh || value >= max_thresh)
+				continue;
 
-			if (value <= thresh) {
-				avg += value;
-				divisor++;
-				if (value > max)
-					max = value;
-			}
+			divisor++;
+
+			avg += value;
+			stddev += value * value;
+			if (value > max)
+				max = value;
+			if (value < min)
+				min = value;
 		}
+		if (!divisor || !max)
+			return 0;
+
 		do_div(avg, divisor);
-
-		for (i = 0; i < MAXSAMPLES; i++) {
-			s64 value = samples_history[i];
-
-			if (value <= thresh) {
-				s64 diff = value - avg;
-
-				stddev += diff * diff;
-			}
-		}
 		do_div(stddev, divisor);
-		stddev = int_sqrt(stddev);
+		avg_sq = avg * avg;
+		stddev -= avg_sq;
+		stddev_sqrt = int_sqrt(stddev);
 
-	/*
-	 * If the deviation is less, return the average, else
-	 * ignore one maximum sample and retry
-	 */
-		if (((avg > stddev * 6) && (divisor >= (MAXSAMPLES - 1)))
-					|| stddev <= PRED_REF_STDDEV) {
-			if (avg >= duration_ns ||
-				avg > max_state->target_residency_ns)
+		/*
+		 * If the deviation is less, return the average, else
+		 * ignore one maximum sample and retry
+		 */
+		if (((avg > stddev_sqrt * 6) && (divisor >= (MAXSAMPLES - 1)))
+					|| stddev_sqrt <= ref_stddev) {
+			if (avg * NSEC_PER_USEC >= duration_ns || avg > max_state->target_residency)
 				return 0;
 
-			cpu_gov->next_pred_time = cpu_gov->now + avg;
-			return avg;
+			cpu_gov->next_pred_time = cpu_gov->now + (avg * NSEC_PER_USEC);
+			return avg * NSEC_PER_USEC;
 		}
-		thresh = max - 1;
 
-	} while (divisor > (MAXSAMPLES - 1));
+		/* Update the thresholds for the next round. */
+		if (avg - min > max - avg)
+			min_thresh = min;
+		else
+			max_thresh = max;
+
+	} while (divisor > MAXSAMPLES - 1);
 
 	return 0;
 }
@@ -284,7 +300,7 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 	 * specific mode has more premature exits return the index of
 	 * that mode.
 	 */
-	cpu_gov->predicted = find_deviation(cpu_gov, lpm_history->resi, duration_ns);
+	cpu_gov->predicted = find_deviation(cpu_gov, lpm_history->resi, duration_ns, false);
 	if (cpu_gov->predicted) {
 		cpu_gov->pred_type = LPM_PRED_RESIDENCY_PATTERN;
 		return;
@@ -323,7 +339,7 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 
 	spin_lock_irqsave(&cpu_gov->lock, flags);
 	cpu_gov->predicted = find_deviation(cpu_gov, ipi_history->interval,
-					    duration_ns);
+					    duration_ns, true);
 	if (cpu_gov->predicted)
 		cpu_gov->pred_type = LPM_PRED_IPI_PATTERN;
 	spin_unlock_irqrestore(&cpu_gov->lock, flags);
