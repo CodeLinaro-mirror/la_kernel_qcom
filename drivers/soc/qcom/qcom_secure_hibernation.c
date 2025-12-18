@@ -495,13 +495,10 @@ static int init_ta_and_set_key(void)
 
 static int init_and_set_key(void)
 {
-	int ret;
-
 	if (!ta_based_key)
 		return qtee_ret;
 
-	ret = init_ta_and_set_key();
-	return ret;
+	return init_ta_and_set_key();
 }
 
 static int alloc_auth_memory(void)
@@ -576,14 +573,13 @@ static void cleanup(void)
 int key_mgr_get_key(uint32_t event, void *key, size_t key_len,
 		    size_t *key_len_out)
 {
-	int ret = setup();
+	if (setup()) {
+		cleanup();
+		return -EINVAL;
+	}
 
-	if (ret)
-		goto exit;
-
-	ret = key_manager_getkey(key_mgr_object, event, key,
+	int ret = key_manager_getkey(key_mgr_object, event, key,
 					 key_len, key_len_out);
-exit:
 	cleanup();
 	return ret;
 }
@@ -595,21 +591,24 @@ int key_restore(void)
 
 	if (!kernel_based_restore)
 		return 0;
+
 	ret = key_mgr_get_key(KEY_MGR_HIBERNATE_WITH_ENCRYPTION, key,
 					AES256_KEY_SIZE, &key_len_out);
+	if (ret)
+		pr_err("%s: Failed to restore key: %d\n", __func__, ret);
+
 	return ret;
 
 }
 
 int key_mgr_prepare(uint32_t event, const struct keymgr_key_info *key_info)
 {
-	int ret = setup();
+	if (setup()) {
+		cleanup();
+		return -EINVAL;
+	}
+	int ret = key_manager_prepare(key_mgr_object, event, key_info);
 
-	if (ret)
-		goto exit;
-
-	ret = key_manager_prepare(key_mgr_object, event, key_info);
-exit:
 	cleanup();
 	return ret;
 }
@@ -663,7 +662,6 @@ free_key_info:
 }
 EXPORT_SYMBOL_GPL(get_key_for_hib);
 
-
 static int hibernate_pm_notifier(struct notifier_block *nb,
 				unsigned long event, void *unused)
 {
@@ -710,10 +708,12 @@ static int hibernate_pm_notifier(struct notifier_block *nb,
 			return NOTIFY_STOP;
 		}
 		break;
+
 	case (PM_POST_RESTORE):
 		deinit_aes_encrypt();
 		cleanup_cmp_blk_array();
 		break;
+
 	default:
 		WARN_ONCE(1, "Invalid PM Notifier\n");
 		break;

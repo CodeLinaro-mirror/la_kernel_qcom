@@ -255,14 +255,13 @@ static long ps_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case GENERATE_HIB_KEY:
 	case POWER_STATE_GENERATE_HIB_KEY:
-		if (!ta_based_key) {
-			ret = get_key_for_hib();
-			if (!ret)
-				pr_info("Generated sec hib key successfully..\n");
-			else
-				pr_err("Hib Key generation failed..\n");
-		}
+		ret = get_key_for_hib();
+		if (!ret)
+			pr_debug("Generated sec hib key successfully..\n");
+		else
+			pr_err("Hib Key generation failed..\n");
 		break;
+
 	case LPM_ACTIVE:
 	case POWER_STATE_LPM_ACTIVE:
 		pr_debug("State changed to Active\n");
