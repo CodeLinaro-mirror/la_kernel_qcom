@@ -345,13 +345,15 @@ void clear_cpu_predict_history(void)
 	for_each_possible_cpu(cpu) {
 		cpu_gov = per_cpu_ptr(&lpm_cpu_data, cpu);
 		lpm_history = &cpu_gov->lpm_history;
+
+		cpu_gov->predicted = 0;
+		cpu_gov->next_pred_time = 0;
+		cpu_gov->pred_type = LPM_PRED_RESET;
+		lpm_history->samples_idx = 0;
+		lpm_history->nsamp = 0;
 		for (i = 0; i < MAXSAMPLES; i++) {
-			lpm_history->resi[i]  = 0;
+			lpm_history->resi[i] = 0;
 			lpm_history->mode[i] = -1;
-			lpm_history->samples_idx = 0;
-			lpm_history->nsamp = 0;
-			cpu_gov->next_pred_time = 0;
-			cpu_gov->pred_type = LPM_PRED_RESET;
 		}
 	}
 }
