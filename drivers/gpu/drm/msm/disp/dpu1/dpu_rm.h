@@ -66,32 +66,31 @@ int dpu_rm_destroy(struct dpu_rm *rm);
  *	HW blocks can then be accessed through dpu_rm_get_* functions.
  *	HW Reservations should be released via dpu_rm_release_hw.
  * @rm: DPU Resource Manager handle
- * @drm_enc: DRM Encoder handle
- * @crtc_state: Proposed Atomic DRM CRTC State handle
+ * @crtc: DRM CRTC handle
  * @topology: Pointer to topology info for the display
  * @Return: 0 on Success otherwise -ERROR
  */
-int dpu_rm_reserve(struct dpu_rm *rm,
+int dpu_rm_reserve(
+		struct dpu_rm *rm,
 		struct dpu_global_state *global_state,
-		struct drm_encoder *drm_enc,
-		struct drm_crtc_state *crtc_state,
+		struct drm_crtc *crtc,
 		struct msm_display_topology topology);
 
 /**
  * dpu_rm_reserve - Given the encoder for the display chain, release any
  *	HW blocks previously reserved for that use case.
  * @rm: DPU Resource Manager handle
- * @enc: DRM Encoder handle
+ * @crtc: DRM CRTC handle
  * @Return: 0 on Success otherwise -ERROR
  */
 void dpu_rm_release(struct dpu_global_state *global_state,
-		struct drm_encoder *enc);
+		struct drm_crtc *crtc);
 
 /**
  * Get hw resources of the given type that are assigned to this encoder.
  */
 int dpu_rm_get_assigned_resources(struct dpu_rm *rm,
-	struct dpu_global_state *global_state, uint32_t enc_id,
+	struct dpu_global_state *global_state, struct drm_crtc *crtc,
 	enum dpu_hw_blk_type type, struct dpu_hw_blk **blks, int blks_size);
 
 /**
