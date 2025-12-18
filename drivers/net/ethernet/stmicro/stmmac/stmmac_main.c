@@ -4880,6 +4880,10 @@ static int stmmac_open(struct net_device *dev)
 		qcom_sgmii_clock_loopback(priv->plat, true);
 	}
 
+	#if IS_ENABLED(CONFIG_PRPL_VARIANT)
+		memset(&dev->stats, 0, sizeof(struct net_device_stats));
+	#endif
+
 	/* Extra statistics */
 	memset(&priv->xstats, 0, sizeof(struct stmmac_extra_stats));
 	priv->xstats.threshold = tc;
