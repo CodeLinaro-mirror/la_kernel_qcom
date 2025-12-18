@@ -54,4 +54,25 @@ int ta_based_key = 1;
 int ta_based_key = 0;
 #endif
 
+#if IS_ENABLED(CONFIG_QCOM_SECURE_HIBERNATION)
+extern int get_key_for_hib(void);
+#else
+static inline int get_key_for_hib(void)
+{
+	return 0;
+}
+#endif
+
+#if IS_ENABLED(CONFIG_QCOM_KERNEL_BASED_RESTORE)
+int kernel_based_restore = 1;
+#else
+int kernel_based_restore;
+#endif
+
+#if !IS_ENABLED(CONFIG_QCOM_HIB_SEC_KEY)
+int ta_based_key = 1;
+#else
+int ta_based_key;
+#endif
+
 #endif /* __SOC_QCOM_HIBERNATION_H__ */
