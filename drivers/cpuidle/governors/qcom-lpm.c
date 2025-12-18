@@ -591,9 +591,12 @@ static int start_prediction_timer(struct lpm_cpu *cpu_gov, s64 duration_ns)
 	max_residency  = s[cpu_gov->last_idx + 1].target_residency_ns - 1;
 	htime = cpu_gov->predicted + PRED_TIMER_ADD * NSEC_PER_USEC;
 
-	if (htime > max_residency)
+	if (htime > max_residency) {
 		htime = max_residency;
+		cpu_gov->next_wakeup = ktime_add_ns(cpu_gov->now, htime);
+	}
 
+	cpu_gov->dev->next_hrtimer = cpu_gov->next_wakeup;
 	if ((duration_ns > htime) && ((duration_ns - htime) > max_residency))
 		histtimer_start(htime);
 
