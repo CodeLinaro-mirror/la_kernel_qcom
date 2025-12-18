@@ -35,7 +35,8 @@
 #define LPM_PRED_RESET				0
 #define LPM_PRED_RESIDENCY_PATTERN		1
 #define LPM_PRED_PREMATURE_EXITS		2
-#define LPM_PRED_IPI_PATTERN			3
+#define LPM_PRED_PREMATURE_EXITS_EXTENDED	3
+#define LPM_PRED_IPI_PATTERN			4
 
 #define LPM_SELECT_STATE_DISABLED		0
 #define LPM_SELECT_STATE_QOS_UNMET		1
@@ -273,6 +274,7 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 	struct history_lpm *lpm_history = &cpu_gov->lpm_history;
 	struct history_ipi *ipi_history = &cpu_gov->ipi_history;
 	unsigned long flags;
+	u32 min_residency_fact = 1;
 
 	if (prediction_disabled)
 		return;
@@ -284,15 +286,44 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 	if (cpu_gov->history_invalid) {
 		cpu_gov->history_invalid = false;
 		cpu_gov->htmr_wkup = true;
+
+		if (cpu_gov->pred_type == LPM_PRED_PREMATURE_EXITS ||
+		    cpu_gov->pred_type == LPM_PRED_PREMATURE_EXITS_EXTENDED) {
+			cpu_gov->timer_factor++;
+			goto skip_invalidate;
+		}
+
+		if (cpu_gov->pred_type == LPM_PRED_RESIDENCY_PATTERN) {
+			cpu_gov->timer_factor++;
+			goto skip_resi_pattern;
+		}
+
+		if (cpu_gov->pred_type == LPM_PRED_IPI_PATTERN)
+			return;
+
 		cpu_gov->next_pred_time = 0;
-		return;
+		cpu_gov->timer_factor = 1;
+		cpu_gov->pred_type = LPM_PRED_RESET;
+		lpm_history->samples_idx = 0;
+		lpm_history->nsamp = 0;
+		for (i = 0; i < MAXSAMPLES; i++) {
+			lpm_history->resi[i]  = 0;
+			lpm_history->mode[i] = -1;
+		}
+
+		cpu_gov->predicted = find_deviation(cpu_gov, ipi_history->interval,
+						    duration_ns, true);
+		if (cpu_gov->predicted) {
+			cpu_gov->pred_type = LPM_PRED_IPI_PATTERN;
+			return;
+		}
 	}
 
+	cpu_gov->timer_factor = 1;
+skip_invalidate:
 	/* Predict only when all the samples are collected */
-	if (lpm_history->nsamp < MAXSAMPLES) {
-		cpu_gov->next_pred_time = 0;
+	if (lpm_history->nsamp < MAXSAMPLES)
 		return;
-	}
 
 	/*
 	 * Check if the samples are not much deviated, if so use the
@@ -300,11 +331,16 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 	 * specific mode has more premature exits return the index of
 	 * that mode.
 	 */
+
 	cpu_gov->predicted = find_deviation(cpu_gov, lpm_history->resi, duration_ns, false);
 	if (cpu_gov->predicted) {
 		cpu_gov->pred_type = LPM_PRED_RESIDENCY_PATTERN;
 		return;
 	}
+
+skip_resi_pattern:
+	if (cpu_gov->cpu == 0)
+		min_residency_fact = resi_fact;
 
 	/*
 	 * Find the number of premature exits for each of the mode,
@@ -315,7 +351,12 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 		struct cpuidle_state *s = &drv->states[j];
 		s64 min_residency = s->target_residency_ns;
 		s64 avg_residency = 0;
+		s64 pred_avg_residency = 0;
 		u32 count = 0;
+		u32 pred_count = 0;
+		u32 premature_cnt = pred_premature_cnt;
+
+		min_residency *= min_residency_fact;
 
 		for (i = 0; i < MAXSAMPLES; i++) {
 			if ((lpm_history->mode[i] == j) &&
@@ -325,11 +366,44 @@ static void cpu_predict(struct lpm_cpu *cpu_gov, u64 duration_ns)
 			}
 		}
 
-		if (count >= PRED_PREMATURE_CNT) {
+		if (count >= premature_cnt) {
 			do_div(avg_residency, count);
 			cpu_gov->predicted = avg_residency;
 			cpu_gov->next_pred_time = cpu_gov->now + cpu_gov->predicted;
 			cpu_gov->pred_type = LPM_PRED_PREMATURE_EXITS;
+			break;
+		}
+
+		if (premature_ext_disabled) {
+			if (cpu_gov->cpu != 0)
+				continue;
+			else
+				premature_cnt = MAXSAMPLES;
+		}
+
+		if (premature_resi_div_cpu == U32_MAX)
+			break;
+
+		if (cpu_gov->cpu > premature_resi_div_cpu)
+			do_div(min_residency, 2);
+
+		for (i = 0; i < MAXSAMPLES; i++) {
+			if (lpm_history->resi[i] < min_residency) {
+				pred_count++;
+				pred_avg_residency += lpm_history->resi[i];
+			}
+		}
+
+		if (pred_count >= premature_cnt) {
+			do_div(pred_avg_residency, pred_count);
+			cpu_gov->predicted = pred_avg_residency * cpu_gov->timer_factor;
+			if (cpu_gov->predicted > MIN_RESI_TIMES * min_residency_fact
+			    && cpu_gov->timer_factor > 1) {
+				cpu_gov->timer_factor--;
+				cpu_gov->predicted = pred_avg_residency * cpu_gov->timer_factor;
+			}
+			cpu_gov->next_pred_time = cpu_gov->now + cpu_gov->predicted;
+			cpu_gov->pred_type = LPM_PRED_PREMATURE_EXITS_EXTENDED;
 			break;
 		}
 	}
@@ -388,35 +462,30 @@ static void update_cpu_history(struct lpm_cpu *cpu_gov)
 	struct cpuidle_state *target;
 
 	if (sleep_disabled || prediction_disabled || idx < 0 ||
-	    idx > cpu_gov->drv->state_count - 1)
+	    idx > cpu_gov->drv->state_count - 1) {
+		cpu_gov->htmr_wkup = false;
 		return;
+	}
 
 	histtimer_cancel();
 	biastimer_cancel();
 
-	if (cpu_gov->dev->last_residency_ns == 0)
+	if (cpu_gov->dev->last_residency_ns == 0) {
+		cpu_gov->htmr_wkup = false;
 		return;
+	}
 
 	target = &cpu_gov->drv->states[idx];
 
 	if (measured_ns > target->exit_latency_ns)
 		measured_ns -= target->exit_latency_ns;
 
-	if (cpu_gov->htmr_wkup && cpu_gov->pred_type == LPM_PRED_IPI_PATTERN)
-		cpu_gov->htmr_wkup = false;
-
 	if (cpu_gov->htmr_wkup) {
-		if (!lpm_history->samples_idx)
-			lpm_history->samples_idx = MAXSAMPLES - 1;
-		else
-			lpm_history->samples_idx--;
-
-		lpm_history->resi[lpm_history->samples_idx] += measured_ns;
 		cpu_gov->htmr_wkup = false;
 		tmr = true;
-	} else
-		lpm_history->resi[lpm_history->samples_idx] = measured_ns;
+	}
 
+	lpm_history->resi[lpm_history->samples_idx] = measured_ns;
 	lpm_history->mode[lpm_history->samples_idx] = idx;
 
 	trace_gov_pred_hist(idx, lpm_history->resi[lpm_history->samples_idx],
@@ -589,9 +658,9 @@ static int start_prediction_timer(struct lpm_cpu *cpu_gov, s64 duration_ns)
 
 	s = &cpu_gov->drv->states[0];
 	max_residency  = s[cpu_gov->last_idx + 1].target_residency_ns - 1;
-	htime = cpu_gov->predicted + PRED_TIMER_ADD * NSEC_PER_USEC;
+	htime = cpu_gov->predicted + pred_timer_add * NSEC_PER_USEC;
 
-	if (htime > max_residency) {
+	if (htime > max_residency && cpu_gov->pred_type != LPM_PRED_PREMATURE_EXITS_EXTENDED) {
 		htime = max_residency;
 		cpu_gov->next_wakeup = ktime_add_ns(cpu_gov->now, htime);
 	}
@@ -624,6 +693,7 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 {
 	struct lpm_cpu *cpu_gov = this_cpu_ptr(&lpm_cpu_data);
 	s64 latency_req = PM_QOS_CPU_LATENCY_DEFAULT_VALUE;
+	struct cpuidle_state *s;
 	ktime_t delta_tick;
 	u64 htime = 0;
 	s64 duration_ns = 0;
@@ -645,12 +715,11 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	cpu_gov->predicted = 0;
 	cpu_gov->predict_started = false;
 	cpu_gov->now = ktime_get();
-	cpu_gov->pred_type = LPM_PRED_RESET;
 	cpu_gov->hist_reason = cpu_gov->select_reason;
 	cpu_gov->select_reason = 0;
 
 	for (i = drv->state_count - 1; i > 0; i--) {
-		struct cpuidle_state *s = &drv->states[i];
+		s = &drv->states[i];
 
 		if (dev->states_usage[i].disable) {
 			cpu_gov->select_reason |= UPDATE_REASON(i, LPM_SELECT_STATE_DISABLED);
@@ -664,7 +733,7 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 
 		if (check_cpu_isactive(dev->cpu) && !cpu_gov->predict_started) {
 			duration_ns = tick_nohz_get_sleep_length(&delta_tick);
-			if (duration_ns <= 0 || s->target_residency_ns > duration_ns) {
+			if (duration_ns <= 0 || resi_fact * s->target_residency_ns > duration_ns) {
 				cpu_gov->select_reason |= UPDATE_REASON(i,
 						LPM_SELECT_STATE_RESIDENCY_UNMET);
 				continue;
@@ -673,14 +742,18 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 			cpu_gov->predict_started = true;
 		}
 
-		if (cpu_gov->predicted)
-			if (s->target_residency_ns > cpu_gov->predicted) {
-				cpu_gov->select_reason |= UPDATE_REASON(i,
-						LPM_SELECT_STATE_PRED);
+		if (cpu_gov->predicted) {
+			if (cpu_gov->pred_type == LPM_PRED_PREMATURE_EXITS_EXTENDED ||
+				s->target_residency_ns > cpu_gov->predicted) {
+				cpu_gov->select_reason |= UPDATE_REASON(i, LPM_SELECT_STATE_PRED);
 				continue;
+			}
 		}
 		break;
 	}
+
+	if (!cpu_gov->predicted)
+		cpu_gov->pred_type = LPM_PRED_RESET;
 
 	cpu_gov->last_idx = i;
 	cpu_gov->next_wakeup = ktime_add_ns(cpu_gov->now, duration_ns);
@@ -852,6 +925,7 @@ static int lpm_enable_device(struct cpuidle_driver *drv,
 	cpu_gov->drv = drv;
 	cpu_gov->dev = dev;
 	cpu_gov->last_idx = -1;
+	cpu_gov->timer_factor = 1;
 
 	return 0;
 }
