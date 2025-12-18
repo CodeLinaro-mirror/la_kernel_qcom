@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -3310,6 +3309,16 @@
 				    "llcc_broadcast_base";
 			interrupts = <GIC_SPI 582 IRQ_TYPE_LEVEL_HIGH>;
 			num-banks = <4>;
+		};
+
+		kryo-erp {
+			compatible = "arm,arm64-kryo-cpu-erp";
+			interrupts = <GIC_PPI 0 IRQ_TYPE_LEVEL_LOW>,
+				<GIC_SPI 36 IRQ_TYPE_LEVEL_HIGH>,
+				<GIC_SPI 21 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "l1-l2-faultirq",
+					"l3-c0-scu-faultirq",
+					"l3-c1-scu-faultirq";
 		};
 
 		iris: video-codec@aa00000 {
