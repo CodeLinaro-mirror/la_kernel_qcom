@@ -57,6 +57,7 @@ u32 pred_premature_cnt = PRED_PREMATURE_CNT;
 u32 ipi_pred_ref_stddev = IPI_PRED_REF_STDDEV;
 u32 pred_ref_stddev = PRED_REF_STDDEV;
 
+bool optimized_resi;
 bool premature_ext_disabled;
 bool cluster_bias_disabled;
 bool bias_disabled;
@@ -719,6 +720,8 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	cpu_gov->hist_reason = cpu_gov->select_reason;
 	cpu_gov->select_reason = 0;
 
+	duration_ns = tick_nohz_get_sleep_length(&delta_tick);
+
 	for (i = drv->state_count - 1; i > 0; i--) {
 		s = &drv->states[i];
 
@@ -729,11 +732,23 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 
 		if (latency_req < s->exit_latency_ns) {
 			cpu_gov->select_reason |= UPDATE_REASON(i, LPM_SELECT_STATE_QOS_UNMET);
+
+			if (optimized_resi) {
+				if (!cpu_gov->history_invalid) {
+					cpu_gov->pred_type = LPM_PRED_ACTIVE_TIME;
+					cpu_gov->predicted = s->target_residency_ns;
+					cpu_gov->next_pred_time = cpu_gov->now + cpu_gov->predicted;
+					continue;
+				}
+				if (s->target_residency_ns * resi_fact < duration_ns) {
+					cpu_gov->history_invalid = false;
+					break;
+				}
+			}
 			continue;
 		}
 
 		if (check_cpu_isactive(dev->cpu) && !cpu_gov->predict_started) {
-			duration_ns = tick_nohz_get_sleep_length(&delta_tick);
 			if (duration_ns <= 0 || resi_fact * s->target_residency_ns > duration_ns) {
 				cpu_gov->select_reason |= UPDATE_REASON(i,
 						LPM_SELECT_STATE_RESIDENCY_UNMET);
@@ -760,7 +775,6 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		cpu_gov->active_time = cpu_gov->now - cpu_gov->exit_time;
 		if (cpu_gov->active_time > pred_active_time * NSEC_PER_USEC) {
 			i = 0;
-			duration_ns = tick_nohz_get_sleep_length(&delta_tick);
 			cpu_gov->select_reason |= UPDATE_REASON(i, LPM_SELECT_STATE_PRED);
 			cpu_gov->pred_type = LPM_PRED_ACTIVE_TIME;
 			cpu_gov->predicted = drv->states[i].target_residency_ns;

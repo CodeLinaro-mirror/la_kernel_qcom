@@ -30,6 +30,7 @@ extern u32 pred_timer_add;
 extern u32 pred_premature_cnt;
 extern u32 pred_ref_stddev;
 extern u32 ipi_pred_ref_stddev;
+extern bool optimized_resi;
 extern bool bias_disabled;
 extern bool cluster_bias_disabled;
 extern bool premature_ext_disabled;
