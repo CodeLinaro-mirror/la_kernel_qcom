@@ -37,6 +37,7 @@
 #define LPM_PRED_PREMATURE_EXITS		2
 #define LPM_PRED_PREMATURE_EXITS_EXTENDED	3
 #define LPM_PRED_IPI_PATTERN			4
+#define LPM_PRED_ACTIVE_TIME			5
 
 #define LPM_SELECT_STATE_DISABLED		0
 #define LPM_SELECT_STATE_QOS_UNMET		1
@@ -755,6 +756,18 @@ static int lpm_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	if (!cpu_gov->predicted)
 		cpu_gov->pred_type = LPM_PRED_RESET;
 
+	if (pred_active_time && i && !cpu_gov->htmr_wkup && cpu_gov->exit_time > 0) {
+		cpu_gov->active_time = cpu_gov->now - cpu_gov->exit_time;
+		if (cpu_gov->active_time > pred_active_time * NSEC_PER_USEC) {
+			i = 0;
+			duration_ns = tick_nohz_get_sleep_length(&delta_tick);
+			cpu_gov->select_reason |= UPDATE_REASON(i, LPM_SELECT_STATE_PRED);
+			cpu_gov->pred_type = LPM_PRED_ACTIVE_TIME;
+			cpu_gov->predicted = drv->states[i].target_residency_ns;
+			cpu_gov->next_pred_time = cpu_gov->now + cpu_gov->predicted;
+		}
+	}
+
 	cpu_gov->last_idx = i;
 	cpu_gov->next_wakeup = ktime_add_ns(cpu_gov->now, duration_ns);
 	htime = start_prediction_timer(cpu_gov, duration_ns);
@@ -793,6 +806,9 @@ done:
 static void lpm_reflect(struct cpuidle_device *dev, int state)
 {
 	struct lpm_cpu *cpu_gov = this_cpu_ptr(&lpm_cpu_data);
+
+	if (!cpu_gov->predicted)
+		cpu_gov->exit_time = ktime_get();
 
 	if (state && cluster_gov_ops && cluster_gov_ops->reflect)
 		cluster_gov_ops->reflect(cpu_gov);
@@ -926,6 +942,7 @@ static int lpm_enable_device(struct cpuidle_driver *drv,
 	cpu_gov->dev = dev;
 	cpu_gov->last_idx = -1;
 	cpu_gov->timer_factor = 1;
+	cpu_gov->exit_time = 0;
 
 	return 0;
 }

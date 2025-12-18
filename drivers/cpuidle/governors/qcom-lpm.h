@@ -76,6 +76,8 @@ struct lpm_cpu {
 	struct history_lpm lpm_history;
 	struct history_ipi ipi_history;
 	ktime_t now;
+	ktime_t active_time;
+	ktime_t exit_time;
 	u64 bias;
 	int64_t next_pred_time;
 	u32 pred_type;
