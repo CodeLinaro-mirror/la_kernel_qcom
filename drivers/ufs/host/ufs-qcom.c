@@ -2610,16 +2610,16 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 			UFSHCD_CAP_WB_WITH_CLK_SCALING;
 		if (!host->disable_wb_support)
 			hba->caps |= UFSHCD_CAP_WB_EN;
+
+		if (ufs_qcom_is_genpd_supported(hba)) {
+			hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
+			hba->caps &= ~(UFSHCD_CAP_CLK_GATING |
+				     UFSHCD_CAP_HIBERN8_WITH_CLK_GATING);
+		}
 	}
 
 	if (host->hw_ver.major >= 0x5)
 		host->caps |= UFS_QCOM_CAP_SHARED_ICE;
-
-	if (ufs_qcom_is_genpd_supported(hba)) {
-		hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
-		hba->caps &= ~(UFSHCD_CAP_CLK_GATING |
-			       UFSHCD_CAP_HIBERN8_WITH_CLK_GATING);
-	}
 }
 
 static int ufs_qcom_unvote_qos_all(struct ufs_hba *hba)
@@ -4015,7 +4015,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	if (err)
 		goto out_disable_vccq_parent;
 
-	if (ufs_qcom_is_genpd_supported(hba)) {
+	if (!host->disable_lpm && ufs_qcom_is_genpd_supported(hba)) {
 		hba->host->rpm_autosuspend_delay = UFS_QCOM_AUTO_SUSPEND_DELAY;
 		hba->rpm_lvl = 1;
 	}
