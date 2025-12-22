@@ -32,7 +32,7 @@ def define_malabar():
             ]
 
             consolidate_build_img_opts = boot_image_opts(
-                earlycon_addr = "qcom_geni,0x994000",
+                earlycon_addr = "qcom_geni,0x4c8c000",
                 kernel_vendor_cmdline_extras = kernel_vendor_cmdline_extras,
                 board_kernel_cmdline_extras = board_kernel_cmdline_extras,
                 board_bootconfig_extras = board_bootconfig_extras,
@@ -44,7 +44,7 @@ def define_malabar():
             board_bootconfig_extras += ["androidboot.serialconsole=0"]
 
             perf_build_img_opts = boot_image_opts(
-                earlycon_addr = "qcom_geni,0x994000",
+                earlycon_addr = "qcom_geni,0x4c8c000",
                 kernel_vendor_cmdline_extras = kernel_vendor_cmdline_extras,
                 board_kernel_cmdline_extras = board_kernel_cmdline_extras,
                 board_bootconfig_extras = board_bootconfig_extras,
