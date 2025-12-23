@@ -199,7 +199,7 @@ hamoa_perf_config = {
     "CONFIG_QRTR_SMD": "m",
     "CONFIG_QRTR_TUN": "n",
     "CONFIG_QRTR_WAKEUP_MS": "0",
-    "CONFIG_QTEE_SHM_BRIDGE": "y",
+    "CONFIG_QTEE_SHM_BRIDGE": "n",
     "CONFIG_QTI_ALTMODE_GLINK": "m",
     "CONFIG_QTI_BATTERY_CHARGER": "m",
     "CONFIG_QTI_BATTERY_GLINK_DEBUG": "m",
