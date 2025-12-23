@@ -1636,7 +1636,7 @@ static int ntn3_i2c_read(struct i2c_client *client, u32 reg_addr,
 	*reg_val = (rd_data[3] << 24) | (rd_data[2] << 16) | (rd_data[1] << 8) |
 		    rd_data[0];
 
-	return ret;
+	return 0;
 }
 
 static int ntn3_ep_reset_ctrl(struct pcie_i2c_ctrl *i2c_ctrl, bool reset)
