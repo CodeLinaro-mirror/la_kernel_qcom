@@ -498,8 +498,6 @@
 };
 
 &i2c11 {
-	pinctrl-0 = <&qup_i2c11_default>, <&usb0_intr_state>;
-	pinctrl-names = "default";
 	status = "okay";
 
 	hd3ss3220@67 {
@@ -507,6 +505,8 @@
 		reg = <0x67>;
 		interrupt-parent = <&pmm8654au_2_gpios>;
 		interrupts = < 5 IRQ_TYPE_EDGE_FALLING>;
+		pinctrl-0 = <&usb0_intr_state>;
+		pinctrl-names = "default";
 		wakeup-source;
 
 		connector@0 {
@@ -526,6 +526,23 @@
 					};
 				};
 			};
+		};
+	};
+
+	hd3ss3220@47 {
+		compatible = "ti,hd3ss3220";
+		reg = <0x47>;
+		interrupts-extended = <&pmm8654au_2_gpios 6 IRQ_TYPE_EDGE_FALLING>;
+		id-gpios = <&tlmm 51 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&usb1_id>, <&usb1_intr_state>;
+		pinctrl-names = "default";
+		vbus-supply = <&vbus_supply_regulator_1>;
+
+		connector@1 {
+			compatible = "usb-c-connector";
+			label = "USB-C";
+			data-role = "dual";
+			power-role = "dual";
 		};
 	};
 };
@@ -669,6 +686,14 @@
 &pmm8654au_2_gpios {
 	usb0_intr_state: usb0-intr-state {
 		pins = "gpio5";
+		function = "normal";
+		input-enable;
+		bias-pull-up;
+		power-source = <0>;
+	};
+
+	usb1_intr_state: usb1-intr-state {
+		pins = "gpio6";
 		function = "normal";
 		input-enable;
 		bias-pull-up;
@@ -905,10 +930,9 @@
 		bias-pull-up;
 	};
 
-	usb1_id_det_default: usb1-id-det-default {
+	usb1_id: usb1-id-state {
 		pins = "gpio51";
 		function = "gpio";
-		drive-strength = <2>;
 		bias-pull-up;
 	};
 };
@@ -1015,25 +1039,6 @@
 };
 
 &soc {
-	connector_usb1: connector-usb1 {
-		compatible = "gpio-usb-b-connector";
-		id-gpio = <&tlmm 51 GPIO_ACTIVE_HIGH>;
-		vbus-supply = <&vbus_supply_regulator_1>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&usb1_id_det_default>;
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				usb1_port_connector: endpoint {
-					remote-endpoint = <&usb1_port>;
-				};
-			};
-		};
-	};
-
 	connector_usb2: connector-usb2 {
 		compatible = "gpio-usb-b-connector";
 		id-gpio = <&pmm8654au_2_gpios 11 GPIO_ACTIVE_HIGH>;
@@ -1196,23 +1201,10 @@
 	snps,dis_enblslpm_quirk;
 	qcom,enable-rt;
 	wakeup-source;
-	dr_mode = "otg";
-	usb-role-switch;
+	maximum-speed = "super-speed";
+	dr_mode = "host";
 	status = "okay";
 
-	ports {
-
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		port@0 {
-			reg = <0>;
-			usb1_port: endpoint {
-				remote-endpoint = <&usb1_port_connector>;
-			};
-		};
-
-	};
 };
 
 &usb_1_hsphy {
