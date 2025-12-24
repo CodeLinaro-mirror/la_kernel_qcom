@@ -3,7 +3,7 @@
   STMMAC Ethtool support
 
   Copyright (C) 2007-2009  STMicroelectronics Ltd
-
+  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
   Author: Giuseppe Cavallaro <peppe.cavallaro@st.com>
 *******************************************************************************/
@@ -286,6 +286,12 @@ static const char stmmac_qstats_rx_string[][ETH_GSTRING_LEN] = {
 	"rx_pkt_n",
 	"rx_irq_n",
 #define STMMAC_RXQ_STATS ARRAY_SIZE(stmmac_qstats_rx_string)
+};
+
+static const char stmmac_priv_flags_strings[][ETH_GSTRING_LEN] = {
+#define PHY_LOOPBACK	BIT(0)
+	"phy-loopback",
+#define STMMAC_PRIV_FLAGS_STR_LEN ARRAY_SIZE(stmmac_priv_flags_strings)
 };
 
 static void stmmac_ethtool_getdrvinfo(struct net_device *dev,
@@ -755,6 +761,8 @@ static int stmmac_get_sset_count(struct net_device *netdev, int sset)
 		return len;
 	case ETH_SS_TEST:
 		return stmmac_selftest_get_count(priv);
+	case ETH_SS_PRIV_FLAGS:
+		return ARRAY_SIZE(stmmac_priv_flags_strings);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -819,6 +827,10 @@ static void stmmac_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 		break;
 	case ETH_SS_TEST:
 		stmmac_selftest_get_strings(priv, p);
+		break;
+	case ETH_SS_PRIV_FLAGS:
+		memcpy(p, stmmac_priv_flags_strings,
+		       STMMAC_PRIV_FLAGS_STR_LEN * ETH_GSTRING_LEN);
 		break;
 	default:
 		WARN_ON(1);
@@ -1266,6 +1278,56 @@ static int stmmac_set_tunable(struct net_device *dev,
 	return ret;
 }
 
+static int stmmac_set_priv_flag(struct net_device *dev, u32 priv_flag)
+{
+	struct stmmac_priv *priv = netdev_priv(dev);
+	int ret = 0;
+
+	if (!netif_running(dev))
+		return -ENETDOWN;
+
+	mutex_lock(&priv->lock);
+
+	if (priv_flag & PHY_LOOPBACK) {
+		priv->phy_loopback_en = true;
+
+		if (priv->plat && priv->plat->fix_mac_speed) {
+			/* Currently we are using SPEED_10000 as the ask
+			 * is only for USXGMII max speed mode
+			 */
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv, SPEED_10000,
+						  priv->plat->phy_interface);
+			netif_carrier_on(dev);
+		} else {
+			netdev_warn(dev,
+				    "PHY loopback enabled but MAC speed fix not present\n");
+		}
+	} else {
+		if (priv->phy_loopback_en && priv->plat && priv->plat->fix_mac_speed) {
+			/* Restore normal operation -
+			 * may need to reconfigure based on link state
+			 */
+			netdev_info(dev,
+				    "Disabling PHY loopback -link may need renegotiation\n");
+		}
+		priv->phy_loopback_en = false;
+		netif_carrier_off(dev);
+	}
+
+	mutex_unlock(&priv->lock);
+
+	pr_debug("phy_loopback_en : %x\n", priv->phy_loopback_en);
+
+	return ret;
+}
+
+static u32 stmmac_get_priv_flag(struct net_device *dev)
+{
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	return priv->phy_loopback_en ? PHY_LOOPBACK : 0;
+}
+
 static const struct ethtool_ops stmmac_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES,
@@ -1305,6 +1367,8 @@ static const struct ethtool_ops stmmac_ethtool_ops = {
 	.set_tunable = stmmac_set_tunable,
 	.get_link_ksettings = stmmac_ethtool_get_link_ksettings,
 	.set_link_ksettings = stmmac_ethtool_set_link_ksettings,
+	.set_priv_flags = stmmac_set_priv_flag,
+	.get_priv_flags = stmmac_get_priv_flag,
 };
 
 void stmmac_set_ethtool_ops(struct net_device *netdev)
