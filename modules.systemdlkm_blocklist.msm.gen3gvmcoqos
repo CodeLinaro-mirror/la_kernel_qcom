@@ -1,2 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+
+blocklist can-raw
+blocklist can-bcm
+blocklist can-gw
+blocklist slcan
