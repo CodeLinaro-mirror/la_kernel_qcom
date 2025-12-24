@@ -134,6 +134,31 @@ int create_cluster_sysfs_nodes(struct lpm_cluster *cluster)
 	return 0;
 }
 
+static ssize_t optimized_resi_show(struct kobject *kobj,
+				   struct kobj_attribute *attr,
+				   char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u\n", optimized_resi);
+}
+
+static ssize_t optimized_resi_store(struct kobject *kobj,
+				    struct kobj_attribute *attr,
+				    const char *buf, size_t count)
+{
+	bool val;
+	int ret;
+
+	ret = kstrtobool(buf, &val);
+	if (ret < 0) {
+		pr_err("Invalid argument passed\n");
+		return ret;
+	}
+
+	optimized_resi = val;
+
+	return count;
+}
+
 static ssize_t premature_resi_div_cpu_show(struct kobject *kobj,
 					   struct kobj_attribute *attr,
 					   char *buf)
@@ -449,6 +474,7 @@ static ssize_t prediction_disabled_store(struct kobject *kobj,
 	return count;
 }
 
+static struct kobj_attribute attr_optimized_resi = __ATTR_RW(optimized_resi);
 static struct kobj_attribute attr_premature_resi_div_cpu = __ATTR_RW(premature_resi_div_cpu);
 static struct kobj_attribute attr_resi_fact = __ATTR_RW(resi_fact);
 static struct kobj_attribute attr_pred_active_time = __ATTR_RW(pred_active_time);
@@ -463,6 +489,7 @@ static struct kobj_attribute attr_sleep_disabled = __ATTR_RW(sleep_disabled);
 static struct kobj_attribute attr_prediction_disabled = __ATTR_RW(prediction_disabled);
 
 static struct attribute *lpm_gov_attrs[] = {
+	&attr_optimized_resi.attr,
 	&attr_premature_resi_div_cpu.attr,
 	&attr_resi_fact.attr,
 	&attr_pred_active_time.attr,
