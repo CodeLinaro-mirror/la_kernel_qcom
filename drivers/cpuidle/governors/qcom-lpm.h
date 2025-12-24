@@ -12,6 +12,7 @@
 #define MAX_LPM_CPUS		8
 #define MAXSAMPLES		5
 #define PRED_RESI_FACT		1
+#define MIN_RESI_TIMES		3
 #define MAX_PRED_TIMER_ADD	1000
 #define PRED_TIMER_ADD		100
 #define PRED_PREMATURE_CNT	3
@@ -61,6 +62,7 @@ struct lpm_cpu {
 	int cpu;
 	int enable;
 	int last_idx;
+	int timer_factor;
 	struct notifier_block nb;
 	struct cpuidle_driver *drv;
 	struct cpuidle_device *dev;
@@ -74,6 +76,8 @@ struct lpm_cpu {
 	struct history_lpm lpm_history;
 	struct history_ipi ipi_history;
 	ktime_t now;
+	ktime_t active_time;
+	ktime_t exit_time;
 	u64 bias;
 	int64_t next_pred_time;
 	u32 pred_type;
