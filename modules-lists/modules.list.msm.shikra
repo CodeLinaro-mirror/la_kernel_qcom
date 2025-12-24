@@ -21,6 +21,10 @@ llcc-qcom.ko
 kryo_arm64_edac.ko
 qcom_wdt_core.ko
 qcom_edac.ko
+icc-debug.ko
+icc-rpm.ko
+qnoc-shikra.ko
+qnoc-qos-rpm.ko
 qcom_ipc_logging.ko
 qcom_hwspinlock.ko
 smem.ko
