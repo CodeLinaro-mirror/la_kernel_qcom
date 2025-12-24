@@ -45,7 +45,7 @@ qcom_llcc_pmu.ko
 qcom-pmu-lib.ko
 kryo_arm64_edac.ko
 proxy-consumer.ko
-rpmh-regulator.ko
+rpm-smd-regulator.ko
 stub-regulator.ko
 spmi-pmic-arb.ko
 regmap-spmi.ko
