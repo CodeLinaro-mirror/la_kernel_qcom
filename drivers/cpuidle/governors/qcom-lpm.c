@@ -847,7 +847,6 @@ static void lpm_idle_enter(void *unused, int *state, struct cpuidle_device *dev)
 	spin_lock_irqsave(&cpu_gov->lock, flags);
 	if (cpu_gov->ipi_pending) {
 		reason = UPDATE_REASON(*state, LPM_SELECT_STATE_IPI_PENDING);
-		trace_lpm_gov_select(*state, 0xdeaffeed, 0xdeaffeed, cpu_gov->bias, reason);
 		*state = -1;
 		dev->last_residency_ns = 0;
 		trace_lpm_gov_select(*state, 0xdeaffeed, 0xdeaffeed, cpu_gov->bias, reason);
