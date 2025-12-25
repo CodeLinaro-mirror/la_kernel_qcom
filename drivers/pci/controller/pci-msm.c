@@ -89,12 +89,17 @@
 #define PCIE20_PARF_TEST_BUS (0xe4)
 #define PCIE20_PARF_VERSION (0x170)
 #define PCIE20_PARF_MHI_CLOCK_RESET_CTRL (0x174)
+#define PCIE20_PARF_AXI_MSTR_RD_HALT_NO_WRITES (0x1a4)
 #define PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT (0x1a8)
 
 #define PCIE20_PARF_LTSSM (0x1b0)
 #define LTSSM_EN BIT(8)
 #define SW_CLR_FLUSH_MODE BIT(10)
 #define FLUSH_MODE BIT(11)
+#define WR_HALT_EN BIT(31)
+#define RD_HALT_EN BIT(0)
+#define BDF_HALT_EN BIT(0)
+#define WR_HALT_ADDR_BIT_INDEX_MASK (0x3F)
 
 #define PCIE20_PARF_INT_ALL_STATUS (0x224)
 #define PCIE20_PARF_INT_ALL_CLEAR (0x228)
@@ -1193,6 +1198,7 @@ struct msm_pcie_dev_t {
 	bool linkdown_recovery_enable;
 	bool gdsc_clk_drv_ss_nonvotable;
 	bool bdf_change_halt_en;
+	bool read_halt_en;
 
 	uint32_t pcie_parf_cesta_config;
 
@@ -6043,6 +6049,39 @@ static void msm_pcie_disable_dbi_mirroring(struct msm_pcie_dev_t *dev)
 							slv_addr_space_size);
 }
 
+static void msm_pcie_configure_axi_halt(struct msm_pcie_dev_t *dev)
+{
+	uint32_t val;
+	uint32_t reg_value;
+
+	reg_value = readl_relaxed(dev->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT);
+
+	/*
+	 * Configure write halt: if wr_halt_size is set, update EN bit and ADDR_BIT_INDEX [5:0];
+	 * otherwise clear only EN bit
+	 */
+	if (dev->wr_halt_size) {
+		val = (reg_value & ~(WR_HALT_EN | WR_HALT_ADDR_BIT_INDEX_MASK)) |
+			(WR_HALT_EN | (dev->wr_halt_size & WR_HALT_ADDR_BIT_INDEX_MASK));
+	} else {
+		val = reg_value & ~WR_HALT_EN;
+	}
+
+	msm_pcie_write_reg(dev->parf, PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT, val);
+
+	/* Configure RD_HALT_EN based on dev->read_halt_en */
+	msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_RD_HALT_NO_WRITES,
+		RD_HALT_EN, (dev->read_halt_en ? 1 : 0));
+
+	/*
+	 * By default explicitly mark BDF_CHANGE_HALT_EN to zero unless
+	 * bdf_change_halt_en is set from DT. there is HW errata in few devices
+	 * which is set to 1 by default.
+	 */
+	 msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT,
+		BDF_HALT_EN, (dev->bdf_change_halt_en ? 1 : 0));
+}
+
 static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 {
 	int ret = 0;
@@ -6095,22 +6134,7 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 
 	msm_pcie_disable_dbi_mirroring(dev);
 
-	val = dev->wr_halt_size ? dev->wr_halt_size :
-		readl_relaxed(dev->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT);
-	msm_pcie_write_reg(dev->parf, PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT,
-				BIT(31) | val);
-
-	/**
-	 * By default explicitly mark BDF_CHANGE_HALT_EN to zero unless
-	 * bdf_change_halt_en is set from DT. there is HW errata in few devices
-	 * which is set to 1 by default.
-	 */
-	if (dev->bdf_change_halt_en)
-		msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT,
-				   0, 1);
-	else
-		msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT,
-				   0, 0);
+	msm_pcie_configure_axi_halt(dev);
 
 	/*
 	 * Clear PCIE_BW_MGT_INT_STATUS and PCIE_LINK_AUTO_BW_INT_STATUS to get
@@ -8374,8 +8398,12 @@ static void msm_pcie_read_dt(struct msm_pcie_dev_t *pcie_dev, int rc_idx,
 
 	pcie_dev->bdf_change_halt_en = of_property_read_bool(of_node,
 				"qcom,bdf-change-halt-en");
-	PCIE_DBG(pcie_dev, "bdf_change_halt_en is %s supported.\n", pcie_dev->bdf_change_halt_en ?
-		"" : "not");
+	PCIE_DBG(pcie_dev, "bdf_change_halt_en is %s supported.\n",
+		pcie_dev->bdf_change_halt_en ? "" : "not");
+
+	pcie_dev->read_halt_en = of_property_read_bool(of_node, "qcom,read-halt-en");
+	PCIE_DBG(pcie_dev, "read_halt_en is %s supported.\n", pcie_dev->read_halt_en ? "" : "not");
+
 	pcie_dev->l1_1_aspm_supported = pcie_dev->l1ss_supported;
 	pcie_dev->l1_2_aspm_supported = pcie_dev->l1ss_supported;
 	pcie_dev->l1_1_pcipm_supported = pcie_dev->l1ss_supported;
