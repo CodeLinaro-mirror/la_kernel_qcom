@@ -122,6 +122,10 @@ static inline void si_core_ffa_driver_unregister(void)
 
 /* ''QTEE'' related definitions. */
 
+#define SMCINVOKE_MIN_ASYNC_VERSION 0x00010002U
+#define SMCINVOKE_ASYNC_VERSION_SHM 0x00010002U
+#define SMCINVOKE_ASYNC_VERSION_FFA 0x00010003U
+
 #define QTEE_RESULT_INBOUND_REQ_NEEDED 3
 
 #define INVOKE_MESSAGE_ALIGN_BYTES 8U

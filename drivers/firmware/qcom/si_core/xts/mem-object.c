@@ -22,10 +22,6 @@
 #define OBJECT_OP_MAP_REGION_SHM	0
 #define OBJECT_OP_MAP_REGION_FFA	3
 
-#define SMCINVOKE_MIN_ASYNC_VERSION 0x00010002U
-#define SMCINVOKE_ASYNC_VERSION_SHM 0x00010002U
-#define SMCINVOKE_ASYNC_VERSION_FFA 0x00010003U
-
 /* TZ defined values for cacheability */
 #define CACHE_NS_CACHED 0x10000000U
 #define CACHE_UNCACHED 0x20000000U
@@ -475,19 +471,7 @@ static unsigned long mo_prepare_ffa(struct si_object *object, struct si_arg args
 	return SI_OBJECT_OP_NO_OP;
 }
 
-static unsigned long mo_prepare_shm(struct si_object *object, struct si_arg args[])
-{
-	pr_err("mapping of a memory object only supported via ffa.\n");
-	return SI_OBJECT_OP_NO_OP;
-}
-
 #else /* CONFIG_QCOM_SI_CORE_MEM_FFA */
-
-static unsigned long mo_prepare_ffa(struct si_object *object, struct si_arg args[])
-{
-	pr_err("mapping of a memory object only supported via shmb.\n");
-	return SI_OBJECT_OP_NO_OP;
-}
 
 static unsigned long mo_prepare_shm(struct si_object *object, struct si_arg args[])
 {
@@ -534,15 +518,11 @@ static unsigned long mo_prepare(struct si_object *object, struct si_arg args[])
 	if (async_version < SMCINVOKE_MIN_ASYNC_VERSION)
 		return SI_OBJECT_OP_NO_OP;
 
-	/* QTEE bumps up the async protocol minor version on introducing
-	 * a new handler. FFA based memory object is supported from
-	 * SMCINVOKE_ASYNC_VERSION_FFA onwards.
-	 */
-	if (async_version < SMCINVOKE_ASYNC_VERSION_FFA)
-		ret = mo_prepare_shm(object, args);
-	else
-		ret = mo_prepare_ffa(object, args);
-
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+	ret = mo_prepare_ffa(object, args);
+#else
+	ret = mo_prepare_shm(object, args);
+#endif
 	return ret;
 }
 
