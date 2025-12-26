@@ -3,10 +3,11 @@
   MMC Header file
 
   Copyright (C) 2011  STMicroelectronics Ltd
-  ​​​​Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.​
 
   Author: Giuseppe Cavallaro <peppe.cavallaro@st.com>
 *******************************************************************************/
+
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef __MMC_H__
 #define __MMC_H__
@@ -78,6 +79,7 @@ struct stmmac_counters {
 	u64 mmc_rx_fifo_overflow;
 	u64 mmc_rx_vlan_frames_gb;
 	u64 mmc_rx_watchdog_error;
+	u64 mmc_rx_discard_packet;
 	/* IPC */
 	u64 mmc_rx_ipc_intr_mask;
 	u64 mmc_rx_ipc_intr;
