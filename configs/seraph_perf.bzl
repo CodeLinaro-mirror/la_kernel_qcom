@@ -151,6 +151,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_SOC_WATCHDOG": "m",
     "CONFIG_QCOM_SPMI_ADC5_GEN3": "m",
     "CONFIG_QCOM_SPMI_TEMP_ALARM": "m",
+    "CONFIG_QCOM_SPMI_VDAC": "m",
     "CONFIG_QCOM_SYSMON": "m",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
