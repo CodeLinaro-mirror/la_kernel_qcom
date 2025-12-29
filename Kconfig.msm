@@ -44,6 +44,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/i3c/master/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/iio/adc/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/iio/dac/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/input/misc/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/interconnect/Kconfig"
