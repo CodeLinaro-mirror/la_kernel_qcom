@@ -115,6 +115,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_SECURE_BUFFER": "m",
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SMEM": "m",
+    "CONFIG_QCOM_SMMU_IRGN0_ERRATA": "y",
     "CONFIG_QCOM_SMP2P": "m",
     "CONFIG_QCOM_SMP2P_SLEEPSTATE": "m",
     "CONFIG_QCOM_SOCINFO": "m",
