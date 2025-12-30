@@ -256,6 +256,9 @@ static void ath11k_cfr_fill_hdr_info(struct ath11k *ar,
 				     struct ath11k_csi_cfr_header *header,
 				     struct ath11k_cfr_peer_tx_param *params)
 {
+	struct ath11k_cfr *cfr;
+
+	cfr = &ar->cfr;
 	header->cfr_metadata_version = ATH11K_CFR_META_VERSION_4;
 	header->cfr_data_version = ATH11K_CFR_DATA_VERSION_1;
 	header->cfr_metadata_len = sizeof(struct cfr_metadata);
@@ -263,7 +266,12 @@ static void ath11k_cfr_fill_hdr_info(struct ath11k *ar,
 	header->meta_data.status = FIELD_GET(WMI_CFR_PEER_CAPTURE_STATUS,
 					     params->status);
 	header->meta_data.capture_bw = params->bandwidth;
-	header->meta_data.phy_mode = params->phy_mode;
+
+	/* FW reports phymode will always be HE mode.
+	 * Replace it with cached phy mode during peer assoc
+	 */
+	header->meta_data.phy_mode = cfr->phymode;
+
 	header->meta_data.prim20_chan = params->primary_20mhz_chan;
 	header->meta_data.center_freq1 = params->band_center_freq1;
 	header->meta_data.center_freq2 = params->band_center_freq2;
@@ -881,6 +889,13 @@ void ath11k_cfr_lut_update_paddr(struct ath11k *ar, dma_addr_t paddr,
 
 	if (cfr->lut)
 		cfr->lut[buf_id].dbr_address = paddr;
+}
+
+void ath11k_cfr_update_phymode(struct ath11k *ar, enum wmi_phy_mode phymode)
+{
+	struct ath11k_cfr *cfr = &ar->cfr;
+
+	cfr->phymode = phymode;
 }
 
 static void ath11k_cfr_ring_free(struct ath11k *ar)
