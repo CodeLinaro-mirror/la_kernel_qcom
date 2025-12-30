@@ -126,6 +126,7 @@ void walt_config(void)
 
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP") || !strcmp(name, "CANOE")
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
+			|| !strcmp(name, "ALORP")
 			|| !strcmp(name, "WHALE") || !strcmp(name, "WHALEP")
 			|| !strcmp(name, "CANOEPSG") || !strcmp(name, "CANOEP")) {
 		sysctl_sched_suppress_region2		= 1;
@@ -185,14 +186,16 @@ void walt_config(void)
 				1;
 		}
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
-		if (strcmp(name, "ALOR_INTERPOSER") && strcmp(name, "ALOR"))
+		if (strcmp(name, "ALOR_INTERPOSER") && strcmp(name, "ALOR")
+				&& strcmp(name, "ALORP"))
 			demand_scaling_factor = 70;
 
 		/*
 		 * By default this SOC flag will be disabled. Enable this only
 		 * for Alor platforms
 		 */
-		if (!strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR"))
+		if (!strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
+				|| !strcmp(name, "ALORP"))
 			soc_feat_set(SOC_ENABLE_LIMIT_PRIME_USAGE);
 
 	} else if (!strcmp(name, "PINEAPPLE")) {
