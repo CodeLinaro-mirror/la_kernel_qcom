@@ -68,4 +68,5 @@ shikra_perf_config = {
     "CONFIG_RPMSG_QCOM_GLINK_RPM": "m",
     "CONFIG_RPMSG_QCOM_GLINK_SMEM": "m",
     "CONFIG_RPMSG_QCOM_SMD": "m",
+    "CONFIG_SPMI_MSM_PMIC_ARB": "m",
 }
