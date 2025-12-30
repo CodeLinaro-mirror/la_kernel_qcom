@@ -165,6 +165,17 @@ config QTI_THERMAL_VENDOR_HOOK
 	   disables cooling stats for different thermal cooling devices
 	   selectively.
 
+config QTI_BCL_OFF_COOLING_DEVICE
+	tristate "QTI Ibat threshold update cooling devices"
+	depends on SPMI && THERMAL
+	help
+	   This enables the bcl off cooling devices. These cooling devices will
+	   be used to disable bcl whenever RF calibration is performed using
+	   external power supply. When external power supply is used for RF
+	   calibration, iBat current can cross the battery specs that can trigger
+	   batfet issues. So pmic bcl should be disabled as it is for protection
+	   for battery not external power supply.
+
 config QTI_DYNAMIC_HW_THERMAL_TRIP
 	tristate "QTI SCMI vendor thermal driver"
 	depends on THERMAL && QTI_SCMI_VENDOR_PROTOCOL
