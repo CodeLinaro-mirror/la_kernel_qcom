@@ -456,6 +456,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(QCS615) },
 	{ qcom_board_id(QAM8397P) },
 	{ qcom_board_id(QAM8797P) },
+	{ qcom_board_id(QAM8787P) },
 };
 
 static const char *socinfo_machine(struct device *dev, unsigned int id)
@@ -610,6 +611,7 @@ static void socinfo_debugfs_init(struct qcom_socinfo *qcom_socinfo,
 			   &qcom_socinfo->info.fmt);
 
 	switch (qcom_socinfo->info.fmt) {
+	case SOCINFO_VERSION(0, 23):
 	case SOCINFO_VERSION(0, 22):
 	case SOCINFO_VERSION(0, 21):
 	case SOCINFO_VERSION(0, 20):

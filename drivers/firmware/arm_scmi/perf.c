@@ -24,7 +24,7 @@
 #include "protocols.h"
 #include "notify.h"
 
-#define MAX_OPPS		16
+#define MAX_OPPS		32
 /* Updated only after ALL the mandatory features for that version are merged */
 #define SCMI_PROTOCOL_SUPPORTED_VERSION		0x40000
 

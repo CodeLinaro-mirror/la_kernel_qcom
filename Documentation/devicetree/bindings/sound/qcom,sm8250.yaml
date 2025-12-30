@@ -24,20 +24,27 @@ properties:
       - items:
           - enum:
               - qcom,sm8550-sndcard
+              - qcom,sm8650-sndcard
           - const: qcom,sm8450-sndcard
       - enum:
           - qcom,apq8016-sbc-sndcard
           - qcom,iq8-8275-evk-sndcard
+          - qcom,monaco-monza-sndcard
           - qcom,msm8916-qdsp6-sndcard
           - qcom,qcm6490-sndcard
+          - qcom,qcm6490-idp-sndcard
+          - qcom,qcs615-sndcard
           - qcom,qcs6490-rb3gen2-sndcard
           - qcom,qcs6490-rb3gen2-ia-sndcard
           - qcom,qcs6490-rb3gen2-ptz-sndcard
           - qcom,qcs6490-rb3gen2-video-sndcard
           - qcom,qcs6490-rb3gen2-vision-sndcard
+          - qcom,qcs8275-sndcard
           - qcom,qcs8300-sndcard
-          - qcom,qcs9075-rb8-sndcard
+          - qcom,qcs8300-ridesx-sndcard
           - qcom,qcs9100-sndcard
+          - qcom,qcs9100-ridesx-sndcard
+          - qcom,qcs9075-sndcard
           - qcom,qrb5165-rb5-sndcard
           - qcom,sc8280xp-sndcard
           - qcom,sdm845-sndcard

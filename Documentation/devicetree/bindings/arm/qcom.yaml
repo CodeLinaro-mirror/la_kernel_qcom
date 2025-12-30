@@ -916,6 +916,8 @@ properties:
           - enum:
               - qcom,qcs615-addons-ride
               - qcom,qcs615-ride
+              - qcom,talos-addons-evk
+              - qcom,talos-evk
           - const: qcom,qcs615
 
       - items:

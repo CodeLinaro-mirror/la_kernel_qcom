@@ -338,6 +338,13 @@ static const struct usb_device_id usb_quirk_list[] = {
 	/* Genesys Logic hub, internally used by Moshi USB to Ethernet Adapter */
 	{ USB_DEVICE(0x05e3, 0x0616), .driver_info = USB_QUIRK_NO_LPM },
 
+	{ USB_DEVICE(0x05e3, 0x0610), .driver_info = USB_QUIRK_NO_LPM},
+
+	{ USB_DEVICE(0x05e3, 0x0625), .driver_info = USB_QUIRK_NO_LPM},
+
+	{ USB_DEVICE(0x05e3, 0x0626), .driver_info = USB_QUIRK_NO_LPM},
+
+
 	/* Avision AV600U */
 	{ USB_DEVICE(0x0638, 0x0a13), .driver_info =
 	  USB_QUIRK_STRING_FETCH_255 },
@@ -463,6 +470,8 @@ static const struct usb_device_id usb_quirk_list[] = {
 
 	/* Huawei 4G LTE module */
 	{ USB_DEVICE(0x12d1, 0x15bb), .driver_info =
+			USB_QUIRK_DISCONNECT_SUSPEND },
+	{ USB_DEVICE(0x12d1, 0x15c1), .driver_info =
 			USB_QUIRK_DISCONNECT_SUSPEND },
 	{ USB_DEVICE(0x12d1, 0x15c3), .driver_info =
 			USB_QUIRK_DISCONNECT_SUSPEND },

@@ -39,6 +39,16 @@ properties:
       Skip to get GCC_UFS_PHY_ICE_CORE_CLK in ICE driver. This
       dictates if ICE driver request this clock on/off.
 
+  operating-points-v2:
+    description:
+      Optional phandle to an OPP table node that defines supported ICE
+      frequencies and required power states. If not present, driver will
+      use fixed clock rate. The required-opps property in each OPP entry
+      must reference valid power domain OPP entries (e.g., rpmhpd_opp_*).
+
+  opp-table:
+    type: object
+
 required:
   - compatible
   - reg
@@ -57,6 +67,21 @@ examples:
                    "qcom,inline-crypto-engine";
       reg = <0x01d88000 0x8000>;
       clocks = <&gcc GCC_UFS_PHY_ICE_CORE_CLK>;
+      operating-points-v2 = <&ice_opp_table>;
+
+      ice_opp_table: opp-table {
+          compatible = "operating-points-v2";
+
+          opp-201600000 {
+              opp-hz = /bits/ 64 <201600000>;
+              required-opps = <&rpmhpd_opp_svs_l1>;
+          };
+
+          opp-403200000 {
+              opp-hz = /bits/ 64 <403200000>;
+              required-opps = <&rpmhpd_opp_nom>;
+          };
+       };
     };
 
   - |
@@ -65,5 +90,20 @@ examples:
                    "qcom,inline-crypto-engine",
       reg = <0x01d88000 0x8000>;
       qcom,ice-skip-clk;
+      operating-points-v2 = <&ice_opp_table>;
+
+      ice_opp_table: opp-table {
+          compatible = "operating-points-v2";
+
+          opp-201600000 {
+              opp-hz = /bits/ 64 <201600000>;
+              required-opps = <&rpmhpd_opp_svs_l1>;
+          };
+
+          opp-403200000 {
+              opp-hz = /bits/ 64 <403200000>;
+              required-opps = <&rpmhpd_opp_nom>;
+          };
+       };
     };
 ...

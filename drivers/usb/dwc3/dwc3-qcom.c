@@ -453,12 +453,17 @@ static void dwc3_qcom_enable_interrupts(struct dwc3_qcom *qcom)
 
 static void dwc3_qcom_vbus_regulator_enable(struct dwc3_qcom *qcom, bool on)
 {
+	int ret;
+
 	if (!qcom->vbus_reg)
 		return;
 
 	if (!qcom->is_vbus_enabled && on) {
-		regulator_enable(qcom->vbus_reg);
-		qcom->is_vbus_enabled = true;
+		ret = regulator_enable(qcom->vbus_reg);
+		if (ret)
+			dev_err(qcom->dev, "Failed to enable vbus: %d\n", ret);
+		else
+			qcom->is_vbus_enabled = true;
 	} else if (qcom->is_vbus_enabled && !on) {
 		regulator_disable(qcom->vbus_reg);
 		qcom->is_vbus_enabled = false;
@@ -931,6 +936,7 @@ node_put:
 	return ret;
 }
 
+#ifdef CONFIG_ACPI
 static int dwc3_qcom_acpi_merge_urs_resources(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -998,6 +1004,7 @@ static int dwc3_qcom_acpi_merge_urs_resources(struct platform_device *pdev)
 
 	return ret;
 }
+#endif
 
 static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
 {
@@ -1010,8 +1017,10 @@ static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
 	qcom->vbus_reg = devm_regulator_get_optional(qcom->dev,
 						"vbus_dwc3");
 	if (IS_ERR(qcom->vbus_reg)) {
-		dev_err(qcom->dev, "Unable to get vbus regulator err: %ld\n",
+		if (PTR_ERR(qcom->vbus_reg) != -ENODEV) {
+			dev_err(qcom->dev, "Unable to get vbus regulator err: %ld\n",
 							PTR_ERR(qcom->vbus_reg));
+		}
 		qcom->vbus_reg = NULL;
 		return;
 	}
@@ -1056,11 +1065,13 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 			return ret;
 		}
 
+#ifdef CONFIG_ACPI
 		if (qcom->acpi_pdata->is_urs) {
 			ret = dwc3_qcom_acpi_merge_urs_resources(pdev);
 			if (ret < 0)
 				goto clk_disable;
 		}
+#endif
 	}
 
 	qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
@@ -1420,7 +1431,9 @@ static struct platform_driver dwc3_qcom_driver = {
 		.name	= "dwc3-qcom",
 		.pm	= &dwc3_qcom_dev_pm_ops,
 		.of_match_table	= dwc3_qcom_of_match,
+#ifdef CONFIG_ACPI
 		.acpi_match_table = ACPI_PTR(dwc3_qcom_acpi_match),
+#endif
 	},
 };
 

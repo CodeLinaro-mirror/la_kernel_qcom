@@ -389,6 +389,7 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.rgmii_config_loopback_en = false,
 	.dma_addr_width = 40,
 	.link_clk_name = "phyaux",
+	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
 	.has_hdma = true,
 	.needs_sgmii_loopback = true,
 	.needs_serdes_reset = true,
@@ -1314,6 +1315,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->flags |= data->has_flags;
 	if (data->dma_addr_width)
 		plat_dat->host_dma_width = data->dma_addr_width;
+
+	if (stmmac_res.tx_rx_irq[0] > 0 ||
+	    (stmmac_res.rx_irq[0] > 0 && stmmac_res.tx_irq[0] > 0))
+		plat_dat->flags |= STMMAC_FLAG_MULTI_IRQ_EN;
 
 	if (ethqos->serdes_phy) {
 		plat_dat->serdes_powerup = qcom_ethqos_serdes_powerup;

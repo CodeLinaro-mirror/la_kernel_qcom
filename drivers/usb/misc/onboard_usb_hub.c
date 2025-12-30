@@ -286,6 +286,8 @@ static int onboard_hub_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
+	msleep(100);
+
 	/*
 	 * The USB driver might have been detached from the USB devices by
 	 * onboard_hub_remove() (e.g. through an 'unbind' by userspace),

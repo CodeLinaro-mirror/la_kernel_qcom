@@ -136,8 +136,8 @@
 	};
 
 	sound: sound {
-		compatible = "qcom,qcm6490-sndcard";
-		model = "qcm6490-rb3-snd-card";
+		compatible = "qcom,qcs6490-rb3gen2-sndcard";
+		model = "QCS6490-RB3Gen2";
 
 		audio-routing =
 			"SpkrLeft IN", "WSA_SPK1 OUT",
@@ -149,6 +149,30 @@
 
 			#address-cells = <1>;
 			#size-cells = <0>;
+
+		dp-dai-link {
+			link-name = "DISPLAY_PORT-RX";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_0>;
+			};
+
+			codec {
+				sound-dai = <&mdss_dp>;
+			};
+		};
+
+		hdmi-dai-link {
+			link-name = "HDMI_PORT-RX";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_1>;
+			};
+
+			codec {
+				sound-dai = <&lt9611_codec 0>;
+			};
+		};
 
 		wsa-dai-link {
 			link-name = "CODEC_DMA-LPAIF_WSA-RX-0";
@@ -172,18 +196,6 @@
 
 			codec {
 				sound-dai = <&lpass_va_macro 0>;
-			};
-		};
-
-		vi-feedback-dai-link {
-			link-name = "CODEC_DMA-LPAIF_WSA-TX-0";
-
-			cpu {
-				sound-dai = <&q6apmbedai WSA_CODEC_DMA_TX_0>;
-			};
-
-			codec {
-				sound-dai = <&swr2 6>, <&lpass_wsa_macro 2>;
 			};
 		};
 	};
@@ -495,6 +507,7 @@
 	lt9611_codec: hdmi-bridge@2b {
 		compatible = "lontium,lt9611uxc";
 		reg = <0x2b>;
+		#sound-dai-cells = <1>;
 
 		interrupts-extended = <&tlmm 24 IRQ_TYPE_EDGE_FALLING>;
 		reset-gpios = <&pm7250b_gpios 2 GPIO_ACTIVE_HIGH>;
