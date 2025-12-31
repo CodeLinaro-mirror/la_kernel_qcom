@@ -4,6 +4,7 @@
  */
 
 #include "phy-qcom-ufs-qmp-v4-crow.h"
+#include <linux/pm_domain.h>
 
 #define UFS_PHY_NAME "ufs_phy_qmp_v4_crow"
 
@@ -73,6 +74,7 @@ static int ufs_qcom_phy_qmp_v4_init(struct phy *generic_phy)
 {
 	struct ufs_qcom_phy_qmp_v4 *phy = phy_get_drvdata(generic_phy);
 	struct ufs_qcom_phy *phy_common = &phy->common_cfg;
+	struct generic_pm_domain *genpd = NULL;
 	int err;
 
 	err = ufs_qcom_phy_init_clks(phy_common);
@@ -92,8 +94,16 @@ static int ufs_qcom_phy_qmp_v4_init(struct phy *generic_phy)
 	/* Optional */
 	ufs_qcom_phy_get_reset(phy_common);
 
-	if (!phy_common->vdd_phy_gdsc.reg)
-		pm_runtime_enable(phy_common->dev);
+	if (!phy_common->vdd_phy_gdsc.reg) {
+		genpd = pd_to_genpd(phy_common->dev->pm_domain);
+		if (genpd) {
+			genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+			pm_runtime_enable(phy_common->dev);
+			err = pm_runtime_get_sync(phy_common->dev);
+			if (err < 0)
+				dev_err(phy_common->dev, "failed to enable %s\n", genpd->name);
+		}
+	}
 
 out:
 	return err;
@@ -152,6 +162,9 @@ static
 void ufs_qcom_phy_qmp_v4_power_control(struct ufs_qcom_phy *phy,
 					 bool power_ctrl)
 {
+	struct device *dev = phy->dev;
+	int err;
+
 	if (!power_ctrl) {
 		/* apply analog power collapse */
 		writel_relaxed(0x0, phy->mmio + UFS_PHY_POWER_DOWN_CONTROL);
@@ -161,7 +174,18 @@ void ufs_qcom_phy_qmp_v4_power_control(struct ufs_qcom_phy *phy,
 		 */
 		mb();
 		ufs_qcom_phy_qmp_v4_tx_pull_down_ctrl(phy, true);
+		if (phy->vdd_phy_gdsc.reg) {
+			err = ufs_qcom_phy_disable_vreg(dev, &phy->vdd_phy_gdsc);
+			if (err)
+				dev_err(dev, "%s disable phy_gdsc err = %d\n",
+				__func__, err);
+		} else {
+			pm_runtime_put_sync(dev);
+		}
 	} else {
+		if (!phy->vdd_phy_gdsc.reg)
+			pm_runtime_get_sync(dev);
+
 		ufs_qcom_phy_qmp_v4_tx_pull_down_ctrl(phy, false);
 		/* bring PHY out of analog power collapse */
 		writel_relaxed(0x1, phy->mmio + UFS_PHY_POWER_DOWN_CONTROL);
