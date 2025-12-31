@@ -47,6 +47,9 @@ static void qcom_mhi_qrtr_ul_callback(struct mhi_device *mhi_dev,
 	struct sk_buff *skb = mhi_res->buf_addr;
 	struct qrtr_mhi_dev *qdev = dev_get_drvdata(&mhi_dev->dev);
 
+	if (!qdev)
+		return;
+
 	if (skb->sk)
 		sock_put(skb->sk);
 	consume_skb(skb);
@@ -106,12 +109,12 @@ static int qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 	struct qrtr_mhi_dev *qdev = container_of(ep, struct qrtr_mhi_dev, ep);
 	int rc;
 
-	do {
-		if (READ_ONCE(qdev->abort_tx)) {
-			kfree_skb(skb);
-			return -EIO;
-		}
+	if (READ_ONCE(qdev->abort_tx)) {
+		kfree_skb(skb);
+		return -EIO;
+	}
 
+	do {
 		rc = __qcom_mhi_qrtr_send(ep, skb);
 		if (rc == -EAGAIN) {
 			reinit_completion(&qdev->ringfull);
