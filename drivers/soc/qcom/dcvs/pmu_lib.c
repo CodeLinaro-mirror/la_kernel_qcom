@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "qcom-pmu: " fmt
@@ -1241,24 +1241,35 @@ skip_pmu:
 	}
 
 	dev_root = bus_get_dev_root(&cpu_subsys);
-	if (dev_root) {
-		ret = kobject_init_and_add(&pmu_kobj, &pmu_settings_ktype,
-						&dev_root->kobj, "pmu_lib");
-		put_device(dev_root);
-	} else {
+	if (!dev_root) {
 		dev_err(dev, "failed to get cpu_subsys dev_root\n");
 		return -ENODEV;
 	}
-	if (ret < 0) {
-		dev_err(dev, "failed to init pmu counters kobj: %d\n", ret);
-		kobject_put(&pmu_kobj);
-		return ret;
+
+	if (!pmu_kobj.state_initialized) {
+		ret = kobject_init_and_add(&pmu_kobj, &pmu_settings_ktype,
+						&dev_root->kobj, "pmu_lib");
+		if (ret < 0) {
+			dev_err(dev, "failed to init pmu counters kobj: %d\n", ret);
+			kobject_put(&pmu_kobj);
+			put_device(dev_root);
+			return ret;
+		}
 	}
+	put_device(dev_root);
 
 	ret = setup_events();
 	if (ret < 0) {
+		/*
+		 * On deferral, keep pmu_kobj to avoid init again next probe, but
+		 * clear pmu_base so consumers do not use a stale mapping.
+		 */
+		if (ret == -EPROBE_DEFER)
+			pmu_base = NULL;
+		else
+			kobject_put(&pmu_kobj);
+
 		dev_err(dev, "failed to setup all pmu/amu events: %d\n", ret);
-		kobject_put(&pmu_kobj);
 		return ret;
 	}
 
