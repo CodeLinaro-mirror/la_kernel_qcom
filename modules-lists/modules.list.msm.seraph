@@ -7,6 +7,8 @@ qcom_hwspinlock.ko
 qrtr.ko
 smem.ko
 socinfo.ko
+cqhci.ko
+sdhci-msm.ko
 qcom_tzmem.ko
 qnoc-seraph.ko
 qnoc-qos.ko
@@ -62,3 +64,5 @@ mdt_loader.ko
 qcom_aoss.ko
 qcom_wdt_core.ko
 qcom_soc_wdt.ko
+qcom_ice.ko
+crypto-qti.ko
