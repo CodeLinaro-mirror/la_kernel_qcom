@@ -3608,6 +3608,7 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	struct qcom_scm *scm;
 	int ret;
 
+	struct device_node *dload = of_find_node_by_path("/soc/dload_mode");
 	scm = devm_kzalloc(&pdev->dev, sizeof(*scm), GFP_KERNEL);
 	if (!scm)
 		return -ENOMEM;
@@ -3675,11 +3676,15 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	scm->restart_nb.priority = 130;
 	register_restart_handler(&scm->restart_nb);
 
-	if (scm->dload_mode_addr &&
-	    IS_ERR(platform_device_register_data(&pdev->dev, "qcom-dload-mode",
-						 PLATFORM_DEVID_NONE, NULL, 0)))
-		dev_err(&pdev->dev, "failed to register qcom dload device\n");
-
+	if (!dload) {
+		if (scm->dload_mode_addr &&
+				IS_ERR(platform_device_register_data(&pdev->dev, "qcom-dload-mode",
+						PLATFORM_DEVID_NONE, NULL, 0)))
+			dev_err(&pdev->dev,
+					"Failed to register qcom dload device\n");
+	} else {
+		of_node_put(dload);
+	}
 	/*
 	 * If requested enable "download mode", from this point on warmboot
 	 * will cause the boot stages to enter download mode, unless
