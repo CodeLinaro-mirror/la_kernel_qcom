@@ -57,3 +57,6 @@ gh_rm_heap_manager.ko
 gunyah_loader.ko
 arm_smmu_pmu.ko
 qcom_ipc_logging.ko
+msm_qmp.ko
+mdt_loader.ko
+qcom_aoss.ko
