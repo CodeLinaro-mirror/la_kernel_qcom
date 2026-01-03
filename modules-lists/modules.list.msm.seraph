@@ -60,3 +60,5 @@ qcom_ipc_logging.ko
 msm_qmp.ko
 mdt_loader.ko
 qcom_aoss.ko
+qcom_wdt_core.ko
+qcom_soc_wdt.ko
