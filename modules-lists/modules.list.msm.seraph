@@ -66,3 +66,4 @@ qcom_wdt_core.ko
 qcom_soc_wdt.ko
 qcom_ice.ko
 crypto-qti.ko
+qcom-ipcc.ko
