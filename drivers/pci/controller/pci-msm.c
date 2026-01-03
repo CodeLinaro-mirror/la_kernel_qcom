@@ -1195,6 +1195,7 @@ struct msm_pcie_dev_t {
 	bool bdf_change_halt_en;
 
 	uint32_t pcie_parf_cesta_config;
+	uint32_t device_vendor_id;
 
 	uint32_t rc_idx;
 	uint32_t phy_ver;
@@ -6180,6 +6181,13 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 		msm_pcie_write_mask(dev->parf + PCIE20_PARF_CFG_BITS_3, 0, BIT(8));
 	msm_pcie_write_mask(dev->dm_core + PCIE20_LANE_SKEW_OFF, 0, BIT(5));
 
+	/* override the vendor id */
+	if (dev->device_vendor_id) {
+		msm_pcie_write_mask(dev->dm_core + PCIE_GEN3_MISC_CONTROL, 1, BIT(0));
+		msm_pcie_write_reg(dev->dm_core, 0x0, dev->device_vendor_id);
+		msm_pcie_write_mask(dev->dm_core + PCIE_GEN3_MISC_CONTROL, 0, BIT(0));
+	}
+
 	/* de-assert PCIe reset link to bring EP out of reset */
 
 	PCIE_INFO(dev, "PCIe: Release the reset of endpoint of RC%d.\n",
@@ -8388,6 +8396,9 @@ static void msm_pcie_read_dt(struct msm_pcie_dev_t *pcie_dev, int rc_idx,
 	PCIE_DBG(pcie_dev, "PCIe: RC%d: L1.2 threshold scale: %d value: %d.\n",
 		pcie_dev->rc_idx, pcie_dev->l1_2_th_scale,
 		pcie_dev->l1_2_th_value);
+
+	of_property_read_u32(of_node, "qcom,device-vendor-id",
+				&pcie_dev->device_vendor_id);
 
 	pcie_dev->common_clk_en = of_property_read_bool(of_node,
 				"qcom,common-clk-en");
