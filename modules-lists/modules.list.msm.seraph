@@ -78,3 +78,4 @@ phy-msm-ssusb-qmp.ko
 phy-msm-m31-eusb2.ko
 repeater.ko
 repeater-i2c-eusb2.ko
+llcc-qcom.ko
