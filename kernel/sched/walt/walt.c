@@ -4480,29 +4480,29 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 	 * not rolled over properly as mark_start > window_start.
 	 */
 	if (!is_migration) {
-		u64 temp_sched_ravg_window;
+		u64 effective_new_sched_ravg_window;
 		spin_lock_irqsave(&sched_ravg_window_lock, flags);
 		if (plenty_giant_tasks || walt_rotation_stop_hyst_start_ts)
-			temp_sched_ravg_window = mult_frac(2, NSEC_PER_SEC, HZ);
+			effective_new_sched_ravg_window = mult_frac(2, NSEC_PER_SEC, HZ);
 		else
-			temp_sched_ravg_window = new_sched_ravg_window;
+			effective_new_sched_ravg_window = new_sched_ravg_window;
 		wrq = &per_cpu(walt_rq, cpu_of(this_rq()));
-		if ((sched_ravg_window != new_sched_ravg_window) &&
-		    (wc < wrq->window_start + new_sched_ravg_window)) {
+		if ((sched_ravg_window != effective_new_sched_ravg_window) &&
+		    (wc < wrq->window_start + effective_new_sched_ravg_window)) {
 			sched_ravg_window_change_time = walt_sched_clock();
 			trace_sched_ravg_window_change(sched_ravg_window,
-					temp_sched_ravg_window,
+					effective_new_sched_ravg_window,
 					sched_ravg_window_change_time);
-			sched_ravg_window = temp_sched_ravg_window;
+			sched_ravg_window = effective_new_sched_ravg_window;
 			walt_tunables_fixup();
 		}
 		spin_unlock_irqrestore(&sched_ravg_window_lock, flags);
 	}
 
 	if (!is_migration)
-		last_migration_irqwork_ts = wc;
-	else
 		last_rollover_irqwork_ts = wc;
+	else
+		last_migration_irqwork_ts = wc;
 }
 
 /**

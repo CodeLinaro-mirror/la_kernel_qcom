@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/iopoll.h>
+#include <linux/suspend.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
 
 #include "qpace-constants.h"
@@ -90,9 +91,12 @@ static void __iomem *qpace_gen_cmd_regs;
 #define QPACE_READ_GEN_CMD_REG(offset) readl(qpace_gen_cmd_regs + offset)
 #define QPACE_WRITE_GEN_CMD_REG(offset, val) writel(val, qpace_gen_cmd_regs + offset)
 
+static bool qpace_suspended;
 static struct icc_path *qpace_interconnect;
 static struct device *qpace_dev;
 static struct dev_pm_qos_request qos_req;
+DEFINE_STATIC_KEY_FALSE(qpace_drv_probed);
+EXPORT_SYMBOL_GPL(qpace_drv_probed);
 
 /*
  * =============================================================================
@@ -568,12 +572,20 @@ EXPORT_SYMBOL_GPL(put_qpace);
  * @ring_num if it has not been initialized already for the current usage
  * period. This function implicitly increments a reference counter that
  * tracks the number of items in the ring.
+ *
+ * Returns 0 if successful, -EINVAL if qpace is suspended.
  */
-static void get_ring(int ring_num)
+static int get_ring(int ring_num)
 {
 	struct transfer_ring *tr = &tr_rings[ring_num];
 
+	/* protect active_rings and qpace_suspended */
 	mutex_lock(&qpace_ref_lock);
+
+	if (qpace_suspended) {
+		mutex_unlock(&qpace_ref_lock);
+		return -EBUSY;
+	}
 
 	if (!tr->item_count) {
 		_get_qpace();
@@ -587,6 +599,7 @@ static void get_ring(int ring_num)
 	tr->item_count++;
 
 	mutex_unlock(&qpace_ref_lock);
+	return 0;
 }
 
 /*
@@ -641,7 +654,9 @@ int qpace_queue_copy(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr, siz
 	struct qpace_transfer_descriptor *td;
 	int ret;
 
-	get_ring(tr_num);
+	ret = get_ring(tr_num);
+	if (ret)
+		return ret;
 
 	td = ring->hw_write_ptr;
 
@@ -681,7 +696,9 @@ int qpace_queue_compress(int tr_num, phys_addr_t src_addr, phys_addr_t dst_addr)
 	struct qpace_transfer_descriptor *td;
 	int ret;
 
-	get_ring(tr_num);
+	ret = get_ring(tr_num);
+	if (ret)
+		return ret;
 
 	td = ring->hw_write_ptr;
 
@@ -1298,6 +1315,9 @@ static int qpace_probe(struct platform_device *pdev)
 		goto power_off;
 
 	qpace_dev = dev;
+	/*  initialization has been completed before other CPUs observe qpace_drv_probed */
+	smp_mb();
+	static_branch_enable(&qpace_drv_probed);
 
 	return ret;
 
@@ -1319,12 +1339,52 @@ static const struct of_device_id qpace_match_table[] = {
 	{},
 };
 
+
+static int qpace_suspend(struct device *dev)
+{
+	mutex_lock(&qpace_ref_lock);
+
+	/* Set suspended flag first to prevent new submissions */
+	qpace_suspended = true;
+	/* Ensure flag is visible before checking queues */
+	smp_wmb();
+
+	if (active_rings) {
+		/* new requests queued during suspend */
+		dev_err(dev, "active_rings not 0, abort suspend\n");
+		qpace_suspended = false;
+		mutex_unlock(&qpace_ref_lock);
+		return -EBUSY;
+	}
+
+	mutex_unlock(&qpace_ref_lock);
+	return 0;
+}
+
+static int qpace_resume(struct device *dev)
+{
+	mutex_lock(&qpace_ref_lock);
+
+	if (active_rings)
+		dev_err(dev, "active_rings not 0, unexpected case\n");
+
+	qpace_suspended = false;
+	mutex_unlock(&qpace_ref_lock);
+	return 0;
+}
+
+const struct dev_pm_ops qpace_pm_ops = {
+	.suspend = qpace_suspend,
+	.resume = qpace_resume,
+};
+
 static struct platform_driver qpace_driver = {
 	.probe = qpace_probe,
 	.remove = qpace_remove,
 	.driver = {
 		.name = "qcom-qpace",
 		.of_match_table = qpace_match_table,
+		.pm = &qpace_pm_ops,
 	},
 };
 

@@ -1369,6 +1369,7 @@ static const struct of_device_id bcl_match[] = {
 	{ .compatible = "qcom,bcl-v5", .data = &pmih010x_data},
 	{ .compatible = "qcom,pmh0101-bcl-v5", .data = &pmh0101_data},
 	{ .compatible = "qcom,pmiv010x-bcl-v5", .data = &pmiv010x_data},
+	{ .compatible = "qcom,pm8550-bcl-v5", .data = &pm8550_data},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, bcl_match);

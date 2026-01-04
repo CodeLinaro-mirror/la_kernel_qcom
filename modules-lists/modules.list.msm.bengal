@@ -60,6 +60,7 @@ qcom_logbuf_vendor_hooks.ko
 qcom_logbuf_boot_log.ko
 pinctrl-msm.ko
 pinctrl-khaje.ko
+pinctrl-bengal.ko
 qcom_tsens.ko
 qcom-scm.ko
 qcom_hwspinlock.ko
@@ -94,3 +95,4 @@ sdhci-msm.ko
 msm_sharedmem.ko
 nvmem_qfprom.ko
 qcom-cpufreq-hw.ko
+qseecom_proxy.ko

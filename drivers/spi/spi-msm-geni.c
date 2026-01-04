@@ -1791,7 +1791,7 @@ static int setup_gsi_xfer(struct spi_transfer *xfer, struct spi_transfer *xfer_t
 	spi_xfer_cmd_update(xfer, xfer_tx_rx, mas, &tx_nent, &rx_nent, &rx_len, &cmd);
 
 	cs |= chip_select;
-	if (!xfer->cs_change) {
+	if (!spi->cs_gpiods && !xfer->cs_change) {
 		if (!list_is_last(&xfer->transfer_list,
 					&spi->cur_msg->transfers))
 			go_flags |= FRAGMENTATION;
@@ -2493,7 +2493,7 @@ static int setup_fifo_xfer(struct spi_transfer *xfer, struct spi_geni_master *ma
 		trans_len = (xfer->len / bytes_per_word) & TRANS_LEN_MSK;
 	}
 
-	if (!xfer->cs_change) {
+	if (!spi->cs_gpiods && !xfer->cs_change) {
 		if (!list_is_last(&xfer->transfer_list,
 					&spi->cur_msg->transfers))
 			m_param |= FRAGMENTATION;
@@ -2806,6 +2806,27 @@ err_fifo_geni_transfer_one:
 	return ret;
 }
 
+static void spi_geni_set_cs(struct spi_device *spi_slv, bool cs_active)
+{
+	u8 idx;
+
+	if (spi_is_csgpiod(spi_slv)) {
+		for (idx = 0; idx < SPI_CS_CNT_MAX; idx++) {
+			if (spi_slv->cs_index_mask & BIT(idx)) {
+				struct gpio_desc *desc = spi_get_csgpiod(spi_slv, idx);
+
+				if (desc) {
+					dev_dbg(&spi_slv->dev,
+						"CS GPIO toggle: idx=%u cs_active=%d\n",
+						idx, cs_active);
+					/* Polarity handled by GPIO library */
+					gpiod_set_value_cansleep(desc, cs_active);
+				}
+			}
+		}
+	}
+}
+
 /*
  * spi_geni_transfer_one_message - Transfer an entire spi message.
  * @spi - pointer to the spi controller structure.
@@ -2823,10 +2844,13 @@ static int spi_geni_transfer_one_message(struct spi_controller *spi, struct spi_
 {
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
 	struct spi_transfer *xfer;
+	bool keep_cs = false;
 	struct spi_transfer *next_xfer = NULL;
 	struct spi_transfer *xfer_tx_rx = NULL;
 	int ret = 0;
 	bool is_qspi = (mas->proto == GENI_SE_QSPI);
+
+	spi_geni_set_cs(msg->spi, true);
 
 	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
 		mas->is_tx_rx = false;
@@ -2866,9 +2890,15 @@ static int spi_geni_transfer_one_message(struct spi_controller *spi, struct spi_
 			msg->actual_length += xfer_tx_rx->len;
 			xfer = xfer_tx_rx;
 		}
+		if (xfer->cs_change) {
+			if (list_is_last(&xfer->transfer_list, &msg->transfers))
+				keep_cs = true;
+		}
 	}
 
 out:
+	if (ret != 0 || !keep_cs)
+		spi_geni_set_cs(msg->spi, false);
 	msg->status = ret;
 	spi_finalize_current_message(spi);
 
@@ -3395,6 +3425,7 @@ static int spi_geni_probe(struct platform_device *pdev)
 	spi->unprepare_transfer_hardware
 			= spi_geni_unprepare_transfer_hardware;
 	spi->auto_runtime_pm = false;
+	spi->use_gpio_descriptors = true;
 
 	init_completion(&geni_mas->xfer_done);
 	init_completion(&geni_mas->tx_cb);

@@ -103,3 +103,5 @@ minidump.ko
 qcom_ice.ko
 panel_event_notifier.ko
 crypto-qti.ko
+qcom_secure_hibernation.ko
+qcom_hib.ko

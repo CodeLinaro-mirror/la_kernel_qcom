@@ -8,7 +8,7 @@
  *	Andrew F. Davis <afd@ti.com>
  *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _QCOM_SG_OPS_H
@@ -34,6 +34,7 @@ struct qcom_sg_buffer {
 	struct deferred_freelist_item deferred_free;
 	void (*free)(struct qcom_sg_buffer *buffer);
 	struct kref kref;
+	struct rcu_head rcu;
 };
 
 struct dma_heap_attachment {

@@ -154,6 +154,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-lahaina",
+        out = "pinctrl-lahaina.ko",
+        config = "CONFIG_PINCTRL_LAHAINA",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-lahaina.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/pinctrl/qcom/pinctrl-khaje",
         out = "pinctrl-khaje.ko",
         config = "CONFIG_PINCTRL_KHAJE",

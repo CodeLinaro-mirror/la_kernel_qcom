@@ -1692,6 +1692,7 @@ def register_modules(registry):
             # do not sort
             "drivers/misc/qseecom_proxy",
             "drivers/soc/qcom/qcom_hib",
+            "drivers/firmware/qcom/si_core/si_core_module",
         ],
         includes = ["include"],
     )

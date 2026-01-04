@@ -1760,7 +1760,9 @@ static inline int _zram_req_queue(struct qpace_control *qpace_ctl,
 	tmp_output_page = qpace_ctl->output_queue->request_arr[arr_offset].out_page;
 
 	pos = qpace_ctl->qpace_queue_op(qpace_ctl->ring, zmeta->page, tmp_output_page);
-
+	/* if get_ring failed because of suspend */
+	if (pos < 0)
+		return pos;
 	qpace_ctl->output_queue->request_arr[pos].zmeta = zmeta;
 
 	qpace_ctl->queue_size++;
@@ -1818,7 +1820,11 @@ static int comp_request_submit(struct qpace_request_meta *zmeta)
 	mutex_lock(&comp_control.queue_lock);
 	queue_ret = _zram_req_queue(&comp_control, zmeta);
 
-	if (queue_ret) {
+	/*
+	 * suspend errors are not placed on overflow_list
+	 * which will be handled by upper layer function
+	 */
+	if (queue_ret == -ENOMEM) {
 		mutex_lock(&comp_control.queue_overflow_list_lock);
 		queue_ret = _zram_req_queue_overflow_list_insert(&comp_control, zmeta);
 		mutex_unlock(&comp_control.queue_overflow_list_lock);
@@ -1869,6 +1875,7 @@ static int enqueue_from_overflow_list(struct qpace_control *qpace_ctl)
 
 			list_del(&zmeta->list_node);
 			qpace_ctl->overflow_list_count--;
+			/* wait lock hold, no need to check return value */
 			_zram_req_queue(qpace_ctl, zmeta);
 			consumed++;
 		}
@@ -2012,7 +2019,6 @@ static int zram_qpace_comp(void *unused)
 	while (!kthread_should_stop()) {
 		pr_debug("waiting for comp work\n");
 		wait_for_completion(&comp_control.work_available);
-
 		get_qpace();
 		pr_debug("kthread: about to kick off compression\n");
 
@@ -2047,6 +2053,8 @@ static int zram_qpace_comp(void *unused)
 		* Grabbing this lock also prevents starvation for the requests coming
 		* from the overflow list, by preventing new submissions going to the
 		* now-empty compression queue until we fully empty the overflow list.
+		*
+		* As get_qpace() called, it is holding wakelock.
 		*/
 		mutex_lock(&comp_control.queue_lock);
 		comp_control.queue_size -= n_entries_consumed;
@@ -2548,6 +2556,12 @@ static void zram_bio_write(struct zram *zram, struct bio *bio)
 	bio_endio(bio);
 }
 
+#if IS_ENABLED(CONFIG_QTI_PAGE_COMPRESSION_ENGINE)
+#define QPACE_READY() static_branch_likely(&qpace_drv_probed)
+#else
+#define QPACE_READY()    (false)
+#endif
+
 /*
  * Handler function for all zram I/O requests.
  */
@@ -2560,10 +2574,16 @@ static void zram_submit_bio(struct bio *bio)
 		zram_bio_read(zram, bio);
 		break;
 	case REQ_OP_WRITE:
-		if (zram->qpace)
+		/* qpace_drv should in theory probed earlier than zram */
+		if (zram->qpace && QPACE_READY()) {
 			qpace_zram_submit_bio(zram, bio, &comp_control);
-		else
+		} else if (zram->qpace) {
+			WARN_ON_ONCE(1);
+			bio->bi_status = BLK_STS_IOERR;
+			bio_endio(bio);
+		} else {
 			zram_bio_write(zram, bio);
+		}
 		break;
 	case REQ_OP_DISCARD:
 	case REQ_OP_WRITE_ZEROES:
@@ -2797,6 +2817,46 @@ static struct attribute *zram_disk_attrs[] = {
 
 ATTRIBUTE_GROUPS(zram_disk);
 
+static void zram_delete_compress_queue(int page_index)
+{
+	for (; page_index >= 0; page_index--) {
+		__free_page(comp_out_queue.request_arr[page_index].out_page);
+		comp_out_queue.request_arr[page_index].out_page = NULL;
+	}
+}
+
+static int zram_init_compress_queue(void)
+{
+	struct page *page_ptr;
+	int page_index;
+
+	for (page_index = 0; page_index < DESCRIPTORS_PER_RING; page_index++) {
+		page_ptr = alloc_page(GFP_KERNEL);
+		if (!page_ptr) {
+			pr_err("qpace mem alloc failed\n");
+			goto free_pages;
+		}
+
+		comp_out_queue.request_arr[page_index].out_page = page_ptr;
+	}
+
+	return 0;
+
+free_pages:
+	/* page_index - 1 holds the last allocated page */
+	zram_delete_compress_queue(page_index - 1);
+
+	return -ENOMEM;
+}
+
+/* Check comp_thread for NULL before use */
+static void kill_comp_thread(void)
+{
+	complete_all(&comp_control.work_available);
+	kthread_stop(comp_thread);
+	comp_thread = NULL;
+}
+
 /*
  * Allocate and initialize new zram device. the function returns
  * '>= 0' device_id upon success, and negative value otherwise.
@@ -2857,8 +2917,8 @@ static int zram_add(void)
 		if (mempool_init_kmalloc_pool(&zmeta_pool, qpace_pool_size,
 			sizeof(struct qpace_request_meta))) {
 			pr_err("zmeta mempool create failed\n");
-			kfree(zram);
-			return -ENOMEM;
+			ret = -ENOMEM;
+			goto free_zram;
 		}
 		/*
 		 * qpace case is asynchronous, need to allocate bio. Increase
@@ -2868,12 +2928,28 @@ static int zram_add(void)
 		if (mempool_resize(&fs_bio_set.bio_pool, qpace_pool_size))
 			pr_warn("Failed to resize fs_bio_set pool, continuing with default size\n");
 
+		ret = zram_init_compress_queue();
+		if (ret) {
+			ret = -ENOMEM;
+			goto mempool_exit;
+		}
+		/*
+		 * only allowed to enter once, unlikely to fail and if it fails
+		 * qpace functionality will be broken.
+		 */
+		comp_thread = kthread_run(zram_qpace_comp, NULL, "zram_comp");
+		if (IS_ERR(comp_thread)) {
+			pr_warn("Failed to run zram_qpace_comp\n");
+			ret = PTR_ERR(comp_thread);
+			goto delete_comp_queue;
+		}
+
 		use_qpace = false;
 	}
 
 	ret = idr_alloc(&zram_index_idr, zram, 0, 0, GFP_KERNEL);
 	if (ret < 0)
-		goto out_free_dev;
+		goto stop_thread;
 	device_id = ret;
 
 	init_rwsem(&zram->init_lock);
@@ -2914,9 +2990,16 @@ out_cleanup_disk:
 	put_disk(zram->disk);
 out_free_idr:
 	idr_remove(&zram_index_idr, device_id);
-out_free_dev:
+stop_thread:
+	if (zram->qpace && comp_thread)
+		kill_comp_thread();
+delete_comp_queue:
+	if (zram->qpace)
+		zram_delete_compress_queue(DESCRIPTORS_PER_RING - 1);
+mempool_exit:
 	if (zram->qpace)
 		mempool_exit(&zmeta_pool);
+free_zram:
 	kfree(zram);
 	return ret;
 }
@@ -2950,9 +3033,12 @@ static int zram_remove(struct zram *zram)
 		zram_reset_device(zram);
 	}
 
-	/* In contrast, clean mempool if use qpace */
-	if (zram->qpace)
+	/* In contrast, clean mempool and stop thread if use qpace */
+	if (zram->qpace) {
 		mempool_exit(&zmeta_pool);
+		if (comp_thread)
+			kill_comp_thread();
+	}
 
 	pr_info("Removed device: %s\n", zram->disk->disk_name);
 
@@ -3058,38 +3144,6 @@ static void destroy_devices(void)
 	cpuhp_remove_multi_state(CPUHP_ZCOMP_PREPARE);
 }
 
-static void zram_delete_compress_queue(int page_index)
-{
-	for (; page_index >= 0; page_index--) {
-		__free_page(comp_out_queue.request_arr[page_index].out_page);
-		comp_out_queue.request_arr[page_index].out_page = NULL;
-	}
-}
-
-static int zram_init_compress_queue(void)
-{
-	struct page *page_ptr;
-	int page_index;
-
-	for (page_index = 0; page_index < DESCRIPTORS_PER_RING; page_index++) {
-		page_ptr = alloc_page(GFP_KERNEL);
-		if (!page_ptr) {
-			pr_err("qpace mem alloc failed\n");
-			goto free_pages;
-		}
-
-		comp_out_queue.request_arr[page_index].out_page = page_ptr;
-	}
-
-	return 0;
-
-free_pages:
-	/* page_index - 1 holds the last allocated page */
-	zram_delete_compress_queue(page_index - 1);
-
-	return -ENOMEM;
-}
-
 static int __init zram_init(void)
 {
 	struct zram_table_entry zram_te;
@@ -3127,18 +3181,8 @@ static int __init zram_init(void)
 		num_devices--;
 	}
 
-	ret = zram_init_compress_queue();
-	if (ret)
-		goto out_error;
-
-	comp_thread = kthread_run(zram_qpace_comp, NULL, "zram_comp");
-	if (!comp_thread)
-		goto delete_comp_queue;
-
 	return 0;
 
-delete_comp_queue:
-	zram_delete_compress_queue(DESCRIPTORS_PER_RING - 1);
 out_error:
 	destroy_devices();
 	return ret;
@@ -3147,9 +3191,6 @@ out_error:
 static void __exit zram_exit(void)
 {
 	destroy_devices();
-	complete_all(&comp_control.work_available);
-	kthread_stop(comp_thread);
-	comp_thread = NULL;
 }
 
 module_init(zram_init);

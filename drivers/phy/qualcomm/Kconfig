@@ -24,6 +24,15 @@ config PHY_QCOM_UFS_V4
 	  This is required to enable UFS on QCOM chipset.
 	  To compile this driver as a module, choose M here.
 
+config PHY_QCOM_UFS_V4_CROW
+	tristate "Qualcomm Technologies, Inc. UFS Crow Phy Driver"
+	depends on PHY_QCOM_UFS
+	help
+	  This configuration option adds support for the UFS
+	  PHY present on QCOM Crow chipsets.
+	  This is required to enable UFS on crow, volcano, chora chipsets.
+	  To compile this driver as a module, choose M here.
+
 config PHY_QCOM_UFS_V4_GEN3AUTO
 	tristate "Qualcomm Technologies, Inc. UFS gen3auto Phy Driver"
 	depends on PHY_QCOM_UFS
@@ -135,3 +144,21 @@ config PHY_QCOM_QMP_COMBO
 	  with USB3 and DisplayPort controllers on Qualcomm chips. This is
 	  required for the USB controller to communicate with the USB host
 	  in Super-Speed mode.
+
+config PHY_QCOM_SGMII_ETH
+	tristate "Qualcomm DWMAC SGMII SerDes/PHY driver"
+	depends on OF && (ARCH_QCOM || COMPILE_TEST)
+	depends on HAS_IOMEM
+	select GENERIC_PHY
+	help
+	  Enable this to support the Qualcomm SGMII SerDes/PHY used with the
+	  DesignWare MAC Ethernet controller on Qualcomm SoCs. This is required
+	  for proper SGMII link configuration between the MAC and external PHY.
+
+config PHY_QCOM_QMP_USB
+	tristate "Qualcomm QMP USB PHY Driver"
+	select GENERIC_PHY
+	default PHY_QCOM_QMP
+	help
+	  Enable this to support the QMP USB PHY transceiver that is used
+	  with USB3 controllers on Qualcomm chips.
