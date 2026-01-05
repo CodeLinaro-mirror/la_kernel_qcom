@@ -304,6 +304,9 @@ static inline bool ufs_qcom_is_genpd_supported(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct phy *phy = host->generic_phy;
 
+	if (host->hw_ver.major >= 0x6 && host->hw_ver.minor >= 0x2)
+		host->phy_retention = 1;
+
 	return !(IS_ERR_OR_NULL(hba->dev->pm_domain) ||
 		 IS_ERR_OR_NULL(phy->dev.parent) ||
 		 IS_ERR_OR_NULL(phy->dev.parent->pm_domain));
@@ -1911,7 +1914,8 @@ static void ufs_qcom_device_reset_ctrl(struct ufs_hba *hba, bool asserted)
 	gpiod_set_value_cansleep(host->device_reset, asserted);
 }
 
-static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool always_on)
+static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool core_always_on,
+			bool phy_mem_always_on)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct phy *phy = host->generic_phy;
@@ -1924,13 +1928,15 @@ static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool always_on)
 	core_genpd = pd_to_genpd(hba->dev->pm_domain);
 	phy_genpd = pd_to_genpd(phy->dev.parent->pm_domain);
 
-	if (always_on) {
+	if (core_always_on)
 		ufs_qcom_genpd_set_always_on(core_genpd);
-		ufs_qcom_genpd_set_always_on(phy_genpd);
-	} else {
+	else
 		ufs_qcom_genpd_clear_always_on(core_genpd);
+
+	if (phy_mem_always_on)
+		ufs_qcom_genpd_set_always_on(phy_genpd);
+	else
 		ufs_qcom_genpd_clear_always_on(phy_genpd);
-	}
 }
 
 static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
@@ -1958,8 +1964,12 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 			ufs_qcom_disable_vreg(hba->dev, host->vccq_parent);
 		if (!err)
 			err = ufs_qcom_unvote_qos_all(hba);
+
+		if (!host->phy_retention)
+			ufs_qcom_genpd_setup(hba, false, true);
+
 	} else {
-		ufs_qcom_genpd_setup(hba, true);
+		ufs_qcom_genpd_setup(hba, true, true);
 	}
 
 	if (!err && ufs_qcom_is_link_off(hba) && host->device_reset)
@@ -2049,7 +2059,7 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (err)
 		return err;
 
-	ufs_qcom_genpd_setup(hba, false);
+	ufs_qcom_genpd_setup(hba, false, false);
 
 	/* Scale down clocks before resume */
 	if (hba->spm_lvl == UFS_PM_LVL_5 && pm_op == UFS_SYSTEM_PM) {

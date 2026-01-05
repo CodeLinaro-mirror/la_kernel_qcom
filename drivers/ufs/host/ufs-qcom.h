@@ -598,6 +598,7 @@ struct ufs_qcom_host {
 	bool esi_enabled;
 	bool enforce_high_irq_cpus;
 	bool cap_hs_gear_limit;
+	bool phy_retention;
 
 	bool bypass_pbl_rst_wa;
 	atomic_t cqhp_update_pending;
