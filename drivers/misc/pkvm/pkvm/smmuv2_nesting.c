@@ -74,9 +74,11 @@ static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, 
 	*buf = arm_smmu_gr0_read(smmu->base_va, offset);
 	/* Use specific log messages for special registers */
 	if (offset == ARM_SMMU_GR0_ID0) {
+		*buf = (*buf & ~ARM_SMMU_ID0_NUMSMRG) | (smmu->num_smr & ARM_SMMU_ID0_NUMSMRG);
 		smmu_v2_debug_print("smmu_v2_id0_read, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
 	} else if (offset == ARM_SMMU_GR0_ID1) {
+		*buf = (*buf & ~ARM_SMMU_ID1_NUMCB) | (smmu->num_cb & ARM_SMMU_ID1_NUMCB);
 		smmu_v2_debug_print("smmu_v2_id1_read, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
 	} else if (offset >= ARM_SMMU_GR0_S2CR(0) && offset <= ARM_SMMU_GR0_S2CR(MAXNUM_SMR)) {
@@ -237,11 +239,119 @@ static int take_over_smmus(void)
 		smmu->base_va = (u64)hyp_phys_to_virt(smmu->base_pa);
 		smmu_v2_debug_print("donate to hyp: base_pa: %llx, base_va: %llx, size: %llx\n",
 				    smmu->base_pa, smmu->base_va, ARM_SMMU_GLOBAL_REGION2_OFFSET);
-		smmu->base_va = (u64)hyp_phys_to_virt(smmu->base_pa);
 	}
 	return 0;
 }
 
+static int update_smr_profile(struct smmu_v2_nested *smmu)
+{
+	int i;
+	u32 smr_val;
+
+	for (i = smmu->num_smr - 1; i >= 0; i--) {
+		smr_val = arm_smmu_gr0_read(smmu->base_va, ARM_SMMU_GR0_SMR(i));
+
+		/* reset value is 0x0*/
+		if (smr_val == 0) {
+			continue;; /* Skip invalid entries */
+		} else {
+			smmu->num_smr = i + 1;
+		}
+
+		smmu->smr_pool[i].idx = i;
+		smmu->smr_pool[i].val = smr_val;
+
+		smmu_v2_debug_print("SMR[%d]: val: %llx\n",
+				    i, smr_val);
+	}
+	WARN_ON(smmu->num_smr == 0);
+	return 0;
+}
+
+static int update_s2cr_profile(struct smmu_v2_nested *smmu)
+{
+	int i;
+	u32 s2cr_val;
+
+	for (i = smmu->num_s2cr - 1; i >= 0; i--) {
+		s2cr_val = arm_smmu_gr0_read(smmu->base_va, ARM_SMMU_GR0_S2CR(i));
+
+		/* reset value is 0x0*/
+		if (s2cr_val == 0) {
+			continue;; /* Skip invalid entries */
+		} else {
+			smmu->num_smr = i + 1;
+		}
+
+		smmu->s2cr_pool[i].idx = i;
+		smmu->s2cr_pool[i].val = s2cr_val;
+
+		smmu_v2_debug_print("S2CR[%d]: val: %llx\n",
+				    i, s2cr_val);
+	}
+	WARN_ON(smmu->num_s2cr == 0);
+	return 0;
+}
+
+static int update_cbar_profile(struct smmu_v2_nested *smmu)
+{
+	int i;
+	/* Get available number of context banks from cbar register */
+	for (i = smmu->num_cb - 1; i >= 0; i--) {
+		u32 cbar_val = arm_smmu_gr1_read(smmu->base_va, ARM_SMMU_GR1_CBAR(i));
+
+		if (((cbar_val & ARM_SMMU_CBAR_TYPE) >> 16) == CBAR_TYPE_S1_TRANS_S2_FAULT)
+			continue; /* Skip invalid entries */
+		else
+			smmu->num_cb = i + 1;
+		smmu->cbar_pool[i].idx = i;
+		smmu->cbar_pool[i].val = cbar_val;
+		smmu_v2_debug_print("CBAR[%d]: val: %llx\n",
+				    i, cbar_val);
+	}
+	return 0;
+}
+
+static int hw_profile_init(void)
+{
+	struct smmu_v2_nested *smmu;
+
+	for_each_smmu(smmu) {
+		u32 id0 = arm_smmu_gr0_read(smmu->base_va, ARM_SMMU_GR0_ID0);
+		u32 id1 = arm_smmu_gr0_read(smmu->base_va, ARM_SMMU_GR0_ID1);
+
+		smmu->num_smr = id0 & ARM_SMMU_ID0_NUMSMRG;
+		smmu->num_s2cr = smmu->num_smr; /* smr == s2cr */
+		smmu->num_cbar = id1 & ARM_SMMU_ID1_NUMCB;
+		smmu->num_cb = smmu->num_cbar; /* cbar == cb */
+		smmu_v2_debug_print("num_smr: %d, num_cb: %d\n",
+				    smmu->num_smr, smmu->num_cb);
+}
+
+	return 0;
+}
+
+static int sw_profile_init(void)
+{
+	struct smmu_v2_nested *smmu;
+	int ret;
+
+	for_each_smmu(smmu) {
+		/* update profile permitted stream id and mask */
+		ret = update_smr_profile(smmu);
+		if (ret)
+			return ret;
+
+		ret = update_s2cr_profile(smmu);
+		if (ret)
+			return ret;
+
+		ret = update_cbar_profile(smmu);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
 static int smmuv2_nesting_init(void)
 {
 	int smmu_arr_size = PAGE_ALIGN(sizeof(*smmu_v2_nested_base) * smmu_v2_nested_count);
@@ -249,16 +359,22 @@ static int smmuv2_nesting_init(void)
 
 	smmu_v2_debug_print("smmu_v2_nested_base: %llx\n", (u64)smmu_v2_nested_base);
 	smmu_v2_nested_base = kern_hyp_va(smmu_v2_nested_base);
-	smmu_v2_debug_print("smmu_v2_nested_base hyp va: %llx\n", (u64)smmu_v2_nested_base);
 
 	ret = __pkvm_host_donate_hyp(hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT,
 				     smmu_arr_size >> PAGE_SHIFT);
+	smmu_v2_debug_print("smmu_v2_nested_base hyp va: %llx\n", (u64)smmu_v2_nested_base);
 	if (ret)
 		return ret;
 	ret = take_over_smmus();
 	if (ret)
 		return ret;
 
+	ret = hw_profile_init();
+	if (ret)
+		return ret;
+	ret = sw_profile_init();
+	if (ret)
+		return ret;
 	return 0;
 }
 

@@ -5,6 +5,7 @@
 #include <asm/kvm_mmu.h>
 #include <asm/kvm_pkvm.h>
 #include <linux/of_address.h>
+#include <linux/of_irq.h>
 #include "smmuv2_nesting.h"
 #include "arm-smmuv2-defs.h"
 
@@ -21,6 +22,7 @@ static unsigned long                   pkvm_module_token;
 
 int kvm_nvhe_sym(smmuv2_nesting_init_module)(const struct pkvm_module_ops *ops);
 extern unsigned long kvm_nvhe_sym(smmu_v2_nested_count);
+#define smmu_v2_nested_count kvm_nvhe_sym(smmu_v2_nested_count)
 extern struct smmu_v2_nested *kvm_nvhe_sym(smmu_v2_nested_base);
 #define smmu_v2_nested_base kvm_nvhe_sym(smmu_v2_nested_base)
 
@@ -30,7 +32,6 @@ int smmuv2_describe_smmuv2(void)
 {
 	struct device_node *np;
 	struct resource res;
-	int smmu_v2_nested_count = 0;
 	int total_smmus = 0;
 	int ret;
 	int i;
@@ -84,7 +85,6 @@ int smmuv2_describe_smmuv2(void)
 		}
 	}
 
-	kvm_nvhe_sym(smmu_v2_nested_count) = total_smmus;
 	pr_info("Total Num of SMMU will be used for nesting: %d\n",
 		total_smmus);
 	pr_info("smmu_v2_nested_base: %llx\n", (u64)smmu_v2_nested_base);

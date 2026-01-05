@@ -24,26 +24,24 @@
 #define SMMU_V2_MAX_POOL_SIZE		255
 
 /**
- * struct smmu_v2_cb_info - Context Bank information for SMMUv2
- * @pa: Physical address of the context bank
- * @irq_num: IRQ number associated with this context bank
- * @cb_idx: Context bank index
+ * struct smmu_v2_cbar_info - Context Bank information for SMMUv2
  */
-struct smmu_v2_cb_info {
-	u64 pa;
-	u32 irq_num;
-	u32 cb_idx;
+struct smmu_v2_cbar_info {
+	u32 val;
+	u32 idx;
 };
 
+struct smmu_v2_s2cr_info {
+	u32 val;
+	u32 idx;
+};
 /**
  * struct smmu_v2_smr_info - Stream Matching Register information for SMMUv2
- * @pa: Physical address of the SMR
  * @sid_and_mask: Stream ID and mask value
  * @idx: SMR index
  */
 struct smmu_v2_smr_info {
-	u64 pa;
-	u32 sid_and_mask;
+	u32 val; /* [31]:valid, [30:16]:mask, [15:0]:stream_id */
 	u32 idx;
 };
 
@@ -71,10 +69,14 @@ struct smmu_v2_nested {
 	u32 oas;
 	u32 pgsize_bitmap;
 	u32 cr0;
-	u32 num_smr;
-	u32 num_cb;
+	u32 irq_s2_cb; /* Context bank s2 fault irq */
+	u32 num_smr;  /* SMR allocation for NS */
+	u32 num_s2cr; /* S2CR allocation for NS */
+	u32 num_cbar; /* CBAR allocation for NS */
+	u32 num_cb;   /* CB allocation for NS */
 	struct smmu_v2_smr_info smr_pool[SMMU_V2_MAX_POOL_SIZE];
-	struct smmu_v2_cb_info cb_pool[SMMU_V2_MAX_POOL_SIZE];
+	struct smmu_v2_s2cr_info s2cr_pool[SMMU_V2_MAX_POOL_SIZE];
+	struct smmu_v2_cbar_info cbar_pool[SMMU_V2_MAX_POOL_SIZE];
 };
 
 #if defined(__KVM_NVHE_HYPERVISOR__) && defined(MODULE)
