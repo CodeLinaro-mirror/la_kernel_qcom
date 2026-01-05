@@ -2191,7 +2191,50 @@ static struct platform_driver qcom_llcc_driver = {
 	.probe = qcom_llcc_probe,
 	.remove_new = qcom_llcc_remove,
 };
-module_platform_driver(qcom_llcc_driver);
+
+static int __init qcom_llcc_init(void)
+{
+	struct device_node *soc, *node = NULL;
+	const char *llcc_node_str = "cache-controller";
+
+	/*
+	 * When a common defconfig is shared across multiple targets, the
+	 * absence of the DT node or a disabled status indicates the device
+	 * is not require.
+	 * Check for the LLCC node name and set drv_data to -ENODEV if the
+	 * node is missing or disabled, ensuring clients do not receive
+	 * -EPROBE_DEFER even if the device is not supported.
+	 */
+	if (drv_data == ERR_PTR(-EPROBE_DEFER)) {
+		soc = of_find_node_by_path("/soc");
+		if (soc) {
+			node = of_get_child_by_name(soc, llcc_node_str);
+			of_node_put(soc);
+		}
+
+		if (!node)
+			node = of_find_node_by_name(NULL, llcc_node_str);
+
+		if (!of_device_is_available(node))
+			drv_data = ERR_PTR(-ENODEV);
+
+		of_node_put(node);
+	}
+
+	/*
+	 * LA requires all modules to load successfully; otherwise, init fails.
+	 * Allow driver registration even if the DT node is missing to prevent
+	 * LA from breaking.
+	 */
+	return platform_driver_register(&qcom_llcc_driver);
+}
+module_init(qcom_llcc_init);
+
+static void __exit qcom_llcc_exit(void)
+{
+	platform_driver_unregister(&qcom_llcc_driver);
+}
+module_exit(qcom_llcc_exit)
 
 MODULE_DESCRIPTION("Qualcomm Last Level Cache Controller");
 MODULE_LICENSE("GPL v2");
