@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <ufs/ufshcd.h>
 #include <ufs/ufshcd-crypto.h>
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+#include <linux/crypto-qti-common.h>
+#endif
 #include "ufs-qcom.h"
 #include <soc/qcom/ice.h>
 
@@ -163,6 +166,7 @@ int ufshcd_qti_hba_init_crypto_capabilities(struct ufs_hba *hba)
 {
 	int cap_idx;
 	int err = 0;
+	unsigned int max_slots = 0;
 	enum blk_crypto_mode_num blk_mode_num;
 
 	/*
@@ -190,9 +194,27 @@ int ufshcd_qti_hba_init_crypto_capabilities(struct ufs_hba *hba)
 		goto out;
 	}
 
+	max_slots = hba->crypto_capabilities.config_count + 1;
+
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+	if (max_slots > crypto_qti_ice_get_num_fde_slots()) {
+		/*
+		 * Reduce the total number of slots available to FBE
+		 * (by the number reserved for the FDE)
+		 * Check at least one slot for backward compatibility,
+		 * otherwise return failure
+		 */
+		if (max_slots - crypto_qti_ice_get_num_fde_slots() < 1) {
+			pr_err("%s: Too many slots allocated to fde\n", __func__);
+			err = -EINVAL;
+			goto out;
+		} else {
+			max_slots = max_slots - crypto_qti_ice_get_num_fde_slots();
+		}
+	}
+#endif
 	/* The actual number of configurations supported is (CFGC+1) */
-	err = devm_blk_crypto_profile_init(hba->dev, &hba->crypto_profile,
-					   hba->crypto_capabilities.config_count + 1);
+	err = devm_blk_crypto_profile_init(hba->dev, &hba->crypto_profile, max_slots);
 	if (err)
 		goto out;
 
