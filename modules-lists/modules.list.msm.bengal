@@ -61,6 +61,7 @@ qcom_logbuf_boot_log.ko
 pinctrl-msm.ko
 pinctrl-khaje.ko
 pinctrl-bengal.ko
+pinctrl-scuba.ko
 qcom_tsens.ko
 qcom-scm.ko
 qcom_hwspinlock.ko
