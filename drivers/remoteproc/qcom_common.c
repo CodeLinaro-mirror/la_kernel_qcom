@@ -5,7 +5,7 @@
  * Copyright (C) 2016 Linaro Ltd
  * Copyright (C) 2015 Sony Mobile Communications Inc
  * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/firmware.h>
@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/soc/qcom/mdt_loader.h>
 #include <linux/soc/qcom/smem.h>
+#include <linux/soc/qcom/smem_state.h>
 #include <linux/devcoredump.h>
 #include <trace/hooks/remoteproc.h>
 #include <trace/events/rproc_qcom.h>
@@ -42,6 +43,23 @@
 #define MINIDUMP_REGION_VALID		('V' << 24 | 'A' << 16 | 'L' << 8 | 'I' << 0)
 #define MINIDUMP_SS_ENCR_DONE		('D' << 24 | 'O' << 16 | 'N' << 8 | 'E' << 0)
 #define MINIDUMP_SS_ENABLED		('E' << 24 | 'N' << 16 | 'B' << 8 | 'L' << 0)
+
+#define SMEM_ID_DUMP_LEVEL		681
+#define DUMP_LEVEL_MIN			1
+#define DUMP_LEVEL_MAX			4
+
+/*
+ * Dump level mapping:
+ *   Level 1: minidump
+ *   Level 2: extended minidump
+ *   Level 3 & 4: reserved
+ */
+enum dump_level {
+	DUMP_LEVEL_1 = DUMP_LEVEL_MIN,
+	DUMP_LEVEL_2,
+	DUMP_LEVEL_3,
+	DUMP_LEVEL_4
+};
 
 /**
  * struct minidump_region - Minidump region
@@ -102,6 +120,11 @@ static struct kobject *sysfs_kobject;
 bool qcom_device_shutdown_in_progress;
 EXPORT_SYMBOL(qcom_device_shutdown_in_progress);
 
+#define QCOM_SMEM_HOST_MODEM	1
+
+void (*qcom_rproc_dump_level_notify_fn)(void) = NULL;
+EXPORT_SYMBOL_GPL(qcom_rproc_dump_level_notify_fn);
+
 static bool qcom_collect_both_coredumps;
 
 static LIST_HEAD(qcom_ssr_subsystem_list);
@@ -153,6 +176,112 @@ static ssize_t qcom_collect_both_coredumps_store(struct kobject *kobj, struct ko
 static struct kobj_attribute both_coredumps_attr =
 	__ATTR(collect_both_coredumps, 0644, qcom_collect_both_coredumps_show,
 	       qcom_collect_both_coredumps_store);
+
+/* ---------- dump_level sysfs ---------- */
+static int qcom_dump_level_smem_init(void)
+{
+	__le32 *ptr;
+	size_t size;
+	int ret;
+
+	ret = qcom_smem_alloc(QCOM_SMEM_HOST_MODEM, SMEM_ID_DUMP_LEVEL, sizeof(__le32));
+	if (ret && ret != -EEXIST)
+		return ret;
+
+	ptr = qcom_smem_get(QCOM_SMEM_HOST_MODEM, SMEM_ID_DUMP_LEVEL, &size);
+	if (IS_ERR(ptr))
+		return PTR_ERR(ptr);
+
+	if (size < sizeof(__le32))
+		return -EINVAL;
+
+	if (le32_to_cpu(READ_ONCE(*ptr)) == 0) {
+		WRITE_ONCE(*ptr, cpu_to_le32(DUMP_LEVEL_MIN));
+		/* Ensure remote can see this initial value */
+		smp_wmb();
+	}
+
+	return 0;
+}
+
+static __le32 *qcom_dump_level_get_ptr(size_t *size)
+{
+	__le32 *ptr;
+	int ret;
+
+	ptr = qcom_smem_get(QCOM_SMEM_HOST_MODEM, SMEM_ID_DUMP_LEVEL, size);
+	if (IS_ERR(ptr)) {
+		ret = qcom_dump_level_smem_init();
+		if (ret)
+			return ERR_PTR(ret);
+		ptr = qcom_smem_get(QCOM_SMEM_HOST_MODEM, SMEM_ID_DUMP_LEVEL, size);
+	}
+
+	return ptr;
+}
+
+static ssize_t dump_level_show(struct kobject *kobj,
+				struct kobj_attribute *attr, char *buf)
+{
+	__le32 *ptr;
+	size_t size;
+	u32 val;
+
+	ptr = qcom_dump_level_get_ptr(&size);
+	if (IS_ERR(ptr))
+		return PTR_ERR(ptr);
+
+	if (size < sizeof(__le32))
+		return -EINVAL;
+
+	val = le32_to_cpu(READ_ONCE(*ptr));
+
+	if (val >= DUMP_LEVEL_MIN && val <= DUMP_LEVEL_MAX)
+		return sysfs_emit(buf, "%u\n", val);
+
+	return -EINVAL;
+}
+
+static ssize_t dump_level_store(struct kobject *kobj,
+				struct kobj_attribute *attr,
+				const char *buf, size_t count)
+{
+	__le32 *ptr;
+	size_t size;
+	unsigned long new_val;
+	u32 current_val;
+	void (*notify)(void) = NULL;
+
+	if (kstrtoul(buf, 0, &new_val))
+		return -EINVAL;
+
+	if (new_val < DUMP_LEVEL_MIN || new_val > DUMP_LEVEL_MAX)
+		return -ERANGE;
+
+	ptr = qcom_dump_level_get_ptr(&size);
+	if (IS_ERR(ptr))
+		return PTR_ERR(ptr);
+
+	if (size < sizeof(__le32))
+		return -EINVAL;
+
+	current_val = le32_to_cpu(READ_ONCE(*ptr));
+
+	if (new_val != current_val) {
+		WRITE_ONCE(*ptr, cpu_to_le32((u32)new_val));
+		/* Ensure visibility before notifying remote */
+		smp_wmb();
+		notify = qcom_rproc_dump_level_notify_fn;
+	}
+
+	if (notify)
+		notify();
+
+	return count;
+}
+
+static struct kobj_attribute dump_level_attr =
+	__ATTR(dump_level, 0644, dump_level_show, dump_level_store);
 
 static void qcom_minidump_cleanup(struct rproc *rproc)
 {
@@ -862,6 +991,12 @@ static int __init qcom_common_init(void)
 		goto remove_shutdown_sysfs;
 	}
 
+	ret = sysfs_create_file(sysfs_kobject, &dump_level_attr.attr);
+	if (ret) {
+		pr_err("qcom rproc: failed to create dump_level sysfs file\n");
+		goto remove_dump_level_sysfs;
+	}
+
 	ret = register_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
 	if (ret) {
 		pr_err("qcom rproc: failed to register trace hooks\n");
@@ -880,6 +1015,8 @@ unregister_rproc_recovery_vh:
 	unregister_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
 remove_coredump_sysfs:
 	sysfs_remove_file(sysfs_kobject, &both_coredumps_attr.attr);
+remove_dump_level_sysfs:
+	sysfs_remove_file(sysfs_kobject, &dump_level_attr.attr);
 remove_shutdown_sysfs:
 	sysfs_remove_file(sysfs_kobject, &shutdown_requested_attr.attr);
 remove_kobject:
@@ -893,6 +1030,7 @@ static void __exit qcom_common_exit(void)
 {
 	sysfs_remove_file(sysfs_kobject, &both_coredumps_attr.attr);
 	sysfs_remove_file(sysfs_kobject, &shutdown_requested_attr.attr);
+	sysfs_remove_file(sysfs_kobject, &dump_level_attr.attr);
 	kobject_put(sysfs_kobject);
 	unregister_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
 }

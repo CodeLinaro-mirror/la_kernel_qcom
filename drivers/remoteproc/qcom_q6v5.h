@@ -49,6 +49,12 @@ struct qcom_q6v5 {
 	void (*handover)(struct qcom_q6v5 *q6v5);
 	unsigned long long seq;
 	unsigned long long crash_seq;
+
+	/* Dump-level notify (AP->MPSS) and ACK (MPSS->AP) */
+	struct qcom_smem_state *dump_level_state;
+	unsigned int dump_level_bit;
+	int dump_level_ack_irq;
+	struct completion dump_level_ack_done;
 };
 
 static inline void qcom_q6v5_pas_set_bw(struct qcom_q6v5 *q6v5, u32 avg_bw, u32 peak_bw)
