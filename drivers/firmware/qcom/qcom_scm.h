@@ -100,6 +100,15 @@ int scm_legacy_call(struct device *dev, const struct qcom_scm_desc *desc,
 
 struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
 
+int qcom_scm_clk_enable(void);
+void qcom_scm_clk_disable(void);
+int qcom_scm_bw_enable(void);
+void qcom_scm_bw_disable(void);
+bool __qcom_scm_is_call_available(struct device *dev, u32 svc_id, u32 cmd_id);
+struct device *qcom_scm_get_dev(void);
+int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
+			 struct qcom_scm_res *res);
+
 #define QCOM_SCM_SVC_BOOT		0x01
 #define QCOM_SCM_BOOT_SET_ADDR		0x01
 #define QCOM_SCM_BOOT_TERMINATE_PC	0x02

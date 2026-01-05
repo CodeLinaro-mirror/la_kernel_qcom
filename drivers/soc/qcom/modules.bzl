@@ -462,6 +462,8 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+            "drivers/firmware/qcom/qcom_scm_smci",
+            "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )
 
