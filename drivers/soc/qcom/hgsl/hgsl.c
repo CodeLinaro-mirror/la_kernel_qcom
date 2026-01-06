@@ -1015,7 +1015,7 @@ static int hgsl_dbcq_open(struct hgsl_priv *priv,
 		goto err;
 	}
 
-	dbcq->queue_mem = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	dbcq->queue_mem = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (!dbcq->queue_mem) {
 		LOGE("out of memory");
 		ret = -ENOMEM;
@@ -2329,7 +2329,7 @@ static int hgsl_ioctl_mem_alloc(
 		goto out;
 	}
 
-	mem_node = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	mem_node = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (mem_node == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -2340,7 +2340,6 @@ static int hgsl_ioctl_mem_alloc(
 	ret = hgsl_sharedmem_alloc(hgsl->dev, params->sizebytes, params->flags, mem_node);
 	if (ret)
 		goto out;
-
 	ret = hgsl_hyp_mem_map_smmu(hab_channel, mem_node->memdesc.size, 0, mem_node);
 	LOGD("%d, %d, gpuaddr 0x%llx",
 		ret, mem_node->export_id, mem_node->memdesc.gpuaddr);
@@ -2501,7 +2500,7 @@ static int hgsl_ioctl_mem_map_smmu(
 		goto out;
 	}
 
-	mem_node = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	mem_node = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (mem_node == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -4014,9 +4013,14 @@ exit:
 
 static int hgsl_suspend(struct device *dev)
 {
-	/* Do nothing */
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_hgsl *hgsl = platform_get_drvdata(pdev);
 
-	// TODO: shall we disable the interrupt from GMU? and enable them after resume?
+	LOGD("+");
+	if (hgsl->wq)
+		flush_workqueue(hgsl->wq);
+
+	/* TODO: shall we disable the interrupt from GMU? and enable them after resume? */
 	return 0;
 }
 
@@ -4025,30 +4029,64 @@ static int hgsl_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct qcom_hgsl *hgsl = platform_get_drvdata(pdev);
 	struct hgsl_tcsr *tcsr = NULL;
-	int tcsr_idx = 0;
+	int tcsr_idx = 0, ret = 0, rval = 0;
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
-		for (tcsr_idx = 0; tcsr_idx < HGSL_TCSR_NUM; tcsr_idx++) {
-			tcsr = hgsl->tcsr[tcsr_idx][HGSL_TCSR_ROLE_RECEIVER];
-			if (tcsr != NULL) {
-				hgsl_tcsr_irq_enable(tcsr,
-					GLB_DB_DEST_TS_RETIRE_IRQ_MASK, true);
-			}
+	LOGD("+");
+	for (tcsr_idx = 0; tcsr_idx < HGSL_TCSR_NUM; tcsr_idx++) {
+		tcsr = hgsl->tcsr[tcsr_idx][HGSL_TCSR_ROLE_RECEIVER];
+		if (tcsr != NULL) {
+			hgsl_tcsr_irq_enable(tcsr,
+				GLB_DB_DEST_TS_RETIRE_IRQ_MASK, true);
 		}
-		/*
-		 * There could be a scenario when GVM submit some work to GMU
-		 * just before going to suspend, in this case, the GMU will
-		 * not submit it to RB and when GMU resume(FW reload) happens,
-		 * it submits the work to GPU and fire the ts_retire to GVM.
-		 * At this point, the GVM is not up so it may miss the
-		 * interrupt from GMU so check if there is any ts_retire by
-		 * reading the shadow timestamp.
-		 */
-		if (hgsl->wq != NULL)
-			queue_work(hgsl->wq, &hgsl->ts_retire_work);
 	}
+	/*
+	 * There could be a scenario when GVM submit some work to GMU
+	 * just before going to suspend, in this case, the GMU will
+	 * not submit it to RB and when GMU resume(FW reload) happens,
+	 * it submits the work to GPU and fire the ts_retire to GVM.
+	 * At this point, the GVM is not up so it may miss the
+	 * interrupt from GMU so check if there is any ts_retire by
+	 * reading the shadow timestamp.
+	 */
+	if (hgsl->wq != NULL)
+		queue_work(hgsl->wq, &hgsl->ts_retire_work);
+
+	/* TODO: should we notify for second device here? */
+	ret = hgsl_hyp_notify_pm_state(&hgsl->global_hyp, GSL_RPC_PM_RESUME,
+								GSL_HANDLE_NULL, &rval);
+	if (ret)
+		LOGE("Failed to reregister context after resume ret %d\n", ret);
 
 	return 0;
+}
+
+static int hgsl_pm_suspend(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_suspend(dev);
+}
+
+static int hgsl_pm_resume(struct device *dev)
+{
+	int ret = 0;
+
+	LOGD("+");
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		ret = hgsl_resume(dev);
+
+	return ret;
+}
+
+static int hgsl_hibernation_suspend(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_suspend(dev);
+}
+
+static int hgsl_hibernation_resume(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_resume(dev);
 }
 
 static int qcom_hgsl_probe(struct platform_device *pdev)
@@ -4101,8 +4139,10 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 	if (!hgsl_dev->db_off)
 		hgsl_init_global_hyp_channel(hgsl_dev);
 
-	hgsl_dev->default_iocoherency = of_property_read_bool(pdev->dev.of_node,
+	hgsl_dev->cache_flags.default_iocoherency = of_property_read_bool(pdev->dev.of_node,
 							"default_iocoherency");
+	hgsl_dev->cache_flags.writecombine_enable = of_property_read_bool(pdev->dev.of_node,
+							"writecombine_enable");
 	platform_set_drvdata(pdev, hgsl_dev);
 	hgsl_sysfs_init(pdev);
 	hgsl_debugfs_init(pdev);
@@ -4167,8 +4207,12 @@ static int qcom_hgsl_remove(struct platform_device *pdev)
 }
 
 static const struct dev_pm_ops hgsl_pm_ops = {
-	.suspend         = hgsl_suspend,
-	.resume          = hgsl_resume,
+	.suspend     = hgsl_pm_suspend,
+	.resume      = hgsl_pm_resume,
+	.freeze      = hgsl_hibernation_suspend,
+	.thaw        = hgsl_hibernation_resume,
+	.poweroff    = hgsl_hibernation_suspend,
+	.restore     = hgsl_hibernation_resume,
 };
 
 static const struct of_device_id qcom_hgsl_of_match[] = {

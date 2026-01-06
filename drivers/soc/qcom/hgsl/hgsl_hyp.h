@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef GSL_HYP_INCLUDED
@@ -164,6 +164,11 @@ enum gsl_rpc_func_t {
 	RPC_CONTEXT_REGISTER_DBCQ,
 	RPC_GSLPROFILER_PER_PROC_GPU_BUSY,
 	RPC_GSLPROFILER_PER_PROC_GPU_PMEM,
+	RPC_DEVICE_GETFEATURES,
+	RPC_DEVICE_ACTIVATE,
+	RPC_GVM_INIT,
+	RPC_GVM_DEINIT,
+	RPC_NOTIFY_PM_STATE,
 	RPC_FUNC_LAST /* insert new func BEFORE this line! */
 };
 
@@ -202,6 +207,12 @@ enum gsl_rpc_server_mode_t {
 	GSL_RPC_SERVER_MODE_LAST
 };
 
+enum gsl_rpc_pm_state_t {
+	GSL_RPC_PM_SUSPEND = 1,
+	GSL_RPC_PM_RESUME,
+	GSL_RPC_PM_LAST,
+};
+
 #pragma pack(push, 4)
 
 /* For RPC_HANDSHAKE version < 2 */
@@ -234,6 +245,12 @@ struct sub_handshake_params_t {
 struct library_open_params_t {
 	uint32_t            size;
 	uint32_t            flags;
+};
+
+struct pm_state_notify_params_t {
+	uint32_t            size;
+	uint32_t            devhandle;
+	uint32_t            pm_state;
 };
 
 struct context_create_params_t {
@@ -486,6 +503,9 @@ int hgsl_hyp_generic_transaction(struct hgsl_hyp_priv_t *priv,
 
 int hgsl_hyp_gsl_lib_open(struct hgsl_hyp_priv_t *priv,
 	uint32_t flags, int32_t *rval);
+
+int hgsl_hyp_notify_pm_state(struct hgsl_hyp_priv_t *priv,
+	uint32_t pm_state, enum gsl_devhandle_t devhandle, int32_t *rval);
 
 int hgsl_hyp_ctxt_create(struct hgsl_hab_channel_t *hab_channel,
 	struct hgsl_ioctl_ctxt_create_params *hgsl_params);
