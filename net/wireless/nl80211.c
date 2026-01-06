@@ -817,6 +817,8 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_MAX_NUM_AKM_SUITES] = { .type = NLA_REJECT },
 	[NL80211_ATTR_PUNCT_BITMAP] =
 		NLA_POLICY_FULL_RANGE(NLA_U32, &nl80211_punct_bitmap_range),
+	[NL80211_ATTR_AP_REMOVAL_COUNT] = { .type = NLA_U32 },
+	[NL80211_ATTR_TSF] = { .type = NLA_U64 },
 };
 
 /* policy for the key attributes */
@@ -16076,6 +16078,32 @@ static int nl80211_remove_link(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 	}
 
+	if (info->attrs[NL80211_ATTR_AP_REMOVAL_COUNT]) {
+		struct cfg80211_link_reconfig_removal_params params = {};
+
+		/* Parsing and sending information to driver about ML
+		 * reconfiguration is supported only when
+		 * %NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD is set
+		 */
+		if (!wiphy_ext_feature_isset(wdev->wiphy,
+					     NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD))
+			return -EOPNOTSUPP;
+
+		/* If AP removal count is present, it is mandatory to have IE
+		 * attribute as well, return error if not present
+		 */
+		if (!info->attrs[NL80211_ATTR_IE])
+			return -EINVAL;
+
+		params.reconfigure_elem = nla_data(info->attrs[NL80211_ATTR_IE]);
+		params.elem_len = nla_len(info->attrs[NL80211_ATTR_IE]);
+		params.link_removal_cntdown =
+			nla_get_u32(info->attrs[NL80211_ATTR_AP_REMOVAL_COUNT]);
+		params.link_id = link_id;
+
+		return cfg80211_link_reconfig_remove(wdev, &params);
+	}
+
 	wdev_lock(wdev);
 	cfg80211_remove_link(wdev, link_id);
 	wdev_unlock(wdev);
@@ -19955,6 +19983,65 @@ nla_put_failure:
 	nlmsg_free(msg);
 }
 EXPORT_SYMBOL(cfg80211_update_owe_info_event);
+
+int
+cfg80211_update_link_reconfig_remove_update(struct net_device *netdev,
+					    unsigned int link_id,
+					    u32 tbtt_count, u64 tsf,
+					    enum nl80211_commands cmd)
+{
+	struct wireless_dev *wdev = netdev->ieee80211_ptr;
+	struct wiphy *wiphy = wdev->wiphy;
+	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
+	struct sk_buff *msg;
+	void *hdr;
+
+	/* Only for ML reconfigure link removal offloaded driver, need to
+	 * update the status about the ongoing link removal to userspace.
+	 */
+	if (!wiphy_ext_feature_isset(wiphy,
+				     NL80211_EXT_FEATURE_MLD_LINK_REMOVAL_OFFLOAD))
+		return -EOPNOTSUPP;
+
+	if (link_id < 0 || !(wdev->valid_links & BIT(link_id)))
+		return -EINVAL;
+
+	trace_cfg80211_update_link_reconfig_remove_update(wiphy, netdev,
+							  link_id, tbtt_count,
+							  tsf, cmd);
+
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_ATOMIC);
+	if (!msg)
+		return -ENOMEM;
+
+	hdr = nl80211hdr_put(msg, 0, 0, 0, cmd);
+
+	if (!hdr)
+		goto nla_put_failure;
+
+	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
+	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, netdev->ifindex))
+		goto nla_put_failure;
+
+	if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID, link_id) ||
+	    nla_put_u32(msg, NL80211_ATTR_AP_REMOVAL_COUNT, tbtt_count) ||
+	    nla_put_u64_64bit(msg, NL80211_ATTR_TSF, tsf,
+			      NL80211_ATTR_PAD))
+		goto nla_put_failure;
+
+	genlmsg_end(msg, hdr);
+
+	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(wiphy), msg, 0,
+				NL80211_MCGRP_MLME, GFP_ATOMIC);
+
+	return 0;
+
+ nla_put_failure:
+	nlmsg_free(msg);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(cfg80211_update_link_reconfig_remove_update);
 
 /* initialisation/exit functions */
 
