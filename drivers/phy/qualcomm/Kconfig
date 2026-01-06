@@ -98,6 +98,16 @@ config PHY_QCOM_SNPS_EUSB2
 	  platform that uses the SNPS eUSB2 PHY, or if you are performing
 	  compile testing for PHY drivers.
 
+config PHY_QCOM_UFS_V3
+	tristate "Qualcomm Technologies, Inc. UFS PHY V3 driver"
+	depends on PHY_QCOM_UFS
+	help
+	 Support for 11nm UFS QMP phy present on QCOM chipsets. This
+	 configuration option adds support for the UFS PHY present
+	 on QCOM Bengal chipsets.
+	 This is required to enable UFS on Bengal chipset.
+	 To compile this driver as a module, choose M here.
+
 config PHY_QCOM_UFS_V4_KHAJE
 	tristate "Qualcomm Technologies, Inc. UFS Khaje Phy Driver"
 	depends on PHY_QCOM_UFS
