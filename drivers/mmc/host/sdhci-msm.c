@@ -3047,9 +3047,17 @@ static int sdhci_msm_ice_init(struct sdhci_msm_host *msm_host,
 	if (IS_ERR_OR_NULL(ice))
 		return PTR_ERR_OR_ZERO(ice);
 
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+	int err = crypto_qti_ice_init_fde_node(dev);
+
+	if (err) {
+		dev_err(dev, "Failed to add fde node, err=%d\n", err);
+		return err;
+	}
+#endif
+
 	msm_host->ice = ice;
 	mmc->caps2 |= MMC_CAP2_CRYPTO;
-
 	return 0;
 }
 

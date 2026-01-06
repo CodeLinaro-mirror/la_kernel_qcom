@@ -627,6 +627,16 @@ static int ufs_qcom_ice_init(struct ufs_qcom_host *host)
 	host->ice = ice;
 	hba->caps |= UFSHCD_CAP_CRYPTO;
 
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+	int err;
+
+	err = crypto_qti_ice_init_fde_node(dev);
+
+	if (err) {
+		dev_err(dev, "Failed to add fde node, err=%d\n", err);
+		return err;
+	}
+#endif
 	return 0;
 }
 
