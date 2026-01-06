@@ -14,6 +14,30 @@
 
 #include <linux/io-pgtable.h>
 #include <linux/io-pgtable-arm.h>
+#include "arm-smmu-v3-module.h"
+
+#ifdef MODULE
+void *memset(void *dst, int c, size_t count)
+{
+	return CALL_FROM_OPS(memset, dst, c, count);
+}
+
+#ifdef CONFIG_LIST_HARDENED
+bool __list_add_valid_or_report(struct list_head *new,
+				struct list_head *prev,
+				struct list_head *next)
+{
+	return CALL_FROM_OPS(list_add_valid_or_report, new, prev, next);
+}
+
+bool __list_del_entry_valid_or_report(struct list_head *entry)
+{
+	return CALL_FROM_OPS(list_del_entry_valid_or_report, entry);
+}
+#endif
+
+const struct pkvm_module_ops		*mod_ops;
+#endif
 
 size_t __ro_after_init kvm_hyp_arm_smmu_v3_count;
 struct hyp_arm_smmu_v3_device *kvm_hyp_arm_smmu_v3_smmus;
@@ -1059,6 +1083,17 @@ static struct kvm_hyp_iommu *smmu_id_to_iommu(pkvm_handle_t smmu_id)
 {
 	return 0;
 }
+
+#ifdef MODULE
+int smmu_init_hyp_module(const struct pkvm_module_ops *ops)
+{
+	if (!ops)
+		return -EINVAL;
+
+	mod_ops = ops;
+	return 0;
+}
+#endif
 
 /* Shared with the kernel driver in EL1 */
 struct kvm_iommu_ops smmu_ops = {
