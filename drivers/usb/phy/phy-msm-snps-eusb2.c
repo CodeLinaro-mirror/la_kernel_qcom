@@ -780,9 +780,6 @@ static int msm_eusb2_repeater_reset_and_init(struct msm_eusb2_phy *phy)
 {
 	int ret;
 
-	if (phy->fw_managed_pwr)
-		return 0;
-
 	if (phy->ur)
 		phy->ur->flags = phy->phy.flags;
 
