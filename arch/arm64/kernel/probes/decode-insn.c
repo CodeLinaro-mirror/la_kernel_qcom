@@ -79,13 +79,10 @@ enum probe_insn __kprobes
 arm_probe_decode_insn(probe_opcode_t insn, struct arch_probe_insn *api)
 {
 	/*
-	 * NOP and BTI (Branch Target Identification) have no program‑visible side
-	 * effects for kprobes purposes. Simulate them to avoid XOL/SS‑BRK and the
-	 * small single‑step window. BTI’s branch‑target enforcement semantics are
-	 * irrelevant in this EL1 kprobe context, so advancing PC by one insn is
-	 * sufficient here.
+	 * While 'nop' instruction can execute in the out-of-line slot,
+	 * simulating them in breakpoint handling offers better performance.
 	 */
-	if (aarch64_insn_is_nop(insn) || aarch64_insn_is_bti(insn)) {
+	if (aarch64_insn_is_nop(insn)) {
 		api->handler = simulate_nop;
 		return INSN_GOOD_NO_SLOT;
 	}
