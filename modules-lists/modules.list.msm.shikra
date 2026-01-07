@@ -44,3 +44,7 @@ usb_f_ccid.ko
 usb_f_cdev.ko
 usb_f_gsi.ko
 usb_f_qdss.ko
+qcom_ice.ko
+cqhci.ko
+sdhci-msm.ko
+mdt_loader.ko
