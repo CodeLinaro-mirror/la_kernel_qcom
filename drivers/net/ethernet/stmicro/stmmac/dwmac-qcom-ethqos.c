@@ -2889,6 +2889,7 @@ static int ethqos_reset_phy_rec(struct stmmac_priv *priv, int int_en)
 			ETHQOSERR("phydev is null , intr value=%d\n",
 				  priv->plat->phy_intr_en_extn_stm);
 		}
+
 		if (ethqos->backup_autoneg == AUTONEG_DISABLE && priv->phydev) {
 			priv->phydev->autoneg = ethqos->backup_autoneg;
 			phy_write(priv->phydev, MII_BMCR, ethqos->backup_bmcr);
@@ -6264,19 +6265,17 @@ static ssize_t ethqos_mac_recovery_enable(struct file *file,
 					  const char __user *user_buf,
 					  size_t count, loff_t *ppos)
 {
-	char *in_buf = kstrdup(user_buf, GFP_KERNEL);
-	int i;
+	static unsigned char in_buf[15] = {0};
+	int i, ret;
 	struct qcom_ethqos *ethqos = pethqos[0];
-
-	if (!in_buf) {
-		ETHQOSERR("Failed to allocate memory for in_buf\n");
-		return -EFAULT;
-	}
 
 	if (sizeof(in_buf) < count) {
 		ETHQOSERR("emac string is too long - count=%zu\n", count);
 		return -EFAULT;
 	}
+
+	memset(in_buf, 0,  sizeof(in_buf));
+	ret = copy_from_user(in_buf, user_buf, count);
 
 	for (i = 0; i < MAC_ERR_CNT; i++) {
 		if (in_buf[i] == '1')
@@ -6284,7 +6283,7 @@ static ssize_t ethqos_mac_recovery_enable(struct file *file,
 		else
 			ethqos->mac_rec_en[i] = false;
 	}
-	kfree(in_buf);
+
 	return count;
 }
 

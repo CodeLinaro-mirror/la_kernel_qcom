@@ -290,6 +290,17 @@ config ETHQOS_QCOM_VER4
 	  only applicable for EMAC version 4. Other targets should
 	  not enable this config.
 
+config PRPL_VARIANT
+	bool "Enable PRPL Variant"
+	depends on STMMAC_ETH
+	default n
+	help
+	  Enable support for the PRPL variant in the stmmac driver.
+	  This option should be selected if your platform integrates
+	  the PRPL variant in the Synopsys DesignWare Ethernet MAC,
+	  which may include performance optimizations not present in
+	  the standard implementation.
+
 config ETHQOS_QCOM_SERDES
 	bool "Enable Serdes driver"
 	depends on STMMAC_ETH
