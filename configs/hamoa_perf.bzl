@@ -253,6 +253,8 @@ hamoa_perf_config = {
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB_DEBUG": "m",
+    "CONFIG_SPS": "m",
+    "CONFIG_SPS_SUPPORT_NDP_BAM": "y",
     "CONFIG_STM": "m",
     "CONFIG_STM_PROTO_OST": "m",
     "CONFIG_STM_SOURCE_CONSOLE": "m",
