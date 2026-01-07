@@ -360,7 +360,7 @@ static int smmuv2_write_global_region_1(struct smmu_v2_nested *smmu,
 }
 
 /* Device access and fault handling */
-static int smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
+static bool smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 				      struct user_pt_regs *regs,
 				      u64 esr, u32 addr)
 {
@@ -369,7 +369,7 @@ static int smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 	int rd = (esr & ESR_ELx_SRT_MASK) >> ESR_ELx_SRT_SHIFT;
 	u64 val = regs->regs[rd];
 	u32 offset;
-	int ret;
+	bool ret = true;
 
 	smmu_v2_debug_print("addr: 0x%llx, val: 0x%llx, esr: 0x%llx\n",
 			    addr, regs->regs[rd], esr);
@@ -401,17 +401,20 @@ static int smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 	return ret;
 }
 
-static int smmuv2_nesting_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 addr)
+static bool smmuv2_nesting_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 addr)
 {
 	struct smmu_v2_nested *smmu;
 	u32 size = ARM_SMMU_GLOBAL_REGION2_OFFSET;
+	int ret;
 
 	for_each_smmu(smmu) {
 		/* Check if address is within this SMMU's range */
-		if (addr >= smmu->base_pa && addr < smmu->base_pa + size)
-			return smmuv2_nesting_dabt_device(smmu, regs, esr, addr - smmu->base_pa);
+		if ((addr >= smmu->base_pa) && (addr < (smmu->base_pa + size))) {
+			ret = smmuv2_nesting_dabt_device(smmu, regs, esr, addr - smmu->base_pa);
+			return (ret == -EPERM) ? false : true;
+		}
 	}
-	return -EPERM; /* No matching SMMU found */
+	return false;
 }
 
 /* Initialization functions */
@@ -643,6 +646,7 @@ const struct smmu_vendor_callbacks v2callbacks = {
 	.tlb_ops = NULL, /* fix me */
 	.get_cfg = NULL, /* fix me */
 	.post_init = smmu_attach_stage_2,
+	.dabt_hdl = smmuv2_nesting_dabt_handler,
 };
 
 static struct smmu_vendor_driver smmuv2_driver = {
@@ -677,8 +681,6 @@ int smmuv2_hyp_nesting_init(void)
 
 	/* Register this driver with the common vendor module */
 	ret = smmu_vendor_register_driver(&smmuv2_driver);
-
-	data.vops->register_host_dabt_fault_handler(smmuv2_nesting_dabt_handler);
 
 	return ret;
 }
