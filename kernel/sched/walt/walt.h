@@ -183,6 +183,7 @@ enum smart_freq_ipc_reason {
 };
 #define IPC_PARTICIPATION	(BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) | BIT(IPC_E))
 
+extern bool cpu_has_amu_support;
 DECLARE_PER_CPU(unsigned int, ipc_level);
 DECLARE_PER_CPU(unsigned long, ipc_cnt);
 DECLARE_PER_CPU(unsigned long, intr_cnt);

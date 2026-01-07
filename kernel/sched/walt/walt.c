@@ -5499,6 +5499,7 @@ DEFINE_PER_CPU(unsigned long, ipc_cnt);
 DEFINE_PER_CPU(u64, last_ipc_update);
 DEFINE_PER_CPU(u64, ipc_deactivate_ns);
 DEFINE_PER_CPU(bool, tickless_mode);
+
 static unsigned long calculate_ipc(int cpu)
 {
 	unsigned long amu_cnt, delta_cycl = 0, delta_intr = 0;
@@ -5670,7 +5671,7 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 
 	if (smart_freq_init_done &&
 		smart_freq_info->smart_freq_ipc_participation_mask & IPC_PARTICIPATION
-		&& IS_ENABLED(CONFIG_ARM64_AMU_EXTN)) {
+		&& IS_ENABLED(CONFIG_ARM64_AMU_EXTN) && cpu_has_amu_support) {
 		last_ipc_level = per_cpu(ipc_level, cpu);
 		last_deactivate_ns = per_cpu(ipc_deactivate_ns, cpu);
 		ipc = calculate_ipc(cpu);
@@ -6058,6 +6059,7 @@ static void register_walt_hooks(void)
 atomic64_t walt_irq_work_lastq_ws;
 bool walt_disabled = true;
 bool walt_quiet_state;
+bool cpu_has_amu_support = false;
 
 static int walt_init_stop_handler(void *data)
 {
@@ -6210,6 +6212,8 @@ static void walt_init(struct work_struct *work)
 	topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpu_online_mask);
 
 	walt_stats_sysctl_init();
+	cpu_has_amu_support =  cpuid_feature_extract_unsigned_field(read_cpuid(ID_AA64PFR0_EL1),
+			ID_AA64PFR0_EL1_AMU_SHIFT) > 0;
 }
 
 static DECLARE_WORK(walt_init_work, walt_init);
