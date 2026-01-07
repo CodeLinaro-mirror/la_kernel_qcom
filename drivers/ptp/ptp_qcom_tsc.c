@@ -76,7 +76,7 @@
 #define TSCSS_TSC_ETU_SLICE_BASE(reg_base, num, offset)	\
 			(reg_base + num * 0x1000 + offset)
 #define TSC_WRITE_READBACK_RETRIES		2
-
+#define TSC_RESOLUTION				0x4
 
 struct qcom_etu_slice {
 	char name[10];
@@ -118,6 +118,7 @@ struct qcom_ptp_tsc {
 	bool frame_pulse_gen;
 	spinlock_t reg_lock;
 	struct delayed_work tsc_preload_poll_work;
+	bool tsc_safety;
 };
 
 /* Write and readback safety critical registers */
@@ -859,6 +860,53 @@ static int qcom_tsc_etu_get_data(struct platform_device *pdev,
 	return 0;
 }
 
+static int qcom_tsc_self_test(struct qcom_ptp_tsc *timer)
+{
+	u32 regval;
+
+	/* Disable the TSC counter. */
+	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
+	regval &= ~BIT(0);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval);
+
+	/* Initiate the counter with known value.(0x11111111) */
+	writel_relaxed(0x11111111, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_LO);
+	writel_relaxed(0x11111111, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_HI);
+
+	/* Update the INCR value as 0x1. */
+	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
+	regval &= ~(GENMASK(11, 8));
+	regval |= (0x1 << 8);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval);
+
+	/* Write the STEP_INCR once. */
+	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
+	regval |= BIT(12);
+	writel_relaxed(regval, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
+	readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
+
+	/* Read counter and compare the counter value. */
+	if (readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_LO) -
+			0x11111111 != TSC_RESOLUTION) {
+		pr_err("TSC self test failed counter diff = 0x%x\n",
+			readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_LO) -
+			0x11111111);
+		return -EINVAL;
+	}
+
+	/* Clear the STEP_INCR bit. */
+	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
+	regval &= ~BIT(12);
+	writel_relaxed(regval, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
+	readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
+
+	/* Reset the counter to 0. */
+	writel_relaxed(0x0, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_LO);
+	writel_relaxed(0x0, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_HI);
+
+	return 0;
+}
+
 static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 {
 	struct qcom_ptp_tsc *timer;
@@ -915,7 +963,6 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 		return PTR_ERR(timer->tsc_etu_clk);
 	}
 
-
 	ret = clk_prepare_enable(timer->tsc_cfg_ahb_clk);
 	if (ret) {
 		pr_debug("Failed to enable AHB clock\n");
@@ -943,10 +990,21 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 	timer->frame_pulse_gen = of_property_read_bool(pdev->dev.of_node,
 							"qcom,tsc-frame-pulse-gen");
 
+	timer->tsc_safety = of_property_read_bool(pdev->dev.of_node,
+							"qcom,tsc-safety");
+
 	if (timer->tsc_hw_preload)
 		INIT_DEFERRABLE_WORK(&timer->tsc_preload_poll_work, tsc_preload_poll);
 
 	timer->ptp_clock_info = qcom_ptp_clock_info;
+
+	if (timer->tsc_safety) {
+		ret = qcom_tsc_self_test(timer);
+		if (ret) {
+			pr_debug("Failed in self test\n");
+			return ret;
+		}
+	}
 
 	timer->ptp_clock = ptp_clock_register(&timer->ptp_clock_info, &pdev->dev);
 	if (IS_ERR(timer->ptp_clock)) {
