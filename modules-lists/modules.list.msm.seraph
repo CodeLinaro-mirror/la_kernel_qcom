@@ -49,6 +49,7 @@ mem-prot.ko
 mem_buf.ko
 mem_buf_dev.ko
 msm_dma_iommu_mapping.ko
+qcom_dma_heaps.ko
 gh_arm_drv.ko
 gh_dbl.ko
 gh_mem_notifier.ko
@@ -58,6 +59,7 @@ gh_rm_drv.ko
 gh_rm_heap_manager.ko
 gunyah_loader.ko
 arm_smmu_pmu.ko
+deferred-free-helper.ko
 qcom_ipc_logging.ko
 msm_qmp.ko
 mdt_loader.ko
