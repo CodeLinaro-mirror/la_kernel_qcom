@@ -7715,10 +7715,13 @@ static irqreturn_t handle_global_irq(int irq, void *data)
 		goto done;
 	}
 
-	/* Not handling the interrupts when we are in drv suspend */
+	/*
+	 * Not handling the interrupts when the resources are not
+	 * initialized or when we are in drv suspend.
+	 */
 	if (!dev->cfg_access) {
 		PCIE_DBG2(dev,
-			"PCIe: RC%d is currently in drv suspend.\n",
+			"PCIe: RC%d: Either in drv suspend or res init not done\n",
 			dev->rc_idx);
 		goto done;
 	}
@@ -9839,7 +9842,7 @@ static void msm_pcie_lock_init(struct msm_pcie_dev_t *pcie_dev)
 {
 	spin_lock_init(&pcie_dev->cfg_lock);
 	spin_lock_init(&pcie_dev->evt_reg_list_lock);
-	pcie_dev->cfg_access = true;
+	pcie_dev->cfg_access = false;
 	mutex_init(&pcie_dev->enumerate_lock);
 	mutex_init(&pcie_dev->setup_lock);
 	mutex_init(&pcie_dev->recovery_lock);
