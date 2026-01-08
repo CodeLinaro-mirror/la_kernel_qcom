@@ -9,6 +9,9 @@ clk-rpmh.ko
 clk-dummy.ko
 gcc-pikachu.ko
 tcsrcc-pikachu.ko
+videocc-pikachu.ko
+evacc-pikachu.ko
+camcc-pikachu.ko
 smem.ko
 socinfo.ko
 qcom_tzmem.ko
