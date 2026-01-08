@@ -72,6 +72,7 @@ autogvmlv_config = {
     "CONFIG_QCOM_MEMORY_DUMP_V2": "m",
     "CONFIG_QCOM_MINIDUMP": "m",
     "CONFIG_QCOM_MINIDUMP_PANIC_DUMP": "y",
+    "CONFIG_QCOM_MINIDUMP_RM": "y",
     "CONFIG_QCOM_MINIDUMP_VIRTIO": "m",
     "CONFIG_QCOM_PDC": "m",
     "CONFIG_QCOM_QMI_HELPERS": "m",
