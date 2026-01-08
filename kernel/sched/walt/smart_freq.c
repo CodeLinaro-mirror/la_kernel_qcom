@@ -282,7 +282,7 @@ int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write,
 	if (!smart_freq_init_done)
 		return -EINVAL;
 
-	if (!IS_ENABLED(CONFIG_ARM64_AMU_EXTN))
+	if (!cpu_has_amu_support)
 		return -EINVAL;
 
 	mutex_lock(&freq_reason_mutex);
