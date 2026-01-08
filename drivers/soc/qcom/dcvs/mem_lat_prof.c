@@ -11,11 +11,10 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-#include <linux/qcom_scm.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/qtee_shmbridge.h>
 #include <linux/slab.h>
-#include <linux/smci_object.h>
-#include <linux/smci_clientenv.h>
+#include <linux/firmware/qcom/si_object.h>
 #include "smci_mem_lat.h"
 #include "trace-bus-prof.h"
 
@@ -288,29 +287,27 @@ static int set_mon_enabled(void *data, u64 val)
 	u32 count, enable = val ? 1 : 0;
 	char *master_name = data;
 	int i, ret = 0;
-	struct smci_object mem_lat_env = {NULL, NULL};
-	struct smci_object mem_lat_profiler = {NULL, NULL};
+	struct si_object *mem_lat_env, *mem_lat_profiler = NULL;
+	static struct si_object_invoke_ctx oic;
 
-	ret = smci_get_client_env_object(&mem_lat_env);
+	ret = si_core_get_client_env(&oic, &mem_lat_env);
 	if (ret) {
-		mem_lat_env.invoke = NULL;
-		mem_lat_env.context = NULL;
+		mem_lat_env = NULL;
 		pr_err("mem_lat_profiler: get client env object failed\n");
 		ret =  -EIO;
 		goto end;
 	}
 
-	ret = smci_clientenv_open(mem_lat_env, SMCI_MEM_LAT_PROFILER_SERVICE_UID,
+	ret = si_core_client_env_open(&oic, mem_lat_env, SMCI_MEM_LAT_PROFILER_SERVICE_UID,
 			&mem_lat_profiler);
 	if (ret) {
-		mem_lat_profiler.invoke = NULL;
-		mem_lat_profiler.context = NULL;
+		mem_lat_profiler = NULL;
 		pr_err("mem_lat_profiler: smci client env open failed\n");
 		ret = -EIO;
 		goto end;
 	}
 
-	ret = smci_mem_lat_profiler_check_license_status(mem_lat_profiler,
+	ret = smci_mem_lat_profiler_check_license_status(&oic, mem_lat_profiler,
 			MEM_LATENCY_FEATURE_ID, NULL, 0);
 	if (ret) {
 		pr_err("mem_lat_profiler: smci_mem_lat_profiler_check_license_status failed\n");
@@ -352,8 +349,8 @@ unlock:
 	mutex_unlock(&bus_lat->lock);
 	return ret;
 end:
-	SMCI_OBJECT_ASSIGN_NULL(mem_lat_profiler);
-	SMCI_OBJECT_ASSIGN_NULL(mem_lat_env);
+	put_si_object(mem_lat_profiler);
+	put_si_object(mem_lat_env);
 	return ret;
 }
 

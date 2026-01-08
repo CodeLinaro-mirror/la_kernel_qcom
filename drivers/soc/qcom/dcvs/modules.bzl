@@ -218,5 +218,14 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/dcvs/mem_lat_prof.c",
+            "drivers/soc/qcom/dcvs/smci_mem_lat.h",
+            "drivers/soc/qcom/dcvs/bus_prof.h",
+            "drivers/soc/qcom/dcvs/trace-bus-prof.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/soc/qcom/dcvs/trace-bus-prof",
+            "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )

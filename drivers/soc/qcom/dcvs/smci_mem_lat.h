@@ -8,7 +8,7 @@
 #ifndef __SMCI_MEM_LAT_PROFILER_H
 #define __SMCI_MEM_LAT_PROFILER_H
 
-#include <linux/smci_object.h>
+#include <linux/firmware/qcom/si_object.h>
 
 #define SMCI_MEM_LAT_PROFILER_SERVICE_UID UINT32_C(426)
 #define SMCI_MEM_LAT_PROFILER_SERVICE_ERROR_NO_MEM INT32_C(10)
@@ -17,18 +17,6 @@
 #define SMCI_MEM_LAT_PROFILER_SERVICE_ERROR_NO_VALID_LICENSE INT32_C(13)
 
 #define SMCI_MEM_LAT_PROFILER_SERVICE_OP_CHECK_LICENSE_STATUS 0
-
-static inline int32_t
-smci_mem_lat_release(struct smci_object self)
-{
-	return smci_object_invoke(self, SMCI_OBJECT_OP_RELEASE, 0, 0);
-}
-
-static inline int32_t
-smci_mem_lat_retain(struct smci_object self)
-{
-	return smci_object_invoke(self, SMCI_OBJECT_OP_RETAIN, 0, 0);
-}
 
 /*
  **
@@ -40,18 +28,26 @@ smci_mem_lat_retain(struct smci_object self)
  ** @return
  ** 0 (SMCI_OBJECT_OK) indicates success
  */
-static inline int32_t smci_mem_lat_profiler_check_license_status(struct smci_object self,
-		uint32_t feature_id_val, const void *licensee_ptr, size_t licensee_len)
+static inline int32_t smci_mem_lat_profiler_check_license_status(struct si_object_invoke_ctx *oic,
+		struct si_object *self, uint32_t feature_id_val, void *licensee_ptr,
+		size_t licensee_len)
 {
 
-	int32_t result;
-	union smci_object_arg a[2];
+	int32_t ret, result;
+	struct si_arg args[3] = { 0 };
 
-	a[0].b = (struct smci_object_buf) { &feature_id_val, sizeof(uint32_t) };
-	a[1].bi = (struct smci_object_buf_in) { licensee_ptr, licensee_len * sizeof(uint8_t) };
+	args[0].type = SI_AT_IB;
+	args[0].b = (struct si_buffer) { {&feature_id_val}, sizeof(uint32_t) };
+	args[1].type = SI_AT_IB;
+	args[1].b = (struct si_buffer) { { licensee_ptr }, licensee_len * sizeof(uint8_t) };
+	args[2].type = SI_AT_END;
 
-	result = smci_object_invoke(self, SMCI_MEM_LAT_PROFILER_SERVICE_OP_CHECK_LICENSE_STATUS, a,
-			SMCI_OBJECT_COUNTS_PACK(2, 0, 0, 0));
+	ret = si_object_do_invoke(oic, self, SMCI_MEM_LAT_PROFILER_SERVICE_OP_CHECK_LICENSE_STATUS,
+		args, &result);
+	if (ret) {
+		pr_err("failed with result %d(ret = %d).\n", result, ret);
+		return -EINVAL;
+	}
 
 	return result;
 }
