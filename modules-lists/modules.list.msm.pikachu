@@ -31,4 +31,6 @@ mem-prot.ko
 mem_buf.ko
 mem_buf_dev.ko
 msm_dma_iommu_mapping.ko
+qcom_dma_heaps.ko
 arm_smmu_pmu.ko
+deferred-free-helper.ko
