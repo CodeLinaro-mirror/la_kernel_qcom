@@ -88,3 +88,7 @@ msm_gpi.ko
 spi-msm-geni.ko
 arm_ffa.ko
 arm_ffa_transport.ko
+cpu_phys_log_map.ko
+qcom-pmu-lib.ko
+qcom_scmi_vendor.ko
+qcom_scmi_client.ko
