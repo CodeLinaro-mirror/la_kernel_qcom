@@ -49,3 +49,4 @@ qcom_ice.ko
 cqhci.ko
 sdhci-msm.ko
 mdt_loader.ko
+socinfo.ko
