@@ -69,3 +69,5 @@ qcom_soc_wdt.ko
 qcom_ice.ko
 crypto-qti.ko
 qcom-ipcc.ko
+qcom-reboot-reason.ko
+qcom-dload-mode.ko
