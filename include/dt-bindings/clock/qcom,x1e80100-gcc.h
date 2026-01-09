@@ -397,6 +397,9 @@
 #define GCC_USB4_2_PHY_RX0_CLK_SRC				387
 #define GCC_USB4_2_PHY_RX1_CLK_SRC				388
 #define GCC_USB4_2_PHY_SYS_CLK_SRC				389
+#define GCC_QSPI_CNOC_PERIPH_AHB_CLK				390
+#define GCC_QSPI_CORE_CLK_SRC					391
+#define GCC_QSPI_CORE_CLK					392
 
 /* GCC power domains */
 #define GCC_PCIE_0_TUNNEL_GDSC					0
@@ -518,4 +521,6 @@
 #define GCC_VIDEO_BCR						87
 #define GCC_VIDEO_AXI0_CLK_ARES					88
 #define GCC_VIDEO_AXI1_CLK_ARES					89
+#define GCC_QSPI_BCR						90
+
 #endif

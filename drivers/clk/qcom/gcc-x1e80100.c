@@ -1823,6 +1823,44 @@ static struct clk_rcg2 gcc_pdm2_clk_src = {
 	},
 };
 
+static const struct freq_tbl ftbl_gcc_qspi_core_clk_src[] = {
+	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(75000000, P_GCC_GPLL0_OUT_EVEN, 4, 0, 0),
+	F(150000000, P_GCC_GPLL0_OUT_EVEN, 2, 0, 0),
+	F(171428571, P_GCC_GPLL0_OUT_MAIN, 3.5, 0, 0),
+	F(201500000, P_GCC_GPLL4_OUT_MAIN, 4, 0, 0),
+	F(240000000, P_GCC_GPLL0_OUT_MAIN, 2.5, 0, 0),
+	F(268666667, P_GCC_GPLL4_OUT_MAIN, 3, 0, 0),
+	F(300000000, P_GCC_GPLL0_OUT_MAIN, 2, 0, 0),
+	F(403000000, P_GCC_GPLL4_OUT_MAIN, 2, 0, 0),
+	{ }
+};
+
+static struct clk_rcg2 gcc_qspi_core_clk_src = {
+	.cmd_rcgr = 0x4b00c,
+	.mnd_width = 0,
+	.hid_width = 5,
+	.parent_map = gcc_parent_map_7,
+	.freq_tbl = ftbl_gcc_qspi_core_clk_src,
+	.enable_safe_config = true,
+	.flags = HW_CLK_CTRL_MODE,
+	.clkr.hw.init = &(const struct clk_init_data) {
+		.name = "gcc_qspi_core_clk_src",
+		.parent_data = gcc_parent_data_7,
+		.num_parents = ARRAY_SIZE(gcc_parent_data_7),
+		.flags = CLK_SET_RATE_PARENT,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_cx,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 150000000,
+			[VDD_LOW] = 201500000,
+			[VDD_NOMINAL] = 403000000},
+	},
+};
+
 static const struct freq_tbl ftbl_gcc_qupv3_wrap0_s0_clk_src[] = {
 	F(7372800, P_GCC_GPLL0_OUT_EVEN, 1, 384, 15625),
 	F(14745600, P_GCC_GPLL0_OUT_EVEN, 1, 768, 15625),
@@ -5591,6 +5629,39 @@ static struct clk_branch gcc_qmip_video_vcodec_ahb_clk = {
 	},
 };
 
+static struct clk_branch gcc_qspi_cnoc_periph_ahb_clk = {
+	.halt_reg = 0x4b004,
+	.halt_check = BRANCH_HALT_VOTED,
+	.hwcg_reg = 0x4b004,
+	.hwcg_bit = 1,
+	.clkr = {
+		.enable_reg = 0x4b004,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "gcc_qspi_cnoc_periph_ahb_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
+static struct clk_branch gcc_qspi_core_clk = {
+	.halt_reg = 0x4b008,
+	.halt_check = BRANCH_HALT,
+	.clkr = {
+		.enable_reg = 0x4b008,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "gcc_qspi_core_clk",
+			.parent_hws = (const struct clk_hw*[]) {
+				&gcc_qspi_core_clk_src.clkr.hw,
+			},
+			.num_parents = 1,
+			.flags = CLK_SET_RATE_PARENT,
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch gcc_qupv3_wrap0_core_2x_clk = {
 	.halt_reg = 0x23018,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -8202,6 +8273,9 @@ static struct clk_regmap *gcc_x1e80100_clocks[] = {
 	[GCC_QMIP_VIDEO_CVP_AHB_CLK] = &gcc_qmip_video_cvp_ahb_clk.clkr,
 	[GCC_QMIP_VIDEO_V_CPU_AHB_CLK] = &gcc_qmip_video_v_cpu_ahb_clk.clkr,
 	[GCC_QMIP_VIDEO_VCODEC_AHB_CLK] = &gcc_qmip_video_vcodec_ahb_clk.clkr,
+	[GCC_QSPI_CNOC_PERIPH_AHB_CLK] = &gcc_qspi_cnoc_periph_ahb_clk.clkr,
+	[GCC_QSPI_CORE_CLK] = &gcc_qspi_core_clk.clkr,
+	[GCC_QSPI_CORE_CLK_SRC] = &gcc_qspi_core_clk_src.clkr,
 	[GCC_QUPV3_WRAP0_CORE_2X_CLK] = &gcc_qupv3_wrap0_core_2x_clk.clkr,
 	[GCC_QUPV3_WRAP0_CORE_CLK] = &gcc_qupv3_wrap0_core_clk.clkr,
 	[GCC_QUPV3_WRAP0_QSPI_S2_CLK] = &gcc_qupv3_wrap0_qspi_s2_clk.clkr,
@@ -8504,6 +8578,7 @@ static const struct qcom_reset_map gcc_x1e80100_resets[] = {
 	[GCC_PCIE_PHY_COM_BCR] = { 0x6f010 },
 	[GCC_PCIE_RSCC_BCR] = { 0xa4000 },
 	[GCC_PDM_BCR] = { 0x33000 },
+	[GCC_QSPI_BCR] = { 0x4b000 },
 	[GCC_QUPV3_WRAPPER_0_BCR] = { 0x42000 },
 	[GCC_QUPV3_WRAPPER_1_BCR] = { 0x18000 },
 	[GCC_QUPV3_WRAPPER_2_BCR] = { 0x1e000 },
