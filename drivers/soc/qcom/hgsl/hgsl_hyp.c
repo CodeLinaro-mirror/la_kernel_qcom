@@ -114,6 +114,11 @@ static const char * const gsl_rpc_func_names[] = {
 	"RPC_CONTEXT_REGISTER_DBCQ",
 	"RPC_GSLPROFILER_PER_PROC_GPU_BUSY",
 	"RPC_GSLPROFILER_PER_PROC_GPU_PMEM",
+	"RPC_DEVICE_GETFEATURES",
+	"RPC_DEVICE_ACTIVATE",
+	"RPC_GVM_INIT",
+	"RPC_GVM_DEINIT",
+	"RPC_NOTIFY_PM_STATE",
 	"RPC_FUNC_LAST" // insert new func BEFORE this line!
 };
 
