@@ -71,3 +71,10 @@ crypto-qti.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
 qcom-dload-mode.ko
+dwc3-msm.ko
+usb_f_gsi.ko
+usb_f_qdss.ko
+phy-msm-ssusb-qmp.ko
+phy-msm-m31-eusb2.ko
+repeater.ko
+repeater-i2c-eusb2.ko
