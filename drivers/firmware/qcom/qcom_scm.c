@@ -44,6 +44,7 @@
 #include <include/linux/arm-smccc.h>
 #include <linux/qtee_shmbridge.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <linux/firmware/qcom/qcom_scm_hab.h>
 
 #include "qcom_scm.h"
 #include "qcom_tzmem.h"
@@ -2416,6 +2417,27 @@ int qcom_scm_camera_update_camnoc_qos(uint32_t use_case_id,
 }
 EXPORT_SYMBOL_GPL(qcom_scm_camera_update_camnoc_qos);
 
+int qcom_scm_tsens_reinit(int *tsens_ret)
+{
+	unsigned int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_TSENS,
+		.cmd = QCOM_SCM_TSENS_INIT_ID,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	struct qcom_scm_res res;
+
+	if (SCM_NOT_INITIALIZED())
+		return -ENODEV;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+	if (tsens_ret)
+		*tsens_ret = res.result[0];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_tsens_reinit);
+
 static int qcom_scm_reboot(struct device *dev)
 {
 	struct qcom_scm_desc desc = {
@@ -3474,7 +3496,7 @@ static irqreturn_t qcom_scm_irq_handler(int irq, void *p)
 static int __qcom_multi_smc_init(struct qcom_scm *__scm,
 						struct platform_device *pdev)
 {
-	int ret = 0, irq;
+	int ret = 0, irq = -1;
 
 	spin_lock_init(&__scm->waitq.idr_lock);
 	idr_init(&__scm->waitq.idr);
@@ -3483,7 +3505,16 @@ static int __qcom_multi_smc_init(struct qcom_scm *__scm,
 
 		/* Detect Multi SMC support present or not */
 		ret = qcom_scm_query_wq_queue_info(__scm);
-		if (!ret) {
+
+		if (ret == -ENXIO
+			&& of_property_read_bool(__scm->dev->of_node, "qcom,scm-hab")) {
+			// concurrency abilities will be specified by Host QCPE,
+			// IRQ will not be used with HAB backend
+			dev_info(__scm->dev, "Allowing %llu tasks to enter TZ concurrently\n",
+					__scm->waitq.call_ctx_cnt);
+			sema_init(&qcom_scm_sem_lock, (int)__scm->waitq.call_ctx_cnt);
+			return 0;
+		} else if (ret == 0) {
 			irq = __scm->waitq.irq;
 			sema_init(&qcom_scm_sem_lock,
 					(int)__scm->waitq.call_ctx_cnt);
@@ -3636,6 +3667,10 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	/* open hab channels for non-atomic calls */
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,scm-hab"))
+		scm_qcpe_hab_open_nonatomic(__scm->waitq.call_ctx_cnt);
+
 	scm->restart_nb.notifier_call = qcom_scm_do_restart;
 	scm->restart_nb.priority = 130;
 	register_restart_handler(&scm->restart_nb);
@@ -3722,7 +3757,7 @@ MODULE_DEVICE_TABLE(of, qcom_scm_dt_match);
 
 static struct platform_driver qcom_scm_driver = {
 	.driver = {
-		.name	= "qcom_scm",
+		.name = "qcom_scm",
 		.of_match_table = qcom_scm_dt_match,
 		.suppress_bind_attrs = true,
 	},

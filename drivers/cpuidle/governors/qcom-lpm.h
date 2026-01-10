@@ -11,13 +11,29 @@
 
 #define MAX_LPM_CPUS		8
 #define MAXSAMPLES		5
+#define PRED_RESI_FACT		1
+#define MIN_RESI_TIMES		3
+#define MAX_PRED_TIMER_ADD	1000
 #define PRED_TIMER_ADD		100
 #define PRED_PREMATURE_CNT	3
 #define PRED_REF_STDDEV		500
+#define PRED_ACTIVE_TIME	0
+#define IPI_PRED_REF_STDDEV	500
 #define CLUST_SMPL_INVLD_TIME	40000
 #define CLUST_BIAS_TIME_MSEC	10
 #define MAX_CLUSTER_STATES	4
 
+extern u32 premature_resi_div_cpu;
+extern u32 pred_active_time;
+extern u32 resi_fact;
+extern u32 pred_timer_add;
+extern u32 pred_premature_cnt;
+extern u32 pred_ref_stddev;
+extern u32 ipi_pred_ref_stddev;
+extern bool optimized_resi;
+extern bool bias_disabled;
+extern bool cluster_bias_disabled;
+extern bool premature_ext_disabled;
 extern bool sleep_disabled;
 extern bool prediction_disabled;
 
@@ -31,15 +47,15 @@ struct qcom_cluster_node {
 };
 
 struct history_lpm {
-	int mode[MAXSAMPLES];
-	u64 resi[MAXSAMPLES];
+	u32 mode[MAXSAMPLES];
+	s64 resi[MAXSAMPLES];
 	int nsamp;
-	uint32_t samples_idx;
+	u32 samples_idx;
 };
 
 struct history_ipi {
-	u64 interval[MAXSAMPLES];
-	uint32_t current_ptr;
+	s64 interval[MAXSAMPLES];
+	u32 current_ptr;
 	ktime_t cpu_idle_resched_ts;
 };
 
@@ -47,12 +63,13 @@ struct lpm_cpu {
 	int cpu;
 	int enable;
 	int last_idx;
+	int timer_factor;
 	struct notifier_block nb;
 	struct cpuidle_driver *drv;
 	struct cpuidle_device *dev;
 	ktime_t next_wakeup;
-	uint64_t predicted;
-	uint32_t history_invalid;
+	s64 predicted;
+	bool history_invalid;
 	bool predict_started;
 	bool htmr_wkup;
 	struct hrtimer histtimer;
@@ -60,29 +77,34 @@ struct lpm_cpu {
 	struct history_lpm lpm_history;
 	struct history_ipi ipi_history;
 	ktime_t now;
-	uint64_t bias;
+	ktime_t active_time;
+	ktime_t exit_time;
+	u64 bias;
 	int64_t next_pred_time;
-	uint32_t pred_type;
+	u32 pred_type;
+	u64 select_reason;
+	u64 hist_reason;
 	bool ipi_pending;
 	spinlock_t lock;
 	bool cpu_off_invoked;
 };
 
 struct cluster_history {
-	uint64_t residency;
+	ktime_t residency;
+	ktime_t entry_time;
 	int mode;
-	uint64_t entry_time;
 };
 
 struct lpm_cluster {
 	struct device *dev;
-	uint32_t samples_idx;
+	u32 samples_idx;
 	bool history_invalid;
 	bool htmr_wkup;
 	int entry_idx;
 	int restrict_idx;
 	int nsamp;
-	u32 samples_invalid_time;
+	int timer_cpu;
+	u64 samples_invalid_time;
 	u32 pred_premature_cnt;
 	struct cluster_history history[MAXSAMPLES];
 	struct generic_pm_domain *genpd;
@@ -106,6 +128,7 @@ struct lpm_cluster {
 	bool is_timer_queued;
 	bool need_timer_requeue;
 	bool use_bias_timer;
+	bool pre_timer;
 };
 
 struct cluster_governor {

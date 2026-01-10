@@ -61,6 +61,9 @@ bool qcom_tzmem_get_status(void)
 
 static int qcom_tzmem_init(void)
 {
+	dev_warn(qcom_tzmem_dev,
+		 "MODE_GENERIC active: SHM bridge *NOT* enabled. Enable QCOM_TZMEM_MODE_SHMBRIDGE for security.\n");
+
 	return 0;
 }
 
@@ -790,3 +793,6 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_enable);
 MODULE_DESCRIPTION("TrustZone memory allocator for Qualcomm firmware drivers");
 MODULE_AUTHOR("Bartosz Golaszewski <bartosz.golaszewski@linaro.org>");
 MODULE_LICENSE("GPL");
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_FFA)
+MODULE_SOFTDEP("pre: arm_ffa arm_ffa_transport");
+#endif

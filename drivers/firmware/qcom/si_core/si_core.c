@@ -1448,7 +1448,11 @@ static void si_core_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id si_core_match[] = {
-	{ .compatible = "qcom,mem-object", }, {}
+	/* qcom,mem-object is deprecated, only here for backward
+	 * compatibility.
+	 */
+	{ .compatible = "qcom,mem-object", },
+	{ .compatible = "qcom,si-core", }, {}
 };
 
 static struct platform_driver si_core_plat_driver = {
@@ -1489,3 +1493,7 @@ module_exit(si_core_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("SI CORE driver");
 MODULE_IMPORT_NS(DMA_BUF);
+MODULE_SOFTDEP("pre: qcom-scm");
+#if IS_ENABLED(CONFIG_QCOM_SI_CORE_MEM_FFA)
+MODULE_SOFTDEP("pre: arm_ffa arm_ffa_transport");
+#endif

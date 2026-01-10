@@ -158,6 +158,7 @@ static inline void qcom_scm_populate_mem_map_info(
 extern int qcom_scm_sec_wdog_deactivate(void);
 extern int qcom_scm_sec_wdog_trigger(void);
 extern int qcom_scm_disable_sdi(void);
+extern int qcom_scm_tsens_reinit(int *tsens_ret);
 
 bool qcom_scm_is_available(void);
 

@@ -22,9 +22,11 @@ qcom_soc_wdt.ko
 debug-regulator.ko
 debugcc-canoe.ko
 dispcc-canoe.ko
+dispcc-malabar.ko
 evacc-canoe.ko
 gcc-alor.ko
 gcc-canoe.ko
+gcc-malabar.ko
 gdsc-regulator.ko
 gpucc-canoe.ko
 tcsrcc-canoe.ko
@@ -41,8 +43,9 @@ dcvs_fp.ko
 qcom-dcvs.ko
 qcom_llcc_pmu.ko
 qcom-pmu-lib.ko
+kryo_arm64_edac.ko
 proxy-consumer.ko
-rpmh-regulator.ko
+rpm-smd-regulator.ko
 stub-regulator.ko
 spmi-pmic-arb.ko
 regmap-spmi.ko
@@ -67,6 +70,7 @@ qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
 qcom-scm.ko
+qcom-mpm.ko
 qcom_hwspinlock.ko
 qcom_aoss.ko
 qrtr.ko
@@ -87,12 +91,13 @@ qcom_dma_heaps.ko
 qseecom_proxy.ko
 si_core_module.ko
 mem_object.ko
+nvmem_qfprom.ko
 ufshcd-crypto-qti.ko
 qcom_ice.ko
 ufs-qcom.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
-phy-qcom-ufs-qmp-v4-canoe.ko
+phy-qcom-ufs-qmp-v4-waipio.ko
 sg.ko
 gh_arm_drv.ko
 gh_dbl.ko

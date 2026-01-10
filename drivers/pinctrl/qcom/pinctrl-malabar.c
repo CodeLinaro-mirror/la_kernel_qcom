@@ -232,9 +232,13 @@ static const struct pinctrl_pin_desc malabar_pins[] = {
 	PINCTRL_PIN(112, "GPIO_112"),
 	PINCTRL_PIN(113, "GPIO_113"),
 	PINCTRL_PIN(114, "UFS_RESET"),
-	PINCTRL_PIN(115, "SDC2_CLK"),
-	PINCTRL_PIN(116, "SDC2_CMD"),
-	PINCTRL_PIN(117, "SDC2_DATA"),
+	PINCTRL_PIN(115, "SDC1_RCLK"),
+	PINCTRL_PIN(116, "SDC1_CLK"),
+	PINCTRL_PIN(117, "SDC1_CMD"),
+	PINCTRL_PIN(118, "SDC1_DATA"),
+	PINCTRL_PIN(119, "SDC2_CLK"),
+	PINCTRL_PIN(120, "SDC2_CMD"),
+	PINCTRL_PIN(121, "SDC2_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -355,9 +359,13 @@ DECLARE_MSM_GPIO_PINS(112);
 DECLARE_MSM_GPIO_PINS(113);
 
 static const unsigned int ufs_reset_pins[] = { 114 };
-static const unsigned int sdc2_clk_pins[] = { 115 };
-static const unsigned int sdc2_cmd_pins[] = { 116 };
-static const unsigned int sdc2_data_pins[] = { 117 };
+static const unsigned int sdc1_rclk_pins[] = { 115 };
+static const unsigned int sdc1_clk_pins[] = { 116 };
+static const unsigned int sdc1_cmd_pins[] = { 117 };
+static const unsigned int sdc1_data_pins[] = { 118 };
+static const unsigned int sdc2_clk_pins[] = { 119 };
+static const unsigned int sdc2_cmd_pins[] = { 120 };
+static const unsigned int sdc2_data_pins[] = { 121 };
 
 enum malabar_functions {
 	msm_mux_gpio,
@@ -1754,9 +1762,13 @@ static const struct msm_pingroup malabar_groups[] = {
 	[113] = PINGROUP(113, qdss_gpio14, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			 egpio, 0x72010, 10),
 	[114] = UFS_RESET(ufs_reset, 0x181000),
-	[115] = SDC_QDSD_PINGROUP(sdc2_clk, 0x179000, 14, 6),
-	[116] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x179000, 11, 3),
-	[117] = SDC_QDSD_PINGROUP(sdc2_data, 0x179000, 9, 0),
+	[115] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x176004, 0, 0),
+	[116] = SDC_QDSD_PINGROUP(sdc1_clk, 0x176000, 13, 6),
+	[117] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x176000, 11, 3),
+	[118] = SDC_QDSD_PINGROUP(sdc1_data, 0x176000, 9, 0),
+	[119] = SDC_QDSD_PINGROUP(sdc2_clk, 0x179000, 14, 6),
+	[120] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x179000, 11, 3),
+	[121] = SDC_QDSD_PINGROUP(sdc2_data, 0x179000, 9, 0),
 };
 
 static struct pinctrl_qup malabar_qup_regs[] = {
@@ -1792,8 +1804,20 @@ static const struct msm_pinctrl_soc_data malabar_tlmm = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data malabar_vm_tlmm = {
+	.pins = malabar_pins,
+	.npins = ARRAY_SIZE(malabar_pins),
+	.functions = malabar_functions,
+	.nfunctions = ARRAY_SIZE(malabar_functions),
+	.groups = malabar_groups,
+	.ngroups = ARRAY_SIZE(malabar_groups),
+	.ngpios = 115,
+	.egpio_func = 11,
+};
+
 static const struct of_device_id malabar_tlmm_of_match[] = {
 	{ .compatible = "qcom,malabar-pinctrl", .data = &malabar_tlmm },
+	{ .compatible = "qcom,malabar-vm-tlmm", .data = &malabar_vm_tlmm },
 	{},
 };
 

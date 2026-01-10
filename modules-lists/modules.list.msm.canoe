@@ -102,6 +102,7 @@ ufs-qcom.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
 phy-qcom-ufs-qmp-v4-canoe.ko
+phy-qcom-ufs-qmp-v4-crow.ko
 sg.ko
 gh_arm_drv.ko
 gh_dbl.ko

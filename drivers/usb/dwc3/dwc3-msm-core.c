@@ -676,6 +676,7 @@ struct dwc3_msm {
 	int			pd_count;
 	struct device		**pd_devs;
 	bool			force_disconnect;
+	bool			disable_force_pull_up_down_quirk;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -6627,6 +6628,9 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 	mdwc->dis_sending_cm_l1_quirk = of_property_read_bool(node,
 				"qcom,dis-sending-cm-l1-quirk");
 
+	mdwc->disable_force_pull_up_down_quirk = of_property_read_bool(node,
+					"qcom,disable-force-pull-up-down-quirk");
+
 	/* use default as nominal bus voting */
 	mdwc->default_bus_vote = BUS_VOTE_NOMINAL;
 	of_property_read_u32(node, "qcom,default-bus-vote",
@@ -7302,11 +7306,9 @@ static void msm_dwc3_perf_vote_work(struct work_struct *w)
 	    (mdwc->qos_req_state == PM_QOS_REQ_DYNAMIC && count >= threshold))
 		in_perf_mode = true;
 
-	pr_debug("%s: in_perf_mode:%u, interrupts in last sample:%u\n",
-		 __func__, in_perf_mode, count);
-
 	mdwc->irq_cnt = new;
-	msm_dwc3_perf_vote_update(mdwc, in_perf_mode);
+	if (cpu_latency_qos_request_active(&mdwc->pm_qos_req_dma))
+		msm_dwc3_perf_vote_update(mdwc, in_perf_mode);
 
 	/*
 	 * in PM_QOS_REQ_DEFAULT and PM_QOS_REQ_PERF, both delay is 100ms,
@@ -7339,9 +7341,9 @@ static void msm_dwc3_perf_vote_enable(struct dwc3_msm *mdwc, bool enable)
 		schedule_delayed_work(&mdwc->perf_vote_work,
 				msecs_to_jiffies(PM_QOS_DEFAULT_SAMPLE_MS));
 	} else {
+		cancel_delayed_work_sync(&mdwc->perf_vote_work);
 		if (!cpu_latency_qos_request_active(&mdwc->pm_qos_req_dma))
 			return;
-		cancel_delayed_work_sync(&mdwc->perf_vote_work);
 		msm_dwc3_perf_vote_update(mdwc, false);
 		cpu_latency_qos_remove_request(&mdwc->pm_qos_req_dma);
 	}
@@ -7659,19 +7661,21 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		usb_role_switch_set_role(mdwc->dwc3_drd_sw, USB_ROLE_DEVICE);
 		clk_set_rate(mdwc->core_clk, mdwc->core_clk_rate);
 
-		/*
-		 * Check udc->driver to find out if we are bound to udc or not.
-		 */
-		spin_lock_irqsave(&dwc->lock, flags);
-		if ((mdwc->force_disconnect) && (!dwc->softconnect) &&
-			(dwc->gadget) && (dwc->gadget->udc->driver)) {
-			spin_unlock_irqrestore(&dwc->lock, flags);
-			dbg_event(0xFF, "Force Pullup", 0);
-			usb_gadget_connect(dwc->gadget);
+		if (!mdwc->disable_force_pull_up_down_quirk) {
+			/*
+			 * Check udc->driver to find out if we are bound to udc or not.
+			 */
 			spin_lock_irqsave(&dwc->lock, flags);
+			if ((mdwc->force_disconnect) && (!dwc->softconnect) &&
+				(dwc->gadget) && (dwc->gadget->udc->driver)) {
+				spin_unlock_irqrestore(&dwc->lock, flags);
+				dbg_event(0xFF, "Force Pullup", 0);
+				usb_gadget_connect(dwc->gadget);
+				spin_lock_irqsave(&dwc->lock, flags);
+			}
+			spin_unlock_irqrestore(&dwc->lock, flags);
+			mdwc->force_disconnect = false;
 		}
-		spin_unlock_irqrestore(&dwc->lock, flags);
-		mdwc->force_disconnect = false;
 	} else {
 		dev_dbg(mdwc->dev, "%s: turn off gadget\n", __func__);
 
@@ -7701,17 +7705,20 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 			dbg_event(0xFF, "StopGdgt connected", dwc->connected);
 			pm_runtime_suspend(&mdwc->dwc3->dev);
 		}
-		if ((timeout == 0) && (dwc->connected)) {
-			dbg_event(0xFF, "Force Pulldown", 0);
 
-			/*
-			 * Since we are not taking the udc_lock, there is a
-			 * chance that this might race with gadget_remove driver
-			 * in case this is called in parallel to UDC getting
-			 * cleared in userspace
-			 */
-			usb_gadget_disconnect(dwc->gadget);
-			mdwc->force_disconnect = true;
+		if (!mdwc->disable_force_pull_up_down_quirk) {
+			if ((timeout == 0) && (dwc->connected)) {
+				dbg_event(0xFF, "Force Pulldown", 0);
+
+				/*
+				 * Since we are not taking the udc_lock, there is a
+				 * chance that this might race with gadget_remove driver
+				 * in case this is called in parallel to UDC getting
+				 * cleared in userspace
+				 */
+				usb_gadget_disconnect(dwc->gadget);
+				mdwc->force_disconnect = true;
+			}
 		}
 
 		/* wait for LPM, to ensure h/w is reset after stop_peripheral */
@@ -8047,6 +8054,9 @@ static int dwc3_core_prepare(struct device *dev)
 	struct dwc3 *dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return 0;
+
 	dbg_event(0xFF, "Core PM prepare", pm_runtime_suspended(dev));
 	/*
 	 * It is recommended to use the PM prepare callback to handle situations
@@ -8073,6 +8083,9 @@ static void dwc3_core_complete(struct device *dev)
 {
 	struct dwc3	*dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return;
 
 	/*
 	 * In the PM devices documentation, while leaving system suspend when

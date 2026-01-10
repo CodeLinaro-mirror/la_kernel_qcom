@@ -799,7 +799,8 @@ static void geni_i3c_err(struct geni_i3c_dev *gi3c, int err)
 	I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev, "%s\n", gi3c_log[err].msg);
 	gi3c->err = gi3c_log[err].err;
 
-	geni_i3c_dump_dbg_regs(gi3c);
+	if (err != RD_TERM)
+		geni_i3c_dump_dbg_regs(gi3c);
 }
 
 /*

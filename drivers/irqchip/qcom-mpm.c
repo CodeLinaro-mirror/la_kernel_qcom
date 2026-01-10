@@ -61,8 +61,7 @@ struct msm_mpm_device_data {
 	void __iomem *mpm_ipc_reg;
 	void __iomem *timer_frame_reg;
 	irq_hw_number_t ipc_irq;
-	struct irq_domain *gic_chip_domain;
-	struct irq_domain *gpio_chip_domain;
+	struct irq_domain *domain;
 };
 
 struct mpm_pin {
@@ -101,7 +100,7 @@ static irq_hw_number_t get_parent_hwirq(struct irq_domain *d,
 	return GPIO_NO_WAKE_IRQ;
 }
 
-static void msm_get_mpm_pin(struct irq_data *d, int *mpm_pin, bool is_mpmgic)
+static void msm_get_mpm_pin(struct irq_data *d, int *mpm_pin)
 {
 	struct mpm_pin *mpm_data = NULL;
 	int i = 0, j = 0;
@@ -110,11 +109,14 @@ static void msm_get_mpm_pin(struct irq_data *d, int *mpm_pin, bool is_mpmgic)
 	if (!d || !d->domain)
 		return;
 
-	if (is_mpmgic && d->domain->host_data) {
+	if (d->domain->host_data) {
 		mpm_data = d->domain->host_data;
 		hwirq = get_parent_hwirq(d->domain, d->hwirq);
-		if (hwirq == GPIO_NO_WAKE_IRQ)
+		if (hwirq == GPIO_NO_WAKE_IRQ) {
+			mpm_pin[j] = d->hwirq;
+			mpm_to_irq[d->hwirq] = d->irq;
 			return;
+		}
 
 		for (i = 0; (mpm_data[i].pin >= 0) &&
 				(j < MAX_MPM_PIN_PER_IRQ); i++) {
@@ -124,9 +126,6 @@ static void msm_get_mpm_pin(struct irq_data *d, int *mpm_pin, bool is_mpmgic)
 				j++;
 			}
 		}
-	} else if (!is_mpmgic) {
-		mpm_pin[j] = d->hwirq;
-		mpm_to_irq[d->hwirq] = d->irq;
 	}
 }
 
@@ -157,8 +156,7 @@ static inline void msm_mpm_write(unsigned int reg,
 	} while (r_value != value);
 }
 
-static inline void msm_mpm_enable_irq(struct irq_data *d, bool on,
-							bool is_mpmgic)
+static inline void msm_mpm_enable_irq(struct irq_data *d, bool on)
 {
 	int mpm_pin[MAX_MPM_PIN_PER_IRQ] = {-1, -1};
 	unsigned long flags;
@@ -168,7 +166,7 @@ static inline void msm_mpm_enable_irq(struct irq_data *d, bool on,
 	unsigned int reg;
 
 	reg = MPM_REG_ENABLE;
-	msm_get_mpm_pin(d, mpm_pin, is_mpmgic);
+	msm_get_mpm_pin(d, mpm_pin);
 	for (i = 0; i < MAX_MPM_PIN_PER_IRQ; i++) {
 		if (mpm_pin[i] < 0)
 			return;
@@ -203,7 +201,7 @@ static void msm_mpm_program_set_type(bool set, unsigned int reg,
 }
 
 static void msm_mpm_set_type(struct irq_data *d,
-					unsigned int flowtype, bool is_mpmgic)
+					unsigned int flowtype)
 {
 	int mpm_pin[MAX_MPM_PIN_PER_IRQ] = {-1, -1};
 	unsigned long flags;
@@ -211,7 +209,7 @@ static void msm_mpm_set_type(struct irq_data *d,
 	unsigned int index, mask;
 	unsigned int reg = 0;
 
-	msm_get_mpm_pin(d, mpm_pin, is_mpmgic);
+	msm_get_mpm_pin(d, mpm_pin);
 	for (i = 0; i < MAX_MPM_PIN_PER_IRQ; i++) {
 		if (mpm_pin[i] < 0)
 			return;
@@ -241,53 +239,37 @@ static void msm_mpm_set_type(struct irq_data *d,
 	}
 }
 
-static void msm_mpm_gpio_chip_mask(struct irq_data *d)
+static void msm_mpm_chip_mask(struct irq_data *d)
 {
-	if (d->hwirq == GPIO_NO_WAKE_IRQ)
-		return;
+	msm_mpm_enable_irq(d, false);
 
-	msm_mpm_enable_irq(d, false, MPM_GPIO);
+	if (d->parent_data)
+		irq_chip_mask_parent(d);
 }
 
-static void msm_mpm_gpio_chip_unmask(struct irq_data *d)
+static void msm_mpm_chip_unmask(struct irq_data *d)
 {
-	if (d->hwirq == GPIO_NO_WAKE_IRQ)
-		return;
+	msm_mpm_enable_irq(d, true);
 
-	msm_mpm_enable_irq(d, true, MPM_GPIO);
+	if (d->parent_data)
+		irq_chip_unmask_parent(d);
 }
 
-static int msm_mpm_gpio_chip_set_type(struct irq_data *d, unsigned int type)
+static int msm_mpm_chip_set_type(struct irq_data *d, unsigned int type)
 {
-	if (d->hwirq == GPIO_NO_WAKE_IRQ)
+	if (!d->parent_data)
 		return 0;
 
-	msm_mpm_set_type(d, type, MPM_GPIO);
-
-	return 0;
-}
-
-static void msm_mpm_gic_chip_mask(struct irq_data *d)
-{
-	msm_mpm_enable_irq(d, false, MPM_GIC);
-	irq_chip_mask_parent(d);
-}
-
-static void msm_mpm_gic_chip_unmask(struct irq_data *d)
-{
-	msm_mpm_enable_irq(d, true, MPM_GIC);
-	irq_chip_unmask_parent(d);
-}
-
-static int msm_mpm_gic_chip_set_type(struct irq_data *d, unsigned int type)
-{
-	msm_mpm_set_type(d, type, MPM_GIC);
+	msm_mpm_set_type(d, type);
 	return irq_chip_set_type_parent(d, type);
 }
 
-int msm_mpm_gic_chip_set_affinity(struct irq_data *data,
+int msm_mpm_chip_set_affinity(struct irq_data *data,
 				 const struct cpumask *dest, bool force)
 {
+	if (!data->parent_data)
+		return 0;
+
 	data = data->parent_data;
 	if (data->chip->irq_set_affinity)
 		return data->chip->irq_set_affinity(data, dest, force);
@@ -301,27 +283,18 @@ void msm_mpm_gic_chip_eoi(struct irq_data *data)
 	data->chip->irq_eoi(data);
 }
 
-static struct irq_chip msm_mpm_gic_chip = {
-	.name		= "mpm-gic",
+static struct irq_chip msm_mpm_chip = {
+	.name		= "mpm-chip",
 	.irq_eoi	= msm_mpm_gic_chip_eoi,
-	.irq_mask	= msm_mpm_gic_chip_mask,
-	.irq_disable	= msm_mpm_gic_chip_mask,
-	.irq_unmask	= msm_mpm_gic_chip_unmask,
-	.irq_set_type	= msm_mpm_gic_chip_set_type,
+	.irq_mask	= msm_mpm_chip_mask,
+	.irq_disable	= msm_mpm_chip_mask,
+	.irq_unmask	= msm_mpm_chip_unmask,
+	.irq_set_type	= msm_mpm_chip_set_type,
 	.flags		= IRQCHIP_SET_TYPE_MASKED | IRQCHIP_MASK_ON_SUSPEND | IRQCHIP_SKIP_SET_WAKE,
-	.irq_set_affinity	= msm_mpm_gic_chip_set_affinity,
+	.irq_set_affinity	= msm_mpm_chip_set_affinity,
 };
 
-static struct irq_chip msm_mpm_gpio_chip = {
-	.name		= "mpm-gpio",
-	.irq_mask	= msm_mpm_gpio_chip_mask,
-	.irq_disable	= msm_mpm_gpio_chip_mask,
-	.irq_unmask	= msm_mpm_gpio_chip_unmask,
-	.irq_set_type	= msm_mpm_gpio_chip_set_type,
-	.flags		= IRQCHIP_SET_TYPE_MASKED | IRQCHIP_MASK_ON_SUSPEND | IRQCHIP_SKIP_SET_WAKE,
-};
-
-static int msm_mpm_gpio_chip_translate(struct irq_domain *d,
+static int msm_mpm_chip_translate(struct irq_domain *d,
 		struct irq_fwspec *fwspec,
 		unsigned long *hwirq,
 		unsigned int *type)
@@ -336,58 +309,7 @@ static int msm_mpm_gpio_chip_translate(struct irq_domain *d,
 	return -EINVAL;
 }
 
-static int msm_mpm_gpio_chip_alloc(struct irq_domain *domain,
-		unsigned int virq,
-		unsigned int nr_irqs,
-		void *data)
-{
-	int ret = 0;
-	struct irq_fwspec *fwspec = data;
-	irq_hw_number_t hwirq;
-	unsigned int type = IRQ_TYPE_NONE;
-
-	ret = msm_mpm_gpio_chip_translate(domain, fwspec, &hwirq, &type);
-	if (ret)
-		return ret;
-
-	if (hwirq == GPIO_NO_WAKE_IRQ)
-		return irq_domain_disconnect_hierarchy(domain, virq);
-
-	irq_domain_set_hwirq_and_chip(domain, virq, hwirq,
-				&msm_mpm_gpio_chip, NULL);
-
-	return irq_domain_disconnect_hierarchy(domain->parent, virq);
-}
-
-static int msm_mpm_gpio_chip_select(struct irq_domain *d,
-				struct irq_fwspec  *node,
-				enum irq_domain_bus_token bus_token)
-{
-	return (bus_token == DOMAIN_BUS_WAKEUP);
-}
-
-static const struct irq_domain_ops msm_mpm_gpio_chip_domain_ops = {
-	.alloc		= msm_mpm_gpio_chip_alloc,
-	.free		= irq_domain_free_irqs_common,
-	.select		= msm_mpm_gpio_chip_select,
-};
-
-static int msm_mpm_gic_chip_translate(struct irq_domain *d,
-		struct irq_fwspec *fwspec,
-		unsigned long *hwirq,
-		unsigned int *type)
-{
-	if (is_of_node(fwspec->fwnode)) {
-		if (fwspec->param_count != 2)
-			return -EINVAL;
-		*hwirq = fwspec->param[0];
-		*type = fwspec->param[1];
-		return 0;
-	}
-	return -EINVAL;
-}
-
-static int msm_mpm_gic_chip_alloc(struct irq_domain *domain,
+static int msm_mpm_chip_alloc(struct irq_domain *domain,
 					unsigned int virq,
 					unsigned int nr_irqs,
 					void *data)
@@ -396,18 +318,24 @@ static int msm_mpm_gic_chip_alloc(struct irq_domain *domain,
 	struct irq_fwspec parent_fwspec;
 	irq_hw_number_t hwirq, parent_hwirq;
 	unsigned int type;
-	int  ret;
+	int ret = 0;
 
-	ret = msm_mpm_gic_chip_translate(domain, fwspec, &hwirq, &type);
+	ret = msm_mpm_chip_translate(domain, fwspec, &hwirq, &type);
 	if (ret)
 		return ret;
 
-	irq_domain_set_hwirq_and_chip(domain, virq, hwirq,
-						&msm_mpm_gic_chip, NULL);
+	if (hwirq == GPIO_NO_WAKE_IRQ)
+		return irq_domain_disconnect_hierarchy(domain, virq);
+
+	ret = irq_domain_set_hwirq_and_chip(domain, virq, hwirq,
+						&msm_mpm_chip, NULL);
+
+	if (ret)
+		return ret;
 
 	parent_hwirq = get_parent_hwirq(domain, hwirq);
 	if (parent_hwirq == MPM_NO_PARENT_IRQ)
-		return 0;
+		return irq_domain_disconnect_hierarchy(domain->parent, virq);
 
 	parent_fwspec.fwnode      = domain->parent->fwnode;
 	parent_fwspec.param_count = 3;
@@ -419,9 +347,9 @@ static int msm_mpm_gic_chip_alloc(struct irq_domain *domain,
 					    &parent_fwspec);
 }
 
-static const struct irq_domain_ops msm_mpm_gic_chip_domain_ops = {
-	.translate	= msm_mpm_gic_chip_translate,
-	.alloc		= msm_mpm_gic_chip_alloc,
+static const struct irq_domain_ops msm_mpm_chip_domain_ops = {
+	.translate	= msm_mpm_chip_translate,
+	.alloc		= msm_mpm_chip_alloc,
 	.free		= irq_domain_free_irqs_common,
 };
 
@@ -436,12 +364,16 @@ static inline void msm_mpm_timer_write(void)
 {
 	u32 lo = ~0U, hi = ~0U, ctrl;
 
+	if (system_state == SYSTEM_SUSPEND)
+		goto exit;
+
 	ctrl = readl_relaxed(msm_mpm_dev_data.timer_frame_reg + MPM_CNTV_CTL);
 	if (ctrl & MPM_ARCH_TIMER_CTRL_ENABLE) {
 		lo = readl_relaxed(msm_mpm_dev_data.timer_frame_reg + MPM_CNTCVAL_LO);
 		hi = readl_relaxed(msm_mpm_dev_data.timer_frame_reg + MPM_CNTCVAL_HI);
 	}
 
+exit:
 	writel_relaxed(lo, msm_mpm_dev_data.mpm_request_reg_base);
 	writel_relaxed(hi, msm_mpm_dev_data.mpm_request_reg_base + 0x4);
 }
@@ -767,7 +699,7 @@ static int msm_mpm_irqchip_init(struct device_node *node,
 {
 	struct irq_domain *parent_domain;
 	const struct of_device_id *id;
-	int ret;
+	int ret = 0;
 
 	if (!parent) {
 		pr_err("%s(): no parent for mpm-gic\n", node->full_name);
@@ -793,30 +725,21 @@ static int msm_mpm_irqchip_init(struct device_node *node,
 		goto mpm_map_err;
 	}
 
-	msm_mpm_dev_data.gic_chip_domain = irq_domain_create_hierarchy(
-			parent_domain, 0, 256,
-			of_fwnode_handle(node),
-			&msm_mpm_gic_chip_domain_ops, (void *)id->data);
-	if (!msm_mpm_dev_data.gic_chip_domain) {
-		pr_err("gic domain add failed\n");
-		ret = -ENOMEM;
-		goto mpm_map_err;
-	}
-
-	msm_mpm_dev_data.gpio_chip_domain = irq_domain_create_hierarchy(
+	msm_mpm_dev_data.domain = irq_domain_create_hierarchy(
 			parent_domain, IRQ_DOMAIN_FLAG_QCOM_MPM_WAKEUP,
 			256, of_node_to_fwnode(node),
-			&msm_mpm_gpio_chip_domain_ops, NULL);
+			&msm_mpm_chip_domain_ops, (void *)id->data);
 
-	if (!msm_mpm_dev_data.gpio_chip_domain)
+	if (!msm_mpm_dev_data.domain)
 		return -ENOMEM;
 
-	irq_domain_update_bus_token(msm_mpm_dev_data.gpio_chip_domain, DOMAIN_BUS_WAKEUP);
+	irq_domain_update_bus_token(msm_mpm_dev_data.domain, DOMAIN_BUS_WAKEUP);
 
 	ret = msm_mpm_init(node);
+
 	if (!ret)
 		return ret;
-	irq_domain_remove(msm_mpm_dev_data.gic_chip_domain);
+	irq_domain_remove(msm_mpm_dev_data.domain);
 
 mpm_map_err:
 	kfree(mpm_to_irq);

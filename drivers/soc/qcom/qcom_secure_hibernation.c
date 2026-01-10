@@ -123,7 +123,8 @@ int get_client_env(struct si_object_invoke_ctx *oic, struct si_object **client_e
 	args[2].type = SI_AT_END;
 
 	/* IClientEnv_OP_registerWithCredentials  is 5. */
-	ret = si_object_do_invoke(oic, ROOT_SI_OBJECT, 5, args, &result);
+	ret = si_object_do_invoke(oic, ROOT_SI_OBJECT, ICLIENTENV_OP_REGISTER_WITH_CRED,
+					args, &result);
 	if (ret || result) {
 		pr_err("failed with result %d(ret = %d).\n", result, ret);
 		return -EINVAL;
@@ -150,7 +151,7 @@ int client_env_open(struct si_object_invoke_ctx *oic, struct si_object *client_e
 
 	/* IClientEnv_OP_open is 0. */
 
-	ret = si_object_do_invoke(oic, client_env, 0, args, &result);
+	ret = si_object_do_invoke(oic, client_env, ICLIENTENV_OP_OPEN, args, &result);
 	if (ret || result) {
 		pr_err("failed with result %d(ret = %d).\n", result, ret);
 		return -EINVAL;
@@ -176,7 +177,7 @@ static int hibernate_tzdata_mgr_getkey(struct si_object_invoke_ctx *oic,
 	args[1].type = SI_AT_END;
 
 	/* IHibernateTzDataMgr_getKey is 4. */
-	ret = si_object_do_invoke(oic, service, 4, args, &result);
+	ret = si_object_do_invoke(oic, service, IHIBERNATE_TZDATA_MGR_OP_GETKEY, args, &result);
 	if (ret || result || !key_ptr) {
 		pr_err("failed with result %d(ret = %d).\n", result, ret);
 		return -EINVAL;
@@ -203,7 +204,7 @@ static int hibernate_tzdata_mgr_savedata(struct si_object_invoke_ctx *oic,
 	args[2].type = SI_AT_END;
 
 	/* IHibernateTzDataMgr_saveData is 2. */
-	ret = si_object_do_invoke(oic, service, 2, args, &result);
+	ret = si_object_do_invoke(oic, service, IHIBERNATE_TZDATA_MGR_OP_SAVEDATA, args, &result);
 
 	if (ret || result) {
 		pr_err("failed with result %d(ret = %d).\n", result, ret);
@@ -218,7 +219,7 @@ static int get_key_from_tz(struct si_object_invoke_ctx *oic)
 
 	int ret;
 	struct si_object *client_env, *service;
-	uint8_t key_ptr[32];
+	uint8_t key_ptr[AES256_KEY_SIZE];
 
 	memset(key_ptr, 0, sizeof(key_ptr));
 
@@ -229,21 +230,21 @@ static int get_key_from_tz(struct si_object_invoke_ctx *oic)
 	}
 
 	/* CHibernateTzDataMgr_UID is 444. */
-	ret = client_env_open(oic, client_env, 444, &service);
+	ret = client_env_open(oic, client_env, CHIBERNATE_TZDATA_MGR_UID, &service);
 	if (ret) {
 		pr_err("%s: client_env_open failed (%d).\n", __func__, ret);
 		put_si_object(client_env);
 		return ret;
 	}
 
-	ret = hibernate_tzdata_mgr_getkey(oic, service, 32, key_ptr);
+	ret = hibernate_tzdata_mgr_getkey(oic, service, AES256_KEY_SIZE, key_ptr);
 	if (ret) {
 		pr_err("%s: Failed to get key (%d).\n", __func__, ret);
 		goto out;
 	}
 
 	/* HLOS VM UID is 3 */
-	ret = hibernate_tzdata_mgr_savedata(oic, service, 3, 32, key_ptr);
+	ret = hibernate_tzdata_mgr_savedata(oic, service, HLOS_VM_UID, AES256_KEY_SIZE, key_ptr);
 	if (ret) {
 		pr_err("%s: Failed to save key (%d).\n", __func__, ret);
 		goto out;
@@ -679,7 +680,7 @@ static int hibernate_pm_notifier(struct notifier_block *nb,
 		break;
 
 	default:
-		WARN_ONCE(1, "Invalid PM Notifier\n");
+		pr_debug("%s: Invalid PM Notifier\n", __func__);
 		break;
 	}
 

@@ -37,6 +37,7 @@
 #define MASTER_SDCC_2				28
 #define MASTER_USB2_0				29
 #define MASTER_USB3				30
+#define MASTER_MMRT_VIRT			31
 #define SLAVE_QUP_CORE_0			512
 #define SLAVE_AHB2PHY_USB			513
 #define SLAVE_APSS_THROTTLE_CFG			514
@@ -104,6 +105,6 @@
 #define SLAVE_TCU				576
 #define SLAVE_PCIE_MEMNOC			577
 #define SLAVE_ANOC_SNOC				578
-#define SLAVE_MMNRT_VIRT_MEMNOC			579
+#define SLAVE_MMNRT_VIRT			579
 
 #endif

@@ -34,6 +34,8 @@
 static struct list_head vhab_list = LIST_HEAD_INIT(vhab_list);
 static DEFINE_SPINLOCK(vh_lock);
 
+static DEFINE_MUTEX(virthab_init_lock);
+
 static struct virtio_device_tbl {
 	int32_t mmid;
 	__u32 device;
@@ -760,7 +762,7 @@ static int virthab_probe(struct virtio_device *vdev)
 {
 	struct virtio_hab *vh = NULL;
 	int err = 0, ret = 0;
-	static int init_once, dt_pchan_cnt, pchan_cnt;
+	static int init_failed, init_done, dt_pchan_cnt, pchan_cnt;
 	int mmid_range = hab_driver.ndevices;
 	uint32_t mmid_start = hab_driver.devp[0].id;
 
@@ -769,24 +771,40 @@ static int virthab_probe(struct virtio_device *vdev)
 		return -ENODEV;
 	}
 
-	if (init_once == 0) {
-		init_once = 1;
-		dt_pchan_cnt = hab_count_pchan();
-		pr_info("Total pchannel in device tree %d\n", dt_pchan_cnt);
+	if (!mutex_trylock(&virthab_init_lock))
+		return -EPROBE_DEFER;
 
-		hab_ops_register(&virtio_ops);
-
-		/*
-		 * this function is called at the first probe call only
-		 * so char driver is created before any virtio probe.
-		 */
-		ret = hab_driver_init();
-		if (ret) {
-			pr_err("hab_driver_init failed, ret %d\n", ret);
-			return ret;
-		}
+	if (init_failed) {
+		mutex_unlock(&virthab_init_lock);
+		pr_err("abort virthab probe due to hab_driver_init failed in other threads\n");
+		return -ENODEV;
 	}
 
+	if (init_done) {
+		mutex_unlock(&virthab_init_lock);
+		goto INIT_DONE;
+	}
+
+	dt_pchan_cnt = hab_count_pchan();
+	pr_info("Total pchannel in device tree %d\n", dt_pchan_cnt);
+
+	hab_ops_register(&virtio_ops);
+
+	/*
+	 * this function is called at the first probe call only
+	 * so char driver is created before any virtio probe.
+	 */
+	ret = hab_driver_init();
+	if (ret) {
+		init_failed = 1;
+		mutex_unlock(&virthab_init_lock);
+		pr_err("hab_driver_init failed, ret %d\n", ret);
+		return ret;
+	}
+	init_done = 1;
+	mutex_unlock(&virthab_init_lock);
+
+INIT_DONE:
 	pr_info("virtio has feature %llX virtio devid %X vid %d empty %d\n",
 		vdev->features, vdev->id.device, vdev->id.vendor,
 		list_empty(&vhab_list));

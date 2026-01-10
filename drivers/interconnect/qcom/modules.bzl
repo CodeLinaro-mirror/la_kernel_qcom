@@ -89,6 +89,26 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/interconnect/qcom/qnoc-shikra",
+        out = "qnoc-shikra.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_SHIKRA",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/shikra.c",
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/rpm-ids.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos-rpm",
+            "drivers/interconnect/qcom/icc-rpm",
+            "drivers/interconnect/qcom/icc-debug",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
         name = "drivers/interconnect/qcom/qnoc-canoe",
         out = "qnoc-canoe.ko",
         config = "CONFIG_INTERCONNECT_QCOM_CANOE",

@@ -43,6 +43,7 @@ def create_signed_modules_group(name, signed_modules):
     )
 
 def _generate_ddk_target(
+        hooks,
         module_map,
         target_variant,
         config_fragment,
@@ -92,6 +93,10 @@ def _generate_ddk_target(
         config = config_fragment,
     )
 
+    # Call registered hooks
+    for hook in hooks:
+        hook.func(target_variant)
+
     matched_configurations = []
     phony_configurations = []
     module_names = {}
@@ -106,6 +111,7 @@ def _generate_ddk_target(
 
     for module in matched_configurations:
         deps = [":{}".format(module_names.get(dep)) for dep in module.deps if module_names.get(dep)] + module.lib_deps
+        deps += [":{}_{}".format(target_variant, dep) for dep in module.hook_deps]
         src_hdrs = [src for src in module.srcs if src.endswith(".h")]
         includes = (module.includes or []) + {paths.dirname(hdr): "" for hdr in src_hdrs}.keys()
 
@@ -164,6 +170,10 @@ def _generate_ddk_target(
 
 def create_module_registry():
     module_map = {}
+    hooks = []
+
+    def register_hook(hook):
+        hooks.append(hook)
 
     def register(
             name,
@@ -173,6 +183,7 @@ def create_module_registry():
             conditional_srcs = None,
             deps = None,
             lib_deps = None,
+            hook_deps = None,
             includes = None,
             **kwargs):
         """Register a module with the registry.
@@ -217,6 +228,9 @@ def create_module_registry():
           lib_deps: List of dependent libraries. This list is not filtered; it is
             intended for use with ddk_library() rules. Add other types of dependencies
             here at your peril.
+          hook_deps: List of dependent targets defined in hooks.
+            A "target_variant_" prefix is added for each dependency before
+            passing to ddk_module() (See _generate_ddk_target()).
           includes: See ddk_module() documentation.
           **kwargs: Additional ddk_module() arguments. See ddk_module() documentation.
         """
@@ -230,6 +244,7 @@ def create_module_registry():
             conditional_srcs = conditional_srcs,
             deps = deps or [],
             lib_deps = lib_deps or [],
+            hook_deps = hook_deps or [],
             includes = includes,
             extra_args = kwargs,
         ))
@@ -276,6 +291,7 @@ def create_module_registry():
             e.g. ["drivers/firmware/qcom/qcom_scm"]
         """
         return _generate_ddk_target(
+            hooks,
             module_map,
             target_variant,
             config_fragment,
@@ -288,6 +304,7 @@ def create_module_registry():
     return struct(
         module_map = module_map,
         register = register,
+        register_hook = register_hook,
         get = module_map.get,
         define_modules = define_modules,
     )

@@ -6,6 +6,7 @@ pikachu_consolidate_config = {
     "CONFIG_DEBUG_PAGEALLOC_ENABLE_DEFAULT": "y",
     "CONFIG_DEBUG_SPINLOCK": "y",
     "CONFIG_DETECT_HUNG_TASK": "y",
+    "CONFIG_IOMMU_TLBSYNC_DEBUG": "y",
     "CONFIG_LKDTM": "m",
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_PAGE_OWNER": "y",

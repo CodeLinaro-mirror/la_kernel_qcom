@@ -287,6 +287,39 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
+	} else if (!strcmp(name, "MALABAR")) {
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
+		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
+		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
+
+		// Evaluate and change the trailblazer freq as per need in future.
+		trailblazer_floor_freq[0] = 1000000;
+		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
+		sysctl_walt_features |= WALT_FEAT_TOPAPP_BASED_HISPEED;
+		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
+		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
+		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
+		soc_sched_lib_name_capacity = 4;
+		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
+
+		// Evaluate and change the swap util thres as per need in future.
+		pipeline_swap_util_th = 50;
+
+		/* CPU0 needs an 9mS bias for all legacy smart freq reasons */
+		for (i = 1; i < LEGACY_SMART_FREQ; i++)
+			smart_freq_legacy_reason_hyst_ms[i][0] = 9;
+		for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
+			for (i = 1; i < LEGACY_SMART_FREQ; i++)
+				smart_freq_legacy_reason_hyst_ms[i][cpu] = 2;
+		}
+		for_each_possible_cpu(cpu) {
+			smart_freq_legacy_reason_hyst_ms[PIPELINE_60FPS_OR_LESSER_SMART_FREQ][cpu] =
+				1;
+		}
+		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+
 	} else if (!strcmp(name, "VIENNA") || !strcmp(name, "VIENNAP")) {
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.

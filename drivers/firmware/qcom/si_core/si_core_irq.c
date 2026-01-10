@@ -408,7 +408,7 @@ int si_core_doorbell_setup(struct platform_device *pdev)
 		return ret;
 
 	ret = devm_request_threaded_irq(dev, si_core_irq, NULL, qtee_irq_handler,
-					IRQF_ONESHOT, "qcom,mem-object", dev);
+					IRQF_ONESHOT, "si-core", dev);
 	if (ret < 0) {
 		pr_err("failed to request qcom-scm irq (ret = %d).\n", ret);
 		goto err_devm_req_threaded_irq;

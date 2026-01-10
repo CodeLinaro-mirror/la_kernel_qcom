@@ -72,6 +72,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/pci/controller/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/perf/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/phy/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/phy/qualcomm/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/pinctrl/qcom/Kconfig"

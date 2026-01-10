@@ -861,6 +861,7 @@ def register_modules(registry):
             "drivers/soc/qcom/qcom_cpucp.c",
             "drivers/soc/qcom/dcvs/qcom_scmi_client",
             "kernel/sched/walt/sched-walt",
+            "drivers/soc/qcom/cpu_phys_log_map",
         ],
     )
 

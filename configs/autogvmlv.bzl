@@ -123,4 +123,7 @@ autogvmlv_config = {
     "CONFIG_VIRTIO_NET": "m",
     "CONFIG_VIRTIO_NET_DISABLE_F_DEVICE_STATS": "y",
     "CONFIG_VIRTIO_REGULATOR": "m",
+    "CONFIG_CFG80211": "m",
+    "CONFIG_NL80211_TESTMODE": "y",
+    "CONFIG_QRTR_MHI": "m",
 }

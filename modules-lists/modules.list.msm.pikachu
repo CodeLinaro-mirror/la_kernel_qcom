@@ -7,6 +7,8 @@ qcom_hwspinlock.ko
 clk-qcom.ko
 clk-rpmh.ko
 clk-dummy.ko
+gcc-pikachu.ko
+tcsrcc-pikachu.ko
 smem.ko
 socinfo.ko
 qcom_tzmem.ko

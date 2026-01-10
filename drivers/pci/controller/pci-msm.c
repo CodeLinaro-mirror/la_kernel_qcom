@@ -89,12 +89,17 @@
 #define PCIE20_PARF_TEST_BUS (0xe4)
 #define PCIE20_PARF_VERSION (0x170)
 #define PCIE20_PARF_MHI_CLOCK_RESET_CTRL (0x174)
+#define PCIE20_PARF_AXI_MSTR_RD_HALT_NO_WRITES (0x1a4)
 #define PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT (0x1a8)
 
 #define PCIE20_PARF_LTSSM (0x1b0)
 #define LTSSM_EN BIT(8)
 #define SW_CLR_FLUSH_MODE BIT(10)
 #define FLUSH_MODE BIT(11)
+#define WR_HALT_EN BIT(31)
+#define RD_HALT_EN BIT(0)
+#define BDF_HALT_EN BIT(0)
+#define WR_HALT_ADDR_BIT_INDEX_MASK (0x3F)
 
 #define PCIE20_PARF_INT_ALL_STATUS (0x224)
 #define PCIE20_PARF_INT_ALL_CLEAR (0x228)
@@ -235,6 +240,7 @@
 
 #define LINK_WIDTH_X1 (0x1)
 #define LINK_WIDTH_X2 (0x3)
+#define LINK_WIDTH_X4 (0xf)
 #define LINK_WIDTH_MASK (0x3f)
 #define LINK_WIDTH_SHIFT (16)
 
@@ -402,6 +408,7 @@
 enum msm_pcie_res {
 	MSM_PCIE_RES_PARF,
 	MSM_PCIE_RES_PHY,
+	MSM_PCIE_RES_PHY_PORTB,
 	MSM_PCIE_RES_DM_CORE,
 	MSM_PCIE_RES_ELBI,
 	MSM_PCIE_RES_IATU,
@@ -1096,6 +1103,7 @@ struct msm_pcie_dev_t {
 
 	void __iomem *parf;
 	void __iomem *phy;
+	void __iomem *phy_portb;
 	void __iomem *elbi;
 	void __iomem *iatu;
 	void __iomem *dm_core;
@@ -1176,6 +1184,8 @@ struct msm_pcie_dev_t {
 	uint32_t phy_status_offset;
 	uint32_t phy_status_bit;
 	uint32_t phy_power_down_offset;
+	uint32_t phy_sw_reset_offset;
+	uint32_t phy_start_cntrl_offset;
 	uint32_t eq_pset_req_vec;
 	uint32_t core_preset;
 	uint32_t eq_fmdc_t_min_phase23;
@@ -1193,6 +1203,7 @@ struct msm_pcie_dev_t {
 	bool linkdown_recovery_enable;
 	bool gdsc_clk_drv_ss_nonvotable;
 	bool bdf_change_halt_en;
+	bool read_halt_en;
 
 	uint32_t pcie_parf_cesta_config;
 
@@ -1217,8 +1228,13 @@ struct msm_pcie_dev_t {
 	u32 num_parf_testbus_sel;
 	u32 phy_len;
 	struct msm_pcie_phy_info_t *phy_sequence;
-	u32 tcsr_len;
-	struct msm_pcie_tcsr_info_t *tcsr_config;
+	u32 phy_len_portb;
+	struct msm_pcie_phy_info_t *phy_sequence_portb;
+	bool is_bifurcation_capable;
+	bool is_full_lane_config;
+	u32 tcsr_pcie_link_config_offset;
+	u32 tcsr_pcie_link_config_value;
+	u32 tcsr_pcie_link_config_mask;
 	u32 sid_info_len;
 	struct msm_pcie_sid_info_t *sid_info;
 	bool bridge_found;
@@ -1430,6 +1446,7 @@ msm_pcie_linkdown_reset_info[MAX_RC_NUM][MSM_PCIE_MAX_LINKDOWN_RESET] = {
 static const struct msm_pcie_res_info_t msm_pcie_res_info[MSM_PCIE_MAX_RES] = {
 	{"parf", NULL, NULL},
 	{"phy", NULL, NULL},
+	{"phy_portb", NULL, NULL},
 	{"dm_core", NULL, NULL},
 	{"elbi", NULL, NULL},
 	{"iatu", NULL, NULL},
@@ -1712,40 +1729,58 @@ static void msm_pcie_rumi_init(struct msm_pcie_dev_t *pcie_dev)
 	msm_pcie_write_reg(pcie_dev->rumi, phy_ctrl_offs, val);
 }
 
-static void pcie_phy_dump(struct msm_pcie_dev_t *dev)
+static void pcie_phy_dump_common(struct msm_pcie_dev_t *dev, int res_idx)
 {
+	void __iomem *phy_base;
 	int i, size;
 
-	size = resource_size(dev->res[MSM_PCIE_RES_PHY].resource);
+	phy_base = dev->res[res_idx].base;
+	if (!phy_base) {
+		PCIE_DBG(dev, "PCIe: The phy base address of RC %d is not found.\n",
+			 dev->rc_idx);
+		return;
+	}
+
+	size = resource_size(dev->res[res_idx].resource);
 	for (i = 0; i < size; i += 32) {
 		PCIE_DUMP(dev,
 			"PCIe PHY of RC%d: 0x%04x %08x %08x %08x %08x %08x %08x %08x %08x\n",
 			dev->rc_idx, i,
-			readl_relaxed(dev->phy + i),
-			readl_relaxed(dev->phy + (i + 4)),
-			readl_relaxed(dev->phy + (i + 8)),
-			readl_relaxed(dev->phy + (i + 12)),
-			readl_relaxed(dev->phy + (i + 16)),
-			readl_relaxed(dev->phy + (i + 20)),
-			readl_relaxed(dev->phy + (i + 24)),
-			readl_relaxed(dev->phy + (i + 28)));
+			readl_relaxed(phy_base + i),
+			readl_relaxed(phy_base + (i + 4)),
+			readl_relaxed(phy_base + (i + 8)),
+			readl_relaxed(phy_base + (i + 12)),
+			readl_relaxed(phy_base + (i + 16)),
+			readl_relaxed(phy_base + (i + 20)),
+			readl_relaxed(phy_base + (i + 24)),
+			readl_relaxed(phy_base + (i + 28)));
 	}
 }
 
-static void pcie_tcsr_init(struct msm_pcie_dev_t *dev)
+static void pcie_phy_dump(struct msm_pcie_dev_t *dev)
 {
-	int i;
-	struct msm_pcie_tcsr_info_t *tcsr_cfg;
+	pcie_phy_dump_common(dev, MSM_PCIE_RES_PHY);
+}
 
-	i = dev->tcsr_len;
-	tcsr_cfg = dev->tcsr_config;
+static void pcie_phy_portb_dump(struct msm_pcie_dev_t *dev)
+{
+	pcie_phy_dump_common(dev, MSM_PCIE_RES_PHY_PORTB);
+}
+
+static void msm_pcie_phy_init_sequence(void __iomem *phy_base,
+				       struct msm_pcie_phy_info_t *phy_seq,
+				       u32 phy_len)
+{
+	u32 i = phy_len;
+
 	while (i--) {
-		msm_pcie_write_reg(dev->tcsr,
-			tcsr_cfg->offset,
-			tcsr_cfg->val);
-		tcsr_cfg++;
+		msm_pcie_write_reg(phy_base, phy_seq->offset, phy_seq->val);
+		if (phy_seq->delay)
+			usleep_range(phy_seq->delay, phy_seq->delay + 1);
+		phy_seq++;
 	}
 }
+
 
 static int msm_pcie_check_align(struct msm_pcie_dev_t *dev,
 						u32 offset)
@@ -4769,17 +4804,38 @@ static void msm_pcie_pipe_clk_deinit(struct msm_pcie_dev_t *dev)
 	PCIE_DBG(dev, "RC%d: exit\n", dev->rc_idx);
 }
 
-static bool pcie_phy_is_ready(struct msm_pcie_dev_t *dev)
+static bool pcie_phy_is_ready(struct msm_pcie_dev_t *dev, void __iomem *phy_base, bool check_rumi)
 {
-	/* There is no PHY status check in RUMI */
-	if (dev->rumi)
+	if (check_rumi && dev->rumi)
 		return true;
 
-	if (readl_relaxed(dev->phy + dev->phy_status_offset) &
+	if (!dev->phy_status_offset) {
+		PCIE_ERR(dev, "PCIe: RC%d: phy_status_offset not configured\n", dev->rc_idx);
+		return false;
+	}
+
+	if (readl_relaxed(phy_base + dev->phy_status_offset) &
 		BIT(dev->phy_status_bit))
 		return false;
 	else
 		return true;
+}
+
+static long pcie_poll_phy_ready(struct msm_pcie_dev_t *dev,
+					 void __iomem *phy,
+					 bool check_rumi)
+{
+	long retries = 0;
+
+	do {
+		if (pcie_phy_is_ready(dev, phy, check_rumi))
+			break;
+		retries++;
+		usleep_range(REFCLK_STABILIZATION_DELAY_US_MIN,
+			REFCLK_STABILIZATION_DELAY_US_MAX);
+	} while (retries < PHY_READY_TIMEOUT_COUNT);
+
+	return retries;
 }
 
 static int pcie_phy_init(struct msm_pcie_dev_t *dev)
@@ -4790,19 +4846,56 @@ static int pcie_phy_init(struct msm_pcie_dev_t *dev)
 
 	PCIE_DBG(dev, "PCIe: RC%d: Initializing PHY\n", dev->rc_idx);
 
-	if (dev->phy_sequence) {
-		i =  dev->phy_len;
-		phy_seq = dev->phy_sequence;
-		while (i--) {
-			msm_pcie_write_reg(dev->phy,
-				phy_seq->offset,
-				phy_seq->val);
-			if (phy_seq->delay)
-				usleep_range(phy_seq->delay,
-					phy_seq->delay + 1);
-			phy_seq++;
-		}
+	if (dev->is_bifurcation_capable && dev->tcsr) {
+		msm_pcie_write_reg_field(dev->tcsr,
+					 dev->tcsr_pcie_link_config_offset,
+					 dev->tcsr_pcie_link_config_mask,
+					 dev->tcsr_pcie_link_config_value);
+
+		/* TCSR PCIe PHY link config mode is set to 0x1 for Full Lane config */
+		dev->is_full_lane_config = !!(dev->tcsr_pcie_link_config_value &
+					      dev->tcsr_pcie_link_config_mask);
+		PCIE_INFO(dev, "PCIe: RC%d: PHY is Bifurcation capable, Full Lane mode: %s\n",
+			 dev->rc_idx,
+			 dev->is_full_lane_config ? "enabled" : "disabled");
 	}
+
+	if (dev->phy_power_down_offset)
+		msm_pcie_write_reg(dev->phy, dev->phy_power_down_offset, 0x03);
+
+	/* Initialize Port A - always required */
+	if (dev->phy_sequence)
+		msm_pcie_phy_init_sequence(dev->phy, dev->phy_sequence,
+					   dev->phy_len);
+
+	/* Initialize Port B - only if phy is Bifurcation capable and in full lane config mode */
+	if (dev->is_bifurcation_capable && dev->is_full_lane_config && dev->phy_portb) {
+		PCIE_DBG(dev,
+			"PCIe: RC%d: Initializing Port B PHY for Full lane mode\n",
+			dev->rc_idx);
+
+		/* if phy sequence for Port B is not present re-use port A phy sequence  */
+		if (dev->phy_sequence_portb) {
+			phy_seq = dev->phy_sequence_portb;
+			i = dev->phy_len_portb;
+		} else {
+			phy_seq = dev->phy_sequence;
+			i = dev->phy_len;
+			PCIE_DBG(dev, "PCIe: RC%d: Initializing Port B PHY with PortA Phy Seq\n",
+				 dev->rc_idx);
+		}
+
+		msm_pcie_phy_init_sequence(dev->phy_portb, phy_seq, i);
+
+		PCIE_DBG(dev, "PCIe: RC%d: Port B PHY initialized\n",
+			 dev->rc_idx);
+	}
+
+	if (dev->phy_sw_reset_offset)
+		msm_pcie_write_reg(dev->phy, dev->phy_sw_reset_offset, 0x00);
+
+	if (dev->phy_start_cntrl_offset)
+		msm_pcie_write_reg(dev->phy, dev->phy_start_cntrl_offset, 0x03);
 
 	usleep_range(PHY_STABILIZATION_DELAY_US_MIN,
 		PHY_STABILIZATION_DELAY_US_MAX);
@@ -4820,22 +4913,33 @@ static int pcie_phy_init(struct msm_pcie_dev_t *dev)
 	wmb();
 
 	PCIE_DBG(dev, "PCIe RC%d: waiting for phy ready...\n", dev->rc_idx);
-	do {
-		if (pcie_phy_is_ready(dev))
-			break;
-		retries++;
-		usleep_range(REFCLK_STABILIZATION_DELAY_US_MIN,
-					 REFCLK_STABILIZATION_DELAY_US_MAX);
-	} while (retries < PHY_READY_TIMEOUT_COUNT);
+	retries = pcie_poll_phy_ready(dev, dev->phy, true);
 
 	PCIE_DBG(dev, "PCIe: RC%d: number of PHY retries: %ld.\n", dev->rc_idx,
 		retries);
 
-	if (!pcie_phy_is_ready(dev)) {
+	if (!pcie_phy_is_ready(dev, dev->phy, true)) {
 		PCIE_ERR(dev, "PCIe PHY RC%d failed to come up!\n",
 			dev->rc_idx);
 		pcie_phy_dump(dev);
 		return -ENODEV;
+	}
+
+	/* Wait for portb phy to be ready  */
+	if (dev->is_bifurcation_capable && dev->is_full_lane_config && dev->phy_portb) {
+
+		retries = pcie_poll_phy_ready(dev, dev->phy_portb, false);
+
+		PCIE_DBG(dev,
+			 "PCIe: RC%d:number of PHY Port B retries: %ld.\n",
+			 dev->rc_idx, retries);
+
+		if (!pcie_phy_is_ready(dev, dev->phy_portb, false)) {
+			PCIE_ERR(dev, "PCIe PHY Port B RC%d failed to come up!\n",
+				dev->rc_idx);
+			pcie_phy_portb_dump(dev);
+			return -ENODEV;
+		}
 	}
 
 	PCIE_INFO(dev, "PCIe RC%d PHY is ready!\n", dev->rc_idx);
@@ -5470,6 +5574,30 @@ static int msm_pcie_get_phy(struct msm_pcie_dev_t *pcie_dev)
 	if (ret)
 		return -EINVAL;
 
+	size = 0;
+	of_get_property(pdev->dev.of_node, "qcom,phy-sequence-portb", &size);
+	if (!size) {
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: Port B PHY sequence not in DT\n",
+			 pcie_dev->rc_idx);
+		return 0;
+	}
+
+	pcie_dev->phy_sequence_portb = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
+	if (!pcie_dev->phy_sequence_portb)
+		return -ENOMEM;
+
+	pcie_dev->phy_len_portb = size / sizeof(*pcie_dev->phy_sequence_portb);
+
+	ret = of_property_read_u32_array(pdev->dev.of_node,
+				"qcom,phy-sequence-portb",
+				(unsigned int *)pcie_dev->phy_sequence_portb,
+				size / sizeof(pcie_dev->phy_sequence_portb->offset));
+	if (ret) {
+		devm_kfree(&pdev->dev, pcie_dev->phy_sequence_portb);
+		pcie_dev->phy_sequence_portb = NULL;
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -5708,6 +5836,7 @@ static int msm_pcie_get_reg(struct msm_pcie_dev_t *pcie_dev)
 
 	pcie_dev->parf = pcie_dev->res[MSM_PCIE_RES_PARF].base;
 	pcie_dev->phy = pcie_dev->res[MSM_PCIE_RES_PHY].base;
+	pcie_dev->phy_portb = pcie_dev->res[MSM_PCIE_RES_PHY_PORTB].base;
 	pcie_dev->elbi = pcie_dev->res[MSM_PCIE_RES_ELBI].base;
 	pcie_dev->iatu = pcie_dev->res[MSM_PCIE_RES_IATU].base;
 	pcie_dev->dm_core = pcie_dev->res[MSM_PCIE_RES_DM_CORE].base;
@@ -5719,33 +5848,6 @@ static int msm_pcie_get_reg(struct msm_pcie_dev_t *pcie_dev)
 	return 0;
 }
 
-static int msm_pcie_get_tcsr_values(struct msm_pcie_dev_t *dev,
-					struct platform_device *pdev)
-{
-	int size = 0, ret = 0;
-
-	of_get_property(pdev->dev.of_node, "qcom,tcsr", &size);
-
-	if (!size) {
-		PCIE_DBG(dev, "PCIe: RC%d: tcsr is not present in DT\n",
-			dev->rc_idx);
-		return 0;
-	}
-
-	dev->tcsr_config = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
-
-	if (!dev->tcsr_config)
-		return -ENOMEM;
-
-	dev->tcsr_len = size / sizeof(*dev->tcsr_config);
-
-	of_property_read_u32_array(pdev->dev.of_node,
-		"qcom,tcsr",
-		(unsigned int *)dev->tcsr_config,
-		size / sizeof(dev->tcsr_config->offset));
-
-	return ret;
-}
 
 static int msm_pcie_get_resources(struct msm_pcie_dev_t *dev,
 					struct platform_device *pdev)
@@ -5786,10 +5888,6 @@ static int msm_pcie_get_resources(struct msm_pcie_dev_t *dev,
 					irq_info->num);
 		}
 	}
-
-	ret = msm_pcie_get_tcsr_values(dev, pdev);
-	if (ret)
-		return ret;
 
 	ret = msm_pcie_get_clk(dev);
 	if (ret)
@@ -5965,6 +6063,13 @@ static int msm_pcie_link_train(struct msm_pcie_dev_t *dev)
 		 dev->rc_idx, dev->current_link_speed,
 		 dev->current_link_width);
 
+	/* Verify link width when in full lane mode */
+	if (dev->is_full_lane_config && dev->current_link_width != dev->target_link_width) {
+		PCIE_INFO(dev,
+			 "PCIe: RC%d: Link width mismatch in Full lane mode: got x%d, expected %d\n",
+			 dev->rc_idx, dev->current_link_width, dev->target_link_width);
+	}
+
 	if ((!dev->enumerated) && dev->panic_genspeed_mismatch &&
 	    dev->target_link_speed &&
 	    dev->target_link_speed != dev->current_link_speed)
@@ -6043,6 +6148,39 @@ static void msm_pcie_disable_dbi_mirroring(struct msm_pcie_dev_t *dev)
 							slv_addr_space_size);
 }
 
+static void msm_pcie_configure_axi_halt(struct msm_pcie_dev_t *dev)
+{
+	uint32_t val;
+	uint32_t reg_value;
+
+	reg_value = readl_relaxed(dev->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT);
+
+	/*
+	 * Configure write halt: if wr_halt_size is set, update EN bit and ADDR_BIT_INDEX [5:0];
+	 * otherwise clear only EN bit
+	 */
+	if (dev->wr_halt_size) {
+		val = (reg_value & ~(WR_HALT_EN | WR_HALT_ADDR_BIT_INDEX_MASK)) |
+			(WR_HALT_EN | (dev->wr_halt_size & WR_HALT_ADDR_BIT_INDEX_MASK));
+	} else {
+		val = reg_value & ~WR_HALT_EN;
+	}
+
+	msm_pcie_write_reg(dev->parf, PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT, val);
+
+	/* Configure RD_HALT_EN based on dev->read_halt_en */
+	msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_RD_HALT_NO_WRITES,
+		RD_HALT_EN, (dev->read_halt_en ? 1 : 0));
+
+	/*
+	 * By default explicitly mark BDF_CHANGE_HALT_EN to zero unless
+	 * bdf_change_halt_en is set from DT. there is HW errata in few devices
+	 * which is set to 1 by default.
+	 */
+	 msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT,
+		BDF_HALT_EN, (dev->bdf_change_halt_en ? 1 : 0));
+}
+
 static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 {
 	int ret = 0;
@@ -6095,22 +6233,7 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 
 	msm_pcie_disable_dbi_mirroring(dev);
 
-	val = dev->wr_halt_size ? dev->wr_halt_size :
-		readl_relaxed(dev->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT);
-	msm_pcie_write_reg(dev->parf, PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT,
-				BIT(31) | val);
-
-	/**
-	 * By default explicitly mark BDF_CHANGE_HALT_EN to zero unless
-	 * bdf_change_halt_en is set from DT. there is HW errata in few devices
-	 * which is set to 1 by default.
-	 */
-	if (dev->bdf_change_halt_en)
-		msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT,
-				   0, 1);
-	else
-		msm_pcie_write_mask(dev->parf + PCIE20_PARF_AXI_MSTR_WR_NS_BDF_HALT,
-				   0, 0);
+	msm_pcie_configure_axi_halt(dev);
 
 	/*
 	 * Clear PCIE_BW_MGT_INT_STATUS and PCIE_LINK_AUTO_BW_INT_STATUS to get
@@ -6121,10 +6244,6 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 			MSM_PCIE_BW_MGT_INT_STATUS | PCIE_LINK_AUTO_BW_INT_STATUS, 0);
 	PCIE_INFO(dev, "PCIe: RC:%d PARF_INT_ALL_2_TYPE:0x%x\n",
 			dev->rc_idx, readl_relaxed(dev->parf + PCIE20_PARF_INT_ALL_2_TYPE));
-
-	/* init tcsr */
-	if (dev->tcsr_config)
-		pcie_tcsr_init(dev);
 
 	/* init PCIe PHY */
 	ret = pcie_phy_init(dev);
@@ -8374,8 +8493,12 @@ static void msm_pcie_read_dt(struct msm_pcie_dev_t *pcie_dev, int rc_idx,
 
 	pcie_dev->bdf_change_halt_en = of_property_read_bool(of_node,
 				"qcom,bdf-change-halt-en");
-	PCIE_DBG(pcie_dev, "bdf_change_halt_en is %s supported.\n", pcie_dev->bdf_change_halt_en ?
-		"" : "not");
+	PCIE_DBG(pcie_dev, "bdf_change_halt_en is %s supported.\n",
+		pcie_dev->bdf_change_halt_en ? "" : "not");
+
+	pcie_dev->read_halt_en = of_property_read_bool(of_node, "qcom,read-halt-en");
+	PCIE_DBG(pcie_dev, "read_halt_en is %s supported.\n", pcie_dev->read_halt_en ? "" : "not");
+
 	pcie_dev->l1_1_aspm_supported = pcie_dev->l1ss_supported;
 	pcie_dev->l1_2_aspm_supported = pcie_dev->l1ss_supported;
 	pcie_dev->l1_1_pcipm_supported = pcie_dev->l1ss_supported;
@@ -8487,6 +8610,16 @@ static void msm_pcie_read_dt(struct msm_pcie_dev_t *pcie_dev, int rc_idx,
 	PCIE_DBG(pcie_dev, "RC%d: phy-power-down-offset: 0x%x.\n",
 		pcie_dev->rc_idx, pcie_dev->phy_power_down_offset);
 
+	of_property_read_u32(of_node, "qcom,phy-start-cntrl-offset",
+				&pcie_dev->phy_start_cntrl_offset);
+	PCIE_DBG(pcie_dev, "RC%d: phy-start-cntrl-offset: 0x%x.\n",
+		pcie_dev->rc_idx, pcie_dev->phy_start_cntrl_offset);
+
+	of_property_read_u32(of_node, "qcom,phy-sw-reset-offset",
+				&pcie_dev->phy_sw_reset_offset);
+	PCIE_DBG(pcie_dev, "RC%d: phy-sw-reset-offset: 0x%x.\n",
+		pcie_dev->rc_idx, pcie_dev->phy_sw_reset_offset);
+
 	of_property_read_u32(pdev->dev.of_node,
 				"qcom,eq-pset-req-vec",
 				&pcie_dev->eq_pset_req_vec);
@@ -8552,6 +8685,35 @@ static void msm_pcie_read_dt(struct msm_pcie_dev_t *pcie_dev, int rc_idx,
 				&pcie_dev->pcie_parf_cesta_config);
 	if (ret)
 		pcie_dev->pcie_parf_cesta_config = 0;
+
+	pcie_dev->is_bifurcation_capable = of_property_read_bool(of_node,
+						"qcom,bifurcation-capable");
+	if (pcie_dev->is_bifurcation_capable) {
+		ret = of_property_read_u32(of_node, "qcom,tcsr-pcie-link-config-offset",
+						&pcie_dev->tcsr_pcie_link_config_offset);
+		if (ret) {
+			PCIE_ERR(pcie_dev, "RC%d: no offset for tcsr-pcie-link-config\n",
+				 pcie_dev->rc_idx);
+			pcie_dev->is_bifurcation_capable = false;
+		} else {
+			ret = of_property_read_u32(of_node, "qcom,tcsr-pcie-link-config-mask",
+							&pcie_dev->tcsr_pcie_link_config_mask);
+			if (ret) {
+				PCIE_ERR(pcie_dev, "RC%d: no mask for tcsr-pcie-link-config\n",
+					pcie_dev->rc_idx);
+				pcie_dev->is_bifurcation_capable = false;
+			}
+		}
+
+		ret = of_property_read_u32(of_node, "qcom,tcsr-pcie-link-config-value",
+						&pcie_dev->tcsr_pcie_link_config_value);
+		if (ret) {
+			pcie_dev->tcsr_pcie_link_config_value = 0;
+			PCIE_DBG(pcie_dev, "RC%d: no value for tcsr-pcie-link-config: default:0\n",
+					pcie_dev->rc_idx);
+		}
+
+	}
 
 	pcie_dev->config_recovery = of_property_read_bool(of_node,
 							"qcom,config-recovery");
@@ -8759,6 +8921,16 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		goto decrease_rc_num;
 	}
 
+	if (pcie_dev->is_bifurcation_capable) {
+		if (!pcie_dev->tcsr || !pcie_dev->phy_portb) {
+			PCIE_ERR(
+				pcie_dev,
+				"RC%d: tcsr or portb phy region not defined, assume bifurcation not supported\n",
+				pcie_dev->rc_idx);
+			pcie_dev->is_bifurcation_capable = false;
+		}
+	}
+
 	INIT_KFIFO(pcie_dev->aer_fifo);
 
 	msm_pcie_sysfs_init(pcie_dev);
@@ -8925,6 +9097,9 @@ static int msm_pcie_set_link_width(struct msm_pcie_dev_t *pcie_dev,
 		break;
 	case PCI_EXP_LNKSTA_NLW_X2:
 		link_width = LINK_WIDTH_X2;
+		break;
+	case PCI_EXP_LNKSTA_NLW_X4:
+		link_width = LINK_WIDTH_X4;
 		break;
 	default:
 		goto invalid_link_width;

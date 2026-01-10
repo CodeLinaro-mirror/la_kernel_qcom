@@ -57,6 +57,8 @@ spmi-pmic-arb.ko
 clk-dummy.ko
 clk-qcom.ko
 clk-rpmh.ko
+sched-walt.ko
+sched-walt-debug.ko
 gcc-x1p42100.ko
 gcc-x1e80100.ko
 tcsrcc-x1e80100.ko
@@ -74,6 +76,7 @@ pinctrl-spmi-gpio.ko
 phy-qcom-eusb2-repeater.ko
 phy-qcom-snps-eusb2.ko
 phy-qcom-qmp-combo.ko
+phy-nxp-ptn3222.ko
 phy-qcom-qmp-usb.ko
 dwc3-msm.ko
 videocc-sm8550.ko

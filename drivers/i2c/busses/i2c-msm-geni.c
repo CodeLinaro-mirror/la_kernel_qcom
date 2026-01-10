@@ -1746,7 +1746,6 @@ static int geni_i2c_gsi_stop_on_bus(struct geni_i2c_dev *gi2c)
 	bool tx_chan = true;
 	dma_cookie_t tx_cookie;
 
-	gi2c->err = 0;
 	reinit_completion(&gi2c->xfer);
 
 	go_t->dword[0] = MSM_GPI_I2C_GO_TRE_DWORD0(0, 0, I2C_STOP_ON_BUS);

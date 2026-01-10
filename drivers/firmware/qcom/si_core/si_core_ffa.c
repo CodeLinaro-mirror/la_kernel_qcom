@@ -6,6 +6,7 @@
 #define pr_fmt(fmt) "si-ffa: %s: " fmt, __func__
 
 #include <linux/dma-mapping.h>
+#include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/genalloc.h>
 
@@ -53,6 +54,7 @@ int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 	}
 
 	*ffa_handle = mem_args.g_handle;
+	pr_debug("Memory shared successfully, ffa_handle: 0x%llx\n", *ffa_handle);
 
 	return 0;
 }
@@ -86,6 +88,7 @@ int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 	}
 
 	*ffa_handle = mem_args.g_handle;
+	pr_debug("Memory lend successfully, ffa_handle: 0x%llx\n", *ffa_handle);
 
 	return 0;
 }
@@ -105,6 +108,7 @@ int qtee_ffa_mem_reclaim(uint64_t ffa_handle)
 		pr_err("mem_reclaim failed: 0x%llx %d\n", ffa_handle, rc);
 		return rc;
 	}
+	pr_debug("Memory reclaimed successfully, ffa_handle: 0x%llx\n", ffa_handle);
 
 	return 0;
 }
@@ -183,6 +187,7 @@ void qtee_ffa_shm_free(struct ffa_shm shm)
 int qtee_ffa_shm_init(struct platform_device *pdev)
 {
 	int rc;
+	uint32_t custom_ffa_pool_size;
 	unsigned int order;
 	size_t nr_pages;
 	unsigned int i;
@@ -194,7 +199,15 @@ int qtee_ffa_shm_init(struct platform_device *pdev)
 		return 0;
 	}
 
-	ffa_pool.size = DEFAULT_FFA_SHM_SIZE;
+	rc = of_property_read_u32((&pdev->dev)->of_node,
+				  "qcom,ffa-pool-size", &custom_ffa_pool_size);
+	if (rc)
+		ffa_pool.size = DEFAULT_FFA_SHM_SIZE;
+	else
+		ffa_pool.size = custom_ffa_pool_size * PAGE_SIZE;
+
+	pr_info("Using FFA pool size = %zu\n", ffa_pool.size);
+
 	order = get_order(ffa_pool.size);
 	ffa_pool.vaddr = (void *)__get_free_pages(GFP_KERNEL|__GFP_COMP,
 						  order);
