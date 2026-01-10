@@ -22,6 +22,7 @@ shikra_perf_config = {
     "CONFIG_IPC_LOGGING": "m",
     "CONFIG_IPC_LOG_MINIDUMP_BUFFERS": "16",
     "CONFIG_MFD_SPMI_PMIC": "m",
+    "CONFIG_MPM_LEGACY": "m",
     "CONFIG_MSM_HAB": "n",
     "CONFIG_MSM_PERFORMANCE": "m",
     "CONFIG_MSM_RPM_SMD": "m",

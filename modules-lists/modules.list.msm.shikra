@@ -15,6 +15,7 @@ qcom_dma_heaps.ko
 qcom_iommu_debug.ko
 qcom_iommu_util.ko
 qcom-scm.ko
+qcom-mpm.ko
 qcom_tzmem.ko
 secure_buffer.ko
 stub-regulator.ko
