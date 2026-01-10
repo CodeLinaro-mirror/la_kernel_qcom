@@ -560,7 +560,7 @@ struct msm_geni_serial_port {
 	u8 rx_buf_idx;
 	atomic_t stop_rx_inprogress;
 	bool pm_auto_suspend_disable;
-	bool gsi_rx_done;
+	atomic_t gsi_rx_done;
 	int hs_uart_operation;
 	atomic_t check_wakeup_byte;
 	struct workqueue_struct *wakeup_irq_wq;
@@ -2816,7 +2816,7 @@ static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 		     "%s: Start\n", __func__);
-	if (!msm_port->gsi_rx_done) {
+	if (!atomic_read(&msm_port->gsi_rx_done)) {
 		UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 			     "%s: gsi_rx not yet done\n", __func__);
 		return;
@@ -2824,7 +2824,7 @@ static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 	if (msm_port->gsi->rx_c)
 		dmaengine_terminate_all(msm_port->gsi->rx_c);
 	complete(&msm_port->xfer);
-	msm_port->gsi_rx_done = false;
+	atomic_set(&msm_port->gsi_rx_done, 0);
 	atomic_set(&msm_port->stop_rx_inprogress, 0);
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 		     "%s: End\n", __func__);
@@ -2913,7 +2913,7 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 		return -EINVAL;
 	}
 	dma_async_issue_pending(msm_port->gsi->rx_c);
-	msm_port->gsi_rx_done = true;
+	atomic_set(&msm_port->gsi_rx_done, 1);
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "End: GSI Rx xfer\n");
 	geni_capture_stop_time(&msm_port->se, msm_port->ipc_log_kpi, __func__,
 			       msm_port->uart_kpi, start_time, 0, 0);
@@ -2925,7 +2925,7 @@ exit_gsi_xfer_rx:
 		msm_port->rx_gsi_buf[i] = NULL;
 	}
 	msm_geni_deallocate_chan(uport);
-	msm_port->gsi_rx_done = false;
+	atomic_set(&msm_port->gsi_rx_done, 0);
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev, "GSI Rx xfer failed\n");
 	return -EIO;
 }
@@ -3530,7 +3530,7 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	}
 
 	if (port->gsi_mode) {
-		if (!port->port_setup && !port->gsi_rx_done) {
+		if (!port->port_setup && !atomic_read(&port->gsi_rx_done)) {
 			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
 				     "%s: Port setup not yet done\n", __func__);
 			atomic_set(&port->stop_rx_inprogress, 0);
@@ -5726,6 +5726,8 @@ static void msm_geni_serial_init_gsi(struct uart_port *uport)
 			  msm_geni_uart_gsi_cancel_rx);
 		INIT_WORK(&msm_port->tx_cancel_work,
 			  msm_geni_uart_gsi_cancel_tx);
+
+		atomic_set(&msm_port->gsi_rx_done, 0);
 	}
 }
 
