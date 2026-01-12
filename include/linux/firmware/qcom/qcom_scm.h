@@ -173,6 +173,7 @@ extern void qcom_scm_set_download_mode(enum qcom_download_mode mode);
 extern int qcom_scm_get_download_mode(unsigned int *mode);
 extern int qcom_scm_config_cpu_errata(void);
 extern void qcom_scm_phy_update_scm_level_shifter(u32 val);
+extern void qcom_scm_deassert_ps_hold(void);
 
 struct qcom_scm_pas_metadata {
 	void *ptr;
