@@ -80,6 +80,7 @@ struct gdsc {
 
 	const char			*path_name;
 	struct icc_path			*path;
+	bool				hw_ctrl_mode;
 };
 
 struct gdsc_desc {
@@ -93,6 +94,7 @@ int gdsc_register(struct gdsc_desc *desc, struct reset_controller_dev *,
 		  struct regmap *);
 void gdsc_unregister(struct gdsc_desc *desc);
 int gdsc_gx_do_nothing_enable(struct generic_pm_domain *domain);
+void gdsc_pm_restore(struct gdsc *sc);
 
 struct gdsc_register_data {
 	char *name;
@@ -144,5 +146,6 @@ static inline int gdsc_register(struct gdsc_desc *desc,
 
 static inline void gdsc_unregister(struct gdsc_desc *desc) {};
 static inline void gdsc_genpd_print_regs(struct gdsc *sc) {};
+static inline void gdsc_pm_restore(struct gdsc *sc) {};
 #endif /* CONFIG_QCOM_GDSC */
 #endif /* __QCOM_GDSC_H__ */

@@ -49,6 +49,7 @@ static int gdsc_genpd_hwctrl_set(void *data, u64 val)
 	}
 
 	regmap_update_bits(sc->regmap, sc->gdscr, HW_CONTROL_MASK, mask);
+	sc->hw_ctrl_mode = !!val;
 
 	if (sc->rsupply)
 		return regulator_disable(sc->rsupply);
