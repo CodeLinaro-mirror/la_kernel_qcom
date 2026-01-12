@@ -3660,9 +3660,9 @@ static int stmmac_request_irq_multi(struct net_device *dev)
 	 */
 	if (priv->sfty_irq > 0 && priv->sfty_irq != dev->irq) {
 		int_name = priv->int_name_sfty;
-		snprintf(int_name, sizeof(*int_name), "%s:%s", dev->name, "safety");
+		snprintf(int_name, IFNAMSIZ + 18, "%s:%s", dev->name, "safety");
 		ret = request_irq(priv->sfty_irq, stmmac_safety_interrupt,
-				  0, int_name, dev);
+				  IRQF_SHARED, int_name, dev);
 		if (unlikely(ret < 0)) {
 			netdev_err(priv->dev,
 				   "%s: alloc sfty MSI %d (error: %d)\n",
