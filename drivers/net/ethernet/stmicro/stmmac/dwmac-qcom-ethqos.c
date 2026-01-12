@@ -358,6 +358,10 @@ static bool qos_use_skprio;
 module_param(qos_use_skprio, bool, 0644);
 MODULE_PARM_DESC(qos_use_skprio, "Use SKPRIO for Tx Routing");
 
+bool disable_split_hdr;
+module_param(disable_split_hdr, bool, 0644);
+MODULE_PARM_DESC(disable_split_hdr, "Enable/disable sph dynamically");
+
 inline void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos)
 {
 	struct platform_device *pdev = ethqos->pdev;
