@@ -899,6 +899,25 @@ out:
 }
 
 /**
+ * si_object_qtee_objects_put() - Put the callback objects in the argument array.
+ * @u: array of arguments.
+ *
+ * When si_object_do_invoke() is successfully invoked, QTEE takes ownership of
+ * the callback objects. If the invocation fails, si_object_do_invoke() calls
+ * si_object_qtee_objects_put() to mimic the release of callback objects by
+ * QTEE.
+ */
+static void si_object_qtee_objects_put(struct si_arg *u)
+{
+	int i;
+
+	arg_for_each_input_object(i, u) {
+		if (typeof_si_object(u[i].o) == SI_OT_CB_OBJECT)
+			put_si_object(u[i].o);
+	}
+}
+
+/**
  * si_object_do_invoke - Submit an invocation for si_object_invoke_ctx.
  * @oic: context to use for current invocation.
  * @object: object being invoked.
@@ -927,18 +946,24 @@ int si_object_do_invoke(struct si_object_invoke_ctx *oic,
 	struct qtee_callback *cb_msg;
 
 	if (typeof_si_object(object) != SI_OT_USER &&
-		typeof_si_object(object) != SI_OT_ROOT)
+		typeof_si_object(object) != SI_OT_ROOT) {
+		si_object_qtee_objects_put(u);
 		return -EINVAL;
+	}
 
 	ret = si_object_invoke_ctx_init(oic, u);
-	if (ret)
+	if (ret) {
+		si_object_qtee_objects_put(u);
 		return ret;
+	}
 
 	pr_debug("start an invocation for %s.\n", si_object_name(object));
 
 	ret = prepare_msg(oic, object, op, u);
-	if (ret)
+	if (ret) {
+		si_object_qtee_objects_put(u);
 		goto out;
+	}
 
 	/* INVOKE remote object!! */
 
@@ -997,9 +1022,7 @@ int si_object_do_invoke(struct si_object_invoke_ctx *oic,
 
 			/* SI_OT_CB_OBJECT input objects are orphan; let's put them. */
 			if (!(oic->flags & OIC_FLAG_QTEE)) {
-				arg_for_each_input_object(i, u)
-					if (typeof_si_object(u[i].o) == SI_OT_CB_OBJECT)
-						put_si_object(u[i].o);
+				si_object_qtee_objects_put(u);
 
 				/* So QTEE is unaawre of this.
 				 * Let the caller know in case they want to do something about it,
