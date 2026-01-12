@@ -99,3 +99,4 @@ nvmem_qfprom.ko
 qcom-cpufreq-hw.ko
 qseecom_proxy.ko
 rtc-pm8xxx.ko
+msm-poweroff.ko
