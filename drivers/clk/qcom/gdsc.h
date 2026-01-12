@@ -101,6 +101,14 @@ struct gdsc_register_data {
 	u32 offset;
 };
 
+#define gdsc_debug_output(m, fmt, ...)			\
+	do {							\
+		if (m)						\
+			seq_printf(m, fmt, ##__VA_ARGS__);	\
+		else						\
+			pr_info(fmt, ##__VA_ARGS__);		\
+	} while (0)
+
 /**
  * gdsc_genpd_print_regs - Print GDSC register values for debugging
  * @sc: GDSC to print registers for
@@ -108,8 +116,8 @@ struct gdsc_register_data {
  * Prints the values of key GDSC registers to help diagnose issues
  * when status polling timeouts occur.
  */
-
-static inline void gdsc_genpd_print_regs(struct gdsc *sc)
+static inline void gdsc_genpd_print_regs(struct seq_file *f,
+					 struct gdsc *sc)
 {
 	int i;
 	u32 val;
@@ -123,17 +131,17 @@ static inline void gdsc_genpd_print_regs(struct gdsc *sc)
 	for (i = 0; i < ARRAY_SIZE(data); i++) {
 		regmap_read(sc->regmap, sc->gdscr + data[i].offset,
 					&val);
-		pr_info("%s: 0x%.8x\n", data[i].name, val);
+		gdsc_debug_output(f, "%s: 0x%.8x\n", data[i].name, val);
 	}
 
 	if (sc->gds_hw_ctrl) {
 		regmap_read(sc->regmap, sc->gds_hw_ctrl, &val);
-		pr_info("GDS_HW_CTRL: 0x%.8x\n", val);
+		gdsc_debug_output(f, "GDS_HW_CTRL: 0x%.8x\n", val);
 	}
 
 	if (sc->collapse_ctrl) {
 		regmap_read(sc->regmap, sc->collapse_ctrl, &val);
-		pr_info("COLLAPSE_CTRL: 0x%.8x\n", val);
+		gdsc_debug_output(f, "COLLAPSE_CTRL: 0x%.8x\n", val);
 	}
 }
 #else
