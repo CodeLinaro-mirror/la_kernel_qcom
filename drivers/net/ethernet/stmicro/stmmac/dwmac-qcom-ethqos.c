@@ -7766,6 +7766,33 @@ static int qcom_ethqos_probe_config_dt(struct platform_device *pdev,
 	return ret;
 }
 
+static void ethqos_parse_pps_dt(struct device *dev,
+				struct device_node *np,
+				struct stmmac_priv *priv)
+{
+	u32 idx;
+
+	/* Clear any prior PPS state before parsing */
+	memset(priv->pps, 0, sizeof(priv->pps));
+	priv->pps_idx = 0;
+
+	/* If the property is absent, we keep PPS disabled */
+	if (of_property_read_u32(np, "emac_pps_output", &idx)) {
+		ETHQOSINFO("PPS: 'emac_pps_reg' not present; PPS disabled by DT\n");
+		return;
+	}
+
+	if (idx >= STMMAC_PPS_MAX) {
+		ETHQOSERR("PPS: emac_pps_reg=%u out of range (max %u)\n",
+			  idx, STMMAC_PPS_MAX - 1);
+		return;
+	}
+
+	priv->pps_idx = idx;
+
+	ETHQOSINFO("PPS: enabled PPS%u from DT\n", idx);
+}
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -8122,6 +8149,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	priv = netdev_priv(ndev);
 	ethqos->priv = priv;
 	ethqos->power_state = true;
+
+	ethqos_parse_pps_dt(&pdev->dev, pdev->dev.of_node, priv);
 
 	qcom_ethqos_init_aux_ts(ethqos, plat_dat, priv);
 

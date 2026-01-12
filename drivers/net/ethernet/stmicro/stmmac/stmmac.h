@@ -428,7 +428,7 @@ struct stmmac_priv {
 
 	/* Pulse Per Second output */
 	struct stmmac_pps_cfg pps[STMMAC_PPS_MAX];
-
+	u32 pps_idx;
 	/* Receive Side Scaling */
 	struct stmmac_rss rss;
 

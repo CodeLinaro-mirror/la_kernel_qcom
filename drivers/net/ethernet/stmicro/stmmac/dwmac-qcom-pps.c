@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.​
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -272,7 +272,7 @@ int ethqos_init_pps(void *priv_n)
 	priv->hw->ptp->adjust_systime(priv->ptpaddr, 0, 0, 0, 1);
 
 	/*Configuaring PPS0 PPS output frequency to default 19.2 Mhz*/
-	eth_pps_cfg.ppsout_ch = 0;
+	eth_pps_cfg.ppsout_ch = priv->pps_idx;
 
 	eth_pps_cfg.ptpclk_freq = priv->plat->clk_ptp_req_rate;
 	eth_pps_cfg.ppsout_freq = PPS_19_2_FREQ;
