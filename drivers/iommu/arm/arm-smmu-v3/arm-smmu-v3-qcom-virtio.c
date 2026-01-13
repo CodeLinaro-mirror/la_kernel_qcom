@@ -172,6 +172,9 @@ static int arm_vsmmu_impl_probe_device(struct arm_smmu_device *smmu, struct devi
 		type = le16_to_cpu(prop->type) & VIRTIO_IOMMU_PROBE_T_MASK;
 	}
 
+	if (dev->iommu)
+		dev->iommu->shadow_on_flush = true;
+
 out_free:
 	kfree(probe);
 	return ret;
