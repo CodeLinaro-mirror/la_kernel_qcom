@@ -404,7 +404,7 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 	spi_trace_log(mas->dev,
 		      "%s: loopback_cfg: %d, demux_sel: %d, cpha: %d, cpol: %d demux_output_inv: %d\n",
 		      __func__, loopback_cfg, demux_sel, cpha, cpol, demux_output_inv);
-	return geni_spi_set_clock_and_bw(mas, spi_slv->max_speed_hz);
+	return 0;
 }
 
 static void
