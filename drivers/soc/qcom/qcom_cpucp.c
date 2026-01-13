@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -265,12 +265,6 @@ static int qcom_cpucp_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	for (i = 0; i < desc->num_chans; i++)
 		spin_lock_init(&cpucp_ipc->chans_locks[i]);
-
-	if (desc->v2_mbox) {
-		writeq(0, cpucp_ipc->rx_irq_base + desc->enable_reg);
-		writeq(0, cpucp_ipc->rx_irq_base + desc->clear_reg);
-		writeq(0, cpucp_ipc->rx_irq_base + desc->map_reg);
-	}
 
 	cpucp_ipc->irq = platform_get_irq(pdev, 0);
 	if (cpucp_ipc->irq < 0) {
