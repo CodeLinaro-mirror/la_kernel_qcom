@@ -4925,10 +4925,11 @@ static int pcie_phy_init(struct msm_pcie_dev_t *dev)
 				 dev->rc_idx);
 		}
 
-		msm_pcie_phy_init_sequence(dev->phy_portb, phy_seq, i);
-
-		PCIE_DBG(dev, "PCIe: RC%d: Port B PHY initialized\n",
-			 dev->rc_idx);
+		if (phy_seq) {
+			msm_pcie_phy_init_sequence(dev->phy_portb, phy_seq, i);
+			PCIE_DBG(dev, "PCIe: RC%d: Port B PHY initialized\n",
+				 dev->rc_idx);
+		}
 	}
 
 	if (dev->phy_sw_reset_offset)
