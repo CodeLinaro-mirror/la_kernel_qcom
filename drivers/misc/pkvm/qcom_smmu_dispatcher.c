@@ -47,6 +47,8 @@ static int qcom_smmu_nesting_init(void)
 	/* For io-pgtable struct*/
 	__pkvm_topup_hyp_alloc(1);
 
+	smmuv2_nesting_init();
+
 #ifdef MODULE
 	ret = pkvm_load_el2_module(kvm_nvhe_sym(qcom_smmu_nesting_init_module),
 				   &pkvm_module_token);
@@ -58,8 +60,19 @@ static int qcom_smmu_nesting_init(void)
 #endif
 	pr_info("nr_pages %lu\n", atomic_mc.nr_pages);
 
-	return kvm_iommu_init_hyp(ksym_ref_addr_nvhe(qcom_smmu_hyp_nesting_ops),
-				  &atomic_mc);
+	ret = kvm_iommu_init_hyp(ksym_ref_addr_nvhe(qcom_smmu_hyp_nesting_ops),
+				 &atomic_mc);
+	if (ret) {
+		pr_err("Failed to init hyp iommu ops: %d\n", ret);
+		return ret;
+	}
+	ret = smmuv2_post_boot_init();
+	if (ret) {
+		pr_err("Failed to initialize SMMUv2 post boot: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
 }
 
 static pkvm_handle_t qcom_smmu_get_iommu_id(struct device_node *np)
