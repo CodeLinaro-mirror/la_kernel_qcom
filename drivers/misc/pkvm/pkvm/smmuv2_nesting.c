@@ -341,6 +341,7 @@ static int smmuv2_write_global_region_1(struct smmu_v2_nested *smmu,
 	    offset <= ARM_SMMU_GR1_CBAR(ARM_SMMU_MAX_CBARS - 1)) {
 		return smmuv2_cbar_write(smmu, offset, (u32)val);
 	}
+
 	/* Handle general register writes based on access size */
 	void *reg_addr = (void *)((u64)smmu->base_va + ARM_SMMU_GLOBAL_REGION1_OFFSET + offset);
 
@@ -359,7 +360,7 @@ static int smmuv2_write_global_region_1(struct smmu_v2_nested *smmu,
 }
 
 /* Device access and fault handling */
-static int smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
+static bool smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 				      struct user_pt_regs *regs,
 				      u64 esr, u32 addr)
 {
@@ -368,7 +369,7 @@ static int smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 	int rd = (esr & ESR_ELx_SRT_MASK) >> ESR_ELx_SRT_SHIFT;
 	u64 val = regs->regs[rd];
 	u32 offset;
-	int ret;
+	bool ret = true;
 
 	smmu_v2_debug_print("addr: 0x%llx, val: 0x%llx, esr: 0x%llx\n",
 			    addr, regs->regs[rd], esr);
@@ -400,17 +401,20 @@ static int smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 	return ret;
 }
 
-static int smmuv2_nesting_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 addr)
+static bool smmuv2_nesting_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 addr)
 {
 	struct smmu_v2_nested *smmu;
 	u32 size = ARM_SMMU_GLOBAL_REGION2_OFFSET;
+	int ret;
 
 	for_each_smmu(smmu) {
 		/* Check if address is within this SMMU's range */
-		if (addr >= smmu->base_pa && addr < smmu->base_pa + size)
-			return smmuv2_nesting_dabt_device(smmu, regs, esr, addr - smmu->base_pa);
+		if ((addr >= smmu->base_pa) && (addr < (smmu->base_pa + size))) {
+			ret = smmuv2_nesting_dabt_device(smmu, regs, esr, addr - smmu->base_pa);
+			return (ret == -EPERM) ? false : true;
+		}
 	}
-	return -EPERM; /* No matching SMMU found */
+	return false;
 }
 
 /* Initialization functions */
@@ -437,13 +441,22 @@ static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 {
 	int i;
 	u32 s2cr_val;
+	u32 smr_val;
 
 	for (i = smmu->num_s2cr - 1; i >= 0; i--) {
 		s2cr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_S2CR(i));
-		if ((s2cr_val & ARM_SMMU_S2CR_TYPE) >> 16 == S2CR_TYPE_FAULT)
-			break; /* Skip invalid entries */
-		smmu_v2_debug_print("S2CR[%d]: val: %llx\n",
-				    i, s2cr_val);
+		smr_val  = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(i));
+		if (!(smr_val & ARM_SMMU_SMR_VALID))
+			break;
+		smmu_v2_debug_print("S2CR[%d]: smr_val:%llx s2cr_val: %llx\n",
+				    i, smr_val, s2cr_val);
+	}
+	/* Reset remaining SMRs and S2CRs */
+	for (int j = i; j >= 0; j--) {
+		smr_val  = 0x0;
+		s2cr_val = FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_FAULT);
+		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_S2CR(j), s2cr_val);
+		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_SMR(j), smr_val);
 	}
 	smmu->num_s2cr = i + 1;
 	smmu->num_smr = smmu->num_s2cr; /* smr == s2cr */
@@ -577,6 +590,15 @@ static int hw_profile_init(void)
 	for_each_smmu(smmu) {
 		u32 id0 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID0);
 		u32 id1 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID1);
+		u32 scr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sCR0);
+
+		/* Enable SMMU by default.
+		 * And enable unidentified stream and Stream match conflicts by default
+		 */
+		scr_val &= ~(ARM_SMMU_sCR0_CLIENTPD);
+		scr_val |= FIELD_PREP(ARM_SMMU_sCR0_USFCFG, 1) |
+			   FIELD_PREP(ARM_SMMU_sCR0_SMCFCFG, 1);
+		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sCR0, scr_val);
 
 		smmu->num_smr = id0 & ARM_SMMU_ID0_NUMSMRG;
 		smmu->num_s2cr = smmu->num_smr; /* smr == s2cr */
@@ -624,6 +646,7 @@ const struct smmu_vendor_callbacks v2callbacks = {
 	.tlb_ops = NULL, /* fix me */
 	.get_cfg = NULL, /* fix me */
 	.post_init = smmu_attach_stage_2,
+	.dabt_hdl = smmuv2_nesting_dabt_handler,
 };
 
 static struct smmu_vendor_driver smmuv2_driver = {
@@ -658,8 +681,6 @@ int smmuv2_hyp_nesting_init(void)
 
 	/* Register this driver with the common vendor module */
 	ret = smmu_vendor_register_driver(&smmuv2_driver);
-
-	data.vops->register_host_dabt_fault_handler(smmuv2_nesting_dabt_handler);
 
 	return ret;
 }

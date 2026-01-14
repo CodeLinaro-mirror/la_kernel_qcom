@@ -26,6 +26,7 @@ struct smmu_vendor_callbacks {
 	const struct iommu_flush_ops *tlb_ops;
 	void (*get_cfg)(struct io_pgtable_cfg *ncfg);
 	int (*post_init)(void);
+	bool (*dabt_hdl)(struct user_pt_regs *regs, u64 esr, u64 addr);
 };
 
 /* SMMU vendor driver structure */

@@ -271,11 +271,28 @@ static void qcom_smmu_nesting_idmap(struct kvm_hyp_iommu_domain *domain,
 	}
 }
 
+bool qcom_dispatcher_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 addr)
+{
+	int i;
+	bool ret = false;
+
+	for (i = 0; i < num_registered_drivers; i++) {
+		if (registered_drivers[i]->callbacks->dabt_hdl) {
+			ret = registered_drivers[i]->callbacks->dabt_hdl(regs, esr, addr);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return ret;
+}
+
 struct kvm_iommu_ops qcom_smmu_hyp_nesting_ops = {
 	.init				= qcom_smmu_nesting_init,
 	.get_iommu_by_id		= qcom_nesting_id_to_iommu,
 	.alloc_domain			= qcom_smmu_nesting_alloc_domain,
 	.free_domain			= qcom_smmu_nesting_free_domain,
+	.dabt_handler                   = qcom_dispatcher_dabt_handler,
 	.attach_dev			= qcom_smmu_nesting_attach_dev,
 	.detach_dev			= qcom_smmu_nesting_detach_dev,
 	.suspend			= qcom_smmu_nesting_suspend,
