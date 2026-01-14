@@ -143,6 +143,7 @@ struct ethqos_emac_driver_data {
 	bool rgmii_config_loopback_en;
 	bool has_emac_ge_3;
 	const char *link_clk_name;
+	u32 has_flags;
 	bool has_integrated_pcs;
 	u32 dma_addr_width;
 	unsigned int ptp_clk_rate;
@@ -639,6 +640,7 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.rgmii_config_loopback_en = false,
 	.dma_addr_width = 40,
 	.link_clk_name = "phyaux",
+	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
 	.has_hdma = true,
 	.needs_serdes_reset = true,
 	.ptp_clk_rate = 250000000,
@@ -1746,6 +1748,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->flags |= STMMAC_FLAG_RX_CLK_RUNS_IN_LPI;
 	if (data->has_integrated_pcs)
 		plat_dat->flags |= STMMAC_FLAG_HAS_INTEGRATED_PCS;
+	if (data->has_flags)
+		plat_dat->flags |= data->has_flags;
 	if (data->dma_addr_width)
 		plat_dat->host_dma_width = data->dma_addr_width;
 
