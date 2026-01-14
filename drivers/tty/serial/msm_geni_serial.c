@@ -4598,6 +4598,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 			msm_geni_serial_power_on(uport);
 
 		if (msm_port->xfer_mode == GENI_GPI_DMA) {
+			/* Prevent device suspend */
+			pm_runtime_forbid(uport->dev);
+
 			/* From the framework every time the stop
 			 * rx sequncer will be called before the closing
 			 * of UART port and due to atomic context we can't
@@ -4658,6 +4661,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				dma_release_channel(msm_port->gsi->tx_c);
 				msm_port->gsi->tx_c = NULL;
 			}
+
+			/* Allow device to suspend */
+			pm_runtime_allow(uport->dev);
 		} else {
 			msm_geni_serial_stop_tx(uport);
 		}
