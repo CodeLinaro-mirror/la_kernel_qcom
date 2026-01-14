@@ -218,7 +218,6 @@ bengal_perf_config = {
     "CONFIG_QCOM_WATCHDOG_PET_TIME": "9360",
     "CONFIG_QCOM_WATCHDOG_USERSPACE_PET": "n",
     "CONFIG_QCOM_WATCHDOG_WAKEUP_ENABLE": "y",
-    "CONFIG_QCOM_WCD_USBSS_I2C": "m",
     "CONFIG_QCOM_WCNSS_PIL": "n",
     "CONFIG_QCOM_WDOG_BITE_EARLY_PANIC": "n",
     "CONFIG_QCOM_WDT_CORE": "m",
@@ -327,4 +326,6 @@ bengal_perf_config = {
     "CONFIG_ZRAM_WRITEBACK": "n",
     "CONFIG_ZSMALLOC": "m",
     "CONFIG_QSEECOM_PROXY": "m",
+    "CONFIG_MSM_SEB": "m",
+    "CONFIG_MSM_SEB_RPMSG": "m",
 }
