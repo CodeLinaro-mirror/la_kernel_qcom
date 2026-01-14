@@ -34,7 +34,6 @@ struct qcom_sg_buffer {
 	struct deferred_freelist_item deferred_free;
 	void (*free)(struct qcom_sg_buffer *buffer);
 	struct kref kref;
-	struct rcu_head rcu;
 };
 
 struct dma_heap_attachment {
