@@ -12,6 +12,7 @@
 #define MAX_LPM_CPUS		8
 #define MAXSAMPLES		5
 #define PRED_RESI_FACT		1
+#define MIN_RESI_TIMES		3
 #define MAX_PRED_TIMER_ADD	1000
 #define PRED_TIMER_ADD		100
 #define PRED_PREMATURE_CNT	3
@@ -29,6 +30,7 @@ extern u32 pred_timer_add;
 extern u32 pred_premature_cnt;
 extern u32 pred_ref_stddev;
 extern u32 ipi_pred_ref_stddev;
+extern bool optimized_resi;
 extern bool bias_disabled;
 extern bool cluster_bias_disabled;
 extern bool premature_ext_disabled;
@@ -61,6 +63,7 @@ struct lpm_cpu {
 	int cpu;
 	int enable;
 	int last_idx;
+	int timer_factor;
 	struct notifier_block nb;
 	struct cpuidle_driver *drv;
 	struct cpuidle_device *dev;
@@ -74,6 +77,8 @@ struct lpm_cpu {
 	struct history_lpm lpm_history;
 	struct history_ipi ipi_history;
 	ktime_t now;
+	ktime_t active_time;
+	ktime_t exit_time;
 	u64 bias;
 	int64_t next_pred_time;
 	u32 pred_type;
@@ -98,7 +103,8 @@ struct lpm_cluster {
 	int entry_idx;
 	int restrict_idx;
 	int nsamp;
-	u32 samples_invalid_time;
+	int timer_cpu;
+	u64 samples_invalid_time;
 	u32 pred_premature_cnt;
 	struct cluster_history history[MAXSAMPLES];
 	struct generic_pm_domain *genpd;
@@ -122,6 +128,7 @@ struct lpm_cluster {
 	bool is_timer_queued;
 	bool need_timer_requeue;
 	bool use_bias_timer;
+	bool pre_timer;
 };
 
 struct cluster_governor {

@@ -1,6 +1,7 @@
 lahaina_perf_config = {
     # keep sorted
     "CONFIG_ARCH_YUPIK": "y",
+    "CONFIG_ARCH_LAHAINA": "y",
     "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_NVMEM": "n",
@@ -128,6 +129,7 @@ lahaina_perf_config = {
     "CONFIG_PHY_QCOM_UFS_QRBTC_SDM845": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_YUPIK": "m",
+    "CONFIG_PINCTRL_LAHAINA": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
     "CONFIG_PLFXLC": "n",
     "CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE": "m",

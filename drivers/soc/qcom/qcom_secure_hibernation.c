@@ -680,7 +680,7 @@ static int hibernate_pm_notifier(struct notifier_block *nb,
 		break;
 
 	default:
-		WARN_ONCE(1, "Invalid PM Notifier\n");
+		pr_debug("%s: Invalid PM Notifier\n", __func__);
 		break;
 	}
 

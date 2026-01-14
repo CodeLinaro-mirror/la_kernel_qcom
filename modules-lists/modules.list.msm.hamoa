@@ -57,6 +57,8 @@ spmi-pmic-arb.ko
 clk-dummy.ko
 clk-qcom.ko
 clk-rpmh.ko
+sched-walt.ko
+sched-walt-debug.ko
 gcc-x1p42100.ko
 gcc-x1e80100.ko
 tcsrcc-x1e80100.ko

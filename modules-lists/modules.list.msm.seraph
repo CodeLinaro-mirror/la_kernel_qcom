@@ -4,6 +4,7 @@ qcom-scm.ko
 pinctrl-msm.ko
 pinctrl-seraph.ko
 qcom_hwspinlock.ko
+qrtr.ko
 smem.ko
 socinfo.ko
 qcom_tzmem.ko
@@ -55,3 +56,4 @@ gh_rm_drv.ko
 gh_rm_heap_manager.ko
 gunyah_loader.ko
 arm_smmu_pmu.ko
+qcom_ipc_logging.ko

@@ -2962,6 +2962,45 @@ static const struct adsp_data khaje_mpss_resource = {
 	.both_dumps = true,
 };
 
+static const struct adsp_data bengal_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = false,
+};
+
+static const struct adsp_data bengal_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.pas_id = 18,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = false,
+	.auto_boot = true,
+};
+
+static const struct adsp_data bengal_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
 static const struct adsp_data malabar_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -3137,6 +3176,9 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,chora-adsp-pas", .data = &chora_adsp_resource},
 	{ .compatible = "qcom,chora-modem-pas", .data = &chora_mpss_resource},
 	{ .compatible = "qcom,chora-wpss-pas", .data = &chora_wpss_resource},
+	{ .compatible = "qcom,bengal-adsp-pas", .data = &bengal_adsp_resource},
+	{ .compatible = "qcom,bengal-cdsp-pas", .data = &bengal_cdsp_resource},
+	{ .compatible = "qcom,bengal-modem-pas", .data = &bengal_mpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

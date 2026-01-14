@@ -40,6 +40,7 @@ bam_dma.ko
 stub-regulator.ko
 clk-smd-rpm.ko
 gcc-khaje.ko
+gcc-sm6115.ko
 icc-rpm.ko
 qnoc-qos-rpm.ko
 qnoc-bengal.ko
@@ -79,6 +80,7 @@ ufshcd-crypto-qti.ko
 qcom_ice.ko
 ufs-qcom.ko
 phy-qcom-ufs-qmp-v4-khaje.ko
+phy-qcom-ufs-qmp-v3-660.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
 sg.ko
@@ -96,3 +98,4 @@ msm_sharedmem.ko
 nvmem_qfprom.ko
 qcom-cpufreq-hw.ko
 qseecom_proxy.ko
+rtc-pm8xxx.ko
