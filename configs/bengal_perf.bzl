@@ -109,6 +109,7 @@ bengal_perf_config = {
     "CONFIG_PHY_QCOM_QMP_COMBO": "m",
     "CONFIG_PHY_QCOM_UFS": "m",
     "CONFIG_PHY_QCOM_UFS_V4_KHAJE": "m",
+    "CONFIG_PHY_QCOM_UFS_V3": "m",
     "CONFIG_PHY_QCOM_UFS_QRBTC_SDM845": "m",
     "CONFIG_PINCTRL_BENGAL": "m",
     "CONFIG_PINCTRL_KHAJE": "m",
