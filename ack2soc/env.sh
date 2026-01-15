@@ -26,6 +26,17 @@ declare -gx  SOC_SHA;
 declare -gx  SOC_REPO_REL_ROOT;
 declare -gx  SOC_ROOT;
 
+declare -gx  LIST_TEAMS;
+declare -gx  TEAMS_POCS_PAGE;
+declare -gx  TEAMS_DATA_ROOT;
+declare -gx  TEAMS_PATTERN;
+declare -gxa TEAMS;
+
+declare -gx  TEAM_NAME='';
+declare -gxa TEAM_POCS=();
+declare -gxa TEAM_DRIVERS=();
+declare -gxa TEAM_PATHS=();
+
 declare -gx  LIST_DRIVERS;
 declare -gxa DRIVERS;
 
@@ -53,6 +64,14 @@ declare -gx  VERBOSE;
 declare -gx  TIMESTAMP;
 declare -gx  DEBUG_LOG;
 declare -gxa DELETE_QUEUE;
+
+# Page with various teams details, like POCs, list of files monitored by the
+# team, etc.
+TEAMS_POCS_PAGE='https://confluence.qualcomm.com/confluence/display/LK/LTS#LTS-POCs';
+TEAMS_DATA_ROOT='data/teams';
+TEAMS_DATA_ROOT="${INCLUDE_PATH}/${TEAMS_DATA_ROOT}";
+TEAMS_PATTERN='.*(linux|display|audio|ssg|wlan).*';
+TEAMS=();
 
 # List of keywords which are matching to list of files and directories
 DRIVERS=();
@@ -109,5 +128,6 @@ PROGRESS="${PROGRESS:-false}";
 VERBOSE="${VERBOSE:-false}";
 
 LIST_DRIVERS='false';
+LIST_TEAMS='false';
 
 DELETE_QUEUE=();

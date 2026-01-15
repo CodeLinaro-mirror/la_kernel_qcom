@@ -61,17 +61,7 @@ init || {
   exit 3;
 }
 
-info || {
-  printf -- '\nERROR(%s): Fail to collect info\n\n' "$?";
-  exit 4;
-}
-
-if $REPORT_STALLED; then
-  echo "List of stalled files (not updated since $NOT_UPDATED_WARNING_PERIOD days)";
-  report-stalled "${FILES[@]}" || exit 5;
-fi
-
-report || {
-  printf -- '\nERROR(%s): Fail to get list of missing chages\n\n' "$?";
+main || {
+  printf -- '\nERROR(%s): Fail to collect missing changes\n\n' "$?";
   exit 5;
 }

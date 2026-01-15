@@ -12,6 +12,10 @@
 # keeps Git command lines simple by removing the need to pass options equivalent
 # to these variables. It also supports detached Git-dir/work-tree setups.
 : "$GIT_DIR" "$GIT_WORK_TREE"
+#
+# Stores the current team name during iteration over teams. Referenced by other
+# files to produce more informative messages.
+: "$TEAM_NAME"
 
 function get-soc-tip()
 {
@@ -20,6 +24,11 @@ function get-soc-tip()
   git ls-remote -h "$SOC_URL" \
     | grep -P  "$tip_regex"   \
     | grep -Po '^[^\s]+';
+}
+
+function team-files()
+{
+  files "$SOC_ROOT" "$SOC_SHA" "${TEAM_PATHS[@]}";
 }
 
 #
@@ -52,6 +61,97 @@ function soc-monitored-files()
     <(soc-files | sort -u) \
     <(ack-files | sort -u) \
       | blocklist-filter;
+}
+
+function team-monitored-files()
+{
+  $DEBUG && set -x;
+
+  local files='';
+
+  files="$(
+    printf -- "%s\n"              \
+      "${SOC_MONITORED_FILES[@]}" \
+        | sort -u;
+  )";
+
+  comm -12                  \
+    <(echo "$files")        \
+    <(team-files | sort -u) \
+      | blocklist-filter;
+}
+
+function read-section()
+{
+  local label="$1"; shift 1;
+
+  [ -z "$label" ] && return 1;
+
+  perl -0 -s -ne '
+    $status=0;
+
+    /^\s*${label}:?\s*$
+     (.+?)
+     (^\s*$|\z)
+    /ismx or exit 1;
+
+    $list = $1;
+    $list =~ s/^\s+|\s+$//mg;
+    print $list;
+
+    exit $status;
+  ' -- -label="$label";
+}
+
+# This function relax user to provide either team name
+#
+#
+function load-team-data()
+{
+  local team_name="$1"; shift 1;
+  local team_info="$1"; shift 1;
+
+  local team_regex="\\b${team_name}\\b";
+  local -i match_count=0;
+  local -i n=1;
+
+  if [ -n "$team_name" ]; then
+    team_info="$(
+
+      grep -ril "$team_regex" "$TEAMS_DATA_ROOT" && exit 0;
+
+      find "$TEAMS_DATA_ROOT" -maxdepth 1 -type f \
+        | grep -Pi "$team_regex"                || exit 1;
+
+    )" && {
+      match_count="$(echo "$team_info" | wc -l)";
+      if [[ $match_count -gt 1 ]]; then
+        printf -- "\nERROR: Several teams matches provided team name '%s'\n" \
+          "$team_name";
+        return 1;
+      fi
+    }
+  fi
+
+  team_info="$(
+    realpath --no-symlinks "$team_info" 2>> "$DEBUG_LOG";
+  )" || return 1;
+
+  TEAM_NAME="$(                 read-section team    < "$team_info")";
+  readarray -t TEAM_POCS    < <(read-section pocs    < "$team_info");
+  readarray -t TEAM_DRIVERS < <(read-section drivers < "$team_info");
+  readarray -t TEAM_PATHS   < <(read-section paths   < "$team_info");
+
+  n=$((
+    ${#TEAM_POCS[@]}
+    * ${#TEAM_DRIVERS[@]}
+    * ${#TEAM_PATHS[@]}
+  ));
+
+  # Fail, if one or more arrays are empty.
+  [[ $n -eq 0 ]] && return 1;
+
+  return 0;
 }
 
 #

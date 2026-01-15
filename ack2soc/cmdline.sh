@@ -9,7 +9,9 @@
 # shellcheck disable=SC2034
 
 LONG_OPTIONS_LIST=(
+  'team:'
   'driver:'
+  'list-teams'
   'list-drivers'
   'stalled::'
   'report-all'
@@ -30,7 +32,7 @@ LONG_OPTIONS_LIST=(
   'help'
   'verbose'
 );
-SHORT_OPTIONS_LIST='d: l h i v';
+SHORT_OPTIONS_LIST='t: d: l h i v';
 
 function usage()
 {
@@ -48,6 +50,16 @@ DESCRIPTION:
     time of their appearance in the history limited by these two ACK SHAs.
 
 OPTIONS:
+  -t | --team TEAM
+           List changes split per files owned by team. If no value OR 'all',
+           iterate over all teams.
+
+       --list-teams
+           List all known teams. Use these values for the \`--teams-view' option.
+
+           This list should be kept up to date with:
+           $TEAMS_POCS_PAGE
+
   -d | --driver
            This is driver string, which is expanded to list of files. You could
            check the list of all drivers by run the script with option
@@ -56,6 +68,9 @@ OPTIONS:
 
   -l | --list-drivers
            List all available drivers loaded in SOC repo
+
+           TODO: update to use POCs table:
+           $TEAMS_POCS_PAGE
 
        --stalled[=days]
            Report files that are not being updated for more than specified days.
@@ -217,6 +232,12 @@ function process_options_ack2soc()
     i="$1"; shift 1;
     $DEBUG && echo "Process option: $i";
     case "$i" in
+      --team|-t)
+        TEAMS+=("$1"); shift 1;
+      ;;
+      --list-teams)
+        LIST_TEAMS=true;
+      ;;
       --driver|-d)
         # Later this array will be replaced by expanded list of files by
         # using files() function

@@ -193,12 +193,12 @@ function init()
   # Build list of regexes representing blocked paths
   blocklist-regexes || return 8;
 
-  # FILES is the list of common files between SOC_SHA and ACK_SHA_KP reduced
-  # with files from the BLOCKLIST
-  readarray -t FILES < <(
+  # Load the list of common files between SOC_SHA and ACK_SHA_KP reduced with
+  # files from the BLOCKLIST
+  readarray -t SOC_MONITORED_FILES < <(
     soc-monitored-files
   );
-  test "${#FILES[@]}" -le 0 && return 2;
+  test "${#SOC_MONITORED_FILES[@]}" -le 0 && return 2;
 
   # Get list of ALL changes i.e. above list, but do not limit it to changes
   # only in FILES
@@ -214,6 +214,91 @@ function init()
     i+=1;
   done
 
+  return 0;
+}
+
+function list-changes-per-teams()
+{
+  local teams=("${TEAMS[@]}");
+  local team='';
+  local key='';
+
+  #local -xa FILES=();
+
+  local -i n=1;
+  local load_team_data_cmd=(load-team-data);
+
+  if $VERBOSE; then
+    printf -- "Reading teams data ...\n";
+    printf -- "  folder : '%s'\n" "$TEAMS_DATA_ROOT";
+    printf -- "  pattern: '%s'\n" "$TEAMS_PATTERN";
+  fi
+
+  if [ "${TEAMS[0]}" = "all" ]; then
+    readarray -t teams < <(
+      find "$TEAMS_DATA_ROOT" -type f \
+        | grep -Pi "^\\Q${TEAMS_DATA_ROOT}/\\E\K$TEAMS_PATTERN";
+    );
+    # This is an empty argument, due to double expansion performed by eval
+    load_team_data_cmd+=('');
+    n+=1;
+  fi
+
+  for team in "${teams[@]}"; do
+    load_team_data_cmd[n]="$team";
+    "${load_team_data_cmd[@]}" || {
+      printf -- "ERROR: Failed to load data for team '%s'\n" "$team";
+      continue;
+    }
+    printf -- "\nProcessing team %s (POCs %s) ...\n" \
+      "$TEAM_NAME"                                   \
+      "$(IFS=,; echo "${TEAM_POCS[*]}")";
+
+    CHANGES=();
+    for key in "${!CHANGES_ALL[@]}"; do
+      CHANGES_ALL["$key"]=0;
+    done
+
+    readarray -t FILES < <(
+      team-monitored-files;
+    );
+
+    if [ "${#FILES[@]}" -eq 0 ]; then
+      cat <<WARN
+
+WARNING: No files to process!!!
+
+  This is based on the intersection of files:
+    * Existing in common folder at $ACK_SHA_KP
+    * Owned by the team $TEAM_NAME
+    * Expanded by the paths you provided as free arguments
+    * Expanded by and drivers you set via --driver options
+
+WARN
+      continue;
+    fi
+
+    actions || {
+      echo  "FAILED: Not able to collect changes for team '$TEAM_NAME'" >&2;
+    }
+  done
+}
+
+function main()
+{
+
+  if [ ${#TEAMS[@]} -gt 0 ]; then
+    list-changes-per-teams || return 1;
+    return 0;
+  fi
+  FILES=("${SOC_MONITORED_FILES[@]}");
+  actions || return 1;
+
+  return 0;
+}
+
+function actions()
+{
   # Get list of ALL changes, between ACK_SHA_KP (integrated already ACK SHA in
   # KP) and ACK_SHA, which are touching _only_ the FILES (common between SOC_SHA
   # and ACK_SHA_KP).
@@ -221,7 +306,20 @@ function init()
   list-changes "$ACK_ROOT" "$ACK_SHA_KP" "$ACK_SHA" || {
     echo "ERROR: list-changes: $?";
   }
-  test "${#CHANGES[@]}" -le 0 && return 3;
+  test "${#CHANGES[@]}" -le 0 && return 1;
 
-  return 0;
+  info || {
+    printf -- '\nERROR(%s): Fail to collect info\n\n' "$?";
+    return 2;
+  }
+
+  if $REPORT_STALLED; then
+    echo "List of stalled files (not updated since $NOT_UPDATED_WARNING_PERIOD days)";
+    report-stalled "${FILES[@]}" || return 3;
+  fi
+
+  report || {
+    printf -- '\nERROR(%s): Fail to get list of missing chages\n\n' "$?";
+    return 4;
+  }
 }
