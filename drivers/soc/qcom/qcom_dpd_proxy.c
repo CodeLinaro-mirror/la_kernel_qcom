@@ -146,10 +146,14 @@ struct dpd_mem_ops_args {
 	u32 type;
 	u32 op;
 	bool is_cpz;
+	bool iommu_bypass;
 };
 
 #define RECLAIM_TIMEOUT_MS (10000)
 
+static int dpd_iommu_bypass_map(struct dpd_mem_ops_args *args, struct dpd_scatterlist *dpd_sg);
+static void dpd_iommu_bypass_unmap(struct dpd_mem_ops_args *args, struct dpd_scatterlist *dpd_sg,
+	int nr);
 
 static u32 dpd_args_src_len(struct dpd_mem_ops_args *args)
 {
@@ -307,6 +311,7 @@ static int dpd_args_validate(struct dpd_mem_ops_args *args, struct sg_table *sgt
 	int i;
 	struct qcom_scm_vmperm vmperm;
 	bool is_cpz = false;
+	bool iommu_bypass = false;
 
 	args->op = dpd_args_op(args);
 	if (args->op == OP_INVALID) {
@@ -341,6 +346,32 @@ static int dpd_args_validate(struct dpd_mem_ops_args *args, struct sg_table *sgt
 		return 0;
 	}
 out_cpz:
+
+	/* Dynamic Pil usecases */
+	for (i = 0; i < dpd_args_len(args); i++) {
+		vmperm = dpd_args_vmperm(args, i);
+		switch (vmperm.vmid) {
+		case QCOM_SCM_VMID_LPASS:
+		case QCOM_SCM_VMID_ADSP_HEAP:
+			iommu_bypass = true;
+			break;
+		case QCOM_SCM_VMID_HLOS:
+			break;
+		default:
+			iommu_bypass = false;
+			goto out_iommu_bypass;
+		}
+	}
+
+	if (iommu_bypass) {
+		if (sgt->orig_nents != 1) {
+			dpd_args_show(args, false, "iommu bypass requires contiguous memory\n");
+			return -EINVAL;
+		}
+		args->iommu_bypass = true;
+		return 0;
+	}
+out_iommu_bypass:
 
 	dpd_args_show(args, false, "Illegal usecase\n");
 	return -EINVAL;
@@ -413,7 +444,7 @@ static int dpd_memory_reclaim(struct dpd_mem_ops_args *args, struct sg_table *sg
 	struct dpd_scatterlist *dpd_sg;
 	struct scatterlist *pos, *sg;
 	unsigned long pfn;
-	int i;
+	int i, val;
 
 	pfn = PHYS_PFN(sg_phys(sgt->sgl));
 	dpd_sg = dpd_mtree_lookup(pfn);
@@ -427,8 +458,12 @@ static int dpd_memory_reclaim(struct dpd_mem_ops_args *args, struct sg_table *sg
 	 */
 	put_si_object(dpd_sg->shm);
 
-	if (atomic_read(&dpd_sg->mapcount)) {
+	val = atomic_read(&dpd_sg->mapcount);
+	if (!args->iommu_bypass && val) {
 		dpd_args_show(args, true, "Mapped by service\n");
+		return -EINVAL;
+	} else if (args->iommu_bypass && val != 1) {
+		dpd_args_show(args, true, "Unexpected mapcount %ld for iommu bypass\n", val);
 		return -EINVAL;
 	}
 
@@ -445,6 +480,8 @@ static int dpd_memory_reclaim(struct dpd_mem_ops_args *args, struct sg_table *sg
 			i, dpd_sg->sgt.orig_nents);
 		return -EINVAL;
 	}
+
+	dpd_iommu_bypass_unmap(args, dpd_sg, dpd_args_len(args));
 
 	return put_dpd_si_sync(args, dpd_sg);
 }
@@ -510,6 +547,12 @@ static int dpd_memory_lend_share(struct dpd_mem_ops_args *args, struct sg_table 
 	}
 
 	ret = dpd_mtree_insert(dpd_sg);
+	if (ret) {
+		put_dpd_si_sync(args, dpd_sg);
+		return ret;
+	}
+
+	ret = dpd_iommu_bypass_map(args, dpd_sg);
 	if (ret)
 		put_dpd_si_sync(args, dpd_sg);
 	return ret;
@@ -591,6 +634,87 @@ static int dpd_hyp_assign_notifier(struct notifier_block *nb,
 
 	sg_free_table(&sgt);
 	return ret ? notifier_from_errno(ret) : NOTIFY_STOP;
+}
+
+/* Special handling for iommu bypass usecases */
+static u32 vmid_to_domain_id(int vmid)
+{
+	switch (vmid) {
+	case QCOM_SCM_VMID_LPASS:
+		return QCOM_SCM_VMID_LPASS;
+	case QCOM_SCM_VMID_ADSP_HEAP:
+		return QCOM_SCM_VMID_ADSP_HEAP;
+	default:
+		return 0;
+	}
+}
+
+static u32 perm_to_flags(int perm)
+{
+	u32 flags = 0;
+
+	if (perm & QCOM_SCM_PERM_READ)
+		flags |= IMM_F_READ;
+	if (perm & QCOM_SCM_PERM_WRITE)
+		flags |= IMM_F_WRITE;
+	return flags;
+}
+
+/*
+ * Ideally these would be done using an identity domain through the iommu api.
+ * However, legacy clients did not use the dma/iommu apis; only qcom_scm_assign_mem().
+ * On x1e8100, we are bound by a requirement to minimize client changes.
+ */
+static void dpd_iommu_bypass_unmap(struct dpd_mem_ops_args *args,
+					struct dpd_scatterlist *dpd_sg, int nr)
+{
+	int domain, i;
+	struct qcom_scm_vmperm vmperm;
+	unsigned long iova;
+
+	if (!args->iommu_bypass)
+		return;
+
+	for (i = 0; i < nr; i++) {
+		vmperm = dpd_args_vmperm(args, i);
+
+		domain = vmid_to_domain_id(vmperm.vmid);
+		if (!domain)
+			continue;
+
+		iova = sg_phys(dpd_sg->sgt.sgl);
+
+		WARN(dpd_svc_unmap(dpd_sg, domain, iova), "Iommu bypass unmap failed.");
+	}
+}
+
+static int dpd_iommu_bypass_map(struct dpd_mem_ops_args *args, struct dpd_scatterlist *dpd_sg)
+{
+	int domain, flags, i, ret;
+	struct qcom_scm_vmperm vmperm;
+	unsigned long iova;
+
+	if (!args->iommu_bypass)
+		return 0;
+
+	for (i = 0; i < dpd_args_len(args); i++) {
+		vmperm = dpd_args_vmperm(args, i);
+
+		domain = vmid_to_domain_id(vmperm.vmid);
+		if (!domain)
+			continue;
+
+		flags = perm_to_flags(vmperm.perm);
+		iova = sg_phys(dpd_sg->sgt.sgl);
+
+		ret = dpd_svc_map(dpd_sg, domain, flags, iova);
+		if (ret) {
+			dpd_iommu_bypass_unmap(args, dpd_sg, i);
+			return ret;
+		}
+	}
+
+	return 0;
 }
 
 int dpd_proxy_available(void)
