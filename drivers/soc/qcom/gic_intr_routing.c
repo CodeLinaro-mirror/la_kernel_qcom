@@ -346,7 +346,9 @@ void gic_do_class_update_physical(
 	if (is_class0)
 		class_bits_val = 0x2;
 	if (is_class1)
-		class_bits_val |= 0x1;
+		class_bits_val = 0x1;
+	if (is_class0 && is_class1)
+		class_bits_val = 0x0;
 
 	spin_lock(&gic_class_lock);
 	val = readl_relaxed(reg);
