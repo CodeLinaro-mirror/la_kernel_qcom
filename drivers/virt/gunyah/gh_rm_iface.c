@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
- *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/slab.h>
@@ -2948,6 +2947,8 @@ static int __gh_rm_setup_feature_scm_assign(void)
 	return 0;
 }
 #else
+static struct notifier_block gh_rm_scm_assign_nb;
+
 static int __gh_rm_setup_feature_scm_assign(void)
 {
 	int ret, gh_acl_sz, gh_sgl_sz;
@@ -2996,7 +2997,12 @@ static int __gh_rm_setup_feature_scm_assign(void)
 	gh_sgl->sgl_entries[0].size = PAGE_SIZE;
 
 	ret = ghd_rm_mem_lend(GH_RM_MEM_TYPE_NORMAL, 0, 0, gh_acl, gh_sgl, NULL, &handle);
-	gh_feature_use_scm_assign = ret ? true : false;
+	if (ret) {
+		gh_feature_use_scm_assign = true;
+	} else {
+		gh_feature_use_scm_assign = false;
+		qcom_scm_assign_mem_notifier_register(&gh_rm_scm_assign_nb);
+	}
 
 	if (ret || !ghd_rm_mem_reclaim(handle, 0))
 		__free_page(page);
@@ -3051,40 +3057,49 @@ static bool is_gh_vm_or_hlos(int vmid)
  *
  * SCM ASSIGN never needed:
  * We are running on !QCOM_SCM_VMID_HLOS
+ *
+ * Returns NOTIFY_STOP if scm assign is not required
  */
-bool gh_rm_needs_scm_assign(u64 *src, const struct qcom_scm_vmperm *newvm,
-				unsigned int dest_cnt)
+static int scm_assign_notifier(struct notifier_block *nb,
+		unsigned long action, void *_args)
 {
 	int ret, i;
 	gh_vmid_t self_vmid;
+	struct qcom_scm_assign_mem_notifier_data *args = _args;
+	u64 *src = args->srcvm;
+	const struct qcom_scm_vmperm *newvm = args->newvm;
+	unsigned int dest_cnt = args->dest_cnt;
 
 	if (gh_feature_use_scm_assign)
-		return true;
+		return NOTIFY_OK;
 
 	ret = gh_rm_get_this_vmid(&self_vmid);
 	if (ret)
-		return true;
+		return NOTIFY_OK;
 
 	if (self_vmid != QCOM_SCM_VMID_HLOS)
-		return false;
+		return NOTIFY_STOP;
 
 	for (i = 0; i < BITS_PER_TYPE(*src); i++) {
 		if (!(*src & BIT(i)))
 			continue;
 		if (!is_gh_vm_or_hlos(i))
-			return true;
+			return NOTIFY_OK;
 	}
 	for (i = 0; i < dest_cnt; i++)
 		if (!is_gh_vm_or_hlos(newvm[i].vmid))
-			return true;
+			return NOTIFY_OK;
 
 	if (hweight64(*src) == 1 && (*src & BIT(QCOM_SCM_VMID_HLOS)) &&
 	    (dest_cnt == 1) && (newvm[0].vmid == QCOM_SCM_VMID_HLOS))
-		return true;
+		return NOTIFY_OK;
 
-	return false;
+	return NOTIFY_STOP;
 }
-EXPORT_SYMBOL_GPL(gh_rm_needs_scm_assign);
+
+static struct notifier_block gh_rm_scm_assign_nb = {
+	.notifier_call = scm_assign_notifier,
+};
 
 bool gh_rm_needs_hyp_assign(u32 *src_vm_list, int source_nelems,
 				int *dst_vm_list, int dst_nelems)

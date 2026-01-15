@@ -39,7 +39,6 @@
 #include <linux/reset-controller.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
-#include <linux/gunyah/gh_rm_drv.h>
 #include <linux/qti-lcp-ppddr.h>
 #include <include/linux/arm-smccc.h>
 #include <linux/qtee_shmbridge.h>
@@ -1167,9 +1166,6 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	/* If notifier handled it (NOTIFY_STOP) or returned an error, return early */
 	if (ret & NOTIFY_STOP_MASK)
 		return notifier_to_errno(ret);
-
-	if (!gh_rm_needs_scm_assign(srcvm, newvm, dest_cnt))
-		return 0;
 
 	src_sz = hweight64(srcvm_bits) * sizeof(*src);
 	mem_to_map_sz = sizeof(*mem_to_map);

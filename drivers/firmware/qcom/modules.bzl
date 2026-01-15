@@ -57,7 +57,6 @@ def register_modules(registry):
             # do not sort
             "drivers/firmware/arm_ffa_transport",
             "drivers/firmware/arm_ffa",
-            "drivers/virt/gunyah/gh_rm_drv",
             "drivers/soc/qcom/hab/msm_hab",
         ],
     )
