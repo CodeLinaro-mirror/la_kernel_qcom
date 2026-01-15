@@ -54,6 +54,17 @@ struct dpd_mapping {
 	u32 prot;
 };
 
+struct dpd_map_walk {
+	struct iommu_map_cookie_sg cookie;
+	struct dpd_scatterlist *dpd_sg;
+	struct sg_page_iter piter;
+	size_t offset;
+	size_t mapped;
+	unsigned long iova;
+	int prot;
+	int error;
+};
+
 #define to_smmu_domain(d) container_of((d), struct dpd_smmu_domain, domain)
 
 /* from arm-smmu-v3 */
@@ -68,7 +79,7 @@ to_smmu_domain_devices(struct iommu_domain *domain)
 	return NULL;
 }
 
-static struct dpd_mapping __maybe_unused *add_mapping(struct dpd_smmu_domain *smmu_domain,
+static struct dpd_mapping *add_mapping(struct dpd_smmu_domain *smmu_domain,
 					struct dpd_scatterlist *dpd_sg,
 					unsigned long iova, int prot)
 {
@@ -309,35 +320,249 @@ static int dpd_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	return ret;
 }
 
+/*
+ * Releases held resources.
+ */
+static void dpd_map_walk_reset(struct dpd_map_walk *w)
+{
+	if (w->dpd_sg)
+		put_si_object(w->dpd_sg->shm);
+	memset(w, 0, sizeof(*w));
+}
+
+/*
+ * Translates the physical address ranges provided by the iommu framework
+ * into smcinvoke memory objects (MO). If [paddr, paddr + size] is a subset of
+ * a MO, the current offset within the MO is preserved and used by the
+ * subsequent call to dpd_map_walk(). When the end of a MO is reached,
+ * a iommu map command is submitted over smcinvoke.
+ *
+ * Mapping partial smcinvoke memory objects is not allowed.
+ */
+static int dpd_map_walk(struct dpd_map_walk *w, phys_addr_t paddr, size_t pgsize, size_t pgcount)
+{
+	struct dpd_smmu_domain *smmu_domain = to_smmu_domain(w->cookie.domain);
+	struct dpd_smmu *smmu = smmu_domain->smmu;
+	struct dpd_scatterlist *dpd_sg;
+	size_t size;
+	struct page *p, *page_end;
+	int ret;
+
+	if (!smmu_domain->attached) {
+		dev_err(smmu->dev, "%s: Mapping to inactive domain\n",
+			dev_name(smmu_domain->dev));
+		return -EINVAL;
+	}
+
+	if (w->error)
+		return w->error;
+
+	if (check_mul_overflow(pgsize, pgcount, &size)) {
+		w->error = -EINVAL;
+		return w->error;
+	}
+
+	p = phys_to_page(paddr);
+	page_end = phys_to_page(paddr + size);
+
+	while (p < page_end) {
+		if (!w->dpd_sg) {
+			unsigned long pfn = page_to_pfn(p);
+
+			/* Acquires reference */
+			w->dpd_sg = dpd_mtree_lookup(pfn);
+			if (!w->dpd_sg) {
+				dev_dbg(smmu->dev, "Not protected memory: pfn:%lx\n", pfn);
+				w->error = -ERANGE;
+				return w->error;
+			}
+
+			__sg_page_iter_start(&w->piter, w->dpd_sg->sgt.sgl,
+					w->dpd_sg->sgt.orig_nents, 0);
+			w->offset = 0;
+			__sg_page_iter_next(&w->piter);
+		}
+		dpd_sg = w->dpd_sg;
+
+		do {
+			struct page *p_sg = sg_page_iter_page(&w->piter);
+
+			if (p >= page_end)
+				return 0;
+
+			if (p != p_sg) {
+				dev_err(smmu->dev, "Partial si_object: expected pfn:%lx (%zx/%zx) have: %lx\n",
+					page_to_pfn(p), w->offset, dpd_sg->size,
+					page_to_pfn(p_sg));
+				w->error = -ERANGE;
+				return w->error;
+			}
+			w->offset += PAGE_SIZE;
+			p++;
+		} while (__sg_page_iter_next(&w->piter));
+
+		/* Reached end of current dpd_sg. Start the map operation */
+		if (!add_mapping(smmu_domain, dpd_sg, w->iova, w->prot)) {
+			w->error = -ENOMEM;
+			return w->error;
+		}
+
+		/* Mapping now holds the refcount; drop ours */
+		put_si_object(w->dpd_sg->shm);
+		w->dpd_sg = NULL;
+
+		ret = dpd_svc_map(dpd_sg, smmu_domain->si_domain_id,
+				prot_to_svc_flags(w->prot), w->iova);
+
+		if (ret) {
+			struct dpd_mapping *mapping;
+
+			mutex_lock(&smmu_domain->mappings_lock);
+			mapping = mtree_erase(&smmu_domain->mappings, w->iova);
+			mutex_unlock(&smmu_domain->mappings_lock);
+			__free_dpd_mapping(mapping);
+			w->error = ret;
+			return ret;
+		}
+
+		w->mapped += dpd_sg->size;
+		w->iova += dpd_sg->size;
+	}
+
+	return 0;
+}
+
+/*
+ * This driver heavily depends on Android's custom iommu_map_sg ops:
+ * alloc_cookie_sg/add_deferred_map_sg/consume_deferred_map_sg in order
+ * to convert the contiguous physical addresses the iommu framework provides
+ * into smcinvoke memory objects.
+ */
+static struct iommu_map_cookie_sg *
+dpd_alloc_cookie_sg(unsigned long iova, int prot, unsigned int nents, gfp_t gfp) {
+	struct dpd_map_walk *w;
+
+	w = kzalloc(sizeof(*w), gfp);
+	if (!w)
+		return NULL;
+
+	w->prot = prot;
+	w->iova = iova;
+	return &w->cookie;
+}
+
+static int dpd_add_deferred_map_sg(struct iommu_map_cookie_sg *cookie,
+				   phys_addr_t paddr, size_t pgsize, size_t pgcount)
+{
+	struct dpd_map_walk *w = container_of(cookie, struct dpd_map_walk, cookie);
+
+	dpd_map_walk(w, paddr, pgsize, pgcount);
+
+	/*
+	 * Android 6.12 doesn't call ops->consume_deferred_map_sg if
+	 * ops->add_deferred_map_sg fails.
+	 * Therefore return success here & return failure at
+	 * consume_deferred_map_sg instead.
+	 */
+	return 0;
+}
+
+static size_t dpd_consume_deferred_map_sg(struct iommu_map_cookie_sg *cookie)
+{
+	struct dpd_map_walk *w = container_of(cookie, struct dpd_map_walk, cookie);
+	struct dpd_smmu_domain *smmu_domain = to_smmu_domain(cookie->domain);
+	struct dpd_smmu *smmu = smmu_domain->smmu;
+	size_t mapped = w->mapped;
+
+	if (!w->error && w->dpd_sg) {
+		dev_err(smmu->dev, "Expected map of entire si_object. Only %zx/%zx mapped\n",
+			w->offset, w->dpd_sg->size);
+	}
+
+	dpd_map_walk_reset(w);
+	kfree(w);
+	return mapped;
+}
+
 static int dpd_smmu_map_pages(struct iommu_domain *domain, unsigned long iova,
 			      phys_addr_t paddr, size_t pgsize, size_t pgcount,
 			      int prot, gfp_t gfp, size_t *_mapped)
 {
-	return -EINVAL;
+	struct iommu_map_cookie_sg *cookie;
+	struct dpd_smmu_domain *smmu_domain = to_smmu_domain(domain);
+
+	if (!smmu_domain->attached) {
+		dev_err(smmu_domain->smmu->dev, "%s: Mapping to inactive domain\n",
+			dev_name(smmu_domain->dev));
+		return -EINVAL;
+	}
+
+	cookie = dpd_alloc_cookie_sg(iova, prot, 1, GFP_KERNEL);
+	if (!cookie)
+		return -ENOMEM;
+
+	cookie->domain = domain;
+
+	dpd_add_deferred_map_sg(cookie, paddr, pgsize, pgcount);
+	*_mapped = dpd_consume_deferred_map_sg(cookie);
+
+	if (*_mapped != pgsize * pgcount)
+		return -EINVAL;
+	return 0;
 }
 
 static size_t dpd_smmu_unmap_pages(struct iommu_domain *domain, unsigned long iova,
 				   size_t pgsize, size_t pgcount,
 				   struct iommu_iotlb_gather *gather)
 {
-	return 0;
-}
+	struct dpd_smmu_domain *smmu_domain = to_smmu_domain(domain);
+	struct dpd_smmu *smmu = smmu_domain->smmu;
+	size_t size;
+	struct dpd_mapping *mapping;
+	unsigned long end;
+	size_t unmapped = 0;
+	int ret;
 
-static struct iommu_map_cookie_sg *
-dpd_alloc_cookie_sg(unsigned long iova, int prot, unsigned int nents, gfp_t gfp)
-{
-	return NULL;
-}
+	if (!smmu_domain->attached) {
+		dev_err(smmu->dev, "%s: Unmapping from inactive domain\n",
+			dev_name(smmu_domain->dev));
+		return unmapped;
+	}
 
-static int dpd_add_deferred_map_sg(struct iommu_map_cookie_sg *cookie,
-				   phys_addr_t paddr, size_t pgsize, size_t pgcount)
-{
-	return -EINVAL;
-}
+	if (check_mul_overflow(pgsize, pgcount, &size))
+		return unmapped;
 
-static size_t dpd_consume_deferred_map_sg(struct iommu_map_cookie_sg *cookie)
-{
-	return 0;
+	end = iova + size;
+
+	mutex_lock(&smmu_domain->mappings_lock);
+	while (iova < end) {
+		mapping = mtree_load(&smmu_domain->mappings, iova);
+		if (!mapping) {
+			dev_err(smmu->dev, "No mapping at %lx\n", iova);
+			goto out;
+		}
+
+		if (iova != mapping->iova || end < mapping->iova + mapping->dpd_sg->size) {
+			dev_err(smmu->dev, "Domain %d: Can't unmap partial si_object. Request %lx-%lx expected %lx-%lx\n",
+				smmu_domain->si_domain_id, iova, end,
+				mapping->iova,
+				mapping->iova + mapping->dpd_sg->size);
+			goto out;
+		}
+
+		ret = dpd_svc_unmap(mapping->dpd_sg, smmu_domain->si_domain_id,
+				    mapping->iova);
+		if (ret)
+			goto out;
+
+		mtree_erase(&smmu_domain->mappings, iova);
+		unmapped += mapping->dpd_sg->size;
+		iova += mapping->dpd_sg->size;
+		__free_dpd_mapping(mapping);
+	}
+out:
+	mutex_unlock(&smmu_domain->mappings_lock);
+	return unmapped;
 }
 
 static phys_addr_t
