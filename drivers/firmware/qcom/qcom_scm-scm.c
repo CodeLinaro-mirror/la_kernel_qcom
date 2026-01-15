@@ -312,3 +312,33 @@ void qcom_scm_pas_store_memoryinfo(u32 peripheral, phys_addr_t addr,
 	/* Nothing to do for legacy SCM */
 }
 EXPORT_SYMBOL_GPL(qcom_scm_pas_store_memoryinfo);
+
+/**
+ * qcom_scm_assign_dump_table_region() - Assign a memory region to the
+ *                                       dump table
+ * @is_assign:  1 = assign, 0 = unassign
+ * @addr:       start address of memory region
+ * @size:       size of the memory region
+ *
+ * Returns 0 on success.
+ */
+int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t size)
+{
+	struct device *scm_dev = NULL;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_UTIL,
+		.cmd = QCOM_SCM_UTIL_DUMP_TABLE_ASSIGN,
+		.arginfo = QCOM_SCM_ARGS(3),
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = is_assign,
+		.args[1] = addr,
+		.args[2] = size,
+	};
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	return qcom_scm_call(scm_dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_dump_table_region);

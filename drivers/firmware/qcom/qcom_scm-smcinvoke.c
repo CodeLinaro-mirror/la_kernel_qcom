@@ -173,3 +173,37 @@ void qcom_scm_pas_store_memoryinfo(u32 peripheral, phys_addr_t addr,
 	qcom_smci_store_memory(SMCI_PILOBJECT_UID, peripheral, addr, size);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_pas_store_memoryinfo);
+
+int qcom_scm_assign_dump_table_region(bool __always_unused is_assign,
+				      phys_addr_t addr, size_t size)
+{
+	struct si_object *dt_service = NULL;
+	struct si_object *smo = NULL;
+	int ret;
+
+	ret = qcom_smci_init_client_service(SMCI_DT_UID, &dt_service);
+	if (ret)
+		return ret;
+
+	ret = qcom_smci_init_smobject(addr, phys_to_virt(addr), size, &smo,
+				      SI_CORE_MEM_OBJ_SHARE);
+	if (ret) {
+		pr_err("Failed to initialize shared memory object (%d)\n", ret);
+		return ret;
+	}
+
+	ret = qcom_smci_smo_call(dt_service, smo, SMCI_DT_OP_SET);
+	if (ret) {
+		pr_err("Failed to set dump table (ret = %d).\n", ret);
+		put_si_object(smo);
+		return ret;
+	}
+
+	/*
+	 * The memory area will remain locked until system crash, and the smo
+	 * is released only when the module exits.
+	 */
+	qcom_smci_store_client_smo(SMCI_DT_UID, smo);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_dump_table_region);

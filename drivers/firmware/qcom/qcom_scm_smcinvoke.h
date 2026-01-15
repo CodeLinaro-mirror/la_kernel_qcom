@@ -13,8 +13,10 @@
 
 #include "qcom_scm.h"
 
+#define SMCI_DT_UID 445
 #define SMCI_PILOBJECT_UID 446
 
+#define SMCI_DT_OP_SET 0
 #define SMCI_PIL_OP_INITIMAGE 0
 #define SMCI_PILIMAGE_OP_VERIFYMETADATA 0
 #define SMCI_PILIMAGE_OP_AUTHRESET 2
@@ -37,6 +39,7 @@ struct smci_service_info {
 
 	/* uid for opening ClientEnv OP */
 	u32 uid;
+	struct si_object *smo;
 	struct si_object *service;
 	struct list_head image_service_list;
 };
@@ -54,6 +57,8 @@ void qcom_smci_store_memory(u32 uid, u32 peripheral, phys_addr_t addr, size_t si
 void qcom_smci_get_memory(u32 uid, u32 peripheral, phys_addr_t *addr, size_t *size);
 void qcom_smci_store_smo(u32 uid, u32 peripheral, struct si_object *smo);
 void qcom_smci_release_smo(u32 uid, u32 peripheral);
+void qcom_smci_store_client_smo(u32 uid, struct si_object *smo);
+int qcom_smci_init_client_service(u32 uid, struct si_object **service);
 int qcom_scm_pas_pil_service_init(u32 peripheral, struct si_object **pil_image_service);
 int qcom_smci_call(struct si_object *object, unsigned long op,
 		struct si_arg args[], int *result);
