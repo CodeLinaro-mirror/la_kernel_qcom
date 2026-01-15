@@ -458,8 +458,6 @@ int gh_rm_minidump_register_range(phys_addr_t base_ipa, size_t region_size,
 int gh_rm_minidump_deregister_slot(uint16_t slot_num);
 int gh_rm_minidump_get_slot_from_name(uint16_t starting_slot, const char *name,
 				      size_t name_size);
-bool gh_rm_needs_hyp_assign(u32 *src_vm_list, int source_nelems,
-				int *dst_vm_list, int dst_nelems);
 #else
 /* RM client register notifications APIs */
 static inline int gh_rm_register_notifier(struct notifier_block *nb)
@@ -813,12 +811,6 @@ static inline int gh_rm_ipa_reserve(u64 size, u64 align, struct range limits,
 				    u64 *ipa)
 {
 	return -EINVAL;
-}
-
-static inline bool gh_rm_needs_hyp_assign(u32 *src_vm_list, int source_nelems,
-				int *dst_vm_list, int dst_nelems)
-{
-	return true;
 }
 #endif
 #endif

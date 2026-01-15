@@ -2948,6 +2948,7 @@ static int __gh_rm_setup_feature_scm_assign(void)
 }
 #else
 static struct notifier_block gh_rm_scm_assign_nb;
+static struct notifier_block gh_rm_hyp_assign_nb;
 
 static int __gh_rm_setup_feature_scm_assign(void)
 {
@@ -3002,6 +3003,7 @@ static int __gh_rm_setup_feature_scm_assign(void)
 	} else {
 		gh_feature_use_scm_assign = false;
 		qcom_scm_assign_mem_notifier_register(&gh_rm_scm_assign_nb);
+		hyp_assign_notifier_register(&gh_rm_hyp_assign_nb);
 	}
 
 	if (ret || !ghd_rm_mem_reclaim(handle, 0))
@@ -3101,33 +3103,41 @@ static struct notifier_block gh_rm_scm_assign_nb = {
 	.notifier_call = scm_assign_notifier,
 };
 
-bool gh_rm_needs_hyp_assign(u32 *src_vm_list, int source_nelems,
-				int *dst_vm_list, int dst_nelems)
+static int hyp_assign_notifier(struct notifier_block *nb,
+			unsigned long action, void *_args)
 {
 	int ret, i;
 	gh_vmid_t self_vmid;
+	struct hyp_assign_notifier_data *args = _args;
+	u32 *src_vm_list = args->source_vm_list;
+	int source_nelems = args->source_nelems;
+	int *dst_vm_list = args->dest_vmids;
+	int dst_nelems = args->dest_nelems;
 
 	if (gh_feature_use_scm_assign)
-		return true;
+		return NOTIFY_OK;
 
 	ret = gh_rm_get_this_vmid(&self_vmid);
 	if (ret)
-		return true;
+		return NOTIFY_OK;
 
 	if (self_vmid != QCOM_SCM_VMID_HLOS)
-		return false;
+		return NOTIFY_STOP;
 
 	for (i = 0; i < source_nelems; i++)
 		if (!is_gh_vm_or_hlos(src_vm_list[i]))
-			return true;
+			return NOTIFY_OK;
 	for (i = 0; i < dst_nelems; i++)
 		if (!is_gh_vm_or_hlos(dst_vm_list[i]))
-			return true;
+			return NOTIFY_OK;
 
 	if (source_nelems == 1 && src_vm_list[0] == QCOM_SCM_VMID_HLOS &&
 	    dst_nelems == 1 && dst_vm_list[0] == QCOM_SCM_VMID_HLOS)
-		return true;
+		return NOTIFY_OK;
 
-	return false;
+	return NOTIFY_STOP;
 }
-EXPORT_SYMBOL_GPL(gh_rm_needs_hyp_assign);
+
+static struct notifier_block gh_rm_hyp_assign_nb = {
+	.notifier_call = hyp_assign_notifier,
+};
