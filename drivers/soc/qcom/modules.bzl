@@ -1773,3 +1773,18 @@ def register_modules(registry):
             "drivers/soc/qcom/minidump",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom_dpd_proxy",
+        out = "qcom_dpd_proxy.ko",
+        config = "CONFIG_QCOM_DPD_PROXY",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom_dpd_proxy.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/firmware/qcom/si_core/si_core_module",
+        ],
+    )
