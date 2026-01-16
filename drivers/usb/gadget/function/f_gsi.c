@@ -20,7 +20,7 @@ static struct gsi_inst_status {
 	struct gsi_opts *opts;
 } inst_status[IPA_USB_MAX_TETH_PROT_SIZE];
 
-#define MAX_CDEV_INSTANCES		3
+#define MAX_CDEV_INSTANCES		4
 
 static int major;
 static struct class *gsi_class;
@@ -1782,6 +1782,8 @@ static int gsi_function_ctrl_port_init(struct f_gsi *gsi)
 		strlcat(gsi->c_port.name, GSI_MBIM_CTRL_NAME, sz);
 	else if (gsi->prot_id == IPA_USB_DIAG)
 		strlcat(gsi->c_port.name, GSI_DPL_CTRL_NAME, sz);
+	else if (gsi->prot_id == IPA_USB_GPS)
+		strlcat(gsi->c_port.name, GSI_GPS_CTRL_NAME, sz);
 	else
 		ctrl_dev_create = false;
 
@@ -2558,6 +2560,7 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 
 	/* send 0 len pkt to qti to notify state change */
 	if (gsi->prot_id == IPA_USB_DIAG ||
+			gsi->prot_id == IPA_USB_GPS ||
 			gsi->prot_id == IPA_USB_MBIM)
 		gsi_ctrl_send_cpkt_tomodem(gsi, NULL, 0);
 
@@ -2623,6 +2626,11 @@ static void gsi_suspend(struct usb_function *f)
 		return;
 	}
 
+	if (!gsi->data_interface_up) {
+		log_event_dbg("%s: suspend done\n", __func__);
+		return;
+	}
+
 	block_db = true;
 	gsi->c_port.is_suspended = true;
 	usb_gsi_ep_op(gsi->d_port.in_ep, (void *)&block_db,
@@ -2657,6 +2665,7 @@ static void gsi_resume(struct usb_function *f)
 {
 	struct f_gsi *gsi = func_to_gsi(f);
 	struct usb_composite_dev *cdev = f->config->cdev;
+	struct gsi_ctrl_pkt *cpkt_notify_connect;
 
 	log_event_dbg("%s for prot_id:%d", __func__, gsi->prot_id);
 
@@ -2672,8 +2681,27 @@ static void gsi_resume(struct usb_function *f)
 
 	gsi->c_port.is_suspended = false;
 
+	if (gsi->prot_id == IPA_USB_ECM) {
+		cpkt_notify_connect = gsi_ctrl_pkt_alloc(0, GFP_ATOMIC);
+		if (IS_ERR(cpkt_notify_connect)) {
+			log_event_dbg("%s: err cpkt_notify_connect\n", __func__);
+			return;
+		}
+		cpkt_notify_connect->type = GSI_CTRL_NOTIFY_CONNECT;
+
+		spin_lock(&gsi->c_port.lock);
+		list_add_tail(&cpkt_notify_connect->list,
+				&gsi->c_port.cpkt_resp_q);
+		spin_unlock(&gsi->c_port.lock);
+	}
+
 	/* Check any pending cpkt, and queue immediately on resume */
 	gsi_ctrl_send_notification(gsi);
+
+	if (!gsi->data_interface_up) {
+		log_event_dbg("%s: resume done\n", __func__);
+		return;
+	}
 
 	/*
 	 * Linux host does not send RNDIS_MSG_INIT or non-zero
@@ -3004,9 +3032,11 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 			goto fail;
 	}
 
-	status = gsi->data_id = usb_interface_id(c, f);
-	if (status < 0)
-		goto fail;
+	if (gsi->prot_id != IPA_USB_GPS) {
+		status = gsi->data_id = usb_interface_id(c, f);
+		if (status < 0)
+			goto fail;
+	}
 
 	switch (gsi->prot_id) {
 	case IPA_USB_RNDIS:
@@ -3229,6 +3259,18 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 		info.in_req_num_buf = GSI_NUM_IN_BUFFERS;
 		info.notify_buf_len = sizeof(struct usb_cdc_notification);
 		break;
+	case IPA_USB_GPS:
+		info.string_defs = gps_string_defs;
+		info.ctrl_str_idx = 0;
+		info.ctrl_desc = &gps_interface_desc;
+		info.fs_notify_desc = &gps_fs_notify_desc;
+		info.hs_notify_desc = &gps_hs_notify_desc;
+		info.ss_notify_desc = &gps_ss_notify_desc;
+		info.fs_desc_hdr = gps_fs_function;
+		info.hs_desc_hdr = gps_hs_function;
+		info.ss_desc_hdr = gps_ss_function;
+		info.notify_buf_len = sizeof(struct usb_cdc_notification);
+		break;
 	default:
 		log_event_err("%s: Invalid prot id %d", __func__,
 							gsi->prot_id);
@@ -3241,6 +3283,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 
 	status = wait_for_completion_timeout(&wait_for_ipa_ready,
 				msecs_to_jiffies(GSI_IPA_READY_TIMEOUT));
+
 	if (!status) {
 		log_event_err("%s: ipa ready timeout", __func__);
 		status = -ETIMEDOUT;
@@ -3249,6 +3292,10 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 
 	gsi->d_port.ipa_ops = &ipa_ops;
 	gsi->d_port.ipa_usb_notify_cb = ipa_usb_notify_cb;
+
+	if (gsi->prot_id == IPA_USB_GPS)
+		goto skip_ipa_init;
+
 	status = gsi->d_port.ipa_ops->init_teth_prot(gsi->prot_id,
 		&gsi->d_port.ipa_init_params, gsi->d_port.ipa_usb_notify_cb,
 		gsi);
@@ -3260,6 +3307,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 
 	gsi->d_port.sm_state = STATE_INITIALIZED;
 
+skip_ipa_init:
 	DBG(cdev, "%s: %s speed IN/%s OUT/%s NOTIFY/%s\n",
 			f->name,
 			gadget_is_superspeed(c->cdev->gadget) ? "super" :
@@ -3362,6 +3410,10 @@ static int gsi_bind_config(struct f_gsi *gsi)
 	case IPA_USB_DIAG:
 		gsi->function.name = "dpl";
 		gsi->function.strings = qdss_gsi_strings;
+		break;
+	case IPA_USB_GPS:
+		gsi->function.name = "gps";
+		gsi->function.strings = gps_strings;
 		break;
 	default:
 		log_event_err("%s: invalid prot id %d", __func__, prot_id);

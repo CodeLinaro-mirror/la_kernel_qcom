@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2020, 2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/delay.h>
@@ -112,7 +112,10 @@ static int param_set_download_mode(const char *val,
 	if (ret)
 		return ret;
 
-	msm_enable_dump_mode(true);
+	msm_enable_dump_mode(enable_dump);
+
+	if (!enable_dump)
+		qcom_scm_disable_sdi();
 
 	return 0;
 }
