@@ -4,6 +4,8 @@ qcom-scm.ko
 arm_smmu.ko
 smem.ko
 qcom_iommu_util.ko
+qcom_iommu_debug.ko
+iommu-logger.ko
 llcc-qcom.ko
 socinfo.ko
 qcom_tzmem.ko
