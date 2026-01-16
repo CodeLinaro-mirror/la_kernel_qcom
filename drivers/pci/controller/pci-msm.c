@@ -6814,6 +6814,8 @@ int msm_pcie_enumerate(u32 rc_idx)
 		goto out;
 	}
 
+	dev->cfg_access = true;
+
 	/* kick start ARM PCI configuration framework */
 	ids = readl_relaxed(dev->dm_core);
 	vendor_id = ids & 0xffff;
@@ -6904,6 +6906,9 @@ int msm_pcie_enumerate(u32 rc_idx)
 	}
 out:
 	mutex_unlock(&dev->enumerate_lock);
+
+	if (ret)
+		dev->cfg_access = false;
 
 	return ret;
 }
