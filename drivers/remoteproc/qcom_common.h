@@ -60,6 +60,14 @@ typedef void (*rproc_dumpfn_t)(struct rproc *rproc, struct rproc_dump_segment *s
 			       void *dest, size_t offset, size_t size);
 
 extern void (*rproc_recovery_set_fn)(struct rproc *rproc);
+
+/*
+ * Function pointer for dump_level notification callback.
+ * Set this to register a callback that will be invoked after
+ * /sys/kernel/qcom_rproc/dump_level updates SMEM[681].
+ */
+extern void (*qcom_rproc_dump_level_notify_fn)(void);
+
 void qcom_minidump(struct rproc *rproc, struct device *md_dev,
 			unsigned int minidump_id, rproc_dumpfn_t dumpfn, bool both_dumps);
 
