@@ -1172,4 +1172,13 @@ config QCM_GPUCC_2290
 	  Say Y if you want to support graphics controller devices and
 	  functionality such as 3D graphics.
 
+config QCM_DEBUGCC_2290
+	tristate "QCM2290 Debug Clock Controller"
+	select QCM_GCC_2290
+	help
+	 Support for the debug clock controller on Qualcomm Technologies, Inc
+	 QCM2290 devices.
+	 Say Y if you want to support the debug clocks such as
+	 clock measurement functionality.
+
 endif
