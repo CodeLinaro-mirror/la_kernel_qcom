@@ -22,6 +22,7 @@ def define_gen3gvmcoqos():
         "drivers/iommu/qcom_iommu_util.ko",
         "drivers/net/net_failover.ko",
         "drivers/net/virtio_net.ko",
+        "drivers/net/wireless/virt_wifi.ko",
         "drivers/nvdimm/nd_virtio.ko",
         "drivers/nvdimm/virtio_pmem.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
