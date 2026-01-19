@@ -1186,6 +1186,9 @@ static int usb_psy_set_icl(struct battery_chg_dev *bcdev,
 	u32 temp;
 	int rc;
 
+	if (!pst->psy)
+		return -ENODEV;
+
 	rc = read_property_id(bcdev, pst, USB_ADAP_TYPE);
 	if (rc < 0) {
 		pr_err("Failed to read prop USB_ADAP_TYPE, rc=%d\n", rc);
