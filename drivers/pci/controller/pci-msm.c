@@ -7167,9 +7167,9 @@ int msm_pcie_enumerate(u32 rc_idx)
 {
 	int ret = 0;
 	struct msm_pcie_dev_t *dev = msm_pcie_dev[rc_idx];
+	int domain_nr;
 	struct pci_dev *pcidev = NULL;
 	struct pci_host_bridge *bridge;
-	bool found = false;
 	u32 ids, vendor_id, device_id;
 	struct pci_config_window *cfg;
 	const struct pci_ecam_ops *ecam_ops;
@@ -7236,7 +7236,7 @@ int msm_pcie_enumerate(u32 rc_idx)
 		if (!bus) {
 			PCIE_ERR(dev, "PCIe: RC%d: Fetching bus resource failed\n",
 				dev->rc_idx);
-			ret = PTR_ERR(cfg);
+			ret = PTR_ERR(bus);
 			goto out;
 		}
 
@@ -7280,15 +7280,17 @@ int msm_pcie_enumerate(u32 rc_idx)
 		msm_pcie_write_reg_field(dev->dm_core,
 			PCIE20_DEVICE_CONTROL2_STATUS2, 0xf, dev->cpl_timeout);
 
-	do {
-		pcidev = pci_get_device(vendor_id, device_id, pcidev);
-		if (pcidev && (dev == (struct msm_pcie_dev_t *)
-			msm_pcie_bus_priv_data(pcidev->bus))) {
-			dev->dev = pcidev;
-			found = true;
-		}
-	} while (!found && pcidev);
+	domain_nr = of_get_pci_domain_nr(dev->pdev->dev.of_node);
+	if (domain_nr < 0) {
+		ret = -ENODEV;
+		goto out;
+	}
 
+	/*
+	 * Getting 'struct pci_dev' of root port in the Root Complex/
+	 * bridge that is being enumerated.
+	 */
+	pcidev = pci_get_domain_bus_and_slot(domain_nr, 0, 0);
 	if (!pcidev) {
 		PCIE_ERR(dev, "PCIe: RC%d: Did not find PCI device.\n",
 			dev->rc_idx);
@@ -7296,6 +7298,7 @@ int msm_pcie_enumerate(u32 rc_idx)
 		goto out;
 	}
 
+	dev->dev = pcidev;
 	pci_walk_bus(dev->dev->bus, msm_pcie_config_device_info, dev);
 
 	msm_pcie_check_l1ss_support_all(dev);
@@ -7303,9 +7306,17 @@ int msm_pcie_enumerate(u32 rc_idx)
 
 	pci_save_state(pcidev);
 	dev->default_state = pci_store_saved_state(pcidev);
+	if (!dev->default_state) {
+		pci_dev_put(pcidev);
+		dev->dev = NULL;
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	if (dev->boot_option & MSM_PCIE_NO_PROBE_ENUMERATION)
 		dev_pm_syscore_device(&pcidev->dev, true);
+
+	pci_dev_put(pcidev);
 out:
 	mutex_unlock(&dev->enumerate_lock);
 
@@ -8470,6 +8481,20 @@ static bool msm_pcie_check_l1_support(struct pci_dev *pdev,
 	return true;
 }
 
+static bool msm_pcie_is_non_zero_function(struct msm_pcie_dev_t *dev, struct pci_dev *pdev)
+{
+	if (PCI_FUNC(pdev->devfn)) {
+		PCIE_DBG(dev,
+			 "PCIe: RC%d: PCI device %02x:%02x.%01x Ignore non-zero function\n",
+				dev->rc_idx, pdev->bus->number, PCI_SLOT(pdev->devfn),
+				PCI_FUNC(pdev->devfn));
+
+		return true;
+	}
+
+	return false;
+}
+
 static int msm_pcie_check_l1ss_support(struct pci_dev *pdev, void *dev)
 {
 	struct msm_pcie_dev_t *pcie_dev = (struct msm_pcie_dev_t *)dev;
@@ -8478,6 +8503,9 @@ static int msm_pcie_check_l1ss_support(struct pci_dev *pdev, void *dev)
 
 	if (!pcie_dev->l1ss_supported)
 		return -ENXIO;
+
+	if (msm_pcie_is_non_zero_function(pcie_dev, pdev))
+		return 0;
 
 	l1ss_cap_id_offset = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_L1SS);
 	if (!l1ss_cap_id_offset) {
@@ -8688,6 +8716,9 @@ static void msm_pcie_config_l1ss(struct msm_pcie_dev_t *dev,
 	u32 l1ss_cap_id_offset, l1ss_ctl1_offset;
 	u32 devctl2_offset = pdev->pcie_cap + PCI_EXP_DEVCTL2;
 
+	if (msm_pcie_is_non_zero_function(dev, pdev))
+		return;
+
 	PCIE_DBG(dev, "PCIe: RC%d: PCI device %02x:%02x.%01x %s\n",
 		dev->rc_idx, pdev->bus->number, PCI_SLOT(pdev->devfn),
 		PCI_FUNC(pdev->devfn), enable ? "enable" : "disable");
@@ -8778,6 +8809,9 @@ static int msm_pcie_config_l1_2_threshold(struct pci_dev *pdev, void *dev)
 
 	/* LTR is not supported */
 	if (!pcie_dev->l1_2_th_value)
+		return 0;
+
+	if (msm_pcie_is_non_zero_function(pcie_dev, pdev))
 		return 0;
 
 	PCIE_DBG(pcie_dev, "PCIe: RC%d: PCI device %02x:%02x.%01x\n",
