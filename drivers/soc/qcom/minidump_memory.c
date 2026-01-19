@@ -268,7 +268,13 @@ bool md_register_memory_dump(int size, char *name)
 	struct md_region md_entry;
 	void *buffer_start;
 	struct page *page;
+	dma_addr_t phys_addr;
 	int ret;
+
+#ifdef CONFIG_HIGHMEM
+	struct page **pages;
+	int i, page_count;
+#endif
 
 	page  = cma_alloc(dma_contiguous_default_area, size >> PAGE_SHIFT,
 			0, GFP_KERNEL);
@@ -279,13 +285,54 @@ bool md_register_memory_dump(int size, char *name)
 		return false;
 	}
 
+	phys_addr = page_to_phys(page);
+
+#ifdef CONFIG_HIGHMEM
+	/* --- HighMem Path: Use vmap --- */
+	page_count = size >> PAGE_SHIFT;
+
+	/* Allocate array to hold page pointers */
+	pages = kcalloc(page_count, sizeof(struct page *), GFP_KERNEL);
+	if (!pages) {
+		cma_release(dma_contiguous_default_area, page, size >> PAGE_SHIFT);
+		return false;
+	}
+
+	/* Populate the array */
+	for (i = 0; i < page_count; i++)
+		pages[i] = nth_page(page, i);
+
+	/* Map pages into Kernel Virtual Address Space (vmalloc region) */
+	buffer_start = vmap(pages, page_count, VM_MAP, PAGE_KERNEL);
+
+	/* Free the array, not needed after mapping */
+	kfree(pages);
+
+	if (!buffer_start) {
+		cma_release(dma_contiguous_default_area, page, size >> PAGE_SHIFT);
+		pr_err("Failed to vmap %s\n", name);
+		return false;
+	}
+#else
+	/* --- LowMem Path: Use direct mapping --- */
 	buffer_start = page_to_virt(page);
+	if (!buffer_start) {
+		cma_release(dma_contiguous_default_area, page, size >> PAGE_SHIFT);
+		pr_err("Failed to get virt addr for %s\n", name);
+		return false;
+	}
+#endif
+
 	strscpy(md_entry.name, name, sizeof(md_entry.name));
 	md_entry.virt_addr = (uintptr_t) buffer_start;
-	md_entry.phys_addr = virt_to_phys(buffer_start);
+	md_entry.phys_addr = phys_addr;
 	md_entry.size = size;
 	ret = msm_minidump_add_region(&md_entry);
 	if (ret < 0) {
+	/* Cleanup depends on allocation method */
+#ifdef CONFIG_HIGHMEM
+		vunmap(buffer_start);
+#endif
 		cma_release(dma_contiguous_default_area, page, size >> PAGE_SHIFT);
 		pr_err("Failed to add %s entry in Minidump\n", name);
 		return false;
