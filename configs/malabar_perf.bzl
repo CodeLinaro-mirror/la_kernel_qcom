@@ -116,6 +116,7 @@ malabar_perf_config = {
     "CONFIG_MPM_LEGACY": "m",
     "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_MSM_GPI_DMA": "m",
+    "CONFIG_MSM_HSUSB_PHY": "m",
     "CONFIG_MSM_PERFORMANCE": "m",
     "CONFIG_MSM_QMP": "m",
     "CONFIG_MSM_RDBG": "m",
