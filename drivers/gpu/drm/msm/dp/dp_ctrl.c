@@ -1311,6 +1311,11 @@ static int msm_dp_ctrl_link_train_2(struct msm_dp_ctrl_private *ctrl,
 
 	msm_dp_ctrl_train_pattern_set(ctrl, pattern);
 
+	msm_dp_link_reset_phy_params_vx_px(ctrl->link);
+	ret = msm_dp_ctrl_update_vx_px(ctrl);
+	if (ret)
+		return ret;
+
 	for (tries = 0; tries <= maximum_retries; tries++) {
 		drm_dp_link_train_channel_eq_delay(ctrl->aux, ctrl->panel->dpcd);
 
