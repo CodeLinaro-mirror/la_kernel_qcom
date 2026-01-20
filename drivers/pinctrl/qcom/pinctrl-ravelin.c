@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022, 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -57,7 +57,7 @@ static struct platform_driver ravelin_tlmm_driver = {
 		.of_match_table = ravelin_tlmm_of_match,
 	},
 	.probe = ravelin_tlmm_probe,
-	.remove = msm_pinctrl_remove,
+	.remove_new = msm_pinctrl_remove,
 };
 
 static int __init ravelin_tlmm_init(void)
