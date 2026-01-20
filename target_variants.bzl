@@ -8,7 +8,6 @@ targets = [
     "lahaina",
     "malabar",
     "monaco",
-    "pikachu",
     "seraph",
     "shikra",
     "sun",
