@@ -248,6 +248,7 @@ malabar_perf_config = {
     "CONFIG_QCOM_SPMI_ADC5": "m",
     "CONFIG_QCOM_SPMI_ADC5_GEN3": "m",
     "CONFIG_QCOM_SPMI_ADC_TM5": "m",
+    "CONFIG_QCOM_RPROC_BOTH_DUMPS": "y",
     "CONFIG_QCOM_SPMI_PMIC_ERR_DBG": "m",
     "CONFIG_QCOM_SPMI_TEMP_ALARM": "m",
     "CONFIG_QCOM_SPSS": "m",
