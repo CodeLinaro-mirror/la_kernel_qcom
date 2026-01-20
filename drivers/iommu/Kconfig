@@ -252,4 +252,14 @@ config VIRTIO_IOMMU
 
           Say Y here if you intend to run this kernel as a guest.
 
+config QCOM_SMMU_IRGN0_ERRATA
+	bool "IRGN0 errata"
+	depends on QCOM_IOMMU_UTIL
+	depends on ARCH_SERAPH
+        help
+	  This option is used to apply a work around for
+	  an internal errata to adjust the irgn bit.
+
+	  Say N here if unsure.
+
 endif # IOMMU_SUPPORT
