@@ -87,7 +87,6 @@ def define_autogvm():
         "drivers/rpmsg/qcom_glink.ko",
         "drivers/rpmsg/qcom_glink_cma.ko",
         "drivers/rpmsg/qcom_glink_smem.ko",
-        "drivers/rtc/rtc-dummy.ko",
         "drivers/rtc/rtc-pm8xxx.ko",
         "drivers/soc/qcom/boot_stats.ko",
         "drivers/soc/qcom/crypto-qti-virt.ko",

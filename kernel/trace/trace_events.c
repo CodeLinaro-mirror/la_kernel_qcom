@@ -456,7 +456,6 @@ static void test_event_printk(struct trace_event_call *call)
 			case '%':
 				continue;
 			case 'p':
- do_pointer:
 				/* Find dereferencing fields */
 				switch (fmt[i + 1]) {
 				case 'B': case 'R': case 'r':
@@ -485,12 +484,6 @@ static void test_event_printk(struct trace_event_call *call)
 						continue;
 					if (fmt[i + j] == '*') {
 						star = true;
-						/* Handle %*pbl case */
-						if (!j && fmt[i + 1] == 'p') {
-							arg++;
-							i++;
-							goto do_pointer;
-						}
 						continue;
 					}
 					if ((fmt[i + j] == 's')) {
@@ -783,9 +776,7 @@ static int __ftrace_event_enable_disable(struct trace_event_file *file,
 				clear_bit(EVENT_FILE_FL_RECORDED_TGID_BIT, &file->flags);
 			}
 
-			ret = call->class->reg(call, TRACE_REG_UNREGISTER, file);
-
-			WARN_ON_ONCE(ret);
+			call->class->reg(call, TRACE_REG_UNREGISTER, file);
 		}
 		/* If in SOFT_MODE, just set the SOFT_DISABLE_BIT, else clear it */
 		if (file->flags & EVENT_FILE_FL_SOFT_MODE)

@@ -431,6 +431,13 @@ xfs_reflink_fill_cow_hole(
 	if (error)
 		return error;
 
+	/*
+	 * Allocation succeeded but the requested range was not even partially
+	 * satisfied?  Bail out!
+	 */
+	if (nimaps == 0)
+		return -ENOSPC;
+
 convert:
 	return xfs_reflink_convert_unwritten(ip, imap, cmap, convert_now);
 
@@ -493,6 +500,13 @@ xfs_reflink_fill_delalloc(
 		error = xfs_trans_commit(tp);
 		if (error)
 			return error;
+
+		/*
+		 * Allocation succeeded but the requested range was not even
+		 * partially satisfied?  Bail out!
+		 */
+		if (nimaps == 0)
+			return -ENOSPC;
 	} while (cmap->br_startoff + cmap->br_blockcount <= imap->br_startoff);
 
 	return xfs_reflink_convert_unwritten(ip, imap, cmap, convert_now);
@@ -604,11 +618,8 @@ xfs_reflink_cancel_cow_blocks(
 			xfs_refcount_free_cow_extent(*tpp, del.br_startblock,
 					del.br_blockcount);
 
-			error = xfs_free_extent_later(*tpp, del.br_startblock,
-					del.br_blockcount, NULL,
-					XFS_AG_RESV_NONE);
-			if (error)
-				break;
+			xfs_free_extent_later(*tpp, del.br_startblock,
+					  del.br_blockcount, NULL);
 
 			/* Roll the transaction */
 			error = xfs_defer_finish(tpp);
@@ -717,6 +728,12 @@ xfs_reflink_end_cow_extent(
 	unsigned int		resblks;
 	int			nmaps;
 	int			error;
+
+	/* No COW extents?  That's easy! */
+	if (ifp->if_bytes == 0) {
+		*offset_fsb = end_fsb;
+		return 0;
+	}
 
 	resblks = XFS_EXTENTADD_SPACE_RES(mp, XFS_DATA_FORK);
 	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, 0,

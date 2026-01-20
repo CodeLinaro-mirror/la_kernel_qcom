@@ -1213,7 +1213,7 @@ again:
 	/* close the client socket open only if we are not going to reconnect */
 	ret = copyfd_io(fd_in, fd, 1, 0);
 	if (ret)
-		goto out;
+		return ret;
 
 	if (cfg_truncate > 0) {
 		shutdown(fd, SHUT_WR);
@@ -1233,10 +1233,7 @@ again:
 		close(fd);
 	}
 
-out:
-	if (cfg_input)
-		close(fd_in);
-	return ret;
+	return 0;
 }
 
 int parse_proto(const char *proto)

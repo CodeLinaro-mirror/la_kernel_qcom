@@ -116,7 +116,6 @@
 #if IS_ENABLED(CONFIG_IPV6)
 #include <net/ipv6_stubs.h>
 #endif
-#include <trace/hooks/net.h>
 
 struct udp_table udp_table __read_mostly;
 EXPORT_SYMBOL(udp_table);
@@ -1423,12 +1422,12 @@ static bool udp_skb_has_head_state(struct sk_buff *skb)
 }
 
 /* fully reclaim rmem/fwd memory allocated for skb */
-static void udp_rmem_release(struct sock *sk, unsigned int size,
-			     int partial, bool rx_queue_lock_held)
+static void udp_rmem_release(struct sock *sk, int size, int partial,
+			     bool rx_queue_lock_held)
 {
 	struct udp_sock *up = udp_sk(sk);
 	struct sk_buff_head *sk_queue;
-	unsigned int amt;
+	int amt;
 
 	if (likely(partial)) {
 		up->forward_deficit += size;
@@ -1448,8 +1447,10 @@ static void udp_rmem_release(struct sock *sk, unsigned int size,
 	if (!rx_queue_lock_held)
 		spin_lock(&sk_queue->lock);
 
-	amt = (size + sk->sk_forward_alloc - partial) & ~(PAGE_SIZE - 1);
-	sk_forward_alloc_add(sk, size - amt);
+
+	sk_forward_alloc_add(sk, size);
+	amt = (sk->sk_forward_alloc - partial) & ~(PAGE_SIZE - 1);
+	sk_forward_alloc_add(sk, -amt);
 
 	if (amt)
 		__sk_mem_reduce_allocated(sk, amt >> PAGE_SHIFT);
@@ -1513,8 +1514,6 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	int rmem, delta, amt, err = -ENOMEM;
 	spinlock_t *busy = NULL;
 	int size;
-
-	trace_android_vh_udp_enqueue_schedule_skb(sk, skb);
 
 	/* try to avoid the costly atomic add/sub pair when the receive
 	 * queue is full; always allow at least a packet
@@ -1636,7 +1635,7 @@ EXPORT_SYMBOL_GPL(skb_consume_udp);
 
 static struct sk_buff *__first_packet_length(struct sock *sk,
 					     struct sk_buff_head *rcvq,
-					     unsigned int *total)
+					     int *total)
 {
 	struct sk_buff *skb;
 
@@ -1669,8 +1668,8 @@ static int first_packet_length(struct sock *sk)
 {
 	struct sk_buff_head *rcvq = &udp_sk(sk)->reader_queue;
 	struct sk_buff_head *sk_queue = &sk->sk_receive_queue;
-	unsigned int total = 0;
 	struct sk_buff *skb;
+	int total = 0;
 	int res;
 
 	spin_lock_bh(&rcvq->lock);

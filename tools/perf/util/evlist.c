@@ -1342,18 +1342,19 @@ static int evlist__create_syswide_maps(struct evlist *evlist)
 	 */
 	cpus = perf_cpu_map__new(NULL);
 	if (!cpus)
-		return -ENOMEM;
+		goto out;
 
 	threads = perf_thread_map__new_dummy();
-	if (!threads) {
-		perf_cpu_map__put(cpus);
-		return -ENOMEM;
-	}
+	if (!threads)
+		goto out_put;
 
 	perf_evlist__set_maps(&evlist->core, cpus, threads);
+
 	perf_thread_map__put(threads);
+out_put:
 	perf_cpu_map__put(cpus);
-	return 0;
+out:
+	return -ENOMEM;
 }
 
 int evlist__open(struct evlist *evlist)

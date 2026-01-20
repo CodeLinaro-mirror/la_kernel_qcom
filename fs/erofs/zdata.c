@@ -241,8 +241,7 @@ static int z_erofs_bvec_enqueue(struct z_erofs_bvec_iter *iter,
 		struct page *nextpage = *candidate_bvpage;
 
 		if (!nextpage) {
-			nextpage = __erofs_allocpage(pagepool, GFP_NOFS,
-					true);
+			nextpage = erofs_allocpage(pagepool, GFP_NOFS);
 			if (!nextpage)
 				return -ENOMEM;
 			set_page_private(nextpage, Z_EROFS_SHORTLIVED_PAGE);
@@ -1536,7 +1535,7 @@ repeat:
 	unlock_page(page);
 	put_page(page);
 out_allocpage:
-	page = __erofs_allocpage(&f->pagepool, gfp | __GFP_NOFAIL, true);
+	page = erofs_allocpage(&f->pagepool, gfp | __GFP_NOFAIL);
 	spin_lock(&pcl->obj.lock);
 	if (pcl->compressed_bvecs[nr].page) {
 		erofs_pagepool_add(&f->pagepool, page);

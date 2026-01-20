@@ -749,7 +749,7 @@ static unsigned int cppc_cpufreq_get_rate(unsigned int cpu)
 	int ret;
 
 	if (!policy)
-		return 0;
+		return -ENODEV;
 
 	cpu_data = policy->driver_data;
 

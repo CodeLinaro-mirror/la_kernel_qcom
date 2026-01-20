@@ -16,7 +16,7 @@
 
 SYM_FUNC_START(entry_ibpb)
 	movl	$MSR_IA32_PRED_CMD, %ecx
-	movl	_ASM_RIP(x86_pred_cmd), %eax
+	movl	$PRED_CMD_IBPB, %eax
 	xorl	%edx, %edx
 	wrmsr
 

@@ -16,31 +16,58 @@
 #include "memfd-ashmem-shim.h"
 #include "memfd-ashmem-shim-internal.h"
 
-/* memfd file names all start with memfd: */
-#define MEMFD_PREFIX "memfd:"
-#define MEMFD_PREFIX_LEN (sizeof(MEMFD_PREFIX) - 1)
+/* file_path() returns the path of the file including the root, hence the additional "/". */
+#define MEMFD_PATH_PREFIX "/memfd:"
+#define MEMFD_PATH_PREFIX_LEN (sizeof(MEMFD_PATH_PREFIX) - 1)
 
-static const char *get_memfd_name(struct file *file)
+/* All memfd files are unlinked, and are therefore suffixed with the " (deleted)" string. */
+#define UNLINKED_FILE_SUFFIX " (deleted)"
+#define UNLINKED_FILE_SUFFIX_LEN (sizeof(UNLINKED_FILE_SUFFIX) - 1)
+
+/*
+ * 1 character for the start of the path (/), NAME_MAX for the maximum length of a full memfd file
+ * name, UNLINKED_FILE_SUFFIX_LEN for the " (deleted)" suffix, and 1 for the NUL terminating
+ * character.
+ */
+#define MAX_FILE_PATH_SIZE (1 + NAME_MAX + UNLINKED_FILE_SUFFIX_LEN + 1)
+
+static char *get_memfd_file_name(struct file *file, char *buf, size_t size)
 {
-	/* This pointer is always valid, so no need to check if it's NULL. */
-	const char *file_name = file->f_path.dentry->d_name.name;
+	char *name_end;
+	char *path = file_path(file, buf, size);
 
-	if (file_name != strstr(file_name, MEMFD_PREFIX))
-		return NULL;
+	if (IS_ERR(path))
+		return path;
 
-	return file_name;
+	/* Only handle memfds; we cannot make assumptions about other file names. */
+	name_end = strstr(path, UNLINKED_FILE_SUFFIX);
+	if ((strstr(path, MEMFD_PATH_PREFIX) != path) || !name_end)
+		return ERR_PTR(-EINVAL);
+
+	/*
+	 * Since file_path() returns the full path of the file, including the root, the format will
+	 * be:
+	 *
+	 * "/memfd:testbuf (deleted)"
+	 *
+	 * But the ASHMEM_GET_NAME ioctl only returns the name of the buffer without any prefixes
+	 * or suffixes. So, terminate the string at the start of the " (deleted)" suffix so that
+	 * strlen() can be used on it from the start of the name.
+	 */
+	*name_end = '\0';
+
+	/* return a pointer to the start of the name */
+	return &path[MEMFD_PATH_PREFIX_LEN];
 }
 
 static long get_name(struct file *file, void __user *name)
 {
-	const char *file_name = get_memfd_name(file);
+	char buf[MAX_FILE_PATH_SIZE];
+	char *file_name = get_memfd_file_name(file, buf, sizeof(buf));
 	size_t len;
 
-	if (!file_name)
-		return -EINVAL;
-
-	/* Strip MEMFD_PREFIX to retain compatibility with ashmem driver. */
-	file_name = &file_name[MEMFD_PREFIX_LEN];
+	if (IS_ERR(file_name))
+		return PTR_ERR(file_name);
 
 	/*
 	 * The expectation is that the user provided buffer is ASHMEM_NAME_LEN in size, which is

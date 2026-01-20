@@ -1164,7 +1164,6 @@ static int mtk_star_tx_poll(struct napi_struct *napi, int budget)
 	struct net_device *ndev = priv->ndev;
 	unsigned int head = ring->head;
 	unsigned int entry = ring->tail;
-	unsigned long flags;
 
 	while (entry != head && count < (MTK_STAR_RING_NUM_DESCS - 1)) {
 		ret = mtk_star_tx_complete_one(priv);
@@ -1184,9 +1183,9 @@ static int mtk_star_tx_poll(struct napi_struct *napi, int budget)
 		netif_wake_queue(ndev);
 
 	if (napi_complete(napi)) {
-		spin_lock_irqsave(&priv->lock, flags);
+		spin_lock(&priv->lock);
 		mtk_star_enable_dma_irq(priv, false, true);
-		spin_unlock_irqrestore(&priv->lock, flags);
+		spin_unlock(&priv->lock);
 	}
 
 	return 0;
@@ -1343,16 +1342,16 @@ push_new_skb:
 static int mtk_star_rx_poll(struct napi_struct *napi, int budget)
 {
 	struct mtk_star_priv *priv;
-	unsigned long flags;
 	int work_done = 0;
 
 	priv = container_of(napi, struct mtk_star_priv, rx_napi);
 
 	work_done = mtk_star_rx(priv, budget);
-	if (work_done < budget && napi_complete_done(napi, work_done)) {
-		spin_lock_irqsave(&priv->lock, flags);
+	if (work_done < budget) {
+		napi_complete_done(napi, work_done);
+		spin_lock(&priv->lock);
 		mtk_star_enable_dma_irq(priv, true, false);
-		spin_unlock_irqrestore(&priv->lock, flags);
+		spin_unlock(&priv->lock);
 	}
 
 	return work_done;

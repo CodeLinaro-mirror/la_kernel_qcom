@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2011-2015, 2017, 2020-2021, The Linux Foundation.
  * All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -17,7 +17,6 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/thermal.h>
-#include "thermal_zone_internal.h"
 
 #include "../thermal_core.h"
 #include "../thermal_hwmon.h"
@@ -474,7 +473,6 @@ static int qpnp_tm_set_trip_temp(struct thermal_zone_device *tz, int trip, int t
 static const struct thermal_zone_device_ops qpnp_tm_sensor_ops = {
 	.get_temp = qpnp_tm_get_temp,
 	.set_trip_temp = qpnp_tm_set_trip_temp,
-	.get_trend = qti_tz_get_trend,
 };
 
 static int qpnp_tm_set_temp_dac_trip_temp(struct thermal_zone_device *tz, int trip, int temp)
