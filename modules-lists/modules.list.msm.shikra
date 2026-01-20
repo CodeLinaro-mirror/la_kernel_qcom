@@ -65,3 +65,4 @@ rpm-smd-regulator.ko
 debug-regulator.ko
 proxy-consumer.ko
 qti-fixed-regulator.ko
+clk-smd-rpm.ko
