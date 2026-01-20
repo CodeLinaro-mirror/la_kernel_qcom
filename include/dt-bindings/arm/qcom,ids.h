@@ -282,6 +282,7 @@
 #define QCOM_ID_TUNA			655
 #define QCOM_ID_KERA			659
 #define QCOM_ID_PARROTPRO		663
+#define QCOM_ID_TAYCAN			734
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and
