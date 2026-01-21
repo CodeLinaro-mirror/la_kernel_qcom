@@ -67,6 +67,7 @@ seraph_perf_config = {
     "CONFIG_IOMMU_IO_PGTABLE_FAST": "y",
     "CONFIG_IPC_LOGGING": "m",
     "CONFIG_IPC_LOG_MINIDUMP_BUFFERS": "16",
+    "CONFIG_ISL97900_LED": "m",
     "CONFIG_LEDS_QCOM_LPG": "m",
     "CONFIG_MEM_PROT": "m",
     "CONFIG_MFD_QCOM_PM8008": "m",

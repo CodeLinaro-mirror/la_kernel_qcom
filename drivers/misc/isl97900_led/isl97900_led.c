@@ -299,8 +299,7 @@ static const struct attribute_group isl97900_attr_group = {
 };
 
 
-static int isl97900_led_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int isl97900_led_probe(struct i2c_client *client)
 {
 	struct isl97900_priv *priv;
 	int rc = 0;
