@@ -6814,11 +6814,9 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 	usleep_range(dev->perst_delay_us_min, dev->perst_delay_us_max);
 
 	ret = msm_pcie_switch_config_de_emphasis(dev);
-	if (ret) {
-		PCIE_ERR(dev, "RC%d: NTN3 de-emphasis config failed: %d\n",
+	if (ret)
+		PCIE_ERR(dev, "RC%d: Failed to config de-emphasis for PCIe switch: %d\n",
 			 dev->rc_idx, ret);
-		return ret;
-	}
 
 	ret = msm_pcie_link_train(dev);
 	if (ret)
