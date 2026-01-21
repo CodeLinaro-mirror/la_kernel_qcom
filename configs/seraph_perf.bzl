@@ -103,6 +103,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_MEM_HOOKS": "m",
     "CONFIG_QCOM_MEM_OFFLINE": "m",
     "CONFIG_QCOM_PANIC_ON_PDR_NOTIF_TIMEOUT": "y",
+    "CONFIG_QCOM_PDC": "m",
     "CONFIG_QCOM_PDR_HELPERS": "m",
     "CONFIG_QCOM_PDR_MSG": "m",
     "CONFIG_QCOM_PIL_INFO": "m",
