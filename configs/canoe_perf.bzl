@@ -147,6 +147,7 @@ canoe_perf_config = {
     "CONFIG_PINCTRL_ALOR": "m",
     "CONFIG_PINCTRL_CANOE": "m",
     "CONFIG_PINCTRL_CHORA": "m",
+    "CONFIG_PINCTRL_RAVELIN": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
     "CONFIG_PLFXLC": "n",
