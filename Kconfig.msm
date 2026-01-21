@@ -92,6 +92,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/powercap/qcom/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/ptp/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/pwm/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/regulator/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/remoteproc/Kconfig"
