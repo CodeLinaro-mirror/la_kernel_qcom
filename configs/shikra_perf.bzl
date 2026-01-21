@@ -1,6 +1,8 @@
 shikra_perf_config = {
     # keep sorted
     "CONFIG_ARCH_SHIKRA": "y",
+    "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
+    "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
     "CONFIG_ARM_SMMU_QCOM": "m",
