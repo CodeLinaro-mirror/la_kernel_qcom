@@ -1938,8 +1938,20 @@ static const struct msm_pinctrl_soc_data pikachu_tlmm = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data pikachu_vm_tlmm = {
+	.pins = pikachu_pins,
+	.npins = ARRAY_SIZE(pikachu_pins),
+	.functions = pikachu_functions,
+	.nfunctions = ARRAY_SIZE(pikachu_functions),
+	.groups = pikachu_groups,
+	.ngroups = ARRAY_SIZE(pikachu_groups),
+	.ngpios = 117,
+	.egpio_func = 11,
+};
+
 static const struct of_device_id pikachu_tlmm_of_match[] = {
 	{ .compatible = "qcom,pikachu-tlmm", .data = &pikachu_tlmm },
+	{ .compatible = "qcom,pikachu-vm-tlmm", .data = &pikachu_vm_tlmm },
 	{},
 };
 
