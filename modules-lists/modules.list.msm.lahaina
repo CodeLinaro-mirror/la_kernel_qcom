@@ -55,6 +55,7 @@ qcom_aoss.ko
 qrtr.ko
 msm_qmp.ko
 qnoc-qos.ko
+qnoc-lahaina.ko
 qnoc-yupik.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko
