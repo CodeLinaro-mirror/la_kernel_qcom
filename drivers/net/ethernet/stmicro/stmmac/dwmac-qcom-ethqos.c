@@ -1570,6 +1570,140 @@ static void ethqos_xpcs_safety_stats(struct stmmac_priv *priv, unsigned long *pt
 		qcom_xpcs_get_err_stats(priv->hw->phylink_pcs, ptr);
 }
 
+static int qcom_ethqos_hib_restore(struct device *dev)
+{
+	struct net_device *ndev = NULL;
+	struct qcom_ethqos *ethqos;
+	struct stmmac_priv *priv;
+	int ret = 0;
+
+	ethqos = get_stmmac_bsp_priv(dev);
+	if (!ethqos)
+		return -ENODEV;
+
+	ndev = dev_get_drvdata(dev);
+
+	if (!ndev)
+		return -EINVAL;
+
+	priv = netdev_priv(ndev);
+
+	mutex_lock(&priv->lock);
+
+	ret = ethqos_init_regulators(ethqos);
+	if (ret) {
+		dev_err(dev, "%s: Regulator init failed with ret = %d\n", __func__, ret);
+		goto err_restore;
+	}
+
+	ret = ethqos_init_gpio(ethqos);
+	if (ret) {
+		dev_err(dev, "%s: GPIO init failed with ret = %d\n", __func__, ret);
+		ethqos_disable_regulators(ethqos);
+		goto err_restore;
+	}
+
+	ret = stmmac_bus_clks_config(priv, true);
+	if (ret) {
+		dev_err(dev, "%s: Clock Enablement Failed\n", __func__);
+		goto err_restore;
+	}
+
+	ethqos_set_func_clk_en(ethqos);
+
+	/* issue netdev up to device */
+
+	if (!netif_running(ndev)) {
+		rtnl_lock();
+		dev_open(ndev, NULL);
+		rtnl_unlock();
+	}
+
+	mutex_unlock(&priv->lock);
+
+	return ret;
+err_restore:
+	mutex_unlock(&priv->lock);
+	return ret;
+}
+
+static int qcom_ethqos_hib_freeze(struct device *dev)
+{
+	struct net_device *ndev = NULL;
+	struct qcom_ethqos *ethqos;
+	struct stmmac_priv *priv;
+	int ret = 0;
+
+	ethqos = get_stmmac_bsp_priv(dev);
+	if (!ethqos)
+		return -ENODEV;
+
+	ndev = dev_get_drvdata(dev);
+
+	if (!ndev)
+		return -EINVAL;
+
+	priv = netdev_priv(ndev);
+	mutex_lock(&priv->lock);
+	if (netif_running(ndev)) {
+		rtnl_lock();
+		dev_close(ndev);
+		rtnl_unlock();
+	}
+
+	ret = stmmac_bus_clks_config(priv, false);
+	if (ret) {
+		dev_err(dev, "%s: Clock Disablement Failed\n", __func__);
+		goto err_freeze;
+	}
+
+	ethqos_disable_regulators(ethqos);
+	ethqos_free_gpios(ethqos);
+
+	priv->speed = SPEED_UNKNOWN;
+	mutex_unlock(&priv->lock);
+
+	return ret;
+err_freeze:
+	mutex_unlock(&priv->lock);
+	return ret;
+}
+
+static int qcom_ethqos_runtime_suspend(struct device *dev)
+{
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv;
+
+	if (!ndev)
+		return 0;
+
+	priv = netdev_priv(ndev);
+
+	return stmmac_bus_clks_config(priv, false);
+}
+
+static int qcom_ethqos_runtime_resume(struct device *dev)
+{
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv;
+
+	if (!ndev)
+		return 0;
+
+	priv = netdev_priv(ndev);
+	return stmmac_bus_clks_config(priv, true);
+}
+
+static const struct dev_pm_ops qcom_ethqos_pm_ops = {
+	.freeze = qcom_ethqos_hib_freeze,
+	.restore = qcom_ethqos_hib_restore,
+	.thaw = qcom_ethqos_hib_restore,
+	.suspend = qcom_ethqos_hib_freeze,
+	.resume = qcom_ethqos_hib_restore,
+	.runtime_suspend = qcom_ethqos_runtime_suspend,
+	.runtime_resume = qcom_ethqos_runtime_resume,
+};
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -1669,6 +1803,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ethqos->needs_serdes_reset = data->needs_serdes_reset;
 
 	if (!ethqos->use_domains) {
+		pdev->dev.driver->pm = &qcom_ethqos_pm_ops;
 		ret = ethqos_init_regulators(ethqos);
 
 		if (ret)
