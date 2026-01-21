@@ -3308,7 +3308,6 @@ int gpi_terminate_all(struct dma_chan *chan)
 	struct gpii *gpii = gpii_chan->gpii;
 	int schid, echid, i;
 	int ret = 0;
-	bool stop_cmd_failed = false;
 	u32 ch_state;
 
 	GPII_INFO(gpii, gpii_chan->chid, "Enter\n");
@@ -3336,7 +3335,6 @@ int gpi_terminate_all(struct dma_chan *chan)
 		if (ret) {
 			GPII_ERR(gpii, gpii_chan->chid,
 				 "Error Stopping Chan:%d resetting\n", ret);
-			stop_cmd_failed = true;
 		} else {
 			gpi_noop_tre(gpii_chan);
 			if (gpii->protocol == SE_PROTOCOL_UART)
@@ -3346,32 +3344,27 @@ int gpi_terminate_all(struct dma_chan *chan)
 		}
 	}
 
-	/* Reset channels if stop command fails */
-	if (stop_cmd_failed) {
-		if (!gpii->reg_table_dump) {
+	/* Reset the channels (clears any pending TREs) */
+	if (!gpii->reg_table_dump) {
+		gpi_dump_debug_reg(gpii);
+		gpii->reg_table_dump = true;
+	}
+	ch_state = gpi_read_ch_state(gpii_chan);
+	GPII_ERR(gpii, gpii_chan->chid, "CH state state:%s\n", TO_GPI_CH_STATE_STR(ch_state));
+	for (i = schid; i < echid; i++) {
+		gpii_chan = &gpii->gpii_chan[i];
+		ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
+		if (ret) {
+			GPII_ERR(gpii, gpii_chan->chid, "Error resetting channel: %d\n", ret);
 			gpi_dump_debug_reg(gpii);
-			gpii->reg_table_dump = true;
+			goto terminate_exit;
 		}
-		ch_state = gpi_read_ch_state(gpii_chan);
-		GPII_ERR(gpii, gpii_chan->chid, "CH state state:%s\n",
-			 TO_GPI_CH_STATE_STR(ch_state));
-		for (i = schid; i < echid; i++) {
-			gpii_chan = &gpii->gpii_chan[i];
-			ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
-			if (ret) {
-				GPII_ERR(gpii, gpii_chan->chid,
-					 "Error resetting channel: %d\n", ret);
-				gpi_dump_debug_reg(gpii);
-				goto terminate_exit;
-			}
 
-			/* reprogram channel CNTXT */
-			ret = gpi_alloc_chan(gpii_chan, false);
-			if (ret) {
-				GPII_ERR(gpii, gpii_chan->chid,
-					 "Error allocating channel: %d\n", ret);
-				goto terminate_exit;
-			}
+		/* reprogram channel CNTXT */
+		ret = gpi_alloc_chan(gpii_chan, false);
+		if (ret) {
+			GPII_ERR(gpii, gpii_chan->chid, "Error allocating channel: %d\n", ret);
+			goto terminate_exit;
 		}
 	}
 
