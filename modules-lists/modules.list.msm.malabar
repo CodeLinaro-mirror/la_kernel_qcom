@@ -6,6 +6,10 @@ llcc-qcom.ko
 cambistmclkcc-canoe.ko
 camcc-alor.ko
 camcc-canoe.ko
+glink_pkt.ko
+qcom_glink.ko
+qcom_glink_rpm.ko
+qcom_glink_smem.ko
 clk-dummy.ko
 clk-qcom.ko
 clk-rpmh.ko
