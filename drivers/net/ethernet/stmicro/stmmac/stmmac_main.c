@@ -8780,6 +8780,9 @@ int stmmac_dvr_probe(struct device *device,
 		goto error_netdev_register;
 	}
 
+	if (!disable_napi_thread && priv->plat->rss_en)
+		dev_set_threaded(ndev, true);
+
 	/* Disable tx_coal_timer if plat provides callback */
 	priv->tx_coal_timer_disable = false;
 
