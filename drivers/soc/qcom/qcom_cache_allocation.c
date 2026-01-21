@@ -841,8 +841,8 @@ static int cache_allocation_probe(struct platform_device *pdev)
 	memcpy(pd->config->freq_cfg, config->freq_cfg,
 				pd->cluster_num * sizeof(struct freq_mon_config));
 	memcpy(pd->config->bw_ratio_cfg, config->bw_ratio_cfg, sizeof(struct bw_ratio_config));
-	pd->enable_monitor = true;
-	pd->running_flag = false;
+	pd->enable_monitor = false;
+	pd->running_flag =  false;
 	pd->sampling_time_ms = SAMPLING_MS;
 
 	pd->current_governor = 1;
@@ -898,19 +898,6 @@ static int cache_allocation_probe(struct platform_device *pdev)
 	mutex_init(&pd->lock);
 	INIT_DELAYED_WORK(&pd->work, cache_allocation_monitor_work);
 	platform_set_drvdata(pdev, pd);
-
-	ret = save_gear_for_client(pd);
-	if (ret < 0) {
-		dev_warn(&pdev->dev, "Failed to save initial gear, monitoring disabled\n");
-		mutex_lock(&pd->lock);
-		pd->enable_monitor = false;
-		mutex_unlock(&pd->lock);
-	} else {
-		mutex_lock(&pd->lock);
-		pd->running_flag = true;
-		mutex_unlock(&pd->lock);
-		schedule_delayed_work(&pd->work, msecs_to_jiffies(pd->sampling_time_ms));
-	}
 
 	return 0;
 
