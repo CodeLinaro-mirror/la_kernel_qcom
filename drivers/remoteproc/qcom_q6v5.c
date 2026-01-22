@@ -18,6 +18,7 @@
 #include <linux/remoteproc.h>
 #include <linux/delay.h>
 #include <asm/timex.h>
+#include <linux/completion.h>
 
 #include "qcom_common.h"
 #include "qcom_q6v5.h"
@@ -25,6 +26,50 @@
 
 #define Q6V5_LOAD_STATE_MSG_LEN	64
 #define Q6V5_PANIC_DELAY_MS	200
+
+/* Single-instance modem: global pointer to reach driver context from common hook */
+static struct qcom_q6v5 *q6v5_notify_ctx;
+
+static irqreturn_t q6v5_dump_level_ack_isr(int irq, void *data)
+{
+	struct qcom_q6v5 *q6v5 = data;
+
+	complete(&q6v5->dump_level_ack_done);
+
+	if (q6v5->dump_level_state)
+		qcom_smem_state_update_bits(q6v5->dump_level_state,
+					    BIT(q6v5->dump_level_bit), 0);
+	return IRQ_HANDLED;
+}
+
+static void qcom_q6v5_update_dump_level(void)
+{
+	struct qcom_q6v5 *q6v5 = q6v5_notify_ctx;
+
+	if (!q6v5 || !q6v5->rproc || !q6v5->dev ||
+		q6v5->rproc->state != RPROC_RUNNING || !q6v5->dump_level_state)
+		return;
+
+	if (q6v5->dump_level_ack_irq > 0)
+		reinit_completion(&q6v5->dump_level_ack_done);
+
+	qcom_smem_state_update_bits(q6v5->dump_level_state,
+				    BIT(q6v5->dump_level_bit),
+				    BIT(q6v5->dump_level_bit));
+
+	if (q6v5->dump_level_ack_irq > 0) {
+		if (!wait_for_completion_timeout(&q6v5->dump_level_ack_done,
+						 msecs_to_jiffies(1000))) {
+			dev_warn(q6v5->dev, "dump-level ack timeout; clearing notify\n");
+			qcom_smem_state_update_bits(q6v5->dump_level_state,
+						    BIT(q6v5->dump_level_bit), 0);
+		}
+	} else {
+		udelay(1);
+		qcom_smem_state_update_bits(q6v5->dump_level_state,
+					    BIT(q6v5->dump_level_bit), 0);
+	}
+}
 
 static int q6v5_load_state_toggle(struct qcom_q6v5 *q6v5, bool enable)
 {
@@ -461,6 +506,35 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 		q6v5->crypto_path = NULL;
 	}
 
+	q6v5->dump_level_state = devm_qcom_smem_state_get(&pdev->dev, "dump-level-notify",
+							  &q6v5->dump_level_bit);
+	if (IS_ERR(q6v5->dump_level_state)) {
+		if (PTR_ERR(q6v5->dump_level_state) == -ENOENT) {
+			dev_dbg(&pdev->dev, "dump-level-notify state not provided; proceeding\n");
+			q6v5->dump_level_state = NULL;
+		} else {
+			return dev_err_probe(&pdev->dev, PTR_ERR(q6v5->dump_level_state),
+					     "failed to acquire dump-level-notify state\n");
+		}
+	}
+
+	q6v5->dump_level_ack_irq = platform_get_irq_byname(pdev, "dump-level-ack");
+	if (q6v5->dump_level_ack_irq < 0) {
+		q6v5->dump_level_ack_irq = 0;
+	} else {
+		init_completion(&q6v5->dump_level_ack_done);
+		ret = devm_request_threaded_irq(&pdev->dev, q6v5->dump_level_ack_irq,
+						NULL, q6v5_dump_level_ack_isr,
+						IRQF_ONESHOT | IRQF_TRIGGER_RISING,
+						"dump-level-ack", q6v5);
+		if (ret)
+			return dev_err_probe(&pdev->dev, ret,
+					     "dump-level-ack irq request failed\n");
+	}
+
+	qcom_rproc_dump_level_notify_fn = qcom_q6v5_update_dump_level;
+	q6v5_notify_ctx = q6v5;
+
 	INIT_WORK(&q6v5->crash_handler, qcom_q6v5_crash_handler_work);
 
 	return 0;
@@ -474,6 +548,8 @@ EXPORT_SYMBOL_GPL(qcom_q6v5_init);
 void qcom_q6v5_deinit(struct qcom_q6v5 *q6v5)
 {
 	qmp_put(q6v5->qmp);
+	qcom_rproc_dump_level_notify_fn = NULL;
+	q6v5_notify_ctx = NULL;
 }
 EXPORT_SYMBOL_GPL(qcom_q6v5_deinit);
 

@@ -1517,6 +1517,47 @@ static ssize_t gsi_ctrl_dev_write(struct file *fp, const char __user *buf,
 	return ret ? ret : count;
 }
 
+static long gsi_ioctl_mbim_ep_lookup(struct f_gsi *gsi, struct ep_info *info)
+{
+	log_event_dbg("%s: EP_LOOKUP for prot id:%d", __func__,
+						gsi->prot_id);
+	if (gsi->prot_id == IPA_USB_DIAG &&
+			(gsi->d_port.in_channel_handle == -EINVAL)) {
+		return -EAGAIN;
+	}
+
+	if (gsi->prot_id != IPA_USB_GPS) {
+		if (gsi->d_port.in_channel_handle == -EINVAL &&
+			gsi->d_port.out_channel_handle == -EINVAL) {
+			return -EAGAIN;
+		}
+		info->ph_ep_info.ep_type = GSI_MBIM_DATA_EP_TYPE_HSUSB;
+		info->ph_ep_info.peripheral_iface_id = gsi->data_id;
+	} else {
+		info->ph_ep_info.ep_type = GSI_MBIM_DATA_EP_TYPE_HSUSB;
+		info->ph_ep_info.peripheral_iface_id = gsi->ctrl_id;
+	}
+
+	log_event_dbg("%s: prot id :%d ep_type:%d intf:%d",
+			__func__, gsi->prot_id, info->ph_ep_info.ep_type,
+			info->ph_ep_info.peripheral_iface_id);
+	if (gsi->prot_id != IPA_USB_GPS) {
+		info->ipa_ep_pair.cons_pipe_num =
+		(gsi->prot_id == IPA_USB_DIAG) ? -1 :
+				gsi->d_port.out_channel_handle;
+		info->ipa_ep_pair.prod_pipe_num =
+				gsi->d_port.in_channel_handle;
+
+
+		log_event_dbg("%s: ipa_cons_idx:%d ipa_prod_idx:%d",
+				__func__,
+				info->ipa_ep_pair.cons_pipe_num,
+				info->ipa_ep_pair.prod_pipe_num);
+	}
+
+	return 0;
+}
+
 static long gsi_ctrl_dev_ioctl(struct file *fp, unsigned int cmd,
 		unsigned long arg)
 {
@@ -1593,34 +1634,9 @@ static long gsi_ctrl_dev_ioctl(struct file *fp, unsigned int cmd,
 		break;
 	case QTI_CTRL_EP_LOOKUP:
 	case GSI_MBIM_EP_LOOKUP:
-		log_event_dbg("%s: EP_LOOKUP for prot id:%d", __func__,
-							gsi->prot_id);
-		if (gsi->prot_id == IPA_USB_DIAG &&
-				(gsi->d_port.in_channel_handle == -EINVAL)) {
-			ret = -EAGAIN;
-			break;
-		}
-
-		if (gsi->d_port.in_channel_handle == -EINVAL &&
-			gsi->d_port.out_channel_handle == -EINVAL) {
-			ret = -EAGAIN;
-			break;
-		}
-
-		info.ph_ep_info.ep_type = GSI_MBIM_DATA_EP_TYPE_HSUSB;
-		info.ph_ep_info.peripheral_iface_id = gsi->data_id;
-		info.ipa_ep_pair.cons_pipe_num =
-		(gsi->prot_id == IPA_USB_DIAG) ? -1 :
-				gsi->d_port.out_channel_handle;
-		info.ipa_ep_pair.prod_pipe_num = gsi->d_port.in_channel_handle;
-
-		log_event_dbg("%s: prot id :%d ep_type:%d intf:%d",
-				__func__, gsi->prot_id, info.ph_ep_info.ep_type,
-				info.ph_ep_info.peripheral_iface_id);
-
-		log_event_dbg("%s: ipa_cons_idx:%d ipa_prod_idx:%d",
-				__func__, info.ipa_ep_pair.cons_pipe_num,
-				info.ipa_ep_pair.prod_pipe_num);
+		ret = gsi_ioctl_mbim_ep_lookup(gsi, &info);
+		if (ret)
+			return ret;
 
 		ret = copy_to_user((void __user *)arg, &info,
 			sizeof(info));
