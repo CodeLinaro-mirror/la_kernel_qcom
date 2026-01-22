@@ -79,3 +79,7 @@ phy-msm-ssusb-qmp.ko
 phy-msm-m31-eusb2.ko
 repeater.ko
 repeater-i2c-eusb2.ko
+debug_symbol.ko
+qcom_cpu_vendor_hooks.ko
+qcom_logbuf_boot_log.ko
+qcom_logbuf_vendor_hooks.ko
