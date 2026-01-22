@@ -201,7 +201,7 @@ static struct clk_alpha_pll disp_cc_pll2 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 153600000},
+				[VDD_RET] = 153600000},
 		},
 	},
 };
@@ -376,8 +376,7 @@ static struct clk_rcg2 disp_cc_esync0_clk_src = {
 		.vdd_class = &vdd_mx,
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_LOWER_D1] = 300000000,
-			[VDD_LOWER] = 360000000,
+			[VDD_RET] = 375000000,
 			[VDD_LOW] = 480000000,
 			[VDD_LOW_L1] = 625000000},
 	},
@@ -400,8 +399,7 @@ static struct clk_rcg2 disp_cc_esync1_clk_src = {
 		.vdd_class = &vdd_mx,
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_LOWER_D1] = 300000000,
-			[VDD_LOWER] = 360000000,
+			[VDD_RET] = 375000000,
 			[VDD_LOW] = 480000000,
 			[VDD_LOW_L1] = 625000000},
 	},
@@ -1060,7 +1058,7 @@ static struct clk_rcg2 disp_cc_osc_clk_src = {
 		.vdd_class = &vdd_mx,
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_LOWER_D1] = 38400000},
+			[VDD_RET] = 38400000},
 	},
 };
 
