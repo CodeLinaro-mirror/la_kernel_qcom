@@ -51,6 +51,7 @@ pikachu_perf_config = {
     "CONFIG_SXR_CAMCC_PIKACHU": "m",
     "CONFIG_SXR_EVACC_PIKACHU": "m",
     "CONFIG_SXR_GCC_PIKACHU": "m",
+    "CONFIG_SXR_GPUCC_PIKACHU": "m",
     "CONFIG_SXR_TCSRCC_PIKACHU": "m",
     "CONFIG_SXR_VIDEOCC_PIKACHU": "m",
     "CONFIG_ZRAM_BACKEND_ZSTD": "n",
