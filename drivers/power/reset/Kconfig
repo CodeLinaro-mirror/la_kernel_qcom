@@ -52,4 +52,12 @@ config POWER_RESET_QCOM_VM
          Say Y here if you have a MSM virtual machine and wish to enable
          restart driver.
 
+config POWER_RESET_MSM
+        bool "Qualcomm MSM power-off driver"
+        depends on ARCH_QCOM
+        help
+          Power off and restart support for Qualcomm Technologies, Inc. SoCs.
+          This driver supports SoC power down and restart. Say Y here if you
+          wish to enable restart driver.
+
 endif
