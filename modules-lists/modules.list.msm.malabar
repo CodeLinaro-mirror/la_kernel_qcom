@@ -8,6 +8,7 @@ qcom_glink_rpm.ko
 qcom_glink_smem.ko
 clk-dummy.ko
 clk-qcom.ko
+clk-smd-rpm.ko
 midpoint.ko
 clk-scmi.ko
 sched-walt.ko
