@@ -199,6 +199,11 @@ static void dwxgmac2_dma_rx_mode(void __iomem *ioaddr, int mode,
 			break;
 		}
 
+		if (rfa_value && rfd_value) {
+			rfa = rfa_value;
+			rfd = rfd_value;
+		}
+
 		flow &= ~XGMAC_RFD;
 		flow |= rfd << XGMAC_RFD_SHIFT;
 
