@@ -2297,6 +2297,26 @@ static void gpi_process_qup_notif_event(struct gpii_chan *gpii_chan,
 			      client_info->cb_param);
 }
 
+static void gpi_free_all_chan_desc(struct gpii_chan *gpii_chan)
+{
+	struct virt_dma_chan *vc = &gpii_chan->vc;
+	struct virt_dma_desc *vd, *temp;
+	unsigned long flags;
+	LIST_HEAD(head);
+
+	GPII_VERB(gpii_chan->gpii, gpii_chan->chid, "Freeing all pending descriptors\n");
+	spin_lock_irqsave(&vc->lock, flags);
+	vchan_get_all_descriptors(vc, &head);
+	spin_unlock_irqrestore(&vc->lock, flags);
+
+	list_for_each_entry_safe(vd, temp, &head, node) {
+		struct gpi_desc *gpi_desc = to_gpi_desc(vd);
+
+		list_del(&vd->node);
+		kfree(gpi_desc);
+	}
+}
+
 /* free gpi_desc for the specified channel */
 static void gpi_free_chan_desc(struct gpii_chan *gpii_chan)
 {
@@ -2573,6 +2593,11 @@ static void gpi_process_xfer_compl_event(struct gpii_chan *gpii_chan,
 			goto gpi_free_desc;
 	}
 	tx_cb_param = vd->tx.callback_param;
+
+	GPII_INFO(gpii, gpii_chan->chid,
+		  "DEBUG: vd:%p vd->tx:%p vd->tx.callback:%p tx_cb_param:%p\n",
+		 vd, &vd->tx, vd->tx.callback, tx_cb_param);
+
 	if (vd->tx.callback && tx_cb_param) {
 		GPII_VERB(gpii, gpii_chan->chid,
 			  "cb_length:%u compl_code:0x%x status:0x%x\n",
@@ -3316,6 +3341,8 @@ int gpi_terminate_all(struct dma_chan *chan)
 			gpi_noop_tre(gpii_chan);
 			if (gpii->protocol == SE_PROTOCOL_UART)
 				gpi_free_chan_desc(gpii_chan);
+			else
+				gpi_free_all_chan_desc(gpii_chan);
 		}
 	}
 
@@ -3489,7 +3516,8 @@ static void gpi_noop_tre(struct gpii_chan *gpii_chan)
 		GPII_INFO(gpii, gpii_chan->chid,
 			"local_rp:0x%0llx\n", local_rp);
 	}
-
+	GPII_INFO(gpii, gpii_chan->chid,
+		  "DEBUG: After noop local_rp:0x%0llx local_wp:0x%0llx\n", local_rp, local_wp);
 	GPII_INFO(gpii, gpii_chan->chid, "exit\n");
 }
 
@@ -3706,8 +3734,12 @@ struct dma_async_tx_descriptor *gpi_prep_slave_sg(struct dma_chan *chan,
 		  to_physical(ch_ring, ch_ring->wp), to_physical(ch_ring, ch_ring->rp),
 		  TO_GPI_CH_STATE_STR(ch_state));
 
-	if (ch_state == CH_STATE_ERROR)
+	if (ch_state == CH_STATE_ERROR) {
+		GPII_ERR(gpii, gpii_chan->chid,
+			 "Bail out the TRE subimit as Channel is in error state\n");
 		gpi_dump_debug_reg(gpii);
+		return NULL;
+	}
 
 	/* calculate # of elements required & available */
 	nr = gpi_ring_num_elements_avail(ch_ring);
