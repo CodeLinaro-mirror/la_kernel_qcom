@@ -224,6 +224,7 @@ bengal_perf_config = {
     "CONFIG_QCOM_WDT_CORE": "m",
     "CONFIG_QPNP_QG": "m",
     "CONFIG_QPNP_SMB5": "m",
+    "CONFIG_QPNP_SMBLITE": "m",
     "CONFIG_QPNP_USB_PDPHY": "m",
     "CONFIG_QRTR": "m",
     "CONFIG_QRTR_SMD": "m",
