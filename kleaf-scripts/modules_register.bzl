@@ -110,7 +110,7 @@ def _generate_ddk_target(
                 phony_configurations.append(obj)
 
     for module in matched_configurations:
-        deps = [":{}".format(module_names.get(dep)) for dep in module.deps if module_names.get(dep)] + module.lib_deps
+        deps = [":{}".format(module_names.get(dep)) for dep in module.deps if module_names.get(dep)]
         deps += [":{}_{}".format(target_variant, dep) for dep in module.hook_deps]
         src_hdrs = [src for src in module.srcs if src.endswith(".h")]
         includes = (module.includes or []) + {paths.dirname(hdr): "" for hdr in src_hdrs}.keys()
@@ -182,7 +182,6 @@ def create_module_registry():
             config = None,
             conditional_srcs = None,
             deps = None,
-            lib_deps = None,
             hook_deps = None,
             includes = None,
             **kwargs):
@@ -225,9 +224,6 @@ def create_module_registry():
                 # do not sort
                 "arch/arm64/gunyah/gunyah_hypercall",
               ]
-          lib_deps: List of dependent libraries. This list is not filtered; it is
-            intended for use with ddk_library() rules. Add other types of dependencies
-            here at your peril.
           hook_deps: List of dependent targets defined in hooks.
             A "target_variant_" prefix is added for each dependency before
             passing to ddk_module() (See _generate_ddk_target()).
@@ -243,7 +239,6 @@ def create_module_registry():
             config = config,
             conditional_srcs = conditional_srcs,
             deps = deps or [],
-            lib_deps = lib_deps or [],
             hook_deps = hook_deps or [],
             includes = includes,
             extra_args = kwargs,
