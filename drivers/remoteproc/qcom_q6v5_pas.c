@@ -2855,6 +2855,7 @@ static const struct adsp_data lahaina_adsp_resource = {
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
 	.uses_elf64 = true,
+	.auto_boot = true,
 };
 
 static const struct adsp_data lahaina_cdsp_resource = {
