@@ -93,3 +93,4 @@ qcom_logbuf_vendor_hooks.ko
 minidump.ko
 gic_intr_routing.ko
 sched-walt.ko
+sched-walt-debug.ko
