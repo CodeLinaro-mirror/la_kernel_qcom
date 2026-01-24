@@ -39,7 +39,6 @@
 #include <linux/reset-controller.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
-#include <linux/gunyah/gh_rm_drv.h>
 #include <linux/qti-lcp-ppddr.h>
 #include <include/linux/arm-smccc.h>
 #include <linux/qtee_shmbridge.h>
@@ -181,6 +180,8 @@ static const char * const qcom_scm_convention_names[] = {
 static struct qcom_scm *__scm;
 
 #define SCM_NOT_INITIALIZED()  (unlikely(!__scm) ? pr_err("SCM not initialized\n") : 0)
+
+SRCU_NOTIFIER_HEAD_STATIC(qcom_scm_assign_mem_nh);
 
 int qcom_scm_clk_enable(void)
 {
@@ -1111,6 +1112,25 @@ static int __qcom_scm_assign_mem(struct device *dev, phys_addr_t mem_region,
 	return ret ? : res.result[0];
 }
 
+/*
+ * Refer to qcom_scm_assign_mem_notifier_register().
+ */
+static int qcom_scm_assign_mem_notify(phys_addr_t mem_addr, size_t mem_sz,
+			u64 *srcvm,
+			const struct qcom_scm_vmperm *newvm,
+			unsigned int dest_cnt)
+{
+	struct qcom_scm_assign_mem_notifier_data data = {
+		.mem_addr = mem_addr,
+		.mem_sz = mem_sz,
+		.srcvm = srcvm,
+		.newvm = newvm,
+		.dest_cnt = dest_cnt,
+	};
+
+	return srcu_notifier_call_chain(&qcom_scm_assign_mem_nh, 0, &data);
+}
+
 /**
  * qcom_scm_assign_mem() - Make a secure call to reassign memory ownership
  * @mem_addr: mem region whose ownership need to be reassigned
@@ -1142,8 +1162,10 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	int ret, i, b;
 	u64 srcvm_bits = *srcvm;
 
-	if (!gh_rm_needs_scm_assign(srcvm, newvm, dest_cnt))
-		return 0;
+	ret = qcom_scm_assign_mem_notify(mem_addr, mem_sz, srcvm, newvm, dest_cnt);
+	/* If notifier handled it (NOTIFY_STOP) or returned an error, return early */
+	if (ret & NOTIFY_STOP_MASK)
+		return notifier_to_errno(ret);
 
 	src_sz = hweight64(srcvm_bits) * sizeof(*src);
 	mem_to_map_sz = sizeof(*mem_to_map);
@@ -1196,6 +1218,30 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_assign_mem);
+
+/**
+ * qcom_scm_assign_mem_notifier_register() -
+ * Register a handler for qcom_scm_assign_mem().
+ * The values returned by this notifier have the following interpretation:
+ * NOTIFY_STOP - Success. No fallback to arm 'smc' instruction.
+ * NOTIFY_OK   - No error. Fallback to arm 'smc'.
+ * values that notifier_to_errno() would consider errors -
+ *               Stop. Do not call futher notifiers nor arm 'smc'.
+ *
+ * This notifier is intended to support a compatibility layer between
+ * client-facing apis and different secure memory implemenations.
+ */
+int qcom_scm_assign_mem_notifier_register(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_register(&qcom_scm_assign_mem_nh, nb);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_mem_notifier_register);
+
+int qcom_scm_assign_mem_notifier_unregister(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_unregister(&qcom_scm_assign_mem_nh, nb);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_mem_notifier_unregister);
 
 /**
  * qcom_scm_assign_mem_regions() - Make a secure call to reassign memory
