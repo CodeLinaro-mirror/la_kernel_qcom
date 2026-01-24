@@ -7781,6 +7781,7 @@ static struct gdsc gcc_hlos1_vote_mmu_tcu_gds = {
 		.name = "gcc_hlos1_vote_mmu_tcu_gds",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
+	.flags = VOTABLE,
 	.supply = "vdd_cx",
 };
 
