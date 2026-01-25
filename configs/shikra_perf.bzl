@@ -101,4 +101,5 @@ shikra_perf_config = {
     "CONFIG_QCOM_PDR_MSG": "m",
     "CONFIG_QCOM_QMI_HELPERS": "m",
     "CONFIG_PDR_INDICATION_NOTIF_TIMEOUT": "9000",
+    "CONFIG_QCOM_SOCINFO": "m",
 }
