@@ -106,23 +106,23 @@ int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
 	return ret ? ret : qcom_scmi_remap_error(result);
 }
 
-static int qcom_smci_init_client_service(u32 uid)
+int qcom_smci_init_client_service(u32 uid, struct si_object **service)
 {
 	struct smci_service_info *service_info = NULL;
-	struct si_object *service = NULL;
 	int ret;
 
 	mutex_lock(&service_list_mutex);
 	list_for_each_entry(service_info, &smci_list, list) {
 		if (service_info->uid == uid) {
+			*service = service_info->service;
 			mutex_unlock(&service_list_mutex);
 			return 0;
 		}
 	}
 
 	/* Initialize client service; it will be released when the module exits */
-	ret = si_core_client_env_open(&oic, client_env, uid, &service);
-	if (ret || service == NULL_SI_OBJECT) {
+	ret = si_core_client_env_open(&oic, client_env, uid, service);
+	if (ret || *service == NULL_SI_OBJECT) {
 		pr_err("Failed to get client service for %d: (%d)\n", uid, ret);
 		mutex_unlock(&service_list_mutex);
 		return ret ? ret : -EINVAL;
@@ -130,13 +130,13 @@ static int qcom_smci_init_client_service(u32 uid)
 
 	service_info = kzalloc(sizeof(*service_info), GFP_KERNEL);
 	if (!service_info) {
-		put_si_object(service);
+		put_si_object(*service);
 		mutex_unlock(&service_list_mutex);
 		return -ENOMEM;
 	}
 
 	service_info->uid = uid;
-	service_info->service = service;
+	service_info->service = *service;
 	INIT_LIST_HEAD(&service_info->image_service_list);
 	list_add_tail(&service_info->list, &smci_list);
 	mutex_unlock(&service_list_mutex);
@@ -260,6 +260,18 @@ void qcom_smci_get_memory(u32 uid, u32 peripheral, phys_addr_t *addr, size_t *si
 		*addr = image_service_info->addr;
 		*size = image_service_info->size;
 	}
+	mutex_unlock(&service_list_mutex);
+}
+
+void qcom_smci_store_client_smo(u32 uid, struct si_object *smo)
+{
+	struct smci_image_service_info *image_service_info = NULL;
+	struct smci_service_info *client_service = NULL;
+
+	mutex_lock(&service_list_mutex);
+	__qcom_smci_find_service(uid, 0, &client_service, &image_service_info);
+	if (client_service)
+		client_service->smo = smo;
 	mutex_unlock(&service_list_mutex);
 }
 
@@ -414,6 +426,7 @@ int qcom_scm_pas_pil_service_init(u32 peripheral, struct si_object **pil_image_s
 
 static int qcom_smci_service_probe(struct platform_device *pdev)
 {
+	struct si_object *service = NULL;
 	int ret;
 
 	ret = si_core_get_client_env(&oic, &client_env);
@@ -422,7 +435,7 @@ static int qcom_smci_service_probe(struct platform_device *pdev)
 		return ret ? ret : -ENODEV;
 	}
 
-	ret = qcom_smci_init_client_service(SMCI_PILOBJECT_UID);
+	ret = qcom_smci_init_client_service(SMCI_PILOBJECT_UID, &service);
 	if (!ret) {
 		pr_info("PIL SMC invocation is supported\n");
 		pil_smcinvoke_supported = true;
@@ -460,6 +473,9 @@ static void qcom_smci_service_remove(struct platform_device *pdev)
 
 		if (service_info->service)
 			put_si_object(service_info->service);
+
+		if (service_info->smo)
+			put_si_object(service_info->smo);
 
 		list_del(&service_info->list);
 		kfree(service_info);

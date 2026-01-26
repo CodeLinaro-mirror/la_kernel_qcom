@@ -525,6 +525,8 @@ def register_modules(registry):
             "drivers/soc/qcom/mem_buf/mem_buf_dev",
             "drivers/soc/qcom/secure_buffer",
             "drivers/firmware/qcom/qcom-scm",
+            "drivers/firmware/qcom/qcom_scm_smci",
+            "drivers/firmware/qcom/si_core/si_core_module",
             "drivers/virt/gunyah/gh_rm_drv",
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
