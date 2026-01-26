@@ -356,38 +356,11 @@ exit_free_buf:
 	return ret;
 }
 
-int32_t qcom_smci_pil_init_smobject(const void *metadata, size_t metadata_len,
-	struct si_object **smo, struct qcom_scm_pas_metadata *ctx,
-	struct device *dev_32bit, uint32_t flags)
+struct device *qcom_scmi_get_dev(void)
 {
-	struct device *dma_dev = smo_buffer_dev;
-	dma_addr_t mdata_phys;
-	void *mdata_buf;
-	int ret;
-
-	if (!ctx || !metadata || metadata_len == 0)
-		return -EINVAL;
-
-	if (dev_32bit)
-		dma_dev = dev_32bit;
-
-	mdata_buf = dma_alloc_coherent(dma_dev, metadata_len, &mdata_phys, GFP_KERNEL);
-	if (!mdata_buf)
-		return -ENOMEM;
-	memcpy(mdata_buf, metadata, metadata_len);
-
-	ret = qcom_smci_init_smobject(mdata_phys, mdata_buf, metadata_len, smo, flags);
-	if (ret) {
-		dev_err(dma_dev, "Failed to get share memory-object: %d\n", ret);
-		dma_free_coherent(dma_dev, metadata_len, mdata_buf, mdata_phys);
-		return ret;
-	}
-
-	ctx->ptr = mdata_buf;
-	ctx->phys = mdata_phys;
-	ctx->size = metadata_len;
-
-	return ret;
+	if (!smo_buffer_dev)
+		return NULL;
+	return smo_buffer_dev;
 }
 
 int qcom_scm_pas_pil_service_init(u32 peripheral, struct si_object **pil_image_service)

@@ -59,9 +59,7 @@ int qcom_smci_call(struct si_object *object, unsigned long op,
 		struct si_arg args[], int *result);
 int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
 		unsigned long op);
-int32_t qcom_smci_pil_init_smobject(const void *metadata, size_t metadata_len,
-		struct si_object **smo, struct qcom_scm_pas_metadata *ctx,
-		struct device *dev_32bit, uint32_t flags);
+struct device *qcom_scmi_get_dev(void);
 int32_t qcom_smci_init_smobject(dma_addr_t dma_addr, void *vaddr, size_t size,
 		struct si_object **smo, uint32_t flags);
 
