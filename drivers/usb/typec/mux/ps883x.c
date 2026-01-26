@@ -387,10 +387,11 @@ static int ps883x_retimer_probe(struct i2c_client *client)
 		goto err_switch_put;
 	}
 
+#ifdef CONFIG_DRM_DP_AUX_BUS
 	ret = drm_aux_bridge_register(dev);
 	if (ret)
 		goto err_mux_put;
-
+#endif
 	ret = ps883x_enable_vregs(retimer);
 	if (ret)
 		goto err_mux_put;
