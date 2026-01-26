@@ -1336,4 +1336,13 @@ config QCOM_SC_TCM_MEM
 	  PAGE_SIZE bytes.
 
           If not sure, say N.
+
+config QCOM_VM_CRASH_DMESG_DUMP
+	bool "Enable crash log access from VM to PVM"
+	depends on QCOM_VM_DMESG_DUMPER
+	help
+	  Enable support for accessing crash logs from VM to PVM.
+	  This is useful for debugging and post-mortem analysis of VM crashes.
+
+	  If not sure, say N.
 endmenu
