@@ -205,13 +205,13 @@ struct stmmac_dma_ops {
 	void (*dma_diagnostic_fr)(void *data, struct stmmac_extra_stats *x,
 				  void __iomem *ioaddr);
 	void (*enable_dma_transmission) (void __iomem *ioaddr);
-	void (*enable_dma_irq)(void __iomem *ioaddr, u32 chan,
+	void (*enable_dma_irq)(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan,
 			       bool rx, bool tx);
-	void (*enable_dma_ts_irq)(void __iomem *ioaddr, u32 chan,
+	void (*enable_dma_ts_irq)(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan,
 				  bool rx, bool tx);
-	void (*disable_dma_irq)(void __iomem *ioaddr, u32 chan,
+	void (*disable_dma_irq)(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan,
 				bool rx, bool tx);
-	void (*disable_dma_ts_irq)(void __iomem *ioaddr, u32 chan,
+	void (*disable_dma_ts_irq)(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan,
 				   bool rx, bool tx);
 	void (*start_tx)(void __iomem *ioaddr, u32 chan);
 	void (*stop_tx)(void __iomem *ioaddr, u32 chan);
@@ -241,18 +241,18 @@ struct stmmac_dma_ops {
 { \
 	struct stmmac_priv *priv_t = __priv; \
 	if ((priv_t)->plat->enable_aux_ts) \
-		stmmac_do_void_callback(priv_t, dma, enable_dma_ts_irq, ## args); \
+		stmmac_do_void_callback(priv_t, dma, enable_dma_ts_irq, __priv, ## args); \
 	else \
-		stmmac_do_void_callback(priv_t, dma, enable_dma_irq, ## args); \
+		stmmac_do_void_callback(priv_t, dma, enable_dma_irq, __priv, ## args); \
 }
 
 #define stmmac_do_void_callback_disable(__priv, args...) \
 { \
 	struct stmmac_priv *priv_t = __priv; \
 	if ((priv_t)->plat->enable_aux_ts) \
-		stmmac_do_void_callback(priv_t, dma, disable_dma_ts_irq, ## args); \
+		stmmac_do_void_callback(priv_t, dma, disable_dma_ts_irq, __priv, ## args); \
 	else \
-		stmmac_do_void_callback(priv_t, dma, disable_dma_irq, ## args); \
+		stmmac_do_void_callback(priv_t, dma, disable_dma_irq, __priv, ## args); \
 }
 
 #define stmmac_reset(__priv, __args...) \

@@ -225,10 +225,14 @@
 #define DMA_CHAN0_DBG_STAT_RPS_SHIFT	8
 
 int dwmac4_dma_reset(void __iomem *ioaddr);
-void dwmac4_enable_dma_irq(void __iomem *ioaddr, u32 chan, bool rx, bool tx);
-void dwmac410_enable_dma_irq(void __iomem *ioaddr, u32 chan, bool rx, bool tx);
-void dwmac4_disable_dma_irq(void __iomem *ioaddr, u32 chan, bool rx, bool tx);
-void dwmac410_disable_dma_irq(void __iomem *ioaddr, u32 chan, bool rx, bool tx);
+void dwmac4_enable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
+			   u32 chan, bool rx, bool tx);
+void dwmac410_enable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
+			     u32 chan, bool rx, bool tx);
+void dwmac4_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
+			    u32 chan, bool rx, bool tx);
+void dwmac410_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr,
+			      u32 chan, bool rx, bool tx);
 void dwmac4_dma_start_tx(void __iomem *ioaddr, u32 chan);
 void dwmac4_dma_stop_tx(void __iomem *ioaddr, u32 chan);
 void dwmac4_dma_start_rx(void __iomem *ioaddr, u32 chan);

@@ -43,6 +43,9 @@ static void dwxgmac2_dma_init_chan(void __iomem *ioaddr,
 
 	writel(value, ioaddr + XGMAC_DMA_CH_CONTROL(chan));
 	writel(XGMAC_DMA_INT_DEFAULT_EN, ioaddr + XGMAC_DMA_CH_INT_EN(chan));
+
+	value = dma_cfg->multi_irq_en ? XGMAC_DMA_INT_COMMON_EN : XGMAC_DMA_INT_DEFAULT_EN;
+	writel(value, ioaddr + XGMAC_DMA_CH_INT_EN(chan));
 }
 
 static void dwxgmac2_dma_init_rx_chan(void __iomem *ioaddr,
@@ -263,7 +266,7 @@ static void dwxgmac2_dma_tx_mode(void __iomem *ioaddr, int mode,
 	writel(value, ioaddr +  XGMAC_MTL_TXQ_OPMODE(channel));
 }
 
-static void dwxgmac2_enable_dma_ts_irq(void __iomem *ioaddr, u32 chan,
+static void dwxgmac2_enable_dma_ts_irq(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan,
 				       bool rx, bool tx)
 {
 	u32 value = readl(ioaddr + XGMAC_DMA_CH_INT_EN(chan));
@@ -283,10 +286,15 @@ static void dwxgmac2_enable_dma_ts_irq(void __iomem *ioaddr, u32 chan,
 	writel(value, ioaddr + XGMAC_DMA_CH_INT_EN(chan));
 }
 
-static void dwxgmac2_enable_dma_irq(void __iomem *ioaddr, u32 chan,
+static void dwxgmac2_enable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan,
 				    bool rx, bool tx)
 {
-	u32 value = readl(ioaddr + XGMAC_DMA_CH_INT_EN(chan));
+	u32 value;
+
+	if (priv->plat->dma_cfg->multi_irq_en)
+		return;
+
+	value = readl(ioaddr + XGMAC_DMA_CH_INT_EN(chan));
 
 	if (rx)
 		value |= XGMAC_DMA_INT_DEFAULT_RX;
@@ -296,7 +304,7 @@ static void dwxgmac2_enable_dma_irq(void __iomem *ioaddr, u32 chan,
 	writel(value, ioaddr + XGMAC_DMA_CH_INT_EN(chan));
 }
 
-static void dwxgmac2_disable_dma_ts_irq(void __iomem *ioaddr, u32 chan,
+static void dwxgmac2_disable_dma_ts_irq(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan,
 					bool rx, bool tx)
 {
 	u32 value = readl(ioaddr + XGMAC_DMA_CH_INT_EN(chan));
@@ -316,10 +324,15 @@ static void dwxgmac2_disable_dma_ts_irq(void __iomem *ioaddr, u32 chan,
 	writel(value, ioaddr + XGMAC_DMA_CH_INT_EN(chan));
 }
 
-static void dwxgmac2_disable_dma_irq(void __iomem *ioaddr, u32 chan,
+static void dwxgmac2_disable_dma_irq(struct stmmac_priv *priv, void __iomem *ioaddr, u32 chan,
 				     bool rx, bool tx)
 {
-	u32 value = readl(ioaddr + XGMAC_DMA_CH_INT_EN(chan));
+	u32 value;
+
+	if (priv->plat->dma_cfg->multi_irq_en)
+		return;
+
+	value = readl(ioaddr + XGMAC_DMA_CH_INT_EN(chan));
 
 	if (rx)
 		value &= ~XGMAC_DMA_INT_DEFAULT_RX;
@@ -419,24 +432,20 @@ static int dwxgmac2_dma_interrupt(void __iomem *ioaddr,
 	}
 
 	/* TX/RX NORMAL interrupts */
-	if (likely(intr_status & XGMAC_NIS)) {
-		x->normal_irq_n++;
-
-		if (likely(intr_status & XGMAC_RI)) {
-			x->rx_normal_irq_n++;
-			x->rxq_stats[chan].rx_normal_irq_n++;
-			ret |= handle_rx;
-		}
-		if (likely(intr_status & XGMAC_TI)) {
-			x->tx_normal_irq_n++;
-			x->txq_stats[chan].tx_normal_irq_n++;
-			ret |= handle_tx;
-		}
-		if (likely(intr_status & XGMAC_TBU)) {
-			x->tx_buf_unav_irq++;
-			x->txq_stats[chan].tx_buf_unav_irq++;
-			ret |= (handle_tx | TDU_ERR);
-		}
+	if (likely(intr_status & XGMAC_RI)) {
+		x->rx_normal_irq_n++;
+		x->rxq_stats[chan].rx_normal_irq_n++;
+		ret |= handle_rx;
+	}
+	if (likely(intr_status & XGMAC_TI)) {
+		x->tx_normal_irq_n++;
+		x->txq_stats[chan].tx_normal_irq_n++;
+		ret |= handle_tx;
+	}
+	if (likely(intr_status & XGMAC_TBU)) {
+		x->tx_buf_unav_irq++;
+		x->txq_stats[chan].tx_buf_unav_irq++;
+		ret |= (handle_tx | TDU_ERR);
 	}
 
 	/* Clear interrupts */

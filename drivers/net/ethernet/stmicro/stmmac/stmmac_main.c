@@ -3315,10 +3315,8 @@ static bool stmmac_safety_feat_interrupt(struct stmmac_priv *priv)
 	return false;
 }
 
-static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
+static void stmmac_napi_schedule(struct stmmac_priv *priv, u32 chan, int status)
 {
-	int status = stmmac_dma_interrupt_status(priv, priv->ioaddr,
-						 &priv->xstats, chan, dir);
 	struct stmmac_rx_queue *rx_q = &priv->rx_queue[chan];
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[chan];
 	struct stmmac_channel *ch = &priv->channel[chan];
@@ -3352,6 +3350,14 @@ static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
 	if (status == tx_hard_error)
 		if (priv->plat->handle_mac_err)
 			priv->plat->handle_mac_err(priv, FBE_ERR, chan);
+}
+
+static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
+{
+	int status = stmmac_dma_interrupt_status(priv, priv->ioaddr,
+						 &priv->xstats, chan, dir);
+
+	stmmac_napi_schedule(priv, chan, status);
 
 	return status;
 }
@@ -4218,6 +4224,8 @@ static int stmmac_request_irq_multi(struct net_device *dev)
 		}
 		irq_set_affinity_hint(priv->rx_irq[i],
 				      cpumask_of(i % num_online_cpus()));
+		if (priv->plat->rx_queues_cfg[i].skip_sw)
+			disable_irq(priv->rx_irq[i]);
 	}
 
 	/* Request Tx irq */
@@ -4240,6 +4248,8 @@ static int stmmac_request_irq_multi(struct net_device *dev)
 		}
 		irq_set_affinity_hint(priv->tx_irq[i],
 				      cpumask_of(i % num_online_cpus()));
+		if (priv->plat->tx_queues_cfg[i].skip_sw)
+			disable_irq(priv->tx_irq[i]);
 	}
 
 	return 0;
@@ -7165,6 +7175,8 @@ static irqreturn_t stmmac_mac_interrupt(int irq, void *dev_id)
 	/* To handle Common interrupts */
 	stmmac_common_interrupt(priv);
 
+	stmmac_dma_interrupt(priv);
+
 	return IRQ_HANDLED;
 }
 
@@ -7193,7 +7205,6 @@ static irqreturn_t stmmac_dma_tx_interrupt(int irq, void *data)
 	struct stmmac_tx_queue *tx_q = (struct stmmac_tx_queue *)data;
 	int chan = tx_q->queue_index;
 	struct stmmac_priv *priv;
-	int status;
 
 	priv = container_of(tx_q, struct stmmac_priv, tx_queue[chan]);
 
@@ -7206,28 +7217,7 @@ static irqreturn_t stmmac_dma_tx_interrupt(int irq, void *data)
 	if (test_bit(STMMAC_DOWN, &priv->state))
 		return IRQ_HANDLED;
 
-	status = stmmac_napi_check(priv, chan, DMA_DIR_TX);
-
-	if (unlikely(status & tx_hard_error_bump_tc)) {
-		/* Try to bump up the dma threshold on this failure */
-		if (unlikely(priv->xstats.threshold != SF_DMA_MODE) &&
-		    tc <= 256) {
-			tc += 64;
-			if (priv->plat->force_thresh_dma_mode)
-				stmmac_set_dma_operation_mode(priv,
-							      tc,
-							      tc,
-							      chan);
-			else
-				stmmac_set_dma_operation_mode(priv,
-							      tc,
-							      SF_DMA_MODE,
-							      chan);
-			priv->xstats.threshold = tc;
-		}
-	} else if (unlikely(status == tx_hard_error)) {
-		stmmac_tx_err(priv, chan);
-	}
+	stmmac_napi_schedule(priv, chan, handle_tx);
 
 	return IRQ_HANDLED;
 }
@@ -7249,7 +7239,7 @@ static irqreturn_t stmmac_dma_rx_interrupt(int irq, void *data)
 	if (test_bit(STMMAC_DOWN, &priv->state))
 		return IRQ_HANDLED;
 
-	stmmac_napi_check(priv, chan, DMA_DIR_RX);
+	stmmac_napi_schedule(priv, chan, handle_rx);
 
 	return IRQ_HANDLED;
 }
