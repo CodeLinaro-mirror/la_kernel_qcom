@@ -5,3 +5,4 @@ blocklist can-raw
 blocklist can-bcm
 blocklist can-gw
 blocklist slcan
+blocklist vkms
