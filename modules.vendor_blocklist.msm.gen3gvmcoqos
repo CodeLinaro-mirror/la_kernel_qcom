@@ -55,6 +55,7 @@ blocklist tua9001
 blocklist tuner-simple
 blocklist tuner-types
 blocklist tuner-xc2028
+blocklist virtio_can
 blocklist vmw_vsock_virtio_transport_common
 blocklist vsock
 blocklist vsock_diag
