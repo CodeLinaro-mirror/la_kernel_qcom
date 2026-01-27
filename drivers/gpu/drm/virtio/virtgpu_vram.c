@@ -56,10 +56,6 @@ static int virtio_gpu_vram_mmap(struct drm_gem_object *obj,
 	else if (vram->map_info == VIRTIO_GPU_MAP_CACHE_UNCACHED)
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 
-	/* Partial mappings of GEM buffers don't happen much in practice. */
-	if (vm_size != vram->vram_node.size)
-		return -EINVAL;
-
 	ret = io_remap_pfn_range(vma, vma->vm_start,
 				 vram->vram_node.start >> PAGE_SHIFT,
 				 vm_size, vma->vm_page_prot);
