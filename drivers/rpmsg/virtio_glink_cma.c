@@ -350,6 +350,8 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 
 	dsp_info = virtio_glink_bridge_get_dsp_info(vgbridge, label);
 	if (!dsp_info) {
+		if (msg_type == MSG_INBUF_RECLAIM)
+			return;
 		dev_err(dev, "fail to find dsp_info %u\n", label);
 		rc = VIRTIO_GLINK_BRIDGE_ENODEV;
 		goto out;
