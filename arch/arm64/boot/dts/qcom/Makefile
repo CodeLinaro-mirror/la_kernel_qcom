@@ -131,8 +131,17 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs404-evb-1000.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs404-evb-4000.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs615-addons-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs615-ride.dtb
+
 dtb-$(CONFIG_ARCH_QCOM) += talos-addons-evk.dtb
+talos-addons-evk-el2-dtbs := talos-addons-evk.dtb qcs615-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM) += talos-addons-evk-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM) += talos-evk.dtb
+talos-evk-el2-dtbs := talos-evk.dtb qcs615-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM) += talos-evk-el2.dtb
+
+qcs615-ride-el2-dtbs := qcs615-ride.dtb qcs615-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM) += qcs615-ride-el2.dtb
 
 qcs8275-addons-iq-8275-evk-dtbs:= qcs8275-iq-8275-evk.dtb qcs8275-addons-iq-8275-evk.dtbo
 
