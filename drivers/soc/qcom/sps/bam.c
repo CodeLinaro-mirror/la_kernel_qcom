@@ -685,7 +685,7 @@ static u32 bam_regmap[][BAM_MAX_REGS] = {
 			[P_PSM_CNTXT_5] = 0xC814,
 			[P_TRUST_REG] = 0x2020,
 	},
-	{ /* 4K non optimised OFFSETs*/
+	{ /* 4K_V1_7 OFFSETs*/
 			[CTRL] = 0x0,
 			[REVISION] = 0x1000,
 			[SW_REVISION] = 0x1004,
@@ -767,7 +767,7 @@ static inline u32 bam_get_register_offset(void *base, enum bam_regs reg,
 		index = 0;
 	if (reg >= IRQ_SRCS_EE && reg < P_CTRL)
 		index = ((bam_type == SPS_BAM_NDP_4K) ||
-				(bam_type == SPS_BAM_NON_OP_NDP_4K)) ? 0x1000 : 0x80;
+				(bam_type == SPS_BAM_NDP_V1_7_4K)) ? 0x1000 : 0x80;
 	if (reg >= P_CTRL && reg < P_TRUST_REG) {
 		if (bam_type == SPS_BAM_LEGACY) {
 			if (reg >= P_EVNT_DEST_ADDR)
@@ -781,7 +781,7 @@ static inline u32 bam_get_register_offset(void *base, enum bam_regs reg,
 			index = 0x80;
 		else
 			index = ((bam_type == SPS_BAM_NDP_4K) ||
-					(bam_type == SPS_BAM_NON_OP_NDP_4K)) ? 0x4 : 0x1000;
+					(bam_type == SPS_BAM_NDP_V1_7_4K)) ? 0x4 : 0x1000;
 	}
 	if (index < 0) {
 		SPS_ERR(dev, "Failed to find register offset for %d\n", reg);
@@ -1694,7 +1694,7 @@ void print_bam_reg(void *virt_addr)
 		return;
 
 #ifdef CONFIG_SPS_SUPPORT_NDP_BAM
-	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NON_OP_NDP_4K)) {
+	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NDP_V1_7_4K)) {
 		ctrl = bam[0x0 / 4];
 		ver = bam[0x1000 / 4];
 		pipes = bam[0x1008 / 4];
@@ -1717,7 +1717,7 @@ void print_bam_reg(void *virt_addr)
 	SPS_DUMP("NUM_PIPES: 0x%x\n", pipes);
 
 #ifdef CONFIG_SPS_SUPPORT_NDP_BAM
-	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NON_OP_NDP_4K))
+	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NDP_V1_7_4K))
 		offset = 0x301c;
 	else
 		offset = 0x80;
@@ -1731,7 +1731,7 @@ void print_bam_reg(void *virt_addr)
 			bam[(i / 4) + 2], bam[(i / 4) + 3]);
 
 #ifdef CONFIG_SPS_SUPPORT_NDP_BAM
-	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NON_OP_NDP_4K)) {
+	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NDP_V1_7_4K)) {
 		offset = 0x3000;
 		index = 0x1000;
 	} else {
@@ -1767,7 +1767,7 @@ void print_bam_pipe_reg(void *virt_addr, u32 pipe_index)
 	SPS_DUMP("%s", "-- Pipe Management Registers --\n");
 
 #ifdef CONFIG_SPS_SUPPORT_NDP_BAM
-	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NON_OP_NDP_4K))
+	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NDP_V1_7_4K))
 		offset = 0x13000;
 	else
 		offset = 0x1000;
@@ -1785,7 +1785,7 @@ void print_bam_pipe_reg(void *virt_addr, u32 pipe_index)
 		"-- Pipe Configuration and Internal State Registers --\n");
 
 #ifdef CONFIG_SPS_SUPPORT_NDP_BAM
-	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NON_OP_NDP_4K))
+	if (bam_type == SPS_BAM_NDP_4K || (bam_type == SPS_BAM_NDP_V1_7_4K))
 		offset = 0x13800;
 	else
 		offset = 0x1800;

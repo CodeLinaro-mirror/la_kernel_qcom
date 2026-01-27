@@ -4,7 +4,7 @@
   Provides Bus interface for MII registers
 
   Copyright (C) 2007-2009  STMicroelectronics Ltd
-
+  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
   Author: Carl Shaw <carl.shaw@st.com>
   Maintainer: Giuseppe Cavallaro <peppe.cavallaro@st.com>
@@ -19,6 +19,7 @@
 #include <linux/phy.h>
 #include <linux/property.h>
 #include <linux/slab.h>
+#include <linux/emac_mdio_fe.h>
 
 #include "dwxgmac2.h"
 #include "stmmac.h"
@@ -44,6 +45,299 @@
 #define MII_XGMAC_C22P_MASK		GENMASK(MII_XGMAC_MAX_C22ADDR, 0)
 #define MII_XGMAC_PA_SHIFT		16
 #define MII_XGMAC_DA_SHIFT		21
+
+/* VIRTIO MDIO defines */
+#define STMMAC_MDIO_POLL_INTERVAL_US		100
+#define STMMAC_MDIO_DOWN_RETRY_CNT_MAX		100
+#define STMMAC_MDIO_BUSY_RETRY_CNT_MAX		2
+
+/**
+ * stmmac_virtio_mdio_read - Read a PHY register via Virtio MDIO
+ *                           (Clause 22)
+ * @bus: points to the mii_bus structure
+ * @phyaddr: PHY address on the MDIO bus
+ * @phyreg: Clause 22 register address within the PHY
+ *
+ * Reads a PHY register using the virtio MDIO transport by calling
+ * virtio_mdio_read(). The function uses read_poll_timeout() to
+ * implement bounded retries in two phases:
+ *
+ *  - Phase 1 (MDIO down): Retries while the operation returns -EIO,
+ *    for up to STMMAC_MDIO_DOWN_RETRY_CNT_MAX *
+ *    STMMAC_MDIO_POLL_INTERVAL_US microseconds. Stops when the
+ *    return is not -EIO (success or a different error).
+ *
+ *  - Phase 2 (busy/other transient): If still negative, retries until
+ *    success (ret >= 0) for up to STMMAC_MDIO_BUSY_RETRY_CNT_MAX *
+ *    STMMAC_MDIO_POLL_INTERVAL_US microseconds.
+ *
+ * Return:
+ *  >= 0: Register value read successfully
+ *  -EBUSY: Timed out in either phase
+ *  < 0 : Other backend error code
+ */
+static int stmmac_virtio_mdio_read(struct mii_bus *bus, int phyaddr, int phyreg)
+{
+	struct net_device *ndev = bus->priv;
+	struct stmmac_priv *priv;
+	int ret, rc;
+	const unsigned long down_timeout_us =
+		STMMAC_MDIO_DOWN_RETRY_CNT_MAX * STMMAC_MDIO_POLL_INTERVAL_US;
+	const unsigned long busy_timeout_us =
+		STMMAC_MDIO_BUSY_RETRY_CNT_MAX * STMMAC_MDIO_POLL_INTERVAL_US;
+
+	priv = netdev_priv(ndev);
+	ret = pm_runtime_resume_and_get(priv->device);
+	if (ret < 0)
+		return ret;
+
+	rc = read_poll_timeout(virtio_mdio_read, ret,
+			       (ret != -EIO), STMMAC_MDIO_POLL_INTERVAL_US,
+			       down_timeout_us, false, phyaddr, phyreg);
+
+	if (rc == -ETIMEDOUT) {
+		pr_info_ratelimited("%s: MDIO down timed out on down after %lu us\n",
+				    __func__, down_timeout_us);
+		ret = -EBUSY;
+		goto runtime_pm_done;
+	} else if (ret >= 0) {
+		goto runtime_pm_done;
+	}
+
+	/* Check if MDIO HW is busy and not available*/
+	rc = read_poll_timeout(virtio_mdio_read, ret,
+			       (ret >= 0), STMMAC_MDIO_POLL_INTERVAL_US,
+			       busy_timeout_us, false, phyaddr, phyreg);
+
+	if (rc == -ETIMEDOUT) {
+		pr_info_ratelimited("%s: MDIO down timed out on busy after %lu us\n",
+				    __func__, busy_timeout_us);
+		ret = -EBUSY;
+		goto runtime_pm_done;
+	}
+
+runtime_pm_done:
+	pm_runtime_put(priv->device);
+	return ret;
+}
+
+/**
+ * stmmac_virtio_mdio_write - Write a PHY register via Virtio MDIO
+ *                            (Clause 22)
+ * @bus: Pointer to the MII bus structure
+ * @phyaddr: PHY address on the MDIO bus
+ * @phyreg: Clause 22 register address within the PHY
+ * @phydata: Data to write
+ *
+ * Writes a PHY register using the virtio MDIO transport by calling
+ * virtio_mdio_write(). The function uses read_poll_timeout() to
+ * implement bounded retries in two phases:
+ *
+ *  - Phase 1 (MDIO down): Retries while the operation returns -EIO,
+ *    for up to STMMAC_MDIO_DOWN_RETRY_CNT_MAX *
+ *    STMMAC_MDIO_POLL_INTERVAL_US microseconds. Stops when the
+ *    return is not -EIO (success or a different error).
+ *
+ *  - Phase 2 (busy/other transient): If still negative, retries until
+ *    success (ret >= 0) for up to STMMAC_MDIO_BUSY_RETRY_CNT_MAX *
+ *    STMMAC_MDIO_POLL_INTERVAL_US microseconds.
+ *
+ * Return:
+ *  >= 0: Write completed successfully
+ *  -EBUSY: Timed out in either phase
+ *  < 0 : Other backend error code
+ */
+static int stmmac_virtio_mdio_write(struct mii_bus *bus, int phyaddr, int phyreg,
+				    u16 phydata)
+{
+	struct net_device *ndev = bus->priv;
+	struct stmmac_priv *priv;
+	int ret, rc;
+	const unsigned long down_timeout_us =
+		STMMAC_MDIO_DOWN_RETRY_CNT_MAX * STMMAC_MDIO_POLL_INTERVAL_US;
+	const unsigned long busy_timeout_us =
+		STMMAC_MDIO_BUSY_RETRY_CNT_MAX * STMMAC_MDIO_POLL_INTERVAL_US;
+
+	priv = netdev_priv(ndev);
+	ret = pm_runtime_resume_and_get(priv->device);
+	if (ret < 0)
+		return ret;
+
+	rc = read_poll_timeout(virtio_mdio_write, ret,
+			       (ret != -EIO), STMMAC_MDIO_POLL_INTERVAL_US,
+			       down_timeout_us, false, phyaddr, phyreg, phydata);
+
+	if (rc == -ETIMEDOUT) {
+		pr_info_ratelimited("%s: MDIO down timed out on down after %lu us\n",
+				    __func__, down_timeout_us);
+		ret = -EBUSY;
+		goto runtime_pm_done;
+	} else if (ret >= 0) {
+		goto runtime_pm_done;
+	}
+
+	/* Check if MDIO HW is busy and not available*/
+	rc = read_poll_timeout(virtio_mdio_write, ret,
+			       (ret >= 0), STMMAC_MDIO_POLL_INTERVAL_US,
+			       busy_timeout_us, false, phyaddr, phyreg, phydata);
+
+	if (rc == -ETIMEDOUT) {
+		pr_info_ratelimited("%s: MDIO down timed out on busy after %lu us\n",
+				    __func__, busy_timeout_us);
+		ret = -EBUSY;
+		goto runtime_pm_done;
+	}
+
+runtime_pm_done:
+	pm_runtime_put(priv->device);
+	return ret;
+}
+
+/**
+ * stmmac_virtio_mdio_read_c45 - Read a Clause 45 PHY register via
+ *                               Virtio MDIO
+ * @bus: Pointer to the MII bus structure
+ * @phyaddr: PHY address on the MDIO bus
+ * @devad: Clause 45 device address (e.g., PMA/PMD, PCS, PHYXS)
+ * @phyreg: Register address within the selected device
+ *
+ * Reads a Clause 45 PHY register using virtio MDIO by calling
+ * virtio_mdio_read_c45(). The function uses read_poll_timeout() to
+ * implement bounded retries in two phases:
+ *
+ *  - Phase 1 (MDIO down): Retries while the operation returns -EIO,
+ *    for up to STMMAC_MDIO_DOWN_RETRY_CNT_MAX *
+ *    STMMAC_MDIO_POLL_INTERVAL_US microseconds. Stops when the
+ *    return is not -EIO (success or a different error).
+ *
+ *  - Phase 2 (busy/other transient): If still negative, retries until
+ *    success (ret >= 0) for up to STMMAC_MDIO_BUSY_RETRY_CNT_MAX *
+ *    STMMAC_MDIO_POLL_INTERVAL_US microseconds.
+ *
+ * Return:
+ *  >= 0: Register value read successfully
+ *  -EBUSY: Timed out in either phase
+ *  < 0 : Other backend error code
+ */
+static int stmmac_virtio_mdio_read_c45(struct mii_bus *bus, int phyaddr, int devad,
+				       int phyreg)
+{
+	struct net_device *ndev = bus->priv;
+	struct stmmac_priv *priv;
+	int ret, rc;
+	const unsigned long down_timeout_us =
+		STMMAC_MDIO_DOWN_RETRY_CNT_MAX * STMMAC_MDIO_POLL_INTERVAL_US;
+	const unsigned long busy_timeout_us =
+		STMMAC_MDIO_BUSY_RETRY_CNT_MAX * STMMAC_MDIO_POLL_INTERVAL_US;
+
+	priv = netdev_priv(ndev);
+	ret = pm_runtime_resume_and_get(priv->device);
+	if (ret < 0)
+		return ret;
+
+	rc = read_poll_timeout(virtio_mdio_read_c45, ret,
+			       (ret != -EIO), STMMAC_MDIO_POLL_INTERVAL_US,
+			       down_timeout_us, false, phyaddr, devad, phyreg);
+
+	if (rc == -ETIMEDOUT) {
+		pr_info_ratelimited("%s: MDIO down timed out on down after %lu us\n",
+				    __func__, down_timeout_us);
+		ret = -EBUSY;
+		goto runtime_pm_done;
+	} else if (ret >= 0) {
+		goto runtime_pm_done;
+	}
+
+	/* Check if MDIO HW is busy and not available*/
+	rc = read_poll_timeout(virtio_mdio_read_c45, ret,
+			       (ret >= 0), STMMAC_MDIO_POLL_INTERVAL_US,
+			       busy_timeout_us, false, phyaddr, devad, phyreg);
+
+	if (rc == -ETIMEDOUT) {
+		pr_info_ratelimited("%s: MDIO down timed out on busy after %lu us\n",
+				    __func__, busy_timeout_us);
+		ret = -EBUSY;
+		goto runtime_pm_done;
+	}
+
+runtime_pm_done:
+	pm_runtime_put(priv->device);
+	return ret;
+}
+
+/**
+ * stmmac_virtio_mdio_write_c45 - Write a Clause 45 PHY register via
+ *                                Virtio MDIO with bounded retries
+ * @bus: Pointer to the MII bus structure
+ * @phyaddr: PHY address on the MDIO bus
+ * @devad: Clause 45 device address (e.g., PMA/PMD, PCS, PHYXS)
+ * @phyreg: Register address within the selected device
+ * @phydata: Data to write
+ *
+ * Writes a Clause 45 PHY register using virtio MDIO by calling
+ * virtio_mdio_write_c45(). The function uses read_poll_timeout() to
+ * implement bounded retries in two phases:
+ *
+ *  - Phase 1 (MDIO down): Retries while the operation returns -EIO,
+ *    for up to STMMAC_MDIO_DOWN_RETRY_CNT_MAX *
+ *    STMMAC_MDIO_POLL_INTERVAL_US microseconds. Stops when the
+ *    return is not -EIO (success or a different error).
+ *
+ *  - Phase 2 (busy/other transient): If still negative, retries until
+ *    success (ret >= 0) for up to STMMAC_MDIO_BUSY_RETRY_CNT_MAX *
+ *    STMMAC_MDIO_POLL_INTERVAL_US microseconds.
+ *
+ * Return:
+ *  >= 0: Write completed successfully
+ *  -EBUSY: Timed out in either phase
+ *  < 0 : Other backend error code
+ */
+static int stmmac_virtio_mdio_write_c45(struct mii_bus *bus, int phyaddr,
+					int devad, int phyreg, u16 phydata)
+{
+	struct net_device *ndev = bus->priv;
+	struct stmmac_priv *priv;
+	int ret, rc;
+	const unsigned long down_timeout_us =
+		STMMAC_MDIO_DOWN_RETRY_CNT_MAX * STMMAC_MDIO_POLL_INTERVAL_US;
+	const unsigned long busy_timeout_us =
+		STMMAC_MDIO_BUSY_RETRY_CNT_MAX * STMMAC_MDIO_POLL_INTERVAL_US;
+
+	priv = netdev_priv(ndev);
+	ret = pm_runtime_resume_and_get(priv->device);
+	if (ret < 0)
+		return ret;
+
+	rc = read_poll_timeout(virtio_mdio_write_c45, ret,
+			       (ret != -EIO), STMMAC_MDIO_POLL_INTERVAL_US,
+			       down_timeout_us, false, phyaddr, devad, phyreg, phydata);
+
+	if (rc == -ETIMEDOUT) {
+		pr_info_ratelimited("%s: MDIO down timed out on down after %lu us\n",
+				    __func__, down_timeout_us);
+		ret = -EBUSY;
+		goto runtime_pm_done;
+	} else if (ret >= 0) {
+		goto runtime_pm_done;
+	}
+
+	/* Check if MDIO HW is busy and not available*/
+	rc = read_poll_timeout(virtio_mdio_write_c45, ret,
+			       (ret >= 0), STMMAC_MDIO_POLL_INTERVAL_US,
+			       busy_timeout_us, false, phyaddr, devad, phyreg, phydata);
+
+	if (rc == -ETIMEDOUT) {
+		pr_info_ratelimited("%s: MDIO down timed out on busy after %lu us\n",
+				    __func__, busy_timeout_us);
+		ret = -EBUSY;
+		goto runtime_pm_done;
+	}
+
+runtime_pm_done:
+	pm_runtime_put(priv->device);
+
+	return ret;
+}
 
 static void stmmac_xgmac2_c45_format(struct stmmac_priv *priv, int phyaddr,
 				     int devad, int phyreg, u32 *hw_addr)
@@ -591,6 +885,12 @@ int stmmac_mdio_register(struct net_device *ndev)
 			/* XGMAC version 2.20 onwards support 32 phy addr */
 			max_addr = PHY_MAX_ADDR;
 		}
+	} else if (priv->plat->has_virtio_mdio) {
+		new_bus->read = &stmmac_virtio_mdio_read;
+		new_bus->write = &stmmac_virtio_mdio_write;
+		new_bus->read_c45 = &stmmac_virtio_mdio_read_c45;
+		new_bus->write_c45 = &stmmac_virtio_mdio_write_c45;
+		max_addr = PHY_MAX_ADDR;
 	} else {
 		new_bus->read = &stmmac_mdio_read_c22;
 		new_bus->write = &stmmac_mdio_write_c22;

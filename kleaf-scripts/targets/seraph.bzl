@@ -1,6 +1,8 @@
 load("//build/kernel/kleaf:kernel.bzl", "kernel_abi", "kernel_module_group")
 load(":configs/seraph_consolidate.bzl", "seraph_consolidate_config")
 load(":configs/seraph_perf.bzl", "seraph_perf_config")
+load(":configs/seraph_tuivm.bzl", "seraph_tuivm_config")
+load(":configs/seraph_tuivm_debug.bzl", "seraph_tuivm_debug_config")
 load(":kleaf-scripts/android_build.bzl", "define_typical_android_build")
 load(":kleaf-scripts/image_opts.bzl", "boot_image_opts")
 load(":kleaf-scripts/vm_build.bzl", "define_typical_vm_build")
@@ -69,4 +71,18 @@ def define_seraph():
         kernel_modules = [
             ":seraph_perf_all_modules",
         ],
+    )
+
+def define_seraph_tuivm():
+    define_typical_vm_build(
+        name = "seraph-tuivm",
+        config = seraph_tuivm_config,
+        debug_config = seraph_tuivm_debug_config,
+        dtb_target = "seraph-tuivm",
+        debug_kwargs = {
+            "config_path": "configs/seraph_tuivm_debug.bzl",
+        },
+        config_kwargs = {
+            "config_path": "configs/seraph_tuivm.bzl",
+        },
     )

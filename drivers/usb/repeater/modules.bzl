@@ -33,6 +33,7 @@ def register_modules(registry):
         ],
         deps = [
             # do not sort
+            "drivers/base/regmap/qti-regmap-debugfs",
             "drivers/usb/repeater/repeater",
         ],
     )

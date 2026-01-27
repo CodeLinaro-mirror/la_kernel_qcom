@@ -78,6 +78,21 @@ config QCOM_QSEECOM_UEFISECAPP
 	  Select Y here to provide access to EFI variables on the aforementioned
 	  platforms.
 
+config QCOM_SCM_SMCI
+	tristate "Qualcomm SMC Invoke Support"
+	depends on QCOM_SCM
+	depends on QCOM_SI_CORE
+	help
+	  Various Qualcomm SoCs have a Trusted Execution Environment (TEE) running
+	  in the Trust Zone. This module provides an interface to that via the
+	  capability based object invocation, using SI-CORE.
+
+	  Enable SCM_SMCI driver which supports capability based secure
+	  communication between QTEE and VM. Using SCM_SMCI, kernel can
+	  issue calls to QTEE or TAs to request a service or exposes services
+	  to QTEE and TAs. The SCM_SMCI implements the necessary marshaling of
+	  messages with QTEE.
+
 source "$(KCONFIG_EXT_PREFIX)drivers/firmware/qcom/si_core/Kconfig"
 
 endmenu

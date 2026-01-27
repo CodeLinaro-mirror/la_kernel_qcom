@@ -4,6 +4,8 @@ qcom-scm.ko
 arm_smmu.ko
 smem.ko
 qcom_iommu_util.ko
+qcom_iommu_debug.ko
+iommu-logger.ko
 llcc-qcom.ko
 socinfo.ko
 qcom_tzmem.ko
@@ -88,3 +90,9 @@ msm_gpi.ko
 spi-msm-geni.ko
 arm_ffa.ko
 arm_ffa_transport.ko
+cpu_phys_log_map.ko
+qcom-pmu-lib.ko
+qcom_scmi_vendor.ko
+qcom_scmi_client.ko
+si_core_module.ko
+qcom_scm_smci.ko

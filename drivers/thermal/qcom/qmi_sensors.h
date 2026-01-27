@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QMI_SENSORS_H__
@@ -61,6 +61,7 @@ enum qmi_ts_sensor {
 	QMI_TS_MMW2,
 	QMI_TS_MMW3,
 	QMI_TS_MMW_IFIC0,
+	QMI_TS_RF_CAL,
 	QMI_TS_SUB1_MODEM_CFG,
 	QMI_TS_SUB1_LTE_CC,
 	QMI_TS_SUB1_MCG_FR1_CC,
@@ -148,6 +149,7 @@ static char sensor_clients[QMI_TS_MAX_NR][QMI_CLIENT_NAME_LENGTH] = {
 	{"mmw2"},
 	{"mmw3"},
 	{"mmw_ific0"},
+	{"rf_cal"},
 	{"sub1_modem_cfg"},
 	{"sub1_lte_cc"},
 	{"sub1_mcg_fr1_cc"},

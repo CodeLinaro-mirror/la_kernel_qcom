@@ -62,28 +62,6 @@
 #include "qcom_secure_system_heap.h"
 #include "qcom_system_heap.h"
 
-#define MAX_NR_PREFETCH_REGIONS 32
-
-/*
- * The video client may not hold the last reference count on the
- * ion_buffer(s). Delay for a short time after the video client sends
- * the IOC_DRAIN event to increase the chance that the reference
- * count drops to zero. Time in milliseconds.
- */
-#define SHRINK_DELAY 1000
-
-struct prefetch_info {
-	struct list_head list;
-	struct dma_heap *heap;
-	u64 size;
-	bool shrink;
-};
-
-static LIST_HEAD(prefetch_list);
-static DEFINE_SPINLOCK(work_lock);
-static struct delayed_work prefetch_work;
-static struct workqueue_struct *prefetch_wq;
-
 static LIST_HEAD(secure_heaps);
 
 static inline struct dynamic_page_pool **get_sys_heap_page_pool(void)
@@ -107,227 +85,6 @@ static inline struct dynamic_page_pool **get_sys_heap_page_pool(void)
 out:
 	return qcom_sys_heap_pools;
 }
-
-static struct sg_table *get_pages(u64 size, struct dma_heap *heap)
-{
-	LIST_HEAD(pages);
-	struct dynamic_page_pool **qcom_sys_heap_pools;
-	unsigned long size_remaining = size;
-	struct page *page, *tmp_page;
-	int max_order = orders[0];
-	int num_pages = 0;
-	struct sg_table *sgt;
-	struct scatterlist *sg;
-	int ret;
-
-	qcom_sys_heap_pools = get_sys_heap_page_pool();
-	if (!qcom_sys_heap_pools) {
-		pr_err("%s: Couldn't obtain the pools for the system heap!\n", __func__);
-		return ERR_PTR(-EINVAL);
-	}
-
-	while (size_remaining > 0) {
-		page = qcom_sys_heap_alloc_largest_available(qcom_sys_heap_pools,
-							     size_remaining,
-							     max_order,
-							     false);
-
-		if (!page) {
-			pr_err("%s: Failed to get pages from the system heap: %lu, %llu!\n",
-			       __func__, size_remaining, size);
-			ret = -ENOMEM;
-			goto err;
-		}
-
-		list_add_tail(&page->lru, &pages);
-		size_remaining -= page_size(page);
-		max_order = compound_order(page);
-		num_pages++;
-	}
-
-	sgt = kzalloc(sizeof(*sgt), GFP_KERNEL);
-	if (!sgt) {
-		ret = -ENOMEM;
-		goto err;
-	}
-
-	ret = sg_alloc_table(sgt, num_pages, GFP_KERNEL);
-	if (ret) {
-		pr_err("%s: sg table allocation failed with %d\n", __func__, ret);
-		goto free_table;
-	}
-
-	sg = sgt->sgl;
-	list_for_each_entry(page, &pages, lru) {
-		sg_set_page(sg, page, page_size(page), 0);
-		sg = sg_next(sg);
-	}
-
-	dma_map_sgtable(dma_heap_get_dev(heap), sgt, DMA_BIDIRECTIONAL, 0);
-	dma_unmap_sgtable(dma_heap_get_dev(heap), sgt, DMA_BIDIRECTIONAL, 0);
-
-	return sgt;
-
-free_table:
-	kfree(sgt);
-err:
-	list_for_each_entry_safe(page, tmp_page, &pages, lru)
-		__free_pages(page, compound_order(page));
-
-	return ERR_PTR(ret);
-}
-
-static void process_one_prefetch(struct prefetch_info *info)
-{
-	struct qcom_secure_system_heap *secure_heap = dma_heap_get_drvdata(info->heap);
-
-	struct sg_table *sgt;
-	struct scatterlist *sg;
-	struct page *page;
-	int ret;
-	int i, j;
-
-	sgt = get_pages(info->size, info->heap);
-	if (IS_ERR(sgt))
-		return;
-
-	ret = hyp_assign_sg_from_flags(sgt, secure_heap->vmid, true);
-	if (ret)
-		goto err;
-
-	for_each_sgtable_sg(sgt, sg, i) {
-		page = sg_page(sg);
-
-		for (j = 0; j < NUM_ORDERS; j++) {
-			if (compound_order(page) == orders[j])
-				break;
-		}
-		dynamic_page_pool_free(secure_heap->pool_list[j], page);
-	}
-
-	sg_free_table(sgt);
-
-	return;
-
-err:
-	for_each_sgtable_sg(sgt, sg, i) {
-		page = sg_page(sg);
-		__free_pages(page, compound_order(page));
-	}
-	sg_free_table(sgt);
-}
-
-static void process_one_shrink(struct prefetch_info *info)
-{
-	struct qcom_secure_system_heap *secure_heap = dma_heap_get_drvdata(info->heap);
-
-	dynamic_page_pool_shrink_high_and_low(secure_heap->pool_list,
-					      NUM_ORDERS, info->size / PAGE_SIZE);
-}
-
-static void secure_system_heap_prefetch_work(struct work_struct *work)
-{
-	struct prefetch_info *info, *tmp;
-	unsigned long flags;
-
-	spin_lock_irqsave(&work_lock, flags);
-	list_for_each_entry_safe(info, tmp, &prefetch_list, list) {
-		list_del(&info->list);
-		spin_unlock_irqrestore(&work_lock, flags);
-
-		if (info->shrink)
-			process_one_shrink(info);
-		else
-			process_one_prefetch(info);
-
-		kfree(info);
-		spin_lock_irqsave(&work_lock, flags);
-	}
-	spin_unlock_irqrestore(&work_lock, flags);
-}
-
-static int alloc_prefetch_info(struct dma_buf_heap_prefetch_region *region,
-			       bool shrink, struct list_head *items)
-{
-	struct prefetch_info *info;
-
-	info = kmalloc(sizeof(*info), GFP_KERNEL);
-	if (!info)
-		return -ENOMEM;
-
-	info->size = PAGE_ALIGN(region->size);
-	info->heap = region->heap;
-	info->shrink = shrink;
-	INIT_LIST_HEAD(&info->list);
-	list_add_tail(&info->list, items);
-	return 0;
-}
-
-static int __qcom_secure_system_heap_resize(struct dma_buf_heap_prefetch_region *regions,
-					    size_t nr_regions,
-					    bool shrink)
-{
-	struct qcom_secure_system_heap *list_ptr, *secure_heap = NULL;
-	int i, ret = 0;
-	struct prefetch_info *info, *tmp;
-	unsigned long flags;
-	LIST_HEAD(items);
-
-	if (!regions || nr_regions > MAX_NR_PREFETCH_REGIONS) {
-		pr_err("%s: Invalid input for %s\n", __func__,
-		       (shrink) ? "drain" : "prefetch");
-		return -EINVAL;
-	}
-
-	for (i = 0; i < nr_regions; i++) {
-		list_for_each_entry(list_ptr, &secure_heaps, list) {
-			if (list_ptr == dma_heap_get_drvdata(regions->heap)) {
-				secure_heap = list_ptr;
-				break;
-			}
-		}
-
-		if (!secure_heap) {
-			pr_err("%s: %s is not a secure system heap!\n", __func__,
-			       dma_heap_get_name(regions->heap));
-			ret = -EINVAL;
-			goto out_free;
-		}
-
-		ret = alloc_prefetch_info(&regions[i], shrink, &items);
-		if (ret)
-			goto out_free;
-	}
-
-	spin_lock_irqsave(&work_lock, flags);
-	list_splice_tail_init(&items, &prefetch_list);
-	queue_delayed_work(prefetch_wq, &prefetch_work,
-			   shrink ?  msecs_to_jiffies(SHRINK_DELAY) : 0);
-	spin_unlock_irqrestore(&work_lock, flags);
-
-	return 0;
-
-out_free:
-	list_for_each_entry_safe(info, tmp, &items, list) {
-		list_del(&info->list);
-		kfree(info);
-	}
-	return ret;
-}
-
-int qcom_secure_system_heap_prefetch(struct dma_buf_heap_prefetch_region *regions,
-				     size_t nr_regions)
-{
-	return __qcom_secure_system_heap_resize(regions, nr_regions, false);
-}
-EXPORT_SYMBOL(qcom_secure_system_heap_prefetch);
-
-int qcom_secure_system_heap_drain(struct dma_buf_heap_prefetch_region *regions,
-				  size_t nr_regions)
-{
-	return __qcom_secure_system_heap_resize(regions, nr_regions, true);
-}
-EXPORT_SYMBOL(qcom_secure_system_heap_drain);
 
 static enum dynamic_pool_callback_ret free_secure_pages(struct dynamic_page_pool *pool,
 							struct list_head *pages,
@@ -644,7 +401,6 @@ int qcom_secure_system_heap_freeze(void)
 	 * before the freeze. DMABUF framework tracks the unfreed memory
 	 * by the total_allocated struct member.
 	 */
-	cancel_delayed_work_sync(&prefetch_work);
 	list_for_each_entry(sys_heap, &secure_heaps, list) {
 		sz = atomic_long_read(&sys_heap->total_allocated);
 		if (sz) {
@@ -679,27 +435,6 @@ static const struct dma_heap_ops system_heap_ops = {
 	.get_pool_size = get_pool_size_bytes,
 };
 
-static int create_prefetch_workqueue(void)
-{
-	static bool registered;
-
-	if (registered)
-		return 0;
-
-	INIT_DELAYED_WORK(&prefetch_work,
-			  secure_system_heap_prefetch_work);
-
-	prefetch_wq = alloc_workqueue("system_secure_prefetch_wq",
-				      WQ_UNBOUND | WQ_FREEZABLE, 0);
-	if (!prefetch_wq) {
-		pr_err("Failed to create system secure prefetch workqueue\n");
-		return -ENOMEM;
-	}
-
-	registered = true;
-	return 0;
-}
-
 void qcom_secure_system_heap_create(const char *name, const char *secure_system_alias, int vmid)
 {
 	struct dma_heap_export_info exp_info;
@@ -714,10 +449,6 @@ void qcom_secure_system_heap_create(const char *name, const char *secure_system_
 	}
 
 	ret = dynamic_page_pool_init_shrinker();
-	if (ret)
-		goto out;
-
-	ret = create_prefetch_workqueue();
 	if (ret)
 		goto out;
 

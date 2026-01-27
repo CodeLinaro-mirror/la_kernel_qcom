@@ -1623,7 +1623,8 @@ static int adsp_setup_32b_dma_allocs(struct qcom_adsp *adsp)
 	if (!adsp->dma_phys_below_32b)
 		return 0;
 
-	ret = of_reserved_mem_device_init_by_idx(adsp->dev, adsp->dev->of_node, 2);
+	ret = of_reserved_mem_device_init_by_idx(adsp->dev, adsp->dev->of_node,
+			adsp->dtb_firmware_name ? 2 : 1);
 	if (ret) {
 		dev_err(adsp->dev,
 			"Unable to get the CMA area for performing dma_alloc_* calls\n");
@@ -3082,6 +3083,50 @@ static const struct adsp_data chora_wpss_resource = {
 	.ssctl_id = 0x19,
 };
 
+static const struct adsp_data seraph_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.load_state = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data seraph_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.load_state = "cdsp",
+	.ssctl_id = 0x17,
+};
+
+static const struct adsp_data seraph_soccp_resource = {
+	.crash_reason_smem = 656,
+	.firmware_name = "soccp.mbn",
+	.dtb_firmware_name = "soccp_dtb.mbn",
+	.pas_id = 51,
+	.dtb_pas_id = 0x41,
+	.minidump_id = 24,
+	.uses_elf64 = true,
+	.ssr_name = "soccp",
+	.sysmon_name = "soccp",
+	.early_boot = true,
+	.auto_boot = true,
+};
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -3153,6 +3198,9 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,canoe-cdsp-pas", .data = &canoe_cdsp_resource},
 	{ .compatible = "qcom,canoe-modem-pas", .data = &canoe_mpss_resource},
 	{ .compatible = "qcom,canoe-soccp-pas", .data = &canoe_soccp_resource},
+	{ .compatible = "qcom,seraph-adsp-pas", .data = &seraph_adsp_resource},
+	{ .compatible = "qcom,seraph-cdsp-pas", .data = &seraph_cdsp_resource},
+	{ .compatible = "qcom,seraph-soccp-pas", .data = &seraph_soccp_resource},
 	{ .compatible = "qcom,vienna-adsp-pas", .data = &vienna_adsp_resource},
 	{ .compatible = "qcom,vienna-cdsp-pas", .data = &vienna_cdsp_resource},
 	{ .compatible = "qcom,vienna-modem-pas", .data = &vienna_mpss_resource},

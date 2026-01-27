@@ -568,12 +568,15 @@ void qcom_sg_buffer_init(struct qcom_sg_buffer *buffer)
 }
 EXPORT_SYMBOL_GPL(qcom_sg_buffer_init);
 
-void qcom_sg_release(void *buffer)
+/* Releases memory associated with buffer */
+void qcom_sg_release(struct kref *kref)
 {
-	struct qcom_sg_buffer *buf = (struct qcom_sg_buffer *)buffer;
-	mem_buf_vmperm_free(buf->vmperm);
-	if (buf->free)
-		buf->free(buf);
+	struct qcom_sg_buffer *buffer;
+
+	buffer = container_of(kref, struct qcom_sg_buffer, kref);
+	mem_buf_vmperm_free(buffer->vmperm);
+	if (buffer->free)
+		buffer->free(buffer);
 }
 EXPORT_SYMBOL_GPL(qcom_sg_release);
 

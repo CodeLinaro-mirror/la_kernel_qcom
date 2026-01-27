@@ -46,12 +46,42 @@ def register_modules(registry):
                     "drivers/firmware/qcom/qcom_tzmem_ffa.c",
                 ],
             },
+            "CONFIG_QCOM_SCM_SMCI": {
+                False: [
+                    # do not sort
+                    "drivers/firmware/qcom/qcom_scm-scm.c",
+                ],
+            },
         },
         deps = [
             # do not sort
             "drivers/firmware/arm_ffa_transport",
             "drivers/firmware/arm_ffa",
-            "drivers/virt/gunyah/gh_rm_drv",
             "drivers/soc/qcom/hab/msm_hab",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/firmware/qcom/qcom_scm_smci",
+        out = "qcom_scm_smci.ko",
+        config = "CONFIG_QCOM_SCM_SMCI",
+        srcs = [
+            # do not sort
+            "drivers/firmware/qcom/qcom_scm-smci.c",
+            "drivers/firmware/qcom/qcom_scm_smcinvoke.h",
+            "drivers/firmware/qcom/qcom_scm.h",
+        ],
+        conditional_srcs = {
+            "CONFIG_QCOM_SCM_SMCI": {
+                True: [
+                    # do not sort
+                    "drivers/firmware/qcom/qcom_scm-smcinvoke.c",
+                ],
+            },
+        },
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )

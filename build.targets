@@ -7,6 +7,7 @@ build.config.msm.bengal
 build.config.msm.lahaina
 build.config.msm.monaco
 build.config.msm.seraph
+build.config.msm.seraph.vm
 build.config.msm.vienna
 build.config.msm.vienna.le
 build.config.msm.gen3auto

@@ -292,6 +292,16 @@ config SM_GPUCC_8250
 	  Say Y if you want to support graphics controller devices and
 	  functionality such as 3D graphics.
 
+config SM_GCC_8350
+	tristate "SM8350 Global Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SM8350 devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI,
+	  I2C, USB, UFS, SDCC, PCIe etc.
+
 config SM_GPUCC_8350
 	tristate "SM8350 Graphics Clock Controller"
 	depends on ARM64 || COMPILE_TEST
@@ -958,5 +968,86 @@ config SM_DEBUGCC_6115
 	  SM6115 devices.
 	  Say Y if you want to support the debug clocks such as
 	  clock measurement functionality.
+
+config CLK_SHIKRA_GCC
+	tristate "SHIKRA Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SHIKRA devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, SD/eMMC, etc.
+
+config SXR_VIDEOCC_PIKACHU
+	tristate "PIKACHU Video Clock Controller"
+	depends on SXR_GCC_PIKACHU
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc
+	  PIKACHU devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
+config SXR_EVACC_PIKACHU
+	tristate "PIKACHU EVA Clock Controller"
+	depends on SXR_GCC_PIKACHU
+	help
+	  Support for the EVA clock controller on Qualcomm Technologies, Inc
+	  PIKACHU devices.
+	  Say Y if you want to support EVA devices to get better
+	  visual analysis.
+
+config SXR_CAMCC_PIKACHU
+	tristate "PIKACHU Camera Clock Controller"
+	depends on SXR_GCC_PIKACHU
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  PIKACHU devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config SM_DISPCC_8350
+	tristate "SM8350 Display Clock Controller"
+	select SM_GCC_8350
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc
+	  SM8350 devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config SM_CAMCC_8350
+	tristate "SM8350 Camera Clock Controller"
+	select SM_GCC_8350
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  SM8350 devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config SM_DEBUGCC_8350
+	tristate "SM8350 Debug Clock Controller"
+	depends on SM_GCC_8350
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc
+	  SM8350 devices.
+	  Say Y if you want to support the debug clocks such as
+	  clock measurement functionality.
+
+config SXR_GPUCC_PIKACHU
+	tristate "PIKACHU Graphics Clock Controller"
+	depends on SXR_GCC_PIKACHU
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc
+	  Pikachu devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SXR_DEBUGCC_PIKACHU
+	tristate "PIKACHU Debug Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc
+	  PIKACHU devices.
+	  Say Y if you want to support the debug clocks such as clock
+	  measurement functionality.
 
 endif

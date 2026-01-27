@@ -284,7 +284,7 @@ enum sps_bam_type {
 	SPS_BAM_LEGACY,
 	SPS_BAM_NDP,
 	SPS_BAM_NDP_4K,
-	SPS_BAM_NON_OP_NDP_4K
+	SPS_BAM_NDP_V1_7_4K
 };
 
 #ifdef CONFIG_DEBUG_FS

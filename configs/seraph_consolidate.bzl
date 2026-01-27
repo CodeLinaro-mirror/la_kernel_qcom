@@ -14,5 +14,6 @@ seraph_consolidate_config = {
     "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
+    "CONFIG_SDHCI_MSM_DBG": "y",
     "CONFIG_TORTURE_TEST": "m",
 }

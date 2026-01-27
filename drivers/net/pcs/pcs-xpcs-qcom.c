@@ -253,6 +253,7 @@ static int qcom_xpcs_reset_usxgmii(struct dw_xpcs_qcom *qxpcs)
 
 		switch (qxpcs->phy_interface) {
 		case PHY_INTERFACE_MODE_USXGMII:
+			qcom_xpcs_read(qxpcs, DW_SR_MII_MMD_STS);
 			ret = qcom_xpcs_poll_bit_set(qxpcs,
 						     DW_SR_MII_MMD_STS, DW_SR_MII_STS_LINK_STS);
 			if (ret < 0)
@@ -260,6 +261,7 @@ static int qcom_xpcs_reset_usxgmii(struct dw_xpcs_qcom *qxpcs)
 			fallthrough;
 		case PHY_INTERFACE_MODE_10GBASER:
 		case PHY_INTERFACE_MODE_5GBASER:
+			qcom_xpcs_read(qxpcs, DW_SR_MII_PCS_STS1);
 			ret = qcom_xpcs_poll_bit_set(qxpcs,
 						     DW_SR_MII_PCS_STS1, DW_SR_XS_PCS_STS1);
 			if (ret < 0)
@@ -462,7 +464,7 @@ recover:
 	ret = qcom_xpcs_poll_reset(qxpcs, DW_VR_MII_PCS_DIG_CTRL1, SW_RST_BIT_STATUS);
 
 	if (ret < 0) {
-		XPCSDBG("Poll reset failed\n");
+		XPCSERR("Poll reset failed\n");
 		goto recover;
 	}
 
@@ -484,6 +486,7 @@ recover:
 				qcom_xpcs_write(qxpcs, DW_VR_MII_AN_INTR_STS, ret);
 			}
 			/* Check for Link status */
+			qcom_xpcs_read(qxpcs, DW_SR_MII_MMD_STS);
 			ret = qcom_xpcs_poll_bit_set(qxpcs,
 						     DW_SR_MII_MMD_STS, DW_SR_MII_STS_LINK_STS);
 			if (ret < 0)
@@ -492,10 +495,11 @@ recover:
 		case PHY_INTERFACE_MODE_10GBASER:
 		case PHY_INTERFACE_MODE_5GBASER:
 			/* Check for remote Link status */
+			qcom_xpcs_read(qxpcs, DW_SR_MII_PCS_STS1);
 			ret = qcom_xpcs_poll_bit_set(qxpcs,
 						     DW_SR_MII_PCS_STS1, DW_SR_XS_PCS_STS1);
 			if (ret < 0) {
-				XPCSDBG("Link is down try to recover\n");
+				XPCSERR("Link is down try to recover\n");
 				goto recover;
 			}
 		}
@@ -663,7 +667,7 @@ void qcom_xpcs_get_err_stats(struct phylink_pcs *pcs, unsigned long *ptr)
 }
 EXPORT_SYMBOL_GPL(qcom_xpcs_get_err_stats);
 
-void qcom_xpcs_link_up_usxgmii(struct dw_xpcs_qcom *qxpcs, int speed)
+int qcom_xpcs_link_up_usxgmii(struct dw_xpcs_qcom *qxpcs, int speed)
 {
 	int mmd_ctrl;
 	int ret;
@@ -678,7 +682,7 @@ void qcom_xpcs_link_up_usxgmii(struct dw_xpcs_qcom *qxpcs, int speed)
 					SW_RST_BIT_STATUS);
 	if (mmd_ctrl < 0) {
 		XPCSERR("Failed to perform soft reset\n");
-		return;
+		goto read_err;
 	}
 
 	if (qxpcs->needs_aneg) {
@@ -724,7 +728,7 @@ void qcom_xpcs_link_up_usxgmii(struct dw_xpcs_qcom *qxpcs, int speed)
 		break;
 	default:
 		XPCSERR("Invalid speed mode selected\n");
-		return;
+		return -EINVAL;
 	}
 
 	qcom_xpcs_write(qxpcs, DW_SR_MII_MMD_CTRL, mmd_ctrl);
@@ -748,22 +752,13 @@ void qcom_xpcs_link_up_usxgmii(struct dw_xpcs_qcom *qxpcs, int speed)
 		qxpcs->pcs_fusa_error_count = 0x0;
 	}
 	XPCSINFO("USXGMII link is up\n");
-	return;
+	return 0;
 read_err:
 	XPCSERR("Failed to read register\n");
+	return -EIO;
 out:
-	/* ERROR CASE:
-	 * Enable Loopback RX clock as we expect the Phy or switch
-	 * to be able to supply the required Rx clock by this time
-	 * But since XPCS link up failed we dont know what went wrong on the
-	 * far end side.
-	 * This can happen if Phy hardware configuration done is incorrect
-	 * or Phy is not supplying consistent RX clocks due to hardware issue.
-	 */
-	if (qxpcs->pcs.rxc_always_on)
-		qcom_xpcs_loopback(qxpcs, true);
-
 	XPCSERR("Failed to bring up USXGMII link\n");
+	return -EAGAIN;
 }
 
 static int qcom_xpcs_select_mode(struct dw_xpcs_qcom *qxpcs, phy_interface_t interface)
@@ -822,6 +817,27 @@ out:
 	return -EINVAL;
 }
 
+static void qcom_xpcs_serdes_reset(struct dw_xpcs_qcom *qxpcs)
+{
+	int err = 0;
+
+	if (qxpcs->reset_serdes) {
+		err = reset_control_assert(qxpcs->reset_serdes);
+		if (err < 0) {
+			XPCSERR("Assert failed: %d\n", err);
+			return;
+		}
+		usleep_range(2000, 4000);
+
+		err = reset_control_deassert(qxpcs->reset_serdes);
+		if (err < 0) {
+			XPCSERR("Deassert failed: %d\n", err);
+			return;
+		}
+		usleep_range(2000, 4000);
+	}
+}
+
 /* USXGMII: Return early if interrupt was enabled.
  * Autonegotiation ISR will set speed and duplex instead.
  * SGMII: For 2.5Gbps, let ISR do NOP since SGMII+ not supported in
@@ -832,6 +848,8 @@ void qcom_xpcs_link_up(struct phylink_pcs *pcs, unsigned int mode,
 		       phy_interface_t interface, int speed, int duplex)
 {
 	struct dw_xpcs_qcom *qxpcs = phylink_pcs_to_xpcs(pcs);
+	struct phylink_link_state state;
+	int recover_count = 0;
 	int ret;
 
 	if (qxpcs->intr_en)
@@ -841,6 +859,8 @@ void qcom_xpcs_link_up(struct phylink_pcs *pcs, unsigned int mode,
 	 * to be able to supply the required Rx clock by this time
 	 */
 	qcom_xpcs_loopback(qxpcs, false);
+
+	qcom_xpcs_serdes_reset(qxpcs);
 
 	switch (interface) {
 	case PHY_INTERFACE_MODE_10GBASER:
@@ -852,12 +872,46 @@ void qcom_xpcs_link_up(struct phylink_pcs *pcs, unsigned int mode,
 		qcom_xpcs_write(qxpcs, DW_VR_MII_PCS_DIG_CTRL1, ret &= ~DW_USXGMII_EN);
 		fallthrough;
 	case PHY_INTERFACE_MODE_USXGMII:
-		qcom_xpcs_link_up_usxgmii(qxpcs, speed);
-		return;
+		ret = qcom_xpcs_link_up_usxgmii(qxpcs, speed);
+		if (ret == -EAGAIN)
+			goto recovery;
+		else
+			return;
+		break;
 	default:
 		XPCSERR("Invalid MII mode: %s\n", phy_modes(interface));
 		return;
 	}
+
+recovery:
+	if (recover_count >= 10) {
+		/* ERROR CASE:
+		 * Enable Loopback RX clock as we expect the Phy or switch
+		 * to be able to supply the required Rx clock by this time
+		 * But since XPCS link up failed we dont know what went wrong on the
+		 * far end side.
+		 * This can happen if Phy hardware configuration done is incorrect
+		 * or Phy is not supplying consistent RX clocks due to hardware issue.
+		 */
+		if (qxpcs->pcs.rxc_always_on)
+			qcom_xpcs_loopback(qxpcs, true);
+
+		XPCSERR("XPCS recovery failed\n");
+		return;
+	}
+
+	XPCSDBG("Recovery attempt in progress, count: %d\n", recover_count);
+	recover_count++;
+
+	qcom_xpcs_serdes_reset(qxpcs);
+	qcom_xpcs_get_link_status(qxpcs, &state);
+
+	if (!state.link) {
+		XPCSERR("The link still fails after resetting the SerDes and XPCS.\n");
+		goto recovery;
+	}
+	return;
+
 read_err:
 	XPCSERR("Failed to read register\n");
 }
@@ -1121,6 +1175,13 @@ static int qcom_xpcs_probe(struct platform_device *pdev)
 	qxpcs->pcs_fusa_intr = platform_get_irq_byname_optional(pdev, "sfty");
 	if (qxpcs->pcs_fusa_intr < 0)
 		pr_info("XPCS FUSA IRQ is not enabled\n");
+
+	qxpcs->reset_serdes =
+		devm_reset_control_get_optional(&pdev->dev, "serdes_reset");
+	if (IS_ERR(qxpcs->reset_serdes)) {
+		pr_err("XPCS Serdes reset PM domain not found.\n");
+		qxpcs->reset_serdes = NULL;
+	}
 
 	platform_set_drvdata(pdev, qxpcs);
 

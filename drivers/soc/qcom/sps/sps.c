@@ -38,7 +38,7 @@ bool enhd_pipe;
 bool imem;
 enum sps_bam_type bam_type;
 static enum sps_bam_type bam_types[] = {
-	SPS_BAM_LEGACY, SPS_BAM_NDP, SPS_BAM_NDP_4K, SPS_BAM_NON_OP_NDP_4K};
+	SPS_BAM_LEGACY, SPS_BAM_NDP, SPS_BAM_NDP_4K, SPS_BAM_NDP_V1_7_4K};
 
 static void sps_device_de_init(void);
 
@@ -2710,9 +2710,8 @@ static const struct of_device_id msm_sps_match[] = {
 	{	.compatible = "qcom,msm-sps-4k",
 		.data = &bam_types[SPS_BAM_NDP_4K]
 	},
-	{
-		.compatible = "qcom,msm-sps-nonop-4k",
-		.data = &bam_types[SPS_BAM_NON_OP_NDP_4K]
+	{	.compatible = "qcom,msm-sps-v1_7-4k",
+		.data = &bam_types[SPS_BAM_NDP_V1_7_4K]
 	},
 	{},
 };

@@ -2301,8 +2301,9 @@ setup_ipc:
 			    major, minor, mas->oversampling, mas->ver_info.s_fw_ver);
 	}
 
-	if (mas->set_miso_sampling)
-		spi_geni_set_sampling_rate(mas, major, minor);
+	if (mas->set_miso_sampling && (mas->ver_info.hw_major_ver || mas->ver_info.hw_minor_ver))
+		spi_geni_set_sampling_rate(mas, mas->ver_info.hw_major_ver,
+						mas->ver_info.hw_minor_ver);
 
 	if (mas->dis_autosuspend)
 		SPI_LOG_DBG(mas->ipc, false, mas->dev,

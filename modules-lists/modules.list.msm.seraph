@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 qcom-scm.ko
+qcom-pdc.ko
 pinctrl-msm.ko
 pinctrl-seraph.ko
 qcom_hwspinlock.ko
 qrtr.ko
 smem.ko
 socinfo.ko
+cqhci.ko
+sdhci-msm.ko
 qcom_tzmem.ko
 qnoc-seraph.ko
 qnoc-qos.ko
@@ -47,6 +50,7 @@ mem-prot.ko
 mem_buf.ko
 mem_buf_dev.ko
 msm_dma_iommu_mapping.ko
+qcom_dma_heaps.ko
 gh_arm_drv.ko
 gh_dbl.ko
 gh_mem_notifier.ko
@@ -56,4 +60,27 @@ gh_rm_drv.ko
 gh_rm_heap_manager.ko
 gunyah_loader.ko
 arm_smmu_pmu.ko
+deferred-free-helper.ko
 qcom_ipc_logging.ko
+msm_qmp.ko
+mdt_loader.ko
+qcom_aoss.ko
+qcom_wdt_core.ko
+qcom_soc_wdt.ko
+qcom_ice.ko
+crypto-qti.ko
+qcom-ipcc.ko
+qcom-reboot-reason.ko
+qcom-dload-mode.ko
+dwc3-msm.ko
+usb_f_gsi.ko
+usb_f_qdss.ko
+phy-msm-ssusb-qmp.ko
+phy-msm-m31-eusb2.ko
+repeater.ko
+repeater-i2c-eusb2.ko
+debug_symbol.ko
+qcom_cpu_vendor_hooks.ko
+qcom_logbuf_boot_log.ko
+qcom_logbuf_vendor_hooks.ko
+minidump.ko
