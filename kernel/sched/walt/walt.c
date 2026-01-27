@@ -1264,6 +1264,20 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
 	bool double_migrate = false;
 
+	/*
+	 * IDLE task during it's initialization migrates to it's target CPU skip migration
+	 * accounting for idle task.
+	 */
+	if (cpu_rq(task_cpu(p))->idle == p)
+		return;
+
+	/*
+	 * skip migration accounting for task which are not yet initialized and configured by
+	 * WALT
+	 */
+	if (!wts->window_start)
+		return;
+
 	if (!p->on_rq && READ_ONCE(p->__state) != TASK_WAKING) {
 		WALT_BUG(WALT_BUG_WALT, p,
 				"CPU%d: %s task %s(%d)'s state=0x%x src_rq=%d p->on_rq=%d",
@@ -5143,7 +5157,12 @@ static void android_rvh_sched_cpu_dying(void *unused, int cpu)
 
 static void android_rvh_set_task_cpu(void *unused, struct task_struct *p, unsigned int new_cpu)
 {
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+
 	if (unlikely(walt_disabled))
+		return;
+
+	if (unlikely(!wts->mark_start))
 		return;
 
 	get_entry_instr(SET_TASK_CPU);
