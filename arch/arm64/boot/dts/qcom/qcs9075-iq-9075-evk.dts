@@ -502,10 +502,11 @@
 	hd3ss3220@67 {
 		compatible = "ti,hd3ss3220";
 		reg = <0x67>;
-		interrupt-parent = <&pmm8654au_2_gpios>;
-		interrupts = < 5 IRQ_TYPE_EDGE_FALLING>;
-		pinctrl-0 = <&usb0_intr_state>;
+		interrupts-extended = <&pmm8654au_2_gpios 5 IRQ_TYPE_EDGE_FALLING>;
+		id-gpios = <&tlmm 50 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&usb0_id>, <&usb0_intr_state>;
 		pinctrl-names = "default";
+		vbus-supply = <&vbus_supply_regulator_0>;
 		wakeup-source;
 
 		connector@0 {
@@ -992,6 +993,12 @@
 		bias-pull-up;
 	};
 
+	usb0_id: usb0-id-state {
+		pins = "gpio50";
+		function = "gpio";
+		bias-pull-up;
+	};
+
 	usb1_id: usb1-id-state {
 		pins = "gpio51";
 		function = "gpio";
@@ -1189,7 +1196,6 @@
 	snps,dis_enblslpm_quirk;
 	qcom,enable-rt;
 	wakeup-source;
-	vbus_dwc3-supply = <&vbus_supply_regulator_0>;
 	status = "okay";
 
 	ports {
