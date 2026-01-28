@@ -548,7 +548,7 @@ struct ufs_qcom_host {
 
 	struct ufs_vreg *vddp_ref_clk;
 	struct ufs_vreg *parent_vreg;
-	struct ufs_vreg *vccq_proxy_client;
+	struct ufs_vreg *proxy_client;
 	bool work_pending;
 	bool bypass_g4_cfgready;
 	bool is_dt_pm_level_read;
