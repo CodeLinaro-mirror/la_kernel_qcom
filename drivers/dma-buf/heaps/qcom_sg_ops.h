@@ -17,6 +17,7 @@
 #include <linux/scatterlist.h>
 #include <linux/dma-heap.h>
 #include <linux/device.h>
+#include <linux/kref.h>
 #include "deferred-free-helper.h"
 #include "qcom_dma_heap_priv.h"
 
@@ -81,7 +82,7 @@ int qcom_sg_vmap(struct dma_buf *dmabuf, struct iosys_map *map);
 
 void qcom_sg_vunmap(struct dma_buf *dmabuf, struct iosys_map *map);
 
-void qcom_sg_release(void *buffer);
+void qcom_sg_release(struct kref *kref);
 
 void qcom_sg_dmabuf_release(struct dma_buf *dmabuf);
 

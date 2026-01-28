@@ -565,6 +565,7 @@ void qcom_sg_buffer_init(struct qcom_sg_buffer *buffer)
 {
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
+	kref_init(&buffer->kref);
 }
 EXPORT_SYMBOL_GPL(qcom_sg_buffer_init);
 
@@ -583,13 +584,14 @@ EXPORT_SYMBOL_GPL(qcom_sg_release);
 /*
  * Attempt return to the default security state, and
  * cleanup lazily-freed iommu mappings.
+ * Drops the initial refcount from qcom_sg_buffer_init()
  */
 static void qcom_sg_exit(struct qcom_sg_buffer *buffer)
 {
 	mem_buf_vmperm_try_reclaim(buffer->vmperm, false);
 
 	msm_dma_buf_freed(buffer);
-	qcom_sg_release(buffer);
+	kref_put(&buffer->kref, qcom_sg_release);
 }
 
 void qcom_sg_dmabuf_release(struct dma_buf *dmabuf)

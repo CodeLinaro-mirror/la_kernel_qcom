@@ -54,7 +54,6 @@ struct ddrllcc_fp_data {
 
 struct ddrllcc_fp_data		*ddrllcc_data;
 static DEFINE_MUTEX(ddrllcc_lock);
-static int num_fp_path;
 
 static int ddrllcc_fp_commit(struct dcvs_path *path, struct dcvs_freq *freqs,
 							u32 update_mask)
@@ -69,10 +68,11 @@ static int ddrllcc_fp_commit(struct dcvs_path *path, struct dcvs_freq *freqs,
 
 	for (i = 0; i < fp_data->fp_cnt; i++) {
 		if (!(update_mask & BIT(i)))
-                        continue;
+			continue;
 		bcm_vote = freqs[i].ib * bcms[i].width / bcms[i].unit;
-                tcs_cmds[i].data = BCM_TCS_CMD(1, 1, 0, bcm_vote);
-        }
+		tcs_cmds[i].data = BCM_TCS_CMD(1, 1, 0, bcm_vote);
+	}
+
 	ret = rpmh_update_fast_path(dev, tcs_cmds, fp_data->fp_cnt,
 					update_mask);
 	if (ret < 0) {

@@ -628,7 +628,7 @@ static u32 bam_regmap[][BAM_MAX_REGS] = {
 			[P_PSM_CNTXT_5] = 0x1814,
 			[P_TRUST_REG] = 0x1030,
 	},
-	{ /* 4K OFFSETs with optimization*/
+	{ /* 4K OFFSETs*/
 			[CTRL] = 0x0,
 			[REVISION] = 0x1000,
 			[SW_REVISION] = 0x1004,
