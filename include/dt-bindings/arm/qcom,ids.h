@@ -298,6 +298,7 @@
 #define QCOM_ID_X1P42100		635
 #define QCOM_ID_IPQ5321			650
 #define QCOM_ID_CANOE			660
+#define QCOM_ID_QCS8845			764
 #define QCOM_ID_CANOEP			661
 #define QCOM_ID_SERAPH			672
 #define QCOM_ID_VIENNA			669
