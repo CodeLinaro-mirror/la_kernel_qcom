@@ -1119,6 +1119,7 @@ static int _disp_rm_log_stats(size_t count)
 			/* Update RM log buffer index tracker and its size */
 			log_start.read_idx = 0x0;
 			log_start.size = p_log_hdr->size;
+			wrap_around =  true;
 		}
 		/* Update RM log buffer starting ptr */
 		log_ptr =
@@ -1138,8 +1139,6 @@ static int _disp_rm_log_stats(size_t count)
 	log_start.size -= log_len;
 	log_start.read_idx += log_len;
 
-	if (log_start.size)
-		wrap_around =  true;
 	return __disp_rm_log_stats(log_ptr, log_len);
 }
 
