@@ -144,6 +144,7 @@ canoe_perf_config = {
     "CONFIG_PHY_QCOM_UFS_QRBTC_SDM845": "m",
     "CONFIG_PHY_QCOM_UFS_V4_CANOE": "m",
     "CONFIG_PHY_QCOM_UFS_V4_CROW": "m",
+    "CONFIG_PHY_QCOM_UFS_V4_WAIPIO": "m",
     "CONFIG_PINCTRL_ALOR": "m",
     "CONFIG_PINCTRL_CANOE": "m",
     "CONFIG_PINCTRL_CHORA": "m",
