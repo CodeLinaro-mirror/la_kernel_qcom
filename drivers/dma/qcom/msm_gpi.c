@@ -1805,7 +1805,7 @@ static int gpi_send_cmd(struct gpii *gpii,
 	/* confirm new ch state is correct , if the cmd is a state change cmd */
 	if (gpi_cmd_info[gpi_cmd].state == STATE_IGNORE)
 		return 0;
-	if (IS_CHAN_CMD(gpi_cmd) &&
+	if (IS_CHAN_CMD(gpi_cmd) && gpii_chan &&
 	    gpii_chan->ch_state == gpi_cmd_info[gpi_cmd].state)
 		return 0;
 	if (!IS_CHAN_CMD(gpi_cmd) &&
