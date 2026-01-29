@@ -242,6 +242,7 @@ struct dwxgmac_addrs {
 #define STMMAC_FLAG_RX_CLK_RUNS_IN_LPI		BIT(10)
 #define STMMAC_FLAG_EN_TX_LPI_CLOCKGATING	BIT(11)
 #define STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY	BIT(12)
+#define STMMAC_FLAG_USE_THREADED_NAPI	BIT(13)
 
 struct plat_stmmacenet_data {
 	u32 snps_id;
@@ -304,6 +305,8 @@ struct plat_stmmacenet_data {
 	void (*ptp_clk_freq_config)(struct stmmac_priv *priv);
 	int (*init)(struct platform_device *pdev, void *priv);
 	void (*exit)(struct platform_device *pdev, void *priv);
+	int (*suspend)(struct device *dev, void *priv);
+	int (*resume)(struct device *dev, void *priv);
 	void (*safety_irq)(struct stmmac_priv *priv, bool en);
 	void (*safety_pcs_stats)(struct stmmac_priv *priv, unsigned long *ptr);
 	struct mac_device_info *(*setup)(void *priv);
