@@ -72,3 +72,17 @@ def register_modules(registry):
             "drivers/soc/qcom/qcom_soc_wdt",
         ],
     )
+
+    registry.register(
+        name = "drivers/power/reset/msm-poweroff",
+        out = "msm-poweroff.ko",
+        config = "CONFIG_POWER_RESET_MSM",
+        srcs = [
+            # do not sort
+            "drivers/power/reset/msm-poweroff.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )

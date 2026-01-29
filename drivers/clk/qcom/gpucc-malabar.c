@@ -224,7 +224,9 @@ static struct clk_rcg2 gpu_cc_gmu_clk_src = {
 static const struct freq_tbl ftbl_gpu_cc_gx_gfx3d_clk_src[] = {
 	F(215000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(266000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(328000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(390000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(440000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(490000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(600000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(650000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
@@ -256,7 +258,9 @@ static struct clk_rcg2 gpu_cc_gx_gfx3d_clk_src = {
 		.rate_max = (unsigned long[VDD_NUM]) {
 			[VDD_LOWER_D1] = 215000000,
 			[VDD_LOWER] = 266000000,
+			[VDD_LOWER_L1] = 328000000,
 			[VDD_LOW] = 390000000,
+			[VDD_LOW_L0] = 440000000,
 			[VDD_LOW_L1] = 490000000,
 			[VDD_LOW_L2] = 600000000,
 			[VDD_NOMINAL] = 650000000,
