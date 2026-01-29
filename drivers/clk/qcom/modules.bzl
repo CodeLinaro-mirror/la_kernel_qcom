@@ -801,6 +801,23 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/clk/qcom/debugcc-malabar",
+        out = "debugcc-malabar.ko",
+        config = "CONFIG_SM_DEBUGCC_MALABAR",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-debug.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/debugcc-malabar.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-dummy",
+            "drivers/clk/qcom/clk-qcom",
+        ],
+    )
+
+    registry.register(
         name = "drivers/clk/qcom/debugcc-monaco",
         out = "debugcc-monaco.ko",
         config = "CONFIG_SDW_DEBUGCC_MONACO",
@@ -2314,6 +2331,37 @@ def register_modules(registry):
             "drivers/regulator/proxy-consumer",
             "drivers/soc/qcom/crm-v2",
             "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/gpucc-malabar",
+        out = "gpucc-malabar.ko",
+        config = "CONFIG_SM_GPUCC_MALABAR",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-alpha-pll.h",
+            "drivers/clk/qcom/clk-branch.h",
+            "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-pm.h",
+            "drivers/clk/qcom/clk-rcg.h",
+            "drivers/clk/qcom/clk-regmap-divider.h",
+            "drivers/clk/qcom/clk-regmap-mux.h",
+            "drivers/clk/qcom/clk-regmap.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/gpucc-malabar.c",
+            "drivers/clk/qcom/gdsc.h",
+            "drivers/clk/qcom/clk-regmap-phy-mux.h",
+            "drivers/clk/qcom/reset.h",
+            "drivers/clk/qcom/vdd-class.h",
+            "drivers/clk/qcom/vdd-level-monaco.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-qcom",
+            "drivers/clk/qcom/gdsc-regulator",
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
         ],
     )
 
