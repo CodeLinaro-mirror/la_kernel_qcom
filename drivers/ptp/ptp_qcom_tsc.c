@@ -271,25 +271,25 @@ static void qcom_ptp_update_tsc_offset(struct qcom_ptp_tsc *timer,
 
 	if (timer->tsc_nsec_update) {
 		timestamp =  offset.tv_sec * NSEC + offset.tv_nsec;
-		writel_relaxed((timestamp >> NSEC_SHFT),
-				timer->baseaddr + TSCSS_TSC_OFFSET_HI);
 		writel_relaxed(timestamp & NSEC_MASK, timer->baseaddr + TSCSS_TSC_OFFSET_LO);
+		writel_relaxed((timestamp >> NSEC_SHFT), timer->baseaddr + TSCSS_TSC_OFFSET_HI);
 	} else {
-		writel_relaxed(offset.tv_sec, timer->baseaddr + TSCSS_TSC_OFFSET_HI);
 		writel_relaxed(offset.tv_nsec, timer->baseaddr + TSCSS_TSC_OFFSET_LO);
+		writel_relaxed(offset.tv_sec, timer->baseaddr + TSCSS_TSC_OFFSET_HI);
 	}
 
-	pr_debug("CNTR_HI: 0x%x\n", readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_HI));
-	pr_debug("CNTR_LO: 0x%x\n", readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_LO));
+	pr_debug("OFFSET_HI: 0x%x\n", readl_relaxed(timer->baseaddr + TSCSS_TSC_OFFSET_HI));
+	pr_debug("OFFSET_LO: 0x%x\n", readl_relaxed(timer->baseaddr + TSCSS_TSC_OFFSET_LO));
+	pr_debug("CNTCV_HI: 0x%x\n", readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_HI));
+	pr_debug("CNTCV_LO: 0x%x\n", readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_LO));
 }
 
 /*
  * PTP clock operations
  */
-static int qcom_ptp_enable_drift_corr(struct qcom_ptp_tsc *timer, bool neg_adj,
-					u32 status, u64 subperiod)
+static int qcom_ptp_enable_drift_corr(struct qcom_ptp_tsc *timer, bool neg_adj, u32 subperiod)
 {
-	u32 cfg;
+	u32 cfg, cmd;
 
 	cfg = readl_relaxed(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION);
 	if (!neg_adj) {
@@ -306,18 +306,25 @@ static int qcom_ptp_enable_drift_corr(struct qcom_ptp_tsc *timer, bool neg_adj,
 
 	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION2, subperiod);
 
-	status |= BIT(2);
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD, status);
+	cmd = readl_relaxed(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD);
+	cmd |= BIT(2);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD, cmd);
+
+	pr_debug("is_jump:%d cfg: %u subperiod:%u cmd:%u\n", timer->is_jump, cfg, subperiod, cmd);
+
 	return 0;
 }
 
-static int qcom_ptp_adjfreq(struct ptp_clock_info *ptp, long ppm)
+static int qcom_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 {
 	struct qcom_ptp_tsc *timer = container_of(ptp, struct qcom_ptp_tsc,
 			ptp_clock_info);
+	long ppm = scaled_ppm_to_ppb(scaled_ppm)/1000;
 	bool neg_adj = false;
-	u32 status, cfg;
-	u64 subperiod;
+	u32 subperiod;
+
+	if (ppm == 0)
+		return 0;
 
 	if (ppm < 0) {
 		neg_adj = true;
@@ -334,20 +341,7 @@ static int qcom_ptp_adjfreq(struct ptp_clock_info *ptp, long ppm)
 	subperiod = TSCSS_DRIFT_CORR_PPM / ppm;
 	subperiod = (subperiod < TSCSS_MIN_SUBPERIOD) ? TSCSS_MIN_SUBPERIOD : subperiod;
 
-	status = readl_relaxed(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD);
-	if (!(status & BIT(1))) {
-		qcom_ptp_enable_drift_corr(timer, neg_adj, status, subperiod);
-		return 0;
-	}
-
-	if ((timer->is_jump && !neg_adj) || (!timer->is_jump && neg_adj)) {
-		tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION2, subperiod);
-	} else {
-		status &= ~BIT(2);
-		tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD, status);
-		qcom_ptp_enable_drift_corr(timer, neg_adj, status, subperiod);
-		return 0;
-	}
+	qcom_ptp_enable_drift_corr(timer, neg_adj, subperiod);
 
 	return 0;
 }
@@ -763,7 +757,7 @@ static struct ptp_clock_info qcom_ptp_clock_info = {
 	.n_ext_ts = 1,
 	.n_per_out = 16,
 	.pps = 1,
-	.adjfine  = qcom_ptp_adjfreq,
+	.adjfine  = qcom_ptp_adjfine,
 	.adjtime  = qcom_ptp_adjtime,
 	.gettime64  = qcom_ptp_gettime,
 	.settime64 = qcom_ptp_settime,
