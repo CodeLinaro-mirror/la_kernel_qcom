@@ -24,21 +24,36 @@ int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
 {
 	struct si_object *pil_image_service = NULL;
 	struct si_object *smo = NULL;
+	struct device *dma_dev = NULL;
+	void *mdata_buf = NULL;
+	dma_addr_t mdata_phys;
 	int ret;
+
+	if (!metadata || size == 0)
+		return -EINVAL;
 
 	ret = qcom_scm_pas_pil_service_init(peripheral, &pil_image_service);
 	if (ret)
 		return ret;
 
-	/*
-	 * Initialize shared object for metadata and its size
-	 * If return value is 0, smo will not be NULL_SI_OBJECT
-	 */
-	ret = qcom_smci_pil_init_smobject(metadata, size, &smo, ctx, dev_32bit,
+	dma_dev = qcom_scmi_get_dev();
+	if (!dma_dev)
+		return -ENODEV;
+
+	if (dev_32bit)
+		dma_dev = dev_32bit;
+
+	mdata_buf = dma_alloc_coherent(dma_dev, size, &mdata_phys, GFP_KERNEL);
+	if (!mdata_buf)
+		return -ENOMEM;
+	memcpy(mdata_buf, metadata, size);
+
+	ret = qcom_smci_init_smobject(mdata_phys, mdata_buf, size, &smo,
 			SI_CORE_MEM_OBJ_SHARE | SI_CORE_MEM_OBJ_UNCACHED);
 	if (ret) {
-		pr_err("Failed to create shared object for metadata and its size (%d)\n", ret);
-		return ret;
+		dev_err(dma_dev,
+			"Failed to initialize shared memory object for metadata: %d\n", ret);
+		goto out;
 	}
 
 	ret = qcom_smci_smo_call(pil_image_service, smo, SMCI_PILIMAGE_OP_VERIFYMETADATA);
@@ -47,6 +62,19 @@ int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
 
 	/* Release smo */
 	put_si_object(smo);
+
+out:
+	/*
+	 * If ctx is NULL, release the metadata immediately after use
+	 * If ctx is not NULL, store the metadata info for later release
+	 */
+	if (ret || !ctx) {
+		dma_free_coherent(dma_dev, size, mdata_buf, mdata_phys);
+	} else {
+		ctx->ptr = mdata_buf;
+		ctx->phys = mdata_phys;
+		ctx->size = size;
+	}
 	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_pas_init_image);
