@@ -3497,15 +3497,26 @@ static int ufs_qcom_set_cur_therm_state(struct thermal_cooling_device *tcd,
 static void ufs_qcom_enable_vccq_proxy_vote(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct ufs_vreg *vccq_proxy_client = NULL;
+	struct ufs_vreg *vccq2_proxy_client = NULL;
 	int err;
 
-	ufs_qcom_parse_reg_info(host, "qcom,vccq-proxy-vote",
-			&host->vccq_proxy_client);
+	ufs_qcom_parse_reg_info(host, "qcom,vccq-proxy-vote", &vccq_proxy_client);
+	ufs_qcom_parse_reg_info(host, "qcom,vccq2-proxy-vote", &vccq2_proxy_client);
 
-	if (host->vccq_proxy_client) {
-		err = ufs_qcom_enable_vreg(hba->dev, host->vccq_proxy_client);
+	/* Detect ufs VCCQ or VCCQ2 proxy vreg to vote on */
+	if (vccq_proxy_client && vccq2_proxy_client) {
+		host->proxy_client = host->ufs_gen_type ?
+			vccq_proxy_client : vccq2_proxy_client;
+	} else {
+		host->proxy_client = vccq_proxy_client ?
+			vccq_proxy_client : vccq2_proxy_client;
+	}
+
+	if (host->proxy_client) {
+		err = ufs_qcom_enable_vreg(hba->dev, host->proxy_client);
 		if (err)
-			dev_err(hba->dev, "%s: failed enable vccq_proxy err=%d\n",
+			dev_err(hba->dev, "%s: failed enable proxy vote err=%d\n",
 						__func__, err);
 	}
 }
