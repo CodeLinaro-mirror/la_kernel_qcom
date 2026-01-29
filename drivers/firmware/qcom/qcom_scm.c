@@ -922,6 +922,30 @@ void qcom_scm_halt_spmi_pmic_arbiter(void)
 		pr_debug("Failed to halt_spmi_pmic_arbiter=0x%x\n", ret);
 }
 
+/**
+ * qcom_deassert_ps_hold() - Deassert PS_HOLD
+ *
+ * Deassert PS_HOLD to signal the PMIC that we are ready to power down or reset.
+ *
+ * This function should never return if the SCM call is available.
+ */
+void qcom_scm_deassert_ps_hold(void)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_PWR,
+		.cmd = QCOM_SCM_PWR_IO_DEASSERT_PS_HOLD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = 0,
+		.arginfo = QCOM_SCM_ARGS(1),
+	};
+
+	ret = qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
+	if (ret)
+		pr_err("Failed to deassert_ps_hold=0x%x\n", ret);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_deassert_ps_hold);
+
 int qcom_scm_spmi_permission_switch(u8 mode)
 {
 	struct qcom_scm_desc desc = {
