@@ -66,6 +66,7 @@ seraph_perf_config = {
     "CONFIG_MSM_GPI_DMA": "m",
     "CONFIG_MSM_PERFORMANCE": "m",
     "CONFIG_MSM_QMP": "m",
+    "CONFIG_MSM_RDBG": "m",
     "CONFIG_MSM_SYSSTATS": "m",
     "CONFIG_MSM_SYSSTATS_STUB_NONEXPORTED_SYMBOLS": "y",
     "CONFIG_NVMEM_QCOM_QFPROM": "m",
