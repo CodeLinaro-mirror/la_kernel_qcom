@@ -1649,7 +1649,7 @@ static int arm_smmu_init_domain_context(struct arm_smmu_domain *smmu_domain,
 	}
 
 	if (IS_ENABLED(CONFIG_QCOM_SMMU_IRGN0_ERRATA)) {
-		if (!of_device_is_compatible(smmu->dev->of_node, "qcom,adreno-smmu"))
+		if (of_property_read_bool(smmu->dev->of_node, "qcom,irgn0-errata"))
 			pgtbl_cfg->quirks |= IO_PGTABLE_QUIRK_QCOM_TCR_IRGN_NC;
 	}
 
