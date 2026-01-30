@@ -1803,6 +1803,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
+            "drivers/soc/qcom/secure_buffer",
             "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )
