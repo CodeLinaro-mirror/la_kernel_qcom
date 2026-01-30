@@ -132,12 +132,33 @@ EXPORT_SYMBOL_GPL(qcom_scm_pas_shutdown_retry);
 
 int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr, phys_addr_t size)
 {
-	/*
-	 * Do nothing for PIL SMCInvoke, as the memory address and size in
-	 * qcom_scm_pas_auth_and_reset are passed to TZ through MemObj, so
-	 * TZ does not require this call.
-	 */
-	return 0;
+	struct si_object *pil_image_service = NULL;
+	int ret, result;
+
+	struct {
+		uint64_t m_address;
+		uint64_t m_size;
+	} __packed buf = {addr, size};
+
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &buf, .size = sizeof(buf) },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	ret = qcom_scm_pas_pil_service_init(peripheral, &pil_image_service);
+	if (ret)
+		return ret;
+
+	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_SETUPMEMAREA, args, &result);
+	if (ret)
+		pr_err("memory setup failed with result %d: %d\n", result, ret);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_pas_mem_setup);
 
