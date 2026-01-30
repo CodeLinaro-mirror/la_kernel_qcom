@@ -284,7 +284,7 @@ static int eusb2_repeater_i2c_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(er->regmap),
 					"failed to allocate register map\n");
 
-	devm_regmap_qti_debugfs_register(er->dev, er->regmap);
+	//devm_regmap_qti_debugfs_register(er->dev, er->regmap);
 	i2c_set_clientdata(client, er);
 
 	ret = of_property_read_u16(dev->of_node, "reg", &er->reg_base);
