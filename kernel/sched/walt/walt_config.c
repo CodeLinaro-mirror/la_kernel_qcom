@@ -334,6 +334,21 @@ void walt_config(void)
 		 * for X1E80100 platforms
 		 */
 		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
+	} else if (!strcmp(name, "SERAPH")) {
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
+		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
+		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
+
+		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
+		sysctl_walt_features |= WALT_FEAT_TOPAPP_BASED_HISPEED;
+		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
+		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
+		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
+		soc_sched_lib_name_capacity = 4;
+
+
+		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 	}
 
 }
