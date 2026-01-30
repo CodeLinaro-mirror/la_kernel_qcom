@@ -130,6 +130,8 @@ struct lpg {
 
 	struct lpg_channel *channels;
 	unsigned int num_channels;
+
+	bool avoid_hi_res_clk_rates;
 };
 
 /**
@@ -451,6 +453,13 @@ static int lpg_calc_freq(struct lpg_channel *chan, uint64_t period)
 	if (chan->subtype == LPG_SUBTYPE_HI_RES_PWM) {
 		clk_rate_arr = lpg_clk_rates_hi_res;
 		clk_len = ARRAY_SIZE(lpg_clk_rates_hi_res);
+		if (chan->lpg->avoid_hi_res_clk_rates) {
+			clk_rate_arr = lpg_clk_rates;
+			clk_len = ARRAY_SIZE(lpg_clk_rates);
+		} else {
+			clk_rate_arr = lpg_clk_rates_hi_res;
+			clk_len = ARRAY_SIZE(lpg_clk_rates_hi_res);
+		}
 		pwm_resolution_arr = lpg_pwm_resolution_hi_res;
 		pwm_resolution_count = ARRAY_SIZE(lpg_pwm_resolution_hi_res);
 		max_res = LPG_RESOLUTION_15BIT;
@@ -1614,6 +1623,12 @@ static int lpg_probe(struct platform_device *pdev)
 
 	lpg->dev = &pdev->dev;
 	mutex_init(&lpg->lock);
+
+	lpg->avoid_hi_res_clk_rates =
+		of_property_read_bool(pdev->dev.of_node, "qcom,avoid-hi-res-clk-rates");
+
+	if (lpg->avoid_hi_res_clk_rates)
+		dev_info(&pdev->dev, "Use Max 19.2Mhz clock for PWM frequency generation\n");
 
 	lpg->map = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!lpg->map)
