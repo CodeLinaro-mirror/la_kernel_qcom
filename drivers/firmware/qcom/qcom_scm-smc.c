@@ -178,7 +178,7 @@ static int __scm_smc_do(struct device *dev, struct arm_smccc_args *smc,
 			bool multicall_allowed)
 {
 	int ret, retry_count = 0;
-	bool multi_smc_call = qcom_scm_multi_call_allow(dev, multicall_allowed);
+	bool multi_smc_call = qcom_scm_multi_call_allow(multicall_allowed);
 
 	if (call_type == QCOM_SCM_CALL_ATOMIC) {
 		__scm_smc_do_quirk(smc, res);

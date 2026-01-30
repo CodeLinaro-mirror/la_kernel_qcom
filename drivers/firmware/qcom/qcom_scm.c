@@ -3206,13 +3206,10 @@ int qcom_scm_set_gic_cpuclass(u32 mpidr, u32 clss)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_set_gic_cpuclass);
 
-bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed)
+bool qcom_scm_multi_call_allow(bool multicall_allowed)
 {
-	struct qcom_scm *scm;
-
-	scm = dev_get_drvdata(dev);
 	if (multicall_allowed &&
-		scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
+		__scm && __scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
 		return true;
 
 	return false;
