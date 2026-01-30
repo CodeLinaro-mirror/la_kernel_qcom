@@ -1102,28 +1102,16 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 	int ret = 0;
 
 	phy = devm_kzalloc(dev, sizeof(*phy), GFP_KERNEL);
-	if (!phy) {
-		ret = -ENOMEM;
-		goto err_ret;
-	}
+	if (!phy)
+		return dev_err_probe(dev, -ENOMEM, "alloc hsphy failed\n");
 
 	driver_data = of_device_get_match_data(dev);
 	phy->phy_priv_data = driver_data;
 	phy->phy.dev = dev;
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
-						"hsusb_phy_base");
-	if (!res) {
-		dev_err(dev, "missing memory base resource\n");
-		ret = -ENODEV;
-		goto err_ret;
-	}
 
-	phy->base = devm_ioremap_resource(dev, res);
-	if (IS_ERR(phy->base)) {
-		dev_err(dev, "ioremap failed\n");
-		ret = -ENODEV;
-		goto err_ret;
-	}
+	phy->base = devm_platform_ioremap_resource_byname(pdev, "hsusb_phy_base");
+	if (IS_ERR(phy->base))
+		return dev_err_probe(dev, PTR_ERR(phy->base), "ioremap failed\n");
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 							"phy_rcal_reg");
