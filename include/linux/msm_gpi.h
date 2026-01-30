@@ -417,25 +417,6 @@ struct gsi_xfer_param {
 	void (*cb_fun)(void *ptr); /* tx or rx cb */
 };
 
-/**
- * struct msm_gpi_tre_dw3_ctrl - GPI TRE DWORD3 control flags
- * @link_rx: Link to RX channel
- * @bei: Block Event Interrupt
- * @ieot: Interrupt on End of Transfer
- * @ieob: Interrupt on End of Block
- * @chain: Chain to next TRE
- *
- * This structure encapsulates the control flags used in DWORD3 of all
- * GPI TRE types for better code organization and type safety.
- */
-struct msm_gpi_tre_dw3_ctrl {
-	bool link_rx;
-	bool bei;
-	bool ieot;
-	bool ieob;
-	bool chain;
-};
-
 struct gsi_common {
 	u8 protocol;
 	struct completion *xfer;
