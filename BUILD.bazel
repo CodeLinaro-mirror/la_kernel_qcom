@@ -21,6 +21,7 @@ load(
 )
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
+load(":kleaf-scripts/targets/hamoa_la.bzl", "define_hamoa_la")
 load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
 load(
     ":kleaf-scripts/targets/malabar.bzl",
@@ -349,6 +350,8 @@ define_vienna_le()
 define_lahaina()
 
 define_hamoa()
+
+define_hamoa_la()
 
 define_malabar()
 
