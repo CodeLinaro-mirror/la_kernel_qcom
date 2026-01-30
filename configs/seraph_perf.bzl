@@ -184,6 +184,8 @@ seraph_perf_config = {
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB_DEBUG": "m",
+    "CONFIG_SPS": "m",
+    "CONFIG_SPS_SUPPORT_NDP_BAM": "y",
     "CONFIG_SXR_CAMCC_SERAPH": "m",
     "CONFIG_SXR_DEBUGCC_SERAPH": "m",
     "CONFIG_SXR_EVACC_SERAPH": "m",
