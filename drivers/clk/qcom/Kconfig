@@ -1050,4 +1050,21 @@ config SXR_DEBUGCC_PIKACHU
 	  Say Y if you want to support the debug clocks such as clock
 	  measurement functionality.
 
+config SM_GPUCC_MALABAR
+        tristate "Malabar Graphics Clock Controller"
+        select SM_GCC_MALABAR
+        help
+          Support for the graphics clock controller on Qualcomm Technologies, Inc
+          Malabar devices.
+          Say Y if you want to support graphics controller devices and
+          functionality such as 3D graphics.
+
+config SM_DEBUGCC_MALABAR
+	tristate "Malabar Debug Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc
+	  Malabar devices.
+	  Say Y if you want to support the debug clocks such as clock
+	  measurement functionality.
 endif

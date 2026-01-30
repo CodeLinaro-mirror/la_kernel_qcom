@@ -1,6 +1,8 @@
 malabar_perf_config = {
     # keep sorted
     "CONFIG_ARCH_MALABAR": "y",
+    "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
+    "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_NVMEM": "n",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
@@ -152,6 +154,7 @@ malabar_perf_config = {
     "CONFIG_QCOM_BWMON": "m",
     "CONFIG_QCOM_CACHE_ALLOCATION": "m",
     "CONFIG_QCOM_CDSP_RM": "m",
+    "CONFIG_QCOM_CLK_SMD_RPM": "m",
     "CONFIG_QCOM_COMMAND_DB": "m",
     "CONFIG_QCOM_CPUCP": "m",
     "CONFIG_QCOM_CPUCP_FAST": "m",
@@ -341,6 +344,8 @@ malabar_perf_config = {
     "CONFIG_SLIM_QCOM_NGD_CTRL": "m",
     "CONFIG_SM_DISPCC_MALABAR": "m",
     "CONFIG_SM_GCC_MALABAR": "m",
+    "CONFIG_SM_GPUCC_MALABAR": "m",
+    "CONFIG_SM_DEBUGCC_MALABAR": "m",
     "CONFIG_SND_USB_AUDIO_QMI": "m",
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPI_QCOM_GENI": "m",
