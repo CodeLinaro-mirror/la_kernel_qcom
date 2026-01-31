@@ -216,13 +216,20 @@ static int qcom_smmu_nesting_resume(struct kvm_hyp_iommu *iommu)
 	return 0;
 }
 
-static size_t smmu_pgsize(size_t size, unsigned long pgsize_bitmap)
+static size_t smmu_pgsize_idmap(size_t size, u64 paddr, size_t pgsize_bitmap)
 {
 	size_t pgsizes;
 
+	/* Remove page sizes that are larger than the current size */
 	pgsizes = pgsize_bitmap & GENMASK_ULL(__fls(size), 0);
+
+	/* Remove page sizes that the address is not aligned to. */
+	if (likely(paddr))
+		pgsizes &= GENMASK_ULL(__ffs(paddr), 0);
+
 	WARN_ON(!pgsizes);
 
+	/* Return the larget page size that fits. */
 	return BIT(__fls(pgsizes));
 }
 
@@ -247,7 +254,7 @@ static void qcom_smmu_nesting_idmap(struct kvm_hyp_iommu_domain *domain,
 
 		while (size) {
 			mapped = 0;
-			pgsize = smmu_pgsize(size, pgsize_bitmap);
+			pgsize = smmu_pgsize_idmap(size, start, pgsize_bitmap);
 			pgcount = size / pgsize;
 
 			ret = pgtable->ops.map_pages(&pgtable->ops, start, start,
@@ -259,7 +266,7 @@ static void qcom_smmu_nesting_idmap(struct kvm_hyp_iommu_domain *domain,
 		}
 	} else {
 		while (size) {
-			pgsize = smmu_pgsize(size, pgsize_bitmap);
+			pgsize = smmu_pgsize_idmap(size, start, pgsize_bitmap);
 			pgcount = size / pgsize;
 			unmapped = pgtable->ops.unmap_pages(&pgtable->ops, start,
 							    pgsize, pgcount, NULL);
