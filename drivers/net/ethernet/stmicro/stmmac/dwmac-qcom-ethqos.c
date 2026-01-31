@@ -726,7 +726,6 @@ static int qcom_ethqos_serdes_set_level(struct qcom_ethqos *ethqos)
 		dev = ethqos->pd_list->pd_devs[PERF_SERDES];
 	} else if (ethqos->phy_mode == PHY_INTERFACE_MODE_5GBASER) {
 		dev = ethqos->pd_list->pd_devs[PERF_5G_SERDES];
-		ethqos->speed = SPEED_5000;
 	} else {
 		dev = ethqos->pd_list->pd_devs[PERF_SERDES];
 	}
