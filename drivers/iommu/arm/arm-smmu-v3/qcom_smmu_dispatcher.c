@@ -101,10 +101,5 @@ static int qcom_smmu_nesting_register(void)
  * loads it before this point.
  * For builtin drivers we use core_initcall
  */
-#ifdef MODULE
-module_init(qcom_smmu_nesting_register);
-#else
-core_initcall(qcom_smmu_nesting_register);
-#endif
-
+subsys_initcall(qcom_smmu_nesting_register);
 MODULE_LICENSE("GPL");
