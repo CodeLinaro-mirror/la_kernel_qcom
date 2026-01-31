@@ -18,8 +18,6 @@
 #define SMMU_KVM_STRTAB_ORDER				(get_order(STRTAB_MAX_L1_ENTRIES * \
 							 sizeof(struct arm_smmu_strtab_l1)))
 
-extern struct kvm_iommu_ops kvm_nvhe_sym(smmu_ops);
-
 #ifdef MODULE
 static unsigned long                   pkvm_module_token;
 
@@ -120,46 +118,7 @@ static int smmuv3_nesting_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int smmu_alloc_atomic_mc(struct kvm_hyp_memcache *atomic_mc)
-{
-	int ret;
-#ifndef MODULE
-	u64 i;
-	phys_addr_t start, end;
-
-	/*
-	 * Allocate pages to cover mapping with PAGE_SIZE for all memory
-	 * Then allocate extra for 1GB of MMIO.
-	 * Add 10 extra pages as we map the rest with first level blocks
-	 * for PAGE_SIZE = 4KB, that should cover 5TB of address space.
-	 */
-	for_each_mem_range(i, &start, &end) {
-		atomic_pages += __hyp_pgtable_max_pages((end - start) >> PAGE_SHIFT);
-	}
-
-	atomic_pages += __hyp_pgtable_max_pages(SZ_1G >> PAGE_SHIFT) + 10;
-#endif
-
-	/* Module didn't set that parameter. */
-	if (!atomic_pages)
-		return 0;
-
-	/* For PGD*/
-	ret = topup_hyp_memcache(atomic_mc, 1, 3);
-	if (ret)
-		return ret;
-	ret = topup_hyp_memcache(atomic_mc, atomic_pages, 0);
-	if (ret)
-		return ret;
-	pr_info("smmuv3: Allocated %d MiB for atomic usage\n",
-		(atomic_pages << PAGE_SHIFT) / SZ_1M);
-	/* Topup hyp alloc so IOMMU driver can allocate domains. */
-	__pkvm_topup_hyp_alloc(1);
-
-	return 0;
-}
-
-static int kvm_arm_smmu_v3_post_init(void)
+int kvm_arm_smmu_v3_post_init(void)
 {
 	if (!is_protected_kvm_enabled() || !kvm_arm_smmu_cur)
 		return 0;
@@ -169,12 +128,7 @@ static int kvm_arm_smmu_v3_post_init(void)
 	return 0;
 }
 
-static pkvm_handle_t kvm_arm_v3_id_by_of(struct device_node *np)
-{
-	return 0;
-}
-
-static int kvm_arm_smmu_v3_init_drv(void)
+int kvm_arm_smmu_v3_init_drv(void)
 {
 	struct kvm_hyp_memcache atomic_mc;
 	int ret;
@@ -193,14 +147,6 @@ static int kvm_arm_smmu_v3_init_drv(void)
 		goto err_free;
 	}
 
-#ifdef MODULE
-	ret = pkvm_load_el2_module(kvm_nvhe_sym(smmu_init_hyp_module), &pkvm_module_token);
-	if (ret) {
-		pr_err("Failed to load SMMUv3 IOMMU EL2 module: %d\n", ret);
-		goto err_free;
-	}
-#endif
-
 	/*
 	 * These variables are stored in the nVHE image, and won't be accessible
 	 * after KVM initialization. Ownership of kvm_arm_smmu_array will be
@@ -209,34 +155,12 @@ static int kvm_arm_smmu_v3_init_drv(void)
 	kvm_hyp_arm_smmu_v3_smmus = kvm_arm_smmu_array;
 	kvm_hyp_arm_smmu_v3_count = kvm_arm_smmu_count;
 
-	init_hyp_memcache(&atomic_mc);
+	return 0;
 
-	ret = smmu_alloc_atomic_mc(&atomic_mc);
-	if (ret)
-		goto err_free;
-
-	ret = kvm_iommu_init_hyp(ksym_ref_addr_nvhe(smmu_ops), &atomic_mc);
-	if (ret)
-		return ret;
-
-	return kvm_arm_smmu_v3_post_init();
 err_free:
 	kvm_arm_smmu_array_free();
 	return ret;
 }
-
-static struct kvm_iommu_driver kvm_smmu_v3_ops = {
-	.init_driver = kvm_arm_smmu_v3_init_drv,
-	.get_iommu_id_by_of = kvm_arm_v3_id_by_of,
-};
-
-static int kvm_arm_smmu_v3_register(void)
-{
-	if (!is_protected_kvm_enabled())
-		return 0;
-
-	return kvm_iommu_register_driver(&kvm_smmu_v3_ops);
-};
 
 static struct platform_driver smmuv3_nesting_driver;
 
@@ -251,5 +175,4 @@ static struct platform_driver smmuv3_nesting_driver = {
 		.of_match_table = smmuv3_nested_of_match,
 	},
 };
-subsys_initcall(kvm_arm_smmu_v3_register);
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");

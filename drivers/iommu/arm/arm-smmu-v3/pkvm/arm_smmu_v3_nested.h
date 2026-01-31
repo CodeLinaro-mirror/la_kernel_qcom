@@ -66,4 +66,7 @@ extern struct hyp_arm_smmu_v3_device *kvm_nvhe_sym(kvm_hyp_arm_smmu_v3_smmus);
 int smmu_init_hyp_module(const struct pkvm_module_ops *ops);
 #endif
 
+int kvm_arm_smmu_v3_init_drv(void);
+int kvm_arm_smmu_v3_post_init(void);
+
 #endif /* __KVM_ARM_SMMU_V3_H */
