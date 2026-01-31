@@ -16,6 +16,7 @@ static struct walt_task_struct *heavy_wts[MAX_NR_PIPELINE];
 unsigned int pipeline_swap_util_th;
 cpumask_t available_gold_cpus = CPU_MASK_NONE;
 cpumask_t available_prime_cpus = CPU_MASK_NONE;
+unsigned int pipeline_lower_cluster_id, pipeline_higher_cluster_id;
 int have_heavy_list;
 u32 total_util;
 u32 least_pipeline_demand;
@@ -48,7 +49,7 @@ void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
 	 * Assume that a task not on prime is on golds.
 	 * This will need to be revisited for a non 2-cluster system.
 	 */
-	if (cpumask_test_cpu(cpu,  &sched_cluster[num_sched_clusters - 1]->cpus)) {
+	if (cpumask_test_cpu(cpu,  &sched_cluster[pipeline_higher_cluster_id]->cpus)) {
 		*scaled_prime_demand = util;
 		*scaled_gold_demand = mult_frac(util, 100, demand_scaling_factor);
 	} else {
@@ -301,7 +302,7 @@ int find_heaviest_topapp(u64 window_start)
 	static int top_wts_count;
 	bool top_wts_miss = false;
 	int nr_pipeline_cnt = 0;
-	int nr_prime_cpu = cpumask_weight(&sched_cluster[prime_cluster_id]->cpus);
+	int nr_prime_cpu = cpumask_weight(&sched_cluster[pipeline_higher_cluster_id]->cpus);
 
 	if (num_sched_clusters < 2)
 		return FIND_HEAVY_FAIL;
@@ -643,7 +644,7 @@ static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prim
 			}
 		} else {
 			other_wts->pipeline_cpu =
-				cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
+				cpumask_last(&sched_cluster[pipeline_higher_cluster_id]->cpus);
 		}
 		trace_sched_pipeline_swapped(other_wts, prime_wts);
 	}
@@ -709,7 +710,7 @@ static inline bool is_prime_worthy(struct walt_task_struct *wts)
 	 * in magnitude of capacities, where the last column represents prime,
 	 * and the second to last column represents golds
 	 */
-	return !task_fits_max(p, cpumask_last(&cpu_array[0][num_sched_clusters - 2]));
+	return !task_fits_max(p, cpumask_last(&cpu_array[0][pipeline_lower_cluster_id]));
 }
 
 void rearrange_heavy(u64 window_start, bool force)
@@ -755,7 +756,7 @@ void rearrange_heavy(u64 window_start, bool force)
 					cpumask_clear_cpu(assign_cpu, &available_gold_cpus);
 				}
 			} else if (cpumask_test_cpu(pipeline_cpu,
-					&sched_cluster[prime_cluster_id]->cpus) &&
+					&sched_cluster[pipeline_higher_cluster_id]->cpus) &&
 					!is_prime_worthy(heavy_wts[i])) {
 				assign_cpu = cpumask_first(&available_gold_cpus);
 				if (assign_cpu < nr_cpu_ids) {
@@ -764,7 +765,7 @@ void rearrange_heavy(u64 window_start, bool force)
 					cpumask_clear_cpu(assign_cpu, &available_gold_cpus);
 				}
 			} else if (cpumask_test_cpu(pipeline_cpu,
-					&sched_cluster[gold_cluster_id]->cpus) &&
+					&sched_cluster[pipeline_lower_cluster_id]->cpus) &&
 					!rearranged &&
 					is_prime_worthy(heavy_wts[i])) {
 				assign_cpu = cpumask_first(&available_prime_cpus);
@@ -795,7 +796,7 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (prime_wts) {
 		pipeline_demand(prime_wts, &gold_demand, &primewts_prime_demand);
 		prime_wts_fits_lower = task_fits_capacity(wts_to_ts(prime_wts),
-					cpumask_last(&cpu_array[0][num_sched_clusters - 2]));
+					cpumask_last(&cpu_array[0][pipeline_lower_cluster_id]));
 	}
 	if (other_wts)
 		pipeline_demand(other_wts, &gold_demand, &otherwts_prime_demand);
@@ -836,9 +837,9 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 
 	if (found_topapp == FIND_HEAVY_SUCCESS && !sysctl_single_thread_pipeline) {
 		cpumask_and(&available_gold_cpus, cpu_online_mask,
-			    &sched_cluster[gold_cluster_id]->cpus);
+			    &sched_cluster[pipeline_lower_cluster_id]->cpus);
 		cpumask_and(&available_prime_cpus, cpu_online_mask,
-			    &sched_cluster[prime_cluster_id]->cpus);
+			    &sched_cluster[pipeline_higher_cluster_id]->cpus);
 		cpumask_and(&available_gold_cpus, &available_gold_cpus, &cpus_for_pipeline);
 		cpumask_and(&available_prime_cpus, &available_prime_cpus, &cpus_for_pipeline);
 		cpumask_andnot(&available_gold_cpus, &available_gold_cpus, cpu_halt_mask);
@@ -869,7 +870,7 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 	if (found_topapp == FIND_HEAVY_WAIT)
 		goto unlock;
 
-	if (cpumask_weight(&sched_cluster[prime_cluster_id]->cpus) == 1)
+	if (cpumask_weight(&sched_cluster[pipeline_higher_cluster_id]->cpus) == 1)
 		sysctl_pipeline_force_config = CONFIG1;
 
 	/* force config skip EAS evaluations */
@@ -877,7 +878,8 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 		goto assign_pipeline_cpu;
 
 	for_each_sched_cluster(cluster) {
-		if (cluster->id != gold_cluster_id && cluster->id != prime_cluster_id)
+		if (cluster->id != pipeline_lower_cluster_id &&
+							cluster->id != pipeline_higher_cluster_id)
 			continue;
 
 		non_pipeline_cluster_util[cluster->id] = 0;
@@ -896,8 +898,8 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 		}
 	}
 
-	gold_cpu = cpumask_first(&sched_cluster[gold_cluster_id]->cpus);
-	prime_cpu = cpumask_first(&sched_cluster[prime_cluster_id]->cpus);
+	gold_cpu = cpumask_first(&sched_cluster[pipeline_lower_cluster_id]->cpus);
+	prime_cpu = cpumask_first(&sched_cluster[pipeline_higher_cluster_id]->cpus);
 
 	/* Config #1 */
 	pipeline_demand(heavy_wts[0], &t0_gold, &t0_prime);
@@ -919,15 +921,15 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 	/* Config #2 */
 	if (heavy_wts[0]->pipeline_cpu >= 0 &&
 	    cpumask_test_cpu(heavy_wts[0]->pipeline_cpu,
-			     &sched_cluster[prime_cluster_id]->cpus))
+			     &sched_cluster[pipeline_higher_cluster_id]->cpus))
 		t0_is_prime = true;
 	if (heavy_wts[1]->pipeline_cpu >= 0 &&
 	    cpumask_test_cpu(heavy_wts[1]->pipeline_cpu,
-			     &sched_cluster[prime_cluster_id]->cpus))
+			     &sched_cluster[pipeline_higher_cluster_id]->cpus))
 		t1_is_prime = true;
 	if (heavy_wts[2]->pipeline_cpu >= 0 &&
 	    cpumask_test_cpu(heavy_wts[2]->pipeline_cpu,
-			     &sched_cluster[prime_cluster_id]->cpus))
+			     &sched_cluster[pipeline_higher_cluster_id]->cpus))
 		t2_is_prime = true;
 
 
@@ -974,21 +976,21 @@ assign_pipeline_cpu:
 	     (sysctl_pipeline_force_config == CONFIG1)) {
 		if (heavy_wts[2]->pipeline_cpu != -1 &&
 		    cpumask_test_cpu(heavy_wts[2]->pipeline_cpu,
-				     &sched_cluster[prime_cluster_id]->cpus)) {
+				     &sched_cluster[pipeline_higher_cluster_id]->cpus)) {
 			cpumask_set_cpu(heavy_wts[2]->pipeline_cpu, &available_prime_cpus);
 			heavy_wts[2]->pipeline_cpu = -1;
 		}
 
 		if (heavy_wts[1]->pipeline_cpu != -1 &&
 		    cpumask_test_cpu(heavy_wts[1]->pipeline_cpu,
-				     &sched_cluster[prime_cluster_id]->cpus)) {
+				     &sched_cluster[pipeline_higher_cluster_id]->cpus)) {
 			cpumask_set_cpu(heavy_wts[1]->pipeline_cpu, &available_prime_cpus);
 			heavy_wts[1]->pipeline_cpu = -1;
 		}
 
 		if (heavy_wts[0]->pipeline_cpu != -1 &&
 		    cpumask_test_cpu(heavy_wts[0]->pipeline_cpu,
-				     &sched_cluster[gold_cluster_id]->cpus)) {
+				     &sched_cluster[pipeline_lower_cluster_id]->cpus)) {
 			cpumask_set_cpu(heavy_wts[0]->pipeline_cpu, &available_gold_cpus);
 			heavy_wts[0]->pipeline_cpu = -1;
 		}
@@ -1012,21 +1014,21 @@ assign_pipeline_cpu:
 	} else {
 		if (heavy_wts[2]->pipeline_cpu != -1 &&
 		    cpumask_test_cpu(heavy_wts[2]->pipeline_cpu,
-				     &sched_cluster[prime_cluster_id]->cpus)) {
+				     &sched_cluster[pipeline_higher_cluster_id]->cpus)) {
 			cpumask_set_cpu(heavy_wts[2]->pipeline_cpu, &available_prime_cpus);
 			heavy_wts[2]->pipeline_cpu = -1;
 		}
 
 		if (heavy_wts[0]->pipeline_cpu != -1 &&
 		    cpumask_test_cpu(heavy_wts[0]->pipeline_cpu,
-				     &sched_cluster[gold_cluster_id]->cpus)) {
+				     &sched_cluster[pipeline_lower_cluster_id]->cpus)) {
 			cpumask_set_cpu(heavy_wts[0]->pipeline_cpu, &available_gold_cpus);
 			heavy_wts[0]->pipeline_cpu = -1;
 		}
 
 		if (heavy_wts[1]->pipeline_cpu != -1 &&
 		    cpumask_test_cpu(heavy_wts[1]->pipeline_cpu,
-				     &sched_cluster[gold_cluster_id]->cpus)) {
+				     &sched_cluster[pipeline_lower_cluster_id]->cpus)) {
 			cpumask_set_cpu(heavy_wts[1]->pipeline_cpu, &available_gold_cpus);
 			heavy_wts[1]->pipeline_cpu = -1;
 		}
@@ -1261,7 +1263,7 @@ int pipeline_fits_smaller_cpus(struct task_struct *p)
 			return -1;
 	}
 
-	if (cpumask_test_cpu(pipeline_cpu, &cpu_array[0][num_sched_clusters - 1]))
+	if (cpumask_test_cpu(pipeline_cpu, &cpu_array[0][pipeline_higher_cluster_id]))
 		return 0;
 
 	return 1;
