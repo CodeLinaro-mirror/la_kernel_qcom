@@ -21,6 +21,7 @@ qcom_soc_wdt.ko
 debug-regulator.ko
 dispcc-malabar.ko
 gcc-malabar.ko
+qcom-cpufreq-hw.ko
 gdsc-regulator.ko
 smem.ko
 socinfo.ko
