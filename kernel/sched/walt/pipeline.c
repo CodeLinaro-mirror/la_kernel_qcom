@@ -21,6 +21,7 @@ int have_heavy_list;
 u32 total_util;
 u32 least_pipeline_demand;
 static bool top_wts_bias;
+bool single_cluster_pipeline;
 
 #define IPC_DEGRADATION_FACTOR 115
 #define PIPELINE_2L_FACTOR 95
@@ -815,6 +816,36 @@ void rearrange_heavy(u64 window_start, bool force)
 		swap_pipeline_with_prime_locked(prime_wts, other_wts);
 }
 
+void assign_single_cluster_pipeline(void)
+{
+	int i, cpu;
+	cpumask_t available_cpu = CPU_MASK_NONE;
+
+	if (sysctl_single_thread_pipeline)
+		return;
+
+	cpumask_and(&available_cpu, &cpus_for_pipeline, cpu_online_mask);
+	cpumask_andnot(&available_cpu, &available_cpu, cpu_halt_mask);
+	have_heavy_list = 0;
+	for (i = 0; i < MAX_NR_PIPELINE; i++) {
+		if (heavy_wts[i]) {
+			have_heavy_list++;
+			cpu = heavy_wts[i]->pipeline_cpu;
+			if ((cpu != -1) && cpumask_test_cpu(cpu, &available_cpu))
+				cpumask_clear_cpu(cpu, &available_cpu);
+			else
+				heavy_wts[i]->pipeline_cpu = -1;
+		}
+	}
+	for (i = 0; i < MAX_NR_PIPELINE; i++) {
+		if (heavy_wts[i] && (heavy_wts[i]->pipeline_cpu == -1) &&
+		    cpumask_weight(&available_cpu)) {
+			heavy_wts[i]->pipeline_cpu = cpumask_first(&available_cpu);
+			cpumask_clear_cpu(heavy_wts[i]->pipeline_cpu, &available_cpu);
+		}
+	}
+}
+
 void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 {
 	int i, gold_cpu, prime_cpu, cpu;
@@ -834,6 +865,11 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 		return;
 
 	raw_spin_lock(&heavy_lock);
+
+	if (single_cluster_pipeline) {
+		assign_single_cluster_pipeline();
+		goto out;
+	}
 
 	if (found_topapp == FIND_HEAVY_SUCCESS && !sysctl_single_thread_pipeline) {
 		cpumask_and(&available_gold_cpus, cpu_online_mask,
