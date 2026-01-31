@@ -14,7 +14,6 @@
 
 #include <linux/io-pgtable.h>
 #include <linux/io-pgtable-arm.h>
-#include "arm-smmu-v3-module.h"
 #include "qcom_smmu_dispatcher.h"
 
 static struct smmu_vendor_data data;
@@ -38,8 +37,6 @@ bool __list_del_entry_valid_or_report(struct list_head *entry)
 	return CALL_FROM_OPS(list_del_entry_valid_or_report, entry);
 }
 #endif
-
-const struct pkvm_module_ops		*mod_ops;
 #endif
 
 size_t __ro_after_init kvm_hyp_arm_smmu_v3_count;
@@ -67,22 +64,22 @@ struct hyp_arm_smmu_v3_device *kvm_hyp_arm_smmu_v3_smmus;
  * Wait until @cond is true.
  * Return 0 on success, or -ETIMEDOUT
  */
-#define smmu_wait(use_wfe, _cond)				\
-({								\
-	int __ret = 0;						\
-	int __i = 0;						\
-								\
-	while (!(_cond)) {					\
-		if (use_wfe)					\
-			wfe();					\
-		if (++__i > ARM_SMMU_POLL_TIMEOUT_US) {		\
-			__ret = -ETIMEDOUT;			\
-			break;					\
-		}						\
-		pkvm_udelay(1);					\
-	}							\
-	__ret;							\
-})
+int smmu_wait(bool use_wfe, bool _cond)
+{
+	int __ret = 0;
+	int __i = 0;
+
+	while (!(_cond)) {
+		if (use_wfe)
+			wfe();
+		if (++__i > ARM_SMMU_POLL_TIMEOUT_US) {
+			__ret = -ETIMEDOUT;
+			break;
+		}
+		pkvm_udelay(1);
+	}
+	return __ret;
+}
 
 static bool is_cmdq_enabled(struct hyp_arm_smmu_v3_device *smmu)
 {
@@ -360,6 +357,7 @@ static int smmu_probe(struct hyp_arm_smmu_v3_device *smmu)
 
 	smmu->ias = 64;
 	smmu->ias = min(smmu->ias, smmu->oas);
+
 	return 0;
 }
 
@@ -602,10 +600,12 @@ static int smmu_init_device(struct hyp_arm_smmu_v3_device *smmu)
 		 */
 		WARN_ON(___pkvm_host_donate_hyp(pfn, 1, true));
 	}
+
 	smmu->base = hyp_phys_to_virt(smmu->mmio_addr);
 	ret = smmu_probe(smmu);
 	if (ret)
 		goto out_ret;
+
 	hyp_spin_lock_init(&smmu->lock);
 
 	ret = smmu_init_cmdq(smmu);
@@ -969,26 +969,55 @@ static bool smmu_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 addr)
 		hyp_spin_unlock(&smmu->lock);
 		return ret;
 	}
+
 	return false;
 }
 
-#ifdef MODULE
-int smmu_init_hyp_module(const struct pkvm_module_ops *ops)
+void smmu_get_cfg(struct io_pgtable_cfg *cfg)
 {
-	if (!ops)
-		return -EINVAL;
+	struct hyp_arm_smmu_v3_device *smmu;
 
-	mod_ops = ops;
-	return 0;
+	for_each_smmu(smmu) {
+		if (!cfg->ias) {
+			cfg->ias = smmu->ias;
+			cfg->oas = smmu->oas;
+			cfg->pgsize_bitmap = smmu->pgsize_bitmap;
+			cfg->coherent_walk = (smmu->features & ARM_SMMU_FEAT_COHERENCY);
+		}
+
+		cfg->ias = min(cfg->ias, smmu->ias);
+		cfg->oas = min(cfg->oas, smmu->oas);
+		cfg->pgsize_bitmap &= smmu->pgsize_bitmap;
+		cfg->coherent_walk &= !!(smmu->features & ARM_SMMU_FEAT_COHERENCY);
+	}
+
+	/* Avoid larger input size as this is identity mapped. */
+	cfg->ias = min(cfg->ias, cfg->oas);
 }
-#endif
 
-/* Shared with the kernel driver in EL1 */
-struct kvm_iommu_ops smmu_ops = {
-	.init				= smmu_init,
-	.host_stage2_idmap		= smmu_host_stage2_idmap,
-	.alloc_domain			= smmu_alloc_domain,
-	.free_domain			= smmu_free_domain,
-	.get_iommu_by_id		= smmu_id_to_iommu,
-	.dabt_handler			= smmu_dabt_handler,
+const struct smmu_vendor_callbacks vcallbacks = {
+	.tlb_ops = &smmu_tlb_ops,
+	.get_cfg = smmu_get_cfg,
+	.dabt_hdl = smmu_dabt_handler,
+	.post_init = NULL,
 };
+
+static struct smmu_vendor_driver smmuv3_driver = {
+	.name = "smmuv3_nesting",
+	.callbacks = &vcallbacks,
+	.vdata = &data,
+};
+
+int smmuv3_hyp_nesting_init(void)
+{
+	int ret;
+
+	ret = smmu_init();
+	if (ret)
+		return ret;
+
+	/* Register this driver with the common vendor module */
+	ret = smmu_vendor_register_driver(&smmuv3_driver);
+
+	return ret;
+}

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
-#include <asm/arm-smmu-v3-common.h>
 #include <linux/io-pgtable-arm.h>
 
 #include <nvhe/iommu.h>
@@ -11,6 +10,7 @@
 #include <module/nvhe/trace.h>
 #include "smmuv2_nesting.h"
 //#include "smmuv3_nesting.h"
+#include "arm_smmu_v3.h"
 #include "qcom_smmu_dispatcher.h"
 
 /* Registered SMMU drivers */
@@ -141,9 +141,13 @@ static int qcom_smmu_nestinc_init_pgt(struct smmu_nested_domain *smmu_domain)
 		}
 	}
 
+	/* At least PAGE_SIZE must be supported by all SMMUs*/
+	if ((cfg.pgsize_bitmap & PAGE_SIZE) == 0)
+		return -EINVAL;
+
 	smmu_domain->domain.priv = &idmapped_domain;
 	smmu_domain->pgtable = kvm_arm_io_pgtable_alloc(&cfg, &smmu_domain->domain,
-							true, &ret);
+							&ret, true);
 	if (ret)
 		return ret;
 
@@ -186,6 +190,10 @@ static int qcom_smmu_nesting_attach_dev(struct kvm_hyp_iommu *iommu,
 static int qcom_smmu_nesting_init(void)
 {
 	int ret, i = 0;
+
+	ret = smmuv3_hyp_nesting_init();
+	if (ret)
+		return ret;
 
 	ret = smmuv2_hyp_nesting_init();
 	if (ret)

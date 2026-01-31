@@ -8,7 +8,7 @@
 #include <nvhe/spinlock.h>
 #endif
 
-#include "../arm-smmu-v3.h"
+#include "arm-smmu-v3.h"
 
 /*
  * Parameters from the trusted host:

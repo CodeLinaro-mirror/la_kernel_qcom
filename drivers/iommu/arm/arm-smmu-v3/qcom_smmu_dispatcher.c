@@ -12,7 +12,7 @@
 #include <linux/of_platform.h>
 #include <linux/kvm_host.h>
 #include "smmuv2_nesting.h"
-#include "pkvm/arm_smmu_v3_nested.h"
+#include "arm_smmu_v3_nested.h"
 
 #ifdef MODULE
 static unsigned long                   pkvm_module_token;
@@ -78,7 +78,13 @@ static int qcom_smmu_nesting_init(void)
 	if (ret)
 		return ret;
 
-	kvm_arm_smmu_v3_init_drv();
+	pr_info("alloc atomic suceeded\n");
+
+	ret = kvm_arm_smmu_v3_init_drv();
+	if (ret) {
+		pr_err("Failed to load SMMUv3 IOMMU EL1 module %d\n", ret);
+		return ret;
+	}
 
 	smmuv2_nesting_init();
 

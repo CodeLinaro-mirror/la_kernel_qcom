@@ -12,18 +12,13 @@
 #include <linux/platform_device.h>
 
 #include "arm-smmu-v3.h"
-#include "pkvm/arm_smmu_v3_nested.h"
+#include "arm_smmu_v3_nested.h"
 
 #define SMMU_KVM_CMDQ_ORDER				4
 #define SMMU_KVM_STRTAB_ORDER				(get_order(STRTAB_MAX_L1_ENTRIES * \
 							 sizeof(struct arm_smmu_strtab_l1)))
 
 #ifdef MODULE
-static unsigned long                   pkvm_module_token;
-
-#define ksym_ref_addr_nvhe(x) \
-	((typeof(kvm_nvhe_sym(x)) *)(pkvm_el2_mod_va(&kvm_nvhe_sym(x), pkvm_module_token)))
-
 int kvm_nvhe_sym(smmu_init_hyp_module)(const struct pkvm_module_ops *ops);
 #else
 #define ksym_ref_addr_nvhe(x) \
@@ -115,6 +110,7 @@ static int smmuv3_nesting_probe(struct platform_device *pdev)
 	smmu->strtab_size = PAGE_SIZE << SMMU_KVM_STRTAB_ORDER;
 
 	kvm_arm_smmu_cur++;
+
 	return 0;
 }
 
@@ -130,7 +126,6 @@ int kvm_arm_smmu_v3_post_init(void)
 
 int kvm_arm_smmu_v3_init_drv(void)
 {
-	struct kvm_hyp_memcache atomic_mc;
 	int ret;
 
 	ret = kvm_arm_smmu_array_alloc();
