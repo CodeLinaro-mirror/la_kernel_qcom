@@ -31,6 +31,7 @@ static int smmu_alloc_atomic_mc(struct kvm_hyp_memcache *atomic_mc)
 {
 	int ret;
 	int atomic_pages = 6000; /* arbitrary for now. */
+	int nr_smmus = 2; /* assumption for now */
 #ifndef MODULE
 	u64 i;
 	phys_addr_t start, end;
@@ -56,11 +57,34 @@ static int smmu_alloc_atomic_mc(struct kvm_hyp_memcache *atomic_mc)
 	ret = topup_hyp_memcache(atomic_mc, 1, 3);
 	if (ret)
 		return ret;
+
+	/* For STEs. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 10);
+		if (ret)
+			return ret;
+
+	/* For command queue. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 8);
+	if (ret)
+		return ret;
+
+	/* For PGD. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 3);
+	if (ret)
+		return ret;
+
+	/*For L2 ptrs */;
+	ret = topup_hyp_memcache(atomic_mc, 50, 2);
+	if (ret)
+		return ret;
+
 	ret = topup_hyp_memcache(atomic_mc, atomic_pages, 0);
 	if (ret)
 		return ret;
+
 	pr_info("smmuv3: Allocated %d MiB for atomic usage\n",
 		(atomic_pages << PAGE_SHIFT) / SZ_1M);
+
 	/* Topup hyp alloc so IOMMU driver can allocate domains. */
 	__pkvm_topup_hyp_alloc(1);
 
@@ -100,6 +124,7 @@ static int qcom_smmu_nesting_init(void)
 
 	ret = kvm_iommu_init_hyp(ksym_ref_addr_nvhe(qcom_smmu_hyp_nesting_ops),
 				 &atomic_mc);
+
 	if (ret) {
 		pr_err("Failed to init hyp iommu ops: %d\n", ret);
 		return ret;
