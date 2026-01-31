@@ -361,6 +361,8 @@ static int walt_proc_pipeline_cpus_handler(const struct ctl_table *table,
 		goto unlock;
 	}
 
+	if (idx == 1)
+		single_cluster_pipeline = true;
 
 	cpumask_copy(&cpus_for_pipeline, &tmp);
 	written_once = true;
