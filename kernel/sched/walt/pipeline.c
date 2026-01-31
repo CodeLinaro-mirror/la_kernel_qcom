@@ -16,6 +16,7 @@ static struct walt_task_struct *heavy_wts[MAX_NR_PIPELINE];
 unsigned int pipeline_swap_util_th;
 cpumask_t available_gold_cpus = CPU_MASK_NONE;
 cpumask_t available_prime_cpus = CPU_MASK_NONE;
+unsigned int gold_cluster_id, prime_cluster_id;
 int have_heavy_list;
 u32 total_util;
 u32 least_pipeline_demand;
@@ -48,7 +49,7 @@ void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
 	 * Assume that a task not on prime is on golds.
 	 * This will need to be revisited for a non 2-cluster system.
 	 */
-	if (cpumask_test_cpu(cpu,  &sched_cluster[num_sched_clusters - 1]->cpus)) {
+	if (cpumask_test_cpu(cpu,  &sched_cluster[prime_cluster_id]->cpus)) {
 		*scaled_prime_demand = util;
 		*scaled_gold_demand = mult_frac(util, 100, demand_scaling_factor);
 	} else {
@@ -643,7 +644,7 @@ static inline void swap_pipeline_with_prime_locked(struct walt_task_struct *prim
 			}
 		} else {
 			other_wts->pipeline_cpu =
-				cpumask_last(&sched_cluster[num_sched_clusters - 1]->cpus);
+				cpumask_last(&sched_cluster[prime_cluster_id]->cpus);
 		}
 		trace_sched_pipeline_swapped(other_wts, prime_wts);
 	}
@@ -709,7 +710,7 @@ static inline bool is_prime_worthy(struct walt_task_struct *wts)
 	 * in magnitude of capacities, where the last column represents prime,
 	 * and the second to last column represents golds
 	 */
-	return !task_fits_max(p, cpumask_last(&cpu_array[0][num_sched_clusters - 2]));
+	return !task_fits_max(p, cpumask_last(&cpu_array[0][gold_cluster_id]));
 }
 
 void rearrange_heavy(u64 window_start, bool force)
@@ -795,7 +796,7 @@ void rearrange_heavy(u64 window_start, bool force)
 	if (prime_wts) {
 		pipeline_demand(prime_wts, &gold_demand, &primewts_prime_demand);
 		prime_wts_fits_lower = task_fits_capacity(wts_to_ts(prime_wts),
-					cpumask_last(&cpu_array[0][num_sched_clusters - 2]));
+					cpumask_last(&cpu_array[0][gold_cluster_id]));
 	}
 	if (other_wts)
 		pipeline_demand(other_wts, &gold_demand, &otherwts_prime_demand);
@@ -1261,7 +1262,7 @@ int pipeline_fits_smaller_cpus(struct task_struct *p)
 			return -1;
 	}
 
-	if (cpumask_test_cpu(pipeline_cpu, &cpu_array[0][num_sched_clusters - 1]))
+	if (cpumask_test_cpu(pipeline_cpu, &cpu_array[0][prime_cluster_id]))
 		return 0;
 
 	return 1;
