@@ -505,6 +505,8 @@ void stmmac_mac_config_pfc(struct stmmac_priv *priv);
 void stmmac_pfc_tx_flow_ctrl(struct stmmac_priv *priv, u32 queue);
 int stmmac_config_rx_queue(struct net_device *ndev, u32 queue, bool skip_sw);
 int stmmac_config_tx_queue(struct net_device *ndev, u32 queue, bool skip_sw);
+extern unsigned int rfa_value;
+extern unsigned int rfd_value;
 extern bool disable_napi_thread;
 extern bool disable_split_hdr;
 

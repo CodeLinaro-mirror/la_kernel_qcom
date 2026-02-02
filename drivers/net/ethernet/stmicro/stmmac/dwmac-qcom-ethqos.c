@@ -361,6 +361,14 @@ static bool qos_use_skprio;
 module_param(qos_use_skprio, bool, 0644);
 MODULE_PARM_DESC(qos_use_skprio, "Use SKPRIO for Tx Routing");
 
+unsigned int rfa_value;
+module_param(rfa_value, uint, 0644);
+MODULE_PARM_DESC(rfa_value, "To assign rfa value whenever required");
+
+unsigned int rfd_value;
+module_param(rfd_value, uint, 0644);
+MODULE_PARM_DESC(rfd_value, "To assign rfd value whenever required");
+
 bool disable_napi_thread;
 module_param(disable_napi_thread, bool, 0644);
 MODULE_PARM_DESC(disable_napi_thread, "Enable/disable napi thread");
