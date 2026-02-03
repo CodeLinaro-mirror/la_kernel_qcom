@@ -3,6 +3,7 @@ canoe_perf_config = {
     "CONFIG_ARCH_ALOR": "y",
     "CONFIG_ARCH_CANOE": "y",
     "CONFIG_ARCH_CHORA": "y",
+    "CONFIG_ARCH_RAVELIN": "y",
     "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_NVMEM": "n",
