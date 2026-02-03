@@ -2947,6 +2947,7 @@ static const struct adsp_data khaje_cdsp_resource = {
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
 	.uses_elf64 = false,
+	.auto_boot = true,
 };
 
 static const struct adsp_data khaje_mpss_resource = {
