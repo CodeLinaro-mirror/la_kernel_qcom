@@ -1067,4 +1067,22 @@ config SM_DEBUGCC_MALABAR
 	  Malabar devices.
 	  Say Y if you want to support the debug clocks such as clock
 	  measurement functionality.
+
+config CLK_SHIKRA_DISPCC
+	tristate "SHIKRA Display Clock Controller"
+	depends on CLK_SHIKRA_GCC
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc.
+	  SHIKRA devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config CLK_SHIKRA_GPUCC
+	tristate "SHIKRA Graphics Clock Controller"
+	select CLK_SHIKRA_GCC
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc.
+	  SHIKRA devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
 endif
