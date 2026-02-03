@@ -238,7 +238,9 @@ seraph_perf_config = {
     "CONFIG_USB_M31_MSM_EUSB2_PHY": "m",
     "CONFIG_USB_MSM_SSPHY_QMP": "m",
     "CONFIG_USB_REPEATER": "m",
+    "CONFIG_ZRAM": "m",
     "CONFIG_ZRAM_BACKEND_ZSTD": "n",
     "CONFIG_ZRAM_MULTI_COMP": "n",
     "CONFIG_ZRAM_WRITEBACK": "n",
+    "CONFIG_ZSMALLOC": "m",
 }
