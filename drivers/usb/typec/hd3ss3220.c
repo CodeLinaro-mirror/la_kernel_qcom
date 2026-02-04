@@ -110,6 +110,23 @@ static const struct typec_operations hd3ss3220_ops = {
 	.dr_set = hd3ss3220_dr_set
 };
 
+static void hd3ss3220_regulator_control(struct hd3ss3220 *hd3ss3220, bool on)
+{
+	int ret;
+
+	if (regulator_is_enabled(hd3ss3220->vbus) == on)
+		return;
+
+	if (on)
+		ret = regulator_enable(hd3ss3220->vbus);
+	else
+		ret = regulator_disable(hd3ss3220->vbus);
+
+	if (ret)
+		dev_err(hd3ss3220->dev,
+			"vbus regulator %s failed: %d\n", on ? "disable" : "enable", ret);
+}
+
 static void hd3ss3220_set_role(struct hd3ss3220 *hd3ss3220)
 {
 	enum usb_role role_state = hd3ss3220_get_attached_state(hd3ss3220);
@@ -129,6 +146,9 @@ static void hd3ss3220_set_role(struct hd3ss3220 *hd3ss3220)
 	default:
 		break;
 	}
+
+	if (hd3ss3220->vbus && !hd3ss3220->id_gpiod)
+		hd3ss3220_regulator_control(hd3ss3220, role_state == USB_ROLE_HOST);
 
 	hd3ss3220->role_state = role_state;
 }
@@ -178,21 +198,11 @@ static const struct regmap_config config = {
 static irqreturn_t hd3ss3220_id_isr(int irq, void *dev_id)
 {
 	struct hd3ss3220 *hd3ss3220 = dev_id;
-	int ret = 0;
 	int id;
 
 	id = gpiod_get_value_cansleep(hd3ss3220->id_gpiod);
-	if (!id) {
-		if (!regulator_is_enabled(hd3ss3220->vbus))
-			ret = regulator_enable(hd3ss3220->vbus);
-	} else {
-		if (regulator_is_enabled(hd3ss3220->vbus))
-			ret = regulator_disable(hd3ss3220->vbus);
-	}
 
-	if (ret)
-		dev_err(hd3ss3220->dev,
-			"vbus regulator %s failed: %d\n", id ? "disable" : "enable", ret);
+	hd3ss3220_regulator_control(hd3ss3220, !id);
 
 	return IRQ_HANDLED;
 }
