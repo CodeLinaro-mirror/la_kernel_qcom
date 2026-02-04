@@ -20,7 +20,7 @@
 
 #define CONFIG_QTI_GPU_RESOURCE_ENABLED 0
 #define K_F 1831  /* 19200000/1024/1024 * 100 */
-#define SAMPLING_MS 10
+#define SAMPLING_MS 160
 #define RETRY_COUNT 3
 #define boost_dection(ptr, idx) ({ \
 	(ptr->cpu_freq_curr[idx] - ptr->cpu_freq_prev[idx]) \
@@ -848,7 +848,7 @@ static int cache_allocation_probe(struct platform_device *pdev)
 	pd->current_governor = 1;
 	pd->freq_mon_status = 0;
 	pd->bw_mon_ratio_status = 0;
-	pd->win_count_config = 16;
+	pd->win_count_config = 1;
 	pd->win_active = false;
 	pd->client_input[APPS] = 0;
 	pd->client_input[GPU] = 0;
@@ -896,7 +896,7 @@ static int cache_allocation_probe(struct platform_device *pdev)
 	}
 
 	mutex_init(&pd->lock);
-	INIT_DELAYED_WORK(&pd->work, cache_allocation_monitor_work);
+	INIT_DEFERRABLE_WORK(&pd->work, cache_allocation_monitor_work);
 	platform_set_drvdata(pdev, pd);
 
 	ret = save_gear_for_client(pd);
