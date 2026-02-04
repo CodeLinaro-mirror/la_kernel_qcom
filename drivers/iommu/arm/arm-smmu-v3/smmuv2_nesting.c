@@ -206,12 +206,19 @@ int smmuv2_describe_smmuv2(void)
 	int ret;
 	int i;
 	u32 irq;
+	int smmu_order;
+
+	for (i = 0; i < ARRAY_SIZE(compatible_devices); i++) {
+		for_each_compatible_node(np, NULL, compatible_devices[i])
+			total_smmus++;
+	}
+
+	if (!total_smmus)
+		return 0;
 
 	/* Pre-allocate memory for the maximum number of SMMUs we'll handle */
-	smmu_v2_nested_base =
-		(struct smmu_v2_nested *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
-							  get_order(sizeof(struct smmu_v2_nested) *
-							  ARRAY_SIZE(compatible_devices)));
+	smmu_order = get_order(total_smmus * sizeof(struct smmu_v2_nested));
+	smmu_v2_nested_base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, smmu_order);
 
 	if (!smmu_v2_nested_base)
 		return -ENOMEM;
@@ -244,7 +251,6 @@ int smmuv2_describe_smmuv2(void)
 					smmu_v2_nested_count,
 					smmu_v2_nested_base[smmu_v2_nested_count].irq_s2_cb);
 				smmu_v2_nested_count++;
-				total_smmus++;
 				desc = irq_to_desc(irq);
 				if (desc)
 					pr_info("SMMU IRQ: %d\n", (int)desc->irq_data.hwirq);
