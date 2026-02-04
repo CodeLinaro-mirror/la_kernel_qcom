@@ -1309,4 +1309,13 @@ config MSM_BAM_DMUX_DEBUG
 
 	  If unsure, say N.
 
+config QCOM_LLCC_DEBUG
+	tristate "Qualcomm Technologies,Inc. LLCC perf debug driver"
+	depends on DEBUG_FS
+	help
+	  This driver will expose debugfs nodes to show the status of
+	  PCB & configure sleep or wakeup as per ADR feature by reading
+	  the information through hardware. Debugfs interface is used to
+	  configure the PCBs in LLCC.
+
 endmenu
