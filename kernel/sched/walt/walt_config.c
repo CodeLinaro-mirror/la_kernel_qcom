@@ -17,7 +17,6 @@ int soc_sched_lib_name_capacity;
 #define PIPELINE_BUSY_THRESH_8MS_WINDOW 7
 #define PIPELINE_BUSY_THRESH_12MS_WINDOW 11
 #define PIPELINE_BUSY_THRESH_16MS_WINDOW 15
-unsigned int gold_cluster_id, prime_cluster_id;
 unsigned int soc_cluster_freq_table_size[MAX_CLUSTERS];
 unsigned int soc_cluster_freq_table[MAX_CLUSTERS][MAX_FREQ_TABLE_ENTRIES];
 unsigned int demand_scaling_factor;
@@ -115,8 +114,6 @@ void walt_config(void)
 	soc_feat_set(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
 	pipeline_swap_util_th = 0;
-	prime_cluster_id = num_sched_clusters - 1;
-	gold_cluster_id = num_sched_clusters > 2 ? 1 : 0;
 
 	/* Initialize smart freq configurations */
 	smart_freq_init(name);
