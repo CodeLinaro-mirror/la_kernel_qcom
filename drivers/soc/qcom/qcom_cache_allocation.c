@@ -984,7 +984,7 @@ static struct freq_mon_config alor_cpu_gpu_freq_cfg[] = {
 static struct bw_ratio_config canoe_bw_ratio_cfg = {
 	.bw_mon_ratio_thresh = { 10, 50, 150, 1000},
 	.bw_gear = {
-		{GEAR_BYPASS, GEAR_LVL_11},
+		{GEAR_LVL_2, GEAR_LVL_13},
 		{GEAR_LVL_5, GEAR_LVL_11},
 		{GEAR_LVL_10, GEAR_LVL_11},
 		{GEAR_LVL_10, GEAR_LVL_6},
