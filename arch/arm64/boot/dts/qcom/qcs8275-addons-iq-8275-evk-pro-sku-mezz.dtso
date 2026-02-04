@@ -121,10 +121,6 @@
 	};
 };
 
-&connector_usb1 {
-	status = "disabled";
-};
-
 &i2c15 {
 
 	status = "okay";
@@ -295,18 +291,5 @@
 				input-enable;
 				bias-disable;
 		};
-	};
-};
-
-&usb1_id_det_default {
-	status = "disabled";
-};
-
-&usb_1 {
-	dr_mode = "host";
-	vbus_dwc3-supply = <&vbus_supply_regulator_1>;
-
-	ports {
-		status = "disabled";
 	};
 };
