@@ -68,6 +68,7 @@ seraph_perf_config = {
     "CONFIG_MSM_CORE_HANG_DETECT": "m",
     "CONFIG_MSM_GPI_DMA": "m",
     "CONFIG_MSM_PERFORMANCE": "m",
+    "CONFIG_MSM_POWER_STATE": "m",
     "CONFIG_MSM_QMP": "m",
     "CONFIG_MSM_RDBG": "m",
     "CONFIG_MSM_SYSSTATS": "m",
