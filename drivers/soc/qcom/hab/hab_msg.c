@@ -558,8 +558,12 @@ static int hab_receive_export_desc(struct physical_channel *pchan,
 	size_t exp_desc_size_minimum = 0;
 	struct export_desc *export = NULL;
 	struct export_desc_super *exp_desc_super = NULL;
-
-	exp_desc_size_minimum = sizeof(struct export_desc)
+	/*
+	 * Add 1 byte to the export desc size to avoid mismatch in size
+	 * coming from PVM/Host side, as to resolve error for payload[1]
+	 * in 6.12 kernel, as it is converted to payload[]
+	 */
+	exp_desc_size_minimum = sizeof(struct export_desc) + 1
 							+ sizeof(struct lb_mem_info);
 	if (sizebytes > (size_t)(HAB_HEADER_SIZE_MAX) ||
 			sizebytes < exp_desc_size_minimum) {
