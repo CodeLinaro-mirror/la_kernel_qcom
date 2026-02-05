@@ -2,7 +2,7 @@
 
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "logbuf_vh: " fmt
@@ -72,8 +72,15 @@ static int __init logbuf_vh_driver_init(void)
 		pr_err("debug symbol driver is not available\n");
 		return -ENODEV;
 	}
+	void *addr = DEBUG_SYMBOL_LOOKUP(prb);
 
-	prb = *(struct printk_ringbuffer **)DEBUG_SYMBOL_LOOKUP(prb);
+	if (!addr)
+		return -ENOENT;
+	prb = *(struct printk_ringbuffer **)addr;
+	if (!prb) {
+		pr_err("printk_ringbuffer pointer is NULL\n");
+		return -EINVAL;
+	}
 	register_log_minidump(prb);
 
 	return 0;
