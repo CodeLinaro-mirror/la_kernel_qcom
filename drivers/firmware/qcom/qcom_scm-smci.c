@@ -20,8 +20,6 @@
 
 #include "qcom_scm_smcinvoke.h"
 
-static struct si_object_invoke_ctx oic;
-static struct si_object *client_env;
 static struct device *smo_buffer_dev;
 static DEFINE_MUTEX(service_list_mutex);
 static LIST_HEAD(smci_list);
@@ -58,6 +56,7 @@ static void __qcom_smci_find_service(u32 uid, u32 peripheral,
 int qcom_smci_call(struct si_object *service, unsigned long op,
 	struct si_arg args[], int *result)
 {
+	struct si_object_invoke_ctx oic = {0};
 	int ret;
 
 	if (!service || !result)
@@ -75,6 +74,7 @@ int qcom_smci_call(struct si_object *service, unsigned long op,
 int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
 		unsigned long op)
 {
+	struct si_object_invoke_ctx oic = {0};
 	struct si_arg args[2] = { 0 };
 	int ret, result = -EINVAL;
 
@@ -109,6 +109,8 @@ int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
 int qcom_smci_init_client_service(u32 uid, struct si_object **service)
 {
 	struct smci_service_info *service_info = NULL;
+	struct si_object_invoke_ctx oic = {0};
+	struct si_object *client_env = NULL;
 	int ret;
 
 	mutex_lock(&service_list_mutex);
@@ -120,8 +122,16 @@ int qcom_smci_init_client_service(u32 uid, struct si_object **service)
 		}
 	}
 
+	ret = si_core_get_client_env(&oic, &client_env);
+	if (ret || !client_env) {
+		pr_err("Failed to get client_env (%d)\n", ret);
+		mutex_unlock(&service_list_mutex);
+		return ret ? ret : -ENODEV;
+	}
+
 	/* Initialize client service; it will be released when the module exits */
 	ret = si_core_client_env_open(&oic, client_env, uid, service);
+	put_si_object(client_env);
 	if (ret || *service == NULL_SI_OBJECT) {
 		pr_err("Failed to get client service for %d: (%d)\n", uid, ret);
 		mutex_unlock(&service_list_mutex);
@@ -402,12 +412,6 @@ static int qcom_smci_service_probe(struct platform_device *pdev)
 	struct si_object *service = NULL;
 	int ret;
 
-	ret = si_core_get_client_env(&oic, &client_env);
-	if (ret || !client_env) {
-		pr_err("Failed to get client_env (%d)\n", ret);
-		return ret ? ret : -ENODEV;
-	}
-
 	ret = qcom_smci_init_client_service(SMCI_PILOBJECT_UID, &service);
 	if (!ret) {
 		pr_info("PIL SMC invocation is supported\n");
@@ -455,7 +459,6 @@ static void qcom_smci_service_remove(struct platform_device *pdev)
 	}
 
 	mutex_unlock(&service_list_mutex);
-	put_si_object(client_env);
 	pr_debug("Service removed\n");
 }
 
