@@ -6260,10 +6260,11 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 		}
 	}
 
-	/* Assumes dwc3 is the first DT child of dwc3-msm */
-	dwc3_node = of_get_next_available_child(node, NULL);
-	if (!dwc3_node) {
-		dev_err(mdwc->dev, "failed to find dwc3 child\n");
+	/* Get the dwc3 child node by checking the node name */
+	dwc3_node = of_get_child_by_name(node, "dwc3");
+	if (!dwc3_node || !of_device_is_available(dwc3_node)) {
+		dev_err(mdwc->dev, "dwc3 child is missing or disabled\n");
+		of_node_put(dwc3_node);
 		ret = -ENODEV;
 		goto err;
 	}
@@ -6834,10 +6835,11 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-	/* Assumes dwc3 is the first DT child of dwc3-msm */
-	dwc3_node = of_get_next_available_child(node, NULL);
-	if (!dwc3_node) {
-		dev_err(&pdev->dev, "failed to find dwc3 child\n");
+	/* Get the dwc3 child node by checking the node name */
+	dwc3_node = of_get_child_by_name(node, "dwc3");
+	if (!dwc3_node || !of_device_is_available(dwc3_node)) {
+		dev_err(&pdev->dev, "dwc3 child is missing or disabled\n");
+		of_node_put(dwc3_node);
 		ret = -ENODEV;
 		goto err;
 	}
