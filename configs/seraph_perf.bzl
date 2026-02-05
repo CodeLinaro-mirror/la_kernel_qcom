@@ -72,6 +72,7 @@ seraph_perf_config = {
     "CONFIG_MSM_RDBG": "m",
     "CONFIG_MSM_SYSSTATS": "m",
     "CONFIG_MSM_SYSSTATS_STUB_NONEXPORTED_SYMBOLS": "y",
+    "CONFIG_NL80211_TESTMODE": "y",
     "CONFIG_NVMEM_QCOM_QFPROM": "m",
     "CONFIG_NVMEM_SPMI_SDAM": "m",
     "CONFIG_PCI_MSM": "m",
