@@ -291,6 +291,7 @@ static int ps883x_retimer_probe(struct i2c_client *client)
 	struct typec_switch_desc sw_desc = { };
 	struct typec_retimer_desc rtmr_desc = { };
 	struct ps883x_retimer *retimer;
+	unsigned int val;
 	int ret;
 
 	retimer = devm_kzalloc(dev, sizeof(*retimer), GFP_KERNEL);
@@ -346,6 +347,32 @@ static int ps883x_retimer_probe(struct i2c_client *client)
 		goto err_vregs_disable;
 	}
 
+	/* skip resetting if already configured */
+	if (regmap_test_bits(retimer->regmap, REG_USB_PORT_CONN_STATUS_0,
+			     CONN_STATUS_0_CONNECTION_PRESENT) == 1) {
+		gpiod_direction_output(retimer->reset_gpio, 0);
+	} else {
+		gpiod_direction_output(retimer->reset_gpio, 1);
+
+		/* VDD IO supply enable to reset release delay */
+		usleep_range(4000, 14000);
+
+		gpiod_set_value(retimer->reset_gpio, 0);
+
+		/* firmware initialization delay */
+		msleep(60);
+
+		/* make sure device is accessible */
+		ret = regmap_read(retimer->regmap, REG_USB_PORT_CONN_STATUS_0,
+				  &val);
+		if (ret) {
+			dev_err(dev, "failed to read conn_status_0: %d\n", ret);
+			if (ret == -ENXIO)
+				ret = -EIO;
+			goto err_clk_disable;
+		}
+	}
+
 	sw_desc.drvdata = retimer;
 	sw_desc.fwnode = dev_fwnode(dev);
 	sw_desc.set = ps883x_sw_set;
@@ -368,29 +395,15 @@ static int ps883x_retimer_probe(struct i2c_client *client)
 		goto err_switch_unregister;
 	}
 
-	/* skip resetting if already configured */
-	if (regmap_test_bits(retimer->regmap, REG_USB_PORT_CONN_STATUS_0,
-			     CONN_STATUS_0_CONNECTION_PRESENT) == 1)
-		return gpiod_direction_output(retimer->reset_gpio, 0);
-
-	gpiod_direction_output(retimer->reset_gpio, 1);
-
-	/* VDD IO supply enable to reset release delay */
-	usleep_range(4000, 14000);
-
-	gpiod_set_value(retimer->reset_gpio, 0);
-
-	/* firmware initialization delay */
-	msleep(60);
-
 	return 0;
 
 err_switch_unregister:
 	typec_switch_unregister(retimer->sw);
-err_vregs_disable:
-	ps883x_disable_vregs(retimer);
 err_clk_disable:
 	clk_disable_unprepare(retimer->xo_clk);
+err_vregs_disable:
+	gpiod_set_value(retimer->reset_gpio, 1);
+	ps883x_disable_vregs(retimer);
 err_mux_put:
 	typec_mux_put(retimer->typec_mux);
 err_switch_put:
