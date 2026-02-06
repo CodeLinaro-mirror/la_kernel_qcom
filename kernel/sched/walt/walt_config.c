@@ -330,6 +330,9 @@ void walt_config(void)
 		 * By default this SOC flag will be disabled. Enable this only
 		 * for X1E80100 platforms
 		 */
+		trailblazer_floor_freq[0] = 2500000;
+		trailblazer_floor_freq[1] = 2500000;
+		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
 	} else if (!strcmp(name, "SERAPH")) {
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
