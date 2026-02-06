@@ -2,6 +2,7 @@ bengal_perf_config = {
     # keep sorted
     "CONFIG_ARCH_BENGAL": "y",
     "CONFIG_ARCH_KHAJE": "y",
+    "CONFIG_ARCH_SCUBA": "y",
     "CONFIG_ARM64_AMU_EXTN": "n",
     "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
