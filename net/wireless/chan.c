@@ -397,7 +397,9 @@ bool cfg80211_chandef_valid(const struct cfg80211_chan_def *chandef)
 		/* all checked above */
 		break;
 	case NL80211_CHAN_WIDTH_320:
-		if (chandef->center_freq1 == control_freq + 150 ||
+		if ((IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+		     chandef->center_freq1 == 0) ||
+		    chandef->center_freq1 == control_freq + 150 ||
 		    chandef->center_freq1 == control_freq + 130 ||
 		    chandef->center_freq1 == control_freq + 110 ||
 		    chandef->center_freq1 == control_freq + 90 ||
@@ -1529,8 +1531,15 @@ static bool cfg80211_secondary_chans_ok_punctured(struct wiphy *wiphy,
 	start_freq = cfg80211_get_start_freq_legacy(center_freq, bandwidth);
 	end_freq = cfg80211_get_end_freq_legacy(center_freq, bandwidth);
 
-	if (band == NL80211_BAND_5GHZ && bandwidth == 320)
-		punctured = FIXED_PUNCTURE_PATTERN;
+	if (bandwidth == 320) {
+		if (band == NL80211_BAND_5GHZ && bandwidth == 320)
+			punctured = FIXED_PUNCTURE_PATTERN;
+		else if (band == NL80211_BAND_6GHZ && center_freq == 0)
+			/* If the user does not specify a center frequency,
+			 * allow the driver to select a valid 320 MHz center frequency
+			 */
+			return true;
+	}
 
 	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
 		if ((1 << (freq - start_freq) / MHZ_TO_KHZ(20)) & punctured)
