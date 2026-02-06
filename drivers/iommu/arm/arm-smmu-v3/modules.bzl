@@ -6,6 +6,7 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.c",
+            "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3-common-lib.c",
             "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3-common.c",
             "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h",
         ],
