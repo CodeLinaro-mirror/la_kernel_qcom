@@ -74,7 +74,6 @@ int qcom_smci_call(struct si_object *service, unsigned long op,
 int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
 		unsigned long op)
 {
-	struct si_object_invoke_ctx oic = {0};
 	struct si_arg args[2] = { 0 };
 	int ret, result = -EINVAL;
 
@@ -90,20 +89,12 @@ int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
 	args[0].type = SI_AT_IO;
 	args[1].type = SI_AT_END;
 
-	ret = si_object_do_invoke(&oic, image_service, op, args, &result);
-	if (ret || result)
-		pr_err("Failed to do invoke for %lu with result %d(ret = %d)\n",
-			op, result, ret);
-
-	/*
-	 * On si_object_do_invoke failure with these conditions, use put_si_object
-	 * to balance the preceding get_si_object.
+	/* After calling si_object_do_invoke, the SMO refcount will align with the
+	 * previous get_si_object:
+	 * get_si_object	--- rercount +1
+	 * si_object_do_invoke	--- refcount -1, regardless of success or failure
 	 */
-	if (((ret == -EINVAL || ret == -ENOMEM || ret == -EFAULT) && result)
-			|| ret == -ENOSPC)
-		put_si_object(smo);
-
-	return ret ? ret : qcom_scmi_remap_error(result);
+	return qcom_smci_call(image_service, op, args, &result);
 }
 
 int qcom_smci_init_client_service(u32 uid, struct si_object **service)
@@ -372,8 +363,10 @@ exit_free_sgtable:
 	sg_free_table(buf_info->sgt);
 exit_free_sgt:
 	kfree(buf_info->sgt);
+	buf_info->sgt = NULL;
 exit_free_buf:
 	kfree(buf_info);
+	buf_info = NULL;
 
 	return ret;
 }
