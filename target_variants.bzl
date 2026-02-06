@@ -20,6 +20,7 @@ le_targets = [
     "sdxkova.cpe.tarang",
     "sdxkova.cpe.wkk",
     "sdxkova.prpl",
+    "sdxkova.prpl.min",
 ]
 
 le_32_targets = [
