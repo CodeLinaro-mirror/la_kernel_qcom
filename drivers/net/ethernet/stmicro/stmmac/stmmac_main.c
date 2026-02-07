@@ -7437,7 +7437,7 @@ static u16 stmmac_tx_select_queue(struct net_device *dev,
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
-	if (likely(priv->plat->tx_select_queue))
+	if (likely(priv->plat->tx_select_queue) && !priv->plat->rss_en)
 		return priv->plat->tx_select_queue(dev, skb, sb_dev);
 
 	return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
