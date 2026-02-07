@@ -75,6 +75,7 @@ nvmem_qcom-spmi-sdam.ko
 rtc-pm8xxx.ko
 pmic-pon-log.ko
 pinctrl-spmi-gpio.ko
+ps883x.ko
 phy-qcom-eusb2-repeater.ko
 phy-qcom-snps-eusb2.ko
 phy-qcom-qmp-combo.ko

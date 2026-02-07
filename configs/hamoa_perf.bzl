@@ -266,6 +266,7 @@ hamoa_perf_config = {
     "CONFIG_STM_SOURCE_CONSOLE": "m",
     "CONFIG_STM_SOURCE_FTRACE": "m",
     "CONFIG_STM_SOURCE_HEARTBEAT": "m",
+    "CONFIG_TYPEC_MUX_PS883X": "m",
     "CONFIG_UCSI_QTI_GLINK": "m",
     "CONFIG_USB_CONFIGFS_F_QDSS": "m",
     "CONFIG_USB_DWC3_MSM": "m",
