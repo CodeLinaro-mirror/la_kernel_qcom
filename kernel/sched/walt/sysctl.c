@@ -323,9 +323,12 @@ static int walt_proc_pipeline_cpus_handler(const struct ctl_table *table,
 	unsigned int old_value;
 	unsigned long bitmask;
 	const unsigned long *bitmaskp = &bitmask;
+	cpumask_t tmp, cluster_cpus;
 	static bool written_once;
 	static DEFINE_MUTEX(mutex);
 	struct ctl_table local_table = *table;
+	struct walt_sched_cluster *cluster;
+	int idx = 0;
 
 	mutex_lock(&mutex);
 
@@ -341,8 +344,27 @@ static int walt_proc_pipeline_cpus_handler(const struct ctl_table *table,
 
 	bitmask = (unsigned long)sysctl_sched_pipeline_cpus;
 	bitmap_copy(sysctl_bitmap, bitmaskp, WALT_NR_CPUS);
-	cpumask_copy(&cpus_for_pipeline, to_cpumask(sysctl_bitmap));
+	cpumask_copy(&tmp, to_cpumask(sysctl_bitmap));
+	for_each_sched_cluster(cluster) {
+		if (cpumask_and(&cluster_cpus, &cluster->cpus, &tmp)) {
+			if (!idx)
+				gold_cluster_id = cluster->id;
+			else
+				prime_cluster_id = cluster->id;
+			idx++;
+		}
+	}
+	/* Pipeline is confined within two clusters only */
+	if (idx > 2) {
+		sysctl_sched_pipeline_cpus = old_value;
+		ret = -EINVAL;
+		goto unlock;
+	}
 
+	if (idx == 1)
+		single_cluster_pipeline = true;
+
+	cpumask_copy(&cpus_for_pipeline, &tmp);
 	written_once = true;
 unlock:
 	mutex_unlock(&mutex);
