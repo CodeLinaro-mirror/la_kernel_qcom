@@ -4,6 +4,7 @@ qcom-scm.ko
 qcom-pdc.ko
 pinctrl-msm.ko
 pinctrl-seraph.ko
+pinctrl-pikachu.ko
 qcom_hwspinlock.ko
 qrtr.ko
 smem.ko
