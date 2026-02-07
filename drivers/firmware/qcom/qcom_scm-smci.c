@@ -20,8 +20,6 @@
 
 #include "qcom_scm_smcinvoke.h"
 
-static struct si_object_invoke_ctx oic;
-static struct si_object *client_env;
 static struct device *smo_buffer_dev;
 static DEFINE_MUTEX(service_list_mutex);
 static LIST_HEAD(smci_list);
@@ -58,6 +56,7 @@ static void __qcom_smci_find_service(u32 uid, u32 peripheral,
 int qcom_smci_call(struct si_object *service, unsigned long op,
 	struct si_arg args[], int *result)
 {
+	struct si_object_invoke_ctx oic = {0};
 	int ret;
 
 	if (!service || !result)
@@ -90,25 +89,19 @@ int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
 	args[0].type = SI_AT_IO;
 	args[1].type = SI_AT_END;
 
-	ret = si_object_do_invoke(&oic, image_service, op, args, &result);
-	if (ret || result)
-		pr_err("Failed to do invoke for %lu with result %d(ret = %d)\n",
-			op, result, ret);
-
-	/*
-	 * On si_object_do_invoke failure with these conditions, use put_si_object
-	 * to balance the preceding get_si_object.
+	/* After calling si_object_do_invoke, the SMO refcount will align with the
+	 * previous get_si_object:
+	 * get_si_object	--- rercount +1
+	 * si_object_do_invoke	--- refcount -1, regardless of success or failure
 	 */
-	if (((ret == -EINVAL || ret == -ENOMEM || ret == -EFAULT) && result)
-			|| ret == -ENOSPC)
-		put_si_object(smo);
-
-	return ret ? ret : qcom_scmi_remap_error(result);
+	return qcom_smci_call(image_service, op, args, &result);
 }
 
 int qcom_smci_init_client_service(u32 uid, struct si_object **service)
 {
 	struct smci_service_info *service_info = NULL;
+	struct si_object_invoke_ctx oic = {0};
+	struct si_object *client_env = NULL;
 	int ret;
 
 	mutex_lock(&service_list_mutex);
@@ -120,8 +113,16 @@ int qcom_smci_init_client_service(u32 uid, struct si_object **service)
 		}
 	}
 
+	ret = si_core_get_client_env(&oic, &client_env);
+	if (ret || !client_env) {
+		pr_err("Failed to get client_env (%d)\n", ret);
+		mutex_unlock(&service_list_mutex);
+		return ret ? ret : -ENODEV;
+	}
+
 	/* Initialize client service; it will be released when the module exits */
 	ret = si_core_client_env_open(&oic, client_env, uid, service);
+	put_si_object(client_env);
 	if (ret || *service == NULL_SI_OBJECT) {
 		pr_err("Failed to get client service for %d: (%d)\n", uid, ret);
 		mutex_unlock(&service_list_mutex);
@@ -362,8 +363,10 @@ exit_free_sgtable:
 	sg_free_table(buf_info->sgt);
 exit_free_sgt:
 	kfree(buf_info->sgt);
+	buf_info->sgt = NULL;
 exit_free_buf:
 	kfree(buf_info);
+	buf_info = NULL;
 
 	return ret;
 }
@@ -401,12 +404,6 @@ static int qcom_smci_service_probe(struct platform_device *pdev)
 {
 	struct si_object *service = NULL;
 	int ret;
-
-	ret = si_core_get_client_env(&oic, &client_env);
-	if (ret || !client_env) {
-		pr_err("Failed to get client_env (%d)\n", ret);
-		return ret ? ret : -ENODEV;
-	}
 
 	ret = qcom_smci_init_client_service(SMCI_PILOBJECT_UID, &service);
 	if (!ret) {
@@ -455,7 +452,6 @@ static void qcom_smci_service_remove(struct platform_device *pdev)
 	}
 
 	mutex_unlock(&service_list_mutex);
-	put_si_object(client_env);
 	pr_debug("Service removed\n");
 }
 
