@@ -53,3 +53,4 @@ socinfo.ko
 dispcc-shikra.ko
 gpucc-shikra.ko
 qcom-cpufreq-hw.ko
+qcom_soc_wdt.ko
