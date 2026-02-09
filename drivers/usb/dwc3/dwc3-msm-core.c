@@ -8135,6 +8135,7 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 	struct dwc3 *dwc = NULL;
+	struct generic_pm_domain *genpd;
 
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
@@ -8145,15 +8146,40 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 	if (dwc)
 		device_init_wakeup(dwc->dev, false);
 
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		/* Keep PHY GDSC ON during host mode bus suspend */
+		/* check if it was in host mode during runtime suspend */
+		if (mdwc->in_host_mode) {
+			genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
+			genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+			dev_dbg(dev, "GDSC flags ON\n");
+		}
+	}
+
 	return dwc3_msm_suspend(mdwc, false);
 }
 
 static int dwc3_msm_runtime_resume(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd;
 
 	dev_dbg(dev, "DWC3-msm runtime resume\n");
 	dbg_event(0xFF, "RT Res", 0);
+
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		/*
+		 * Reset the GDSC flags back, so that GDSC can be
+		 * turned off during cable disconnect.
+		 */
+		if (mdwc->in_host_mode) {
+			genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
+			genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+			dev_dbg(dev, "GDSC flags OFF\n");
+		}
+	}
 
 	return dwc3_msm_resume(mdwc);
 }
