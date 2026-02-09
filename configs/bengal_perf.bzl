@@ -177,6 +177,7 @@ bengal_perf_config = {
     "CONFIG_QCOM_MPM": "n",
     "CONFIG_QCOM_PANEL_EVENT_NOTIFIER": "m",
     "CONFIG_QCOM_PANIC_ON_PDR_NOTIF_TIMEOUT": "y",
+    "CONFIG_QCOM_PBS": "m",
     "CONFIG_QCOM_PDR_HELPERS": "m",
     "CONFIG_QCOM_PDR_MSG": "m",
     "CONFIG_QCOM_PD_MAPPER": "m",
