@@ -1824,3 +1824,16 @@ def register_modules(registry):
             "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/qcom-pbs",
+        out = "qcom-pbs.ko",
+        config = "CONFIG_QCOM_PBS",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qcom-pbs.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
