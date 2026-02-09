@@ -509,13 +509,11 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 	q6v5->dump_level_state = devm_qcom_smem_state_get(&pdev->dev, "dump-level-notify",
 							  &q6v5->dump_level_bit);
 	if (IS_ERR(q6v5->dump_level_state)) {
-		if (PTR_ERR(q6v5->dump_level_state) == -ENOENT) {
-			dev_dbg(&pdev->dev, "dump-level-notify state not provided; proceeding\n");
-			q6v5->dump_level_state = NULL;
-		} else {
+		if (PTR_ERR(q6v5->dump_level_state) != -ENODATA) {
 			return dev_err_probe(&pdev->dev, PTR_ERR(q6v5->dump_level_state),
 					     "failed to acquire dump-level-notify state\n");
 		}
+		q6v5->dump_level_state = NULL;
 	}
 
 	q6v5->dump_level_ack_irq = platform_get_irq_byname(pdev, "dump-level-ack");

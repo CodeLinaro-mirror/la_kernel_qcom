@@ -349,6 +349,9 @@ MODULE_PARM_DESC(eiface, "Interface type from ethernet partition");
 static char *eqos;
 module_param(eqos, charp, 0600);
 MODULE_PARM_DESC(eqos, "QOS Config support from ethernet partition");
+static char *erss;
+module_param(erss, charp, 0600);
+MODULE_PARM_DESC(erss, "RSS Config support from ethernet partition");
 static char *ewait_switch_rdy;
 module_param(ewait_switch_rdy, charp, 0600);
 MODULE_PARM_DESC(ewait_switch_rdy, "Link up delay option from ethernet partition");
@@ -357,6 +360,22 @@ MODULE_PARM_DESC(ewait_switch_rdy, "Link up delay option from ethernet partition
 static bool qos_use_skprio;
 module_param(qos_use_skprio, bool, 0644);
 MODULE_PARM_DESC(qos_use_skprio, "Use SKPRIO for Tx Routing");
+
+unsigned int rfa_value;
+module_param(rfa_value, uint, 0644);
+MODULE_PARM_DESC(rfa_value, "To assign rfa value whenever required");
+
+unsigned int rfd_value;
+module_param(rfd_value, uint, 0644);
+MODULE_PARM_DESC(rfd_value, "To assign rfd value whenever required");
+
+bool disable_napi_thread;
+module_param(disable_napi_thread, bool, 0644);
+MODULE_PARM_DESC(disable_napi_thread, "Enable/disable napi thread");
+
+bool disable_split_hdr;
+module_param(disable_split_hdr, bool, 0644);
+MODULE_PARM_DESC(disable_split_hdr, "Enable/disable sph dynamically");
 
 inline void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos)
 {
@@ -803,6 +822,19 @@ static int set_ethernet_qos_cfg(char *qoscfg)
 	return 0;
 }
 
+static int set_ethernet_rss_cfg(char *rsscfg)
+{
+	if (!rsscfg)
+		return 1;
+
+	if ((strlen(rsscfg) == 0) || (strlen(rsscfg) > 4))
+		return 1;
+
+	strscpy(mparams.rsscfg_name, rsscfg, sizeof(mparams.rsscfg_name));
+
+	return 0;
+}
+
 static int set_ethernet_wait_switch_rdy(char *eth_wait_switch_rdy)
 {
 	if (!eth_wait_switch_rdy || strlen(eth_wait_switch_rdy) == 0)
@@ -887,6 +919,19 @@ static int __init set_ethernet_qoscfg_static(char *eth_qos)
 }
 
 __setup("eqos=", set_ethernet_qoscfg_static);
+
+static int __init set_ethernet_rsscfg_static(char *eth_rss)
+{
+	int ret = 1;
+
+	ret = set_ethernet_rss_cfg(eth_rss);
+	if (ret)
+		mparams.rsscfg_name[0] = '\0';
+
+	return 0;
+}
+
+__setup("erss=", set_ethernet_rsscfg_static);
 
 static int __init set_ethernet_wait_switch_rdy_static(char *eth_wait_switch_rdy)
 {
@@ -7679,6 +7724,9 @@ static int ethqos_set_early_eth_params(void)
 	if (eqos)
 		ret = set_ethernet_qos_cfg(eqos);
 
+	if (erss)
+		ret = set_ethernet_rss_cfg(erss);
+
 	if (ewait_switch_rdy)
 		ret = set_ethernet_wait_switch_rdy(ewait_switch_rdy);
 
@@ -7716,6 +7764,33 @@ static int qcom_ethqos_probe_config_dt(struct platform_device *pdev,
 		   plat_dat->rx_queues_to_use,
 		   plat_dat->tx_queues_to_use);
 	return ret;
+}
+
+static void ethqos_parse_pps_dt(struct device *dev,
+				struct device_node *np,
+				struct stmmac_priv *priv)
+{
+	u32 idx;
+
+	/* Clear any prior PPS state before parsing */
+	memset(priv->pps, 0, sizeof(priv->pps));
+	priv->pps_idx = 0;
+
+	/* If the property is absent, we keep PPS disabled */
+	if (of_property_read_u32(np, "emac_pps_output", &idx)) {
+		ETHQOSINFO("PPS: 'emac_pps_reg' not present; PPS disabled by DT\n");
+		return;
+	}
+
+	if (idx >= STMMAC_PPS_MAX) {
+		ETHQOSERR("PPS: emac_pps_reg=%u out of range (max %u)\n",
+			  idx, STMMAC_PPS_MAX - 1);
+		return;
+	}
+
+	priv->pps_idx = idx;
+
+	ETHQOSINFO("PPS: enabled PPS%u from DT\n", idx);
 }
 
 static int qcom_ethqos_probe(struct platform_device *pdev)
@@ -8074,6 +8149,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	priv = netdev_priv(ndev);
 	ethqos->priv = priv;
 	ethqos->power_state = true;
+
+	ethqos_parse_pps_dt(&pdev->dev, pdev->dev.of_node, priv);
 
 	qcom_ethqos_init_aux_ts(ethqos, plat_dat, priv);
 

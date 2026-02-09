@@ -780,6 +780,8 @@ static int msm_minidump_add_header(void)
 	int slot_num;
 
 	linux_banner = DEBUG_SYMBOL_LOOKUP(linux_banner);
+	if (!linux_banner)
+		return -EINVAL;
 	/* Header buffer contains:
 	 * elf header, MAX_NUM_ENTRIES+4 of section and program elf headers,
 	 * string table section and linux banner.

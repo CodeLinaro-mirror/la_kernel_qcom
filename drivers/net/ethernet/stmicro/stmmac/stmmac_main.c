@@ -6895,10 +6895,12 @@ static void stmmac_set_rx_mode(struct net_device *dev)
 	u32 mka_mcbcq_used = 0;
 	struct netdev_hw_addr *ha;
 	u8 dst_eapol_mac_addr[ETH_ALEN] = {0x1, 0x80, 0xc2, 0x00, 0x00, 0x03};
+	u8 dst_8021as_mac_addr[ETH_ALEN] = {0x1, 0x80, 0xc2, 0x00, 0x00, 0x0E};
 
 	if (priv->plat->mka_mcbcq_filtering) {
 		netdev_for_each_mc_addr(ha, dev) {
-			if (!memcmp(dst_eapol_mac_addr, ha->addr, ETH_ALEN))
+			if (!memcmp(dst_eapol_mac_addr, ha->addr, ETH_ALEN) ||
+			    !memcmp(dst_8021as_mac_addr, ha->addr, ETH_ALEN))
 				mka_mcbcq_used = 1;
 		}
 		pr_debug("Setting MCBCQ to queue %d\n", mka_mcbcq_used);
@@ -8777,6 +8779,9 @@ int stmmac_dvr_probe(struct device *device,
 			__func__, ret);
 		goto error_netdev_register;
 	}
+
+	if (!disable_napi_thread && priv->plat->rss_en)
+		dev_set_threaded(ndev, true);
 
 	/* Disable tx_coal_timer if plat provides callback */
 	priv->tx_coal_timer_disable = false;
