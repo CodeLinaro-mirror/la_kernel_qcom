@@ -12,6 +12,7 @@ load(":drivers/dma-buf/heaps/modules.bzl", register_dma_buf_heaps = "register_mo
 load(":drivers/edac/modules.bzl", register_edac = "register_modules")
 load(":drivers/eom/modules.bzl", register_eom_driver = "register_modules")
 load(":drivers/eom/pcie/modules.bzl", register_pci_phy_access = "register_modules")
+load(":drivers/extcon/modules.bzl", register_extcon = "register_modules")
 load(":drivers/firmware/modules.bzl", register_firmware = "register_modules")
 load(":drivers/gpio/modules.bzl", register_gpio = "register_modules")
 load(":drivers/gpu/drm/bridge/modules.bzl", register_gpu_drm_bridge = "register_modules")
@@ -122,3 +123,4 @@ def register_modules(registry):
     register_video(registry)
     register_virt(registry)
     register_virtio(registry)
+    register_extcon(registry)

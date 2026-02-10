@@ -36,6 +36,7 @@ COPY_FILES = [
     "drivers/phy/qualcomm/phy-qcom-qmp-pcs-sgmii.h",
     "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v5.h",
     "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v5.h",
+    "drivers/extcon/extcon-qcom-spmi-misc.c",
     # cfg80211.ko files start
     "net/wireless/ap.c",
     "net/wireless/certs/sforshee.hex",
