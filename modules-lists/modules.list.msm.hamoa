@@ -2,6 +2,7 @@
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 qcom-scm.ko
 arm_smmu.ko
+arm_smmu_v3.ko
 smem.ko
 qcom_iommu_util.ko
 qcom_iommu_debug.ko
