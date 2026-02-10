@@ -129,4 +129,9 @@ shikra_perf_config = {
     "CONFIG_QCOM_SOCINFO": "m",
     "CONFIG_QCOM_SOC_WATCHDOG": "m",
     "CONFIG_RTC_DRV_PM8XXX": "m",
+    "CONFIG_QCOM_PMU_LIB": "m",
+    "CONFIG_QCOM_DCVS": "m",
+    "CONFIG_QCOM_BWMON": "m",
+    "CONFIG_QCOM_MEMLAT": "m",
+    "CONFIG_SCHED_WALT": "m",
 }
