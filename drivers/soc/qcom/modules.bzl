@@ -1875,3 +1875,13 @@ def register_modules(registry):
             "kernel/trace/qcom_ipc_logging",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/power_mode",
+        out = "power_mode.ko",
+        config = "CONFIG_QCOM_POWER_MODE",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/power_mode.c",
+        ],
+    )
