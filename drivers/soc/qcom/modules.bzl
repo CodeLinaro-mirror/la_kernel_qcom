@@ -1842,6 +1842,35 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/slate_rsb",
+        out = "slate_rsb.ko",
+        config = "CONFIG_MSM_SLATERSB",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slate_rsb.c",
+            "drivers/soc/qcom/slate_rsb.h",
+            "drivers/soc/qcom/slatersb_rpmsg.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/slatersb_rpmsg",
+            "drivers/remoteproc/rproc_qcom_common",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slatersb_rpmsg",
+        out = "slatersb_rpmsg.ko",
+        config = "CONFIG_MSM_SLATERSB_RPMSG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slatersb_rpmsg.c",
+            "drivers/soc/qcom/slatersb_rpmsg.h",
+            "drivers/soc/qcom/slate_rsb.h",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom-pbs",
         out = "qcom-pbs.ko",
         config = "CONFIG_QCOM_PBS",
