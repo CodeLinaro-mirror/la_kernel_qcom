@@ -14,6 +14,7 @@
 #include <linux/iommu.h>
 #include <linux/qcom_dpd_proxy.h>
 #include <linux/pci.h>
+#include <linux/adreno-smmu-priv.h>
 #include "drivers/iommu/dma-iommu.h"
 #include "qcom_dpd_proxy_tee.h"
 #include "arm/arm-smmu/arm-smmu.h"
@@ -43,6 +44,7 @@ struct dpd_smmu_domain {
 	struct device *dev;
 	/* Sharing domains across multiple devices is not supported */
 	u32 si_domain_id;
+	struct adreno_smmu_fault_info adreno_cfi;
 	struct iommu_domain domain;
 };
 
@@ -307,6 +309,58 @@ static void dpd_smmu_get_resv_regions(struct device *dev,
 	iommu_dma_get_resv_regions(dev, head);
 }
 
+static void adreno_set_fault_info(struct iommu_domain *domain, struct imm_fault_info *cfi)
+{
+	struct dpd_smmu_domain *smmu_domain;
+	struct adreno_smmu_fault_info *adreno_cfi;
+
+	if (!domain)
+		return;
+
+	smmu_domain = to_smmu_domain(domain);
+	adreno_cfi = &smmu_domain->adreno_cfi;
+	adreno_cfi->far = cfi->far;
+	adreno_cfi->ttbr0 = cfi->ttbr0;
+	/* TEE does not provide contextidr */
+	adreno_cfi->contextidr = U32_MAX;
+	adreno_cfi->fsr = cfi->fsr;
+	adreno_cfi->fsynr0 = cfi->fsynr0;
+	adreno_cfi->fsynr1 = cfi->fsynr1;
+	adreno_cfi->cbfrsynra = cfi->cbfrsynra;
+}
+
+static void adreno_get_fault_info(const void *cookie, struct adreno_smmu_fault_info *info)
+{
+	const struct dpd_smmu_domain *smmu_domain = cookie;
+
+	*info = smmu_domain->adreno_cfi;
+}
+
+static bool device_is_adreno(struct device *dev)
+{
+	const char *name = "gfx3d_secure";
+
+	if (!dev->of_node)
+		return false;
+
+	if (of_node_name_eq(dev->of_node, name))
+		return true;
+	return false;
+}
+
+static void setup_adreno_callbacks(struct dpd_smmu_domain *smmu_domain, struct device *dev)
+{
+	struct adreno_smmu_priv *p = dev_get_drvdata(dev);
+
+	if (!p || !device_is_adreno(dev))
+		return;
+
+	p->cookie = smmu_domain;
+	p->get_fault_info = adreno_get_fault_info;
+	dev_dbg(smmu_domain->smmu->dev, "%s: Setup of adreno_smmu_priv complete\n",
+		dev_name(dev));
+}
+
 static int dpd_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 {
 	struct dpd_smmu_domain *prev_domain =
@@ -325,6 +379,9 @@ static int dpd_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	mutex_lock(&smmu_domain->mappings_lock);
 	ret = attach_mappings(smmu_domain);
 	mutex_unlock(&smmu_domain->mappings_lock);
+
+	setup_adreno_callbacks(smmu_domain, dev);
+
 	return ret;
 }
 
@@ -672,8 +729,15 @@ static int si_cbo_dispatch(unsigned int context_id, struct si_object *object,
 	ret = -ENOSYS;
 	if (client) {
 		domain = iommu_get_domain_for_dev(client);
-		if (domain)
+		if (domain) {
+			/*
+			 * Adreno device retrieve additional data via a get_fault_info callback
+			 * Ensure it is set before calling report_iommu_fault.
+			 */
+			if (device_is_adreno(client))
+				adreno_set_fault_info(domain, cfi);
 			ret = report_iommu_fault(domain, smmu->dev, cfi->far, flags);
+		}
 	}
 	/* Clients should return -ENOSYS for default fault handling */
 	if (ret != -ENOSYS || __ratelimit(&_rs))
