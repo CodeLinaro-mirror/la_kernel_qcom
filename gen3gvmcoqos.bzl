@@ -42,7 +42,6 @@ def define_gen3gvmcoqos():
         "net/mac80211/mac80211.ko",
         "net/vmw_vsock/vmw_vsock_virtio_transport.ko",
         "net/wireless/cfg80211.ko",
-        "sound/virtio/virtio_snd.ko",
     ]
 
     _gen3gvmcoqos_consolidate_in_tree_modules = _gen3gvmcoqos_in_tree_modules + [
