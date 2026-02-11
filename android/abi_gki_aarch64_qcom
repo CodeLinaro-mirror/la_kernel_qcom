@@ -2182,6 +2182,7 @@
   nvmem_device_read
   nvmem_device_write
   of_address_to_resource
+  of_alias_get_highest_id
   of_alias_get_id
   of_can_transceiver
   of_clk_add_hw_provider
