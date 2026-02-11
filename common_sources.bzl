@@ -19,6 +19,7 @@ COPY_FILES = [
     "drivers/gpio/gpio-virtio.c",
     "drivers/i2c/busses/i2c-qcom-geni.c",
     "drivers/i2c/busses/i2c-virtio.c",
+    "drivers/i2c/i2c-dev.c",
     "drivers/spi/spi-geni-qcom.c",
     "drivers/virtio/virtio_input.c",
     "net/core/failover.c",
