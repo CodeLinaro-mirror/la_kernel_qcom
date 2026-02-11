@@ -33,6 +33,8 @@ static char gear_index[][25] = {
 #define SLC_INVALID_PARTID      ((1 << 16) - 1)
 
 #define SLC_MPAM_VERSION_0	0x00000000	/* Base firmware */
+#define SLC_MPAM_VERSION_0_3	0x00000003	/* mpam 0.3 firmware */
+#define SLC_MPAM_VERSION_1_0	0x00010000	/* mpam 1.0 firmware */
 
 enum mpam_slc_get_param_ids {
 	PARAM_GET_CLIENT_INFO_MSC = 1,
@@ -182,8 +184,8 @@ struct slc_client_details {
 struct slc_mon_details {
 	uint32_t num_cap_monitor;
 	uint32_t num_miss_monitor;
-	uint32_t num_slc_fe_bw_mnitor;
-	uint32_t num_slc_be_bw_mnitor;
+	uint32_t num_slc_fe_bw_monitor;
+	uint32_t num_slc_be_bw_monitor;
 } __packed;
 
 struct slc_sct_client_info {
@@ -215,6 +217,26 @@ struct qcom_slc_mon_data_v1 {
 	uint64_t wr_incr;
 } __packed;
 
+#define FE_MON_OFFSET		6
+#define BE_MON_OFFSET		6
+#define MISS_MON_OFFSET		4
+
+struct mon_index {
+	uint16_t miss_mon_idx	: MISS_MON_OFFSET;
+	uint16_t fe_bwmon_idx	: FE_MON_OFFSET;
+	uint16_t be_bwmon_idx	: BE_MON_OFFSET;
+} __packed;
+
+struct qcom_slc_mon_data_v2 {
+	struct slc_partid_info part_info;
+	struct mon_index cntr_index;
+	uint16_t mon_enabled;
+	uint32_t num_cache_lines;
+	uint64_t rd_misses;
+	uint64_t fe_bytes;
+	uint64_t be_bytes;
+} __packed;
+
 #define SLC_NUM_PARTIDS		5
 struct qcom_slc_mon_mem_v0 {
 	uint32_t match_seq;
@@ -233,20 +255,34 @@ struct qcom_slc_mon_mem_v1 {
 	struct qcom_slc_mon_data_v1 data[];
 } __packed;
 
+struct qcom_slc_mon_mem_v2 {
+	uint32_t match_seq;
+	uint16_t msc_id;
+	uint16_t num_active_mon;
+	uint64_t last_capture_time;
+	uint64_t slc_mpam_monitor_size;
+	struct qcom_slc_mon_data_v2 data[];
+} __packed;
+
 union qcom_slc_monitor_memory {
 	struct qcom_slc_mon_mem_v0 mem_v0;
 	struct qcom_slc_mon_mem_v1 mem_v1;
+	struct qcom_slc_mon_mem_v2 mem_v2;
 };
 
 /* slc Monitor capability */
 struct slc_mon_capability {
 	uint32_t read_miss_config_available;
 	uint32_t capacity_config_available;
+	uint32_t fe_mon_config_available;
+	uint32_t be_mon_config_available;
 };
 
 struct slc_mon_configured {
 	uint32_t read_miss_configured;
 	uint32_t capacity_configured;
+	uint32_t fe_mon_configured;
+	uint32_t be_mon_configured;
 	uint32_t mon_cfgd;
 };
 
