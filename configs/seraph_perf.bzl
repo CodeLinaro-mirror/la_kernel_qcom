@@ -109,6 +109,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_BUS_LAT": "m",
     "CONFIG_QCOM_BUS_PROF": "m",
     "CONFIG_QCOM_BWMON": "m",
+    "CONFIG_QCOM_BWPROF_SCMI": "m",
     "CONFIG_QCOM_CLK_RPMH": "m",
     "CONFIG_QCOM_COMMAND_DB": "m",
     "CONFIG_QCOM_CPUCP": "m",
