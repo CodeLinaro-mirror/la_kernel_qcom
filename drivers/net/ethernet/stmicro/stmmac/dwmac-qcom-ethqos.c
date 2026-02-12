@@ -8151,6 +8151,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ethqos_mac_rec_init(ethqos);
 	if (of_property_read_bool(np, "mdio-drv-str") || of_property_read_bool(np, "mdc-drv-str"))
 		ethqos_update_mdio_drv_strength(ethqos, np);
+
+	if (stmmac_res.rx_irq[0] > 0 && stmmac_res.tx_irq[0] > 0 && plat_dat->rss_en)
+		plat_dat->flags |= STMMAC_FLAG_MULTI_IRQ_EN;
+
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;

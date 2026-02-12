@@ -79,6 +79,8 @@
 
 /* Platfrom data for platform device structure's platform_data field */
 
+#define STMMAC_FLAG_MULTI_IRQ_EN		BIT(7)
+
 struct stmmac_mdio_bus_data {
 	unsigned int phy_mask;
 	unsigned int has_xpcs;
@@ -97,7 +99,7 @@ struct stmmac_dma_cfg {
 	int mixed_burst;
 	bool aal;
 	bool eame;
-	bool multi_msi_en;
+	bool multi_irq_en;
 	bool dche;
 };
 
@@ -374,6 +376,7 @@ struct plat_stmmacenet_data {
 	int rx_qos_queues_to_use;
 	int tx_qos_queues_to_use;
 	bool is_config_supp;
+	unsigned int flags;
 	char qoscfg[4];
 	char rsscfg[4];
 	bool qos_active;
