@@ -1604,6 +1604,39 @@ static void stmmac_check_pcs_mode(struct stmmac_priv *priv)
 	}
 }
 
+static void __stmmac_phy_support_eee(struct stmmac_priv *priv)
+{
+	struct fwnode_handle *phy_fwnode;
+	struct fwnode_handle *fwnode;
+	struct phy_device *phydev;
+
+	fwnode = dev_fwnode(priv->device);
+
+	if (fwnode)
+		phy_fwnode = fwnode_get_phy_node(fwnode);
+	else
+		phy_fwnode = NULL;
+
+	if (!phy_fwnode || IS_ERR(phy_fwnode))
+		goto err_phy_support_eee;
+
+	phydev = fwnode_phy_find_device(phy_fwnode);
+	fwnode_handle_put(phy_fwnode);
+
+	if (!phydev)
+		goto err_phy_support_eee;
+
+	if (priv->dma_cap.eee)
+		phy_support_eee(phydev);
+	else
+		netdev_info(priv->dev, "EEE not supported by MAC");
+
+	return;
+
+err_phy_support_eee:
+	netdev_err(priv->dev, "failed to fetch phydev, EEE will be disabled");
+}
+
 /**
  * stmmac_init_phy - PHY initialization
  * @dev: net device structure
@@ -1622,8 +1655,10 @@ static int stmmac_init_phy(struct net_device *dev)
 
 	node = priv->plat->phylink_node;
 
-	if (node)
+	if (node) {
+		__stmmac_phy_support_eee(priv);
 		ret = phylink_of_phy_connect(priv->phylink, node, 0);
+	}
 
 	/* Some DT bindings do not set-up the PHY handle. Let's try to
 	 * manually parse it
