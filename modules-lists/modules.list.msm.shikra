@@ -54,3 +54,10 @@ dispcc-shikra.ko
 gpucc-shikra.ko
 qcom-cpufreq-hw.ko
 qcom_soc_wdt.ko
+regmap-spmi.ko
+qti-regmap-debugfs.ko
+qcom-spmi-pmic.ko
+nvmem_qcom-spmi-sdam.ko
+rtc-pm8xxx.ko
+pmic-pon-log.ko
+spmi-pmic-arb.ko
