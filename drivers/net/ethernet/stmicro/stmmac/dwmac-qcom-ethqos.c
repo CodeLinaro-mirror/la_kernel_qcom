@@ -2965,7 +2965,7 @@ static int ethqos_schedule_poll(struct stmmac_priv *priv, int chan)
 
 	if (!priv->plat->rx_queues_cfg[chan].skip_sw) {
 		if (likely(napi_schedule_prep(&ch->rx_napi))) {
-			priv->hw->dma->disable_dma_irq(priv->ioaddr, chan, 1, 0);
+			priv->hw->dma->disable_dma_irq(priv, priv->ioaddr, chan, 1, 0);
 			__napi_schedule(&ch->rx_napi);
 		}
 	}
