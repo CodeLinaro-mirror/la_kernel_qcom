@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  */
 
@@ -156,6 +156,10 @@ static ssize_t iommu_debug_map_write(struct file *file, const char __user *ubuf,
 		goto invalid_format;
 
 	if (kstrtoint(comma3 + 1, 0, &prot))
+		goto invalid_format;
+
+	/* Validate prot: must be bitwise OR of IOMMU_READ and/or IOMMU_WRITE */
+	if (!prot || (prot & ~(IOMMU_READ | IOMMU_WRITE)))
 		goto invalid_format;
 
 	mutex_lock(&ddev->state_lock);
