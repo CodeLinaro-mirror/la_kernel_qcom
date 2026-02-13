@@ -43,6 +43,7 @@ gcc-sm6115.ko
 icc-rpm.ko
 qnoc-qos-rpm.ko
 qnoc-bengal.ko
+qnoc-scuba.ko
 spmi-pmic-arb.ko
 regmap-spmi.ko
 qti-regmap-debugfs.ko
