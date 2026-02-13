@@ -26,6 +26,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/pinctrl/devinfo.h>
 #include <linux/pinctrl/machine.h>
+#include <linux/pinctrl/pinconf.h>
 #include <linux/pinctrl/pinctrl.h>
 
 #ifdef CONFIG_GPIOLIB
@@ -928,6 +929,39 @@ int pinctrl_gpio_set_config(unsigned gpio, unsigned long config)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pinctrl_gpio_set_config);
+
+/**
+ * pinctrl_gpio_get_config() - Get the config for a given GPIO pin
+ * @gpio: the GPIO pin number from the GPIO subsystem number space
+ * @config: the configuration to query.  On success it holds the result
+ */
+int pinctrl_gpio_get_config(unsigned int gpio, unsigned long *config)
+{
+	struct pinctrl_gpio_range *range;
+	const struct pinconf_ops *ops;
+	struct pinctrl_dev *pctldev;
+	int ret, pin;
+
+	ret = pinctrl_get_device_gpio_range(gpio, &pctldev, &range);
+	if (ret)
+		return ret;
+
+	ops = pctldev->desc->confops;
+	if (!ops || !ops->pin_config_get)
+		return -EINVAL;
+
+	mutex_lock(&pctldev->mutex);
+	pin = gpio_to_pin(range, gpio);
+	ret = ops->pin_config_get(pctldev, pin, config);
+	mutex_unlock(&pctldev->mutex);
+
+	if (ret)
+		return ret;
+
+	*config = pinconf_to_config_argument(*config);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(pinctrl_gpio_get_config);
 
 static struct pinctrl_state *find_state(struct pinctrl *p,
 					const char *name)
