@@ -860,6 +860,11 @@ skip_sync:
 
 	chip = uadev[card_num].chip;
 
+	if (!chip) {
+		ret = -ENODEV;
+		goto unmap_sync;
+	}
+
 	if (atomic_read(&uadev[card_num].in_use) == 1) {
 		ret = initialize_uadev_if_in_use(card_num, subs, chip);
 		if (ret < 0)

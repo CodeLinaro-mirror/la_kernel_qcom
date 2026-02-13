@@ -58,8 +58,10 @@ int32_t qtee_shmbridge_allocate_shm(size_t size, struct qtee_shm *shm)
 {
 	shm->size = PAGE_ALIGN(size);
 	shm->vaddr = qcom_tzmem_alloc(shmbridge_pool, shm->size, GFP_KERNEL);
-	if (!shm->vaddr)
+	if (!shm->vaddr) {
+		pr_err("Failed to alloc memory from shmbridge pool, size: %#zx\n", shm->size);
 		return -ENOMEM;
+	}
 
 	shm->paddr = qcom_tzmem_to_phys(shm->vaddr);
 
@@ -98,7 +100,7 @@ int qtee_shmbridge_driver_init(void)
 	struct qcom_tzmem_pool_config pool_config;
 
 	memset(&pool_config, 0, sizeof(pool_config));
-	pool_config.initial_size = SZ_256K;
+	pool_config.initial_size = SZ_512K;
 	pool_config.policy = QCOM_TZMEM_POLICY_ON_DEMAND;
 	pool_config.max_size = SZ_4M;
 	pool_config.is_cached = true;
@@ -109,6 +111,8 @@ int qtee_shmbridge_driver_init(void)
 		return PTR_ERR(shmbridge_pool);
 	}
 
+	pr_info("shmbridge pool of size: %#zx is created successfully\n",
+		pool_config.initial_size);
 	return 0;
 }
 

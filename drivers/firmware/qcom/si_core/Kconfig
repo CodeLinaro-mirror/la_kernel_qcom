@@ -50,3 +50,13 @@ config QCOM_SI_CORE_MEM_FFA
 
 	 Enable this option only if QTEE supports FFA memory ABIs.
 
+config QCOM_SI_CORE_DOORBELL
+	bool "Enable support for Doorbell interrupts from QTEE"
+	depends on QCOM_SI_CORE
+	help
+	 The doorbell interrupt mechanism allows QTEE to send an asynchronous
+	 message to a VM. The message contains one or more invoke calls for
+	 the VM to execute on handling the interrupt.
+
+	 Enable this option only if QTEE supports Doorbell interrupts.
+

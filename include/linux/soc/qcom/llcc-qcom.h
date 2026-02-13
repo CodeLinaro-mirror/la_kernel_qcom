@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/platform_device.h>
@@ -88,6 +88,9 @@
 #define LLCC_GPU_LITTLE       80
 #define LLCC_OOBM_NS          81
 #define LLCC_OOBM_S           82
+#define LLCC_VIDEO_APV        83
+#define LLCC_DCP              86
+#define LLCC_COMPUTE1         87
 #define LLCC_CPUSSMPAM        89
 #define LLCC_CPU_MTE          35
 #define LLCC_VIDEO_APV        83
@@ -99,6 +102,43 @@
 #define LLCC_CAM_OFE_STROV    93
 #define LLCC_CPUSS_HEU        94
 #define LLCC_MDM_PNG_FIXED   100
+#define LLCC_GPU_LAYERS        256
+#define LLCC_GPU_TEMP_DATA     257
+#define LLCC_VIDSC_LAYER0      258
+#define LLCC_VIDSC_LAYER1      259
+#define LLCC_VIDSC_LAYER2      260
+#define LLCC_VIDSC_LAYER3      261
+#define LLCC_VIDSC_LAYER4      262
+#define LLCC_VIDSC_LAYER5      263
+#define LLCC_VIDSC_LAYER6      264
+#define LLCC_VIDSC_LAYER7      265
+#define LLCC_CSC_LAYER0        266
+#define LLCC_CSC_LAYER1        267
+#define LLCC_CSC_LAYER2        268
+#define LLCC_CSC_LAYER3        269
+#define LLCC_CSC_LAYER4        270
+#define LLCC_CSC_LAYER5        271
+#define LLCC_CSC_LAYER6        272
+#define LLCC_CSC_LAYER7        273
+#define LLCC_CSC_LAYER8        274
+#define LLCC_CSC_LAYER9        275
+#define LLCC_CSC_LAYER10       276
+#define LLCC_CSC_LAYER11       277
+#define LLCC_CSC_LAYER12       278
+#define LLCC_CSC_LAYER13       279
+#define LLCC_CSC_LAYER14       280
+#define LLCC_CSC_LAYER15       281
+#define LLCC_GCX_TO_DPU_LEFT   282
+#define LLCC_GCX_TO_DPU_RIGHT  283
+#define LLCC_VIDSC_DEPTH0      284
+#define LLCC_VIDSC_DEPTH1      285
+#define LLCC_TCM_WIFI          286
+#define LLCC_TCM_CAM           287
+#define LLCC_TCM_OEM           288
+#define LLCC_CAM_TF_BUFFER     289
+#define LLCC_CAM_IPE_BUFFER    290
+#define LLCC_CAM_META_ADVANCED 291
+#define LLCC_CAM_IPE_CSC       292
 
 #define LLCC_VERSION_2_0_0_0          0x02000000
 #define LLCC_VERSION_2_1_0_0          0x02010000
@@ -164,6 +204,11 @@ struct llcc_edac_reg_offset {
 	u32 drp_ecc_db_err_syn0;
 };
 
+struct llcc_uid_slice_pair {
+	uint32_t uid;
+	struct llcc_slice_desc *desc;
+};
+
 /**
  * struct llcc_drv_data - Data associated with the llcc driver
  * @regmaps: regmaps associated with the llcc device
@@ -180,6 +225,8 @@ struct llcc_edac_reg_offset {
  * @ecc_irq: interrupt for llcc cache error detection and reporting
  * @version: Indicates the LLCC version
  * @desc: Array pointer of llcc_slice_desc
+ * @uid_slice_lookup: Lookup form UID to slice desc
+ * @sct_initialized: Indicates that SCT is already initialized outside llcc-qcom
  */
 struct llcc_drv_data {
 	struct regmap **regmaps;
@@ -197,6 +244,8 @@ struct llcc_drv_data {
 	u32 version;
 	bool cap_based_alloc_and_pwr_collapse;
 	struct llcc_slice_desc *desc;
+	struct llcc_uid_slice_pair *uid_slice_lookup;
+	bool sct_initialized;
 };
 
 /**

@@ -297,7 +297,7 @@ static ssize_t slc_mpam_monitors_data_show(struct config_item *item,
 {
 	struct msc_query query;
 
-	set_msc_query(&query, get_pm_item(item));
+	memset(&query, 0, sizeof(struct msc_query));
 
 	return msc_system_mon_read_all(SLC, &query, page);
 }

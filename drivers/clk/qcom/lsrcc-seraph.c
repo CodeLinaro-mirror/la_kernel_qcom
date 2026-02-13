@@ -20,6 +20,7 @@
 #include "clk-regmap-divider.h"
 #include "clk-regmap-mux.h"
 #include "common.h"
+#include "gdsc.h"
 #include "reset.h"
 #include "vdd-level.h"
 
@@ -434,6 +435,46 @@ static struct clk_branch lsr_cc_mvs0c_shift_clk = {
 	},
 };
 
+static struct gdsc lsr_cc_lsr_noc_gdsc = {
+	.gdscr = 0x8100,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x6,
+	.pd = {
+		.name = "lsr_cc_lsr_noc_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mm",
+};
+
+static struct gdsc lsr_cc_mvs0c_gdsc = {
+	.gdscr = 0x8034,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x6,
+	.pd = {
+		.name = "lsr_cc_mvs0c_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mm",
+};
+
+static struct gdsc lsr_cc_mvs0_gdsc = {
+	.gdscr = 0x807c,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x6,
+	.pd = {
+		.name = "lsr_cc_mvs0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &lsr_cc_mvs0c_gdsc.pd,
+	.supply = "vdd_mm",
+};
+
 static struct clk_regmap *lsr_cc_seraph_clocks[] = {
 	[LSR_CC_AHB_CLK_SRC] = &lsr_cc_ahb_clk_src.clkr,
 	[LSR_CC_MVS0_CLK] = &lsr_cc_mvs0_clk.clkr,
@@ -470,6 +511,11 @@ static struct critical_clk_offset critical_clk_list[] = {
 	{ .offset = 0x810c, .mask = ACCU_CFG_MASK },
 };
 
+static struct gdsc *lsr_cc_seraph_gdscs[] = {
+	[LSR_CC_LSR_NOC_GDSC] = &lsr_cc_lsr_noc_gdsc,
+	[LSR_CC_MVS0_GDSC] = &lsr_cc_mvs0_gdsc,
+	[LSR_CC_MVS0C_GDSC] = &lsr_cc_mvs0c_gdsc,
+};
 
 static const struct qcom_reset_map lsr_cc_seraph_resets[] = {
 	[LSR_CC_INTERFACE_BCR] = { 0x80a0 },
@@ -500,6 +546,8 @@ static struct qcom_cc_desc lsr_cc_seraph_desc = {
 	.num_clk_regulators = ARRAY_SIZE(lsr_cc_seraph_regulators),
 	.critical_clk_en = critical_clk_list,
 	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
+	.gdscs = lsr_cc_seraph_gdscs,
+	.num_gdscs = ARRAY_SIZE(lsr_cc_seraph_gdscs),
 };
 
 static const struct of_device_id lsr_cc_seraph_match_table[] = {

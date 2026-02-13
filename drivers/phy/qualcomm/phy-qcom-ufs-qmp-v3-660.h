@@ -1,6 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-only
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2013-2016,2019-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -173,7 +172,6 @@
 #define QSERDES_RX_SIGDET_LVL			RX_OFF(0x118)
 #define QSERDES_RX_SIGDET_DEGLITCH_CNTRL	RX_OFF(0x11C)
 #define QSERDES_RX_RX_INTERFACE_MODE		RX_OFF(0x12C)
-
 
 #define UFS_PHY_RX_LINECFG_DISABLE_BIT		BIT(1)
 

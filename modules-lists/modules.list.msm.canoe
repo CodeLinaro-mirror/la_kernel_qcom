@@ -22,11 +22,13 @@ qcom_soc_wdt.ko
 debug-regulator.ko
 debugcc-canoe.ko
 dispcc-canoe.ko
+dispcc-chora.ko
 evacc-canoe.ko
 gcc-alor.ko
 gcc-canoe.ko
 tcsrcc-chora.ko
 gcc-chora.ko
+qcom-cpufreq-hw.ko
 gdsc-regulator.ko
 gpucc-canoe.ko
 tcsrcc-canoe.ko
@@ -68,6 +70,7 @@ pinctrl-msm.ko
 pinctrl-alor.ko
 pinctrl-canoe.ko
 pinctrl-chora.ko
+pinctrl-ravelin.ko
 qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
@@ -80,6 +83,7 @@ qnoc-qos.ko
 qnoc-canoe.ko
 qnoc-chora.ko
 qnoc-alor.ko
+qnoc-ravelin.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko
 iommu-logger.ko
@@ -100,6 +104,7 @@ ufs-qcom.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
 phy-qcom-ufs-qmp-v4-canoe.ko
+phy-qcom-ufs-qmp-v4-crow.ko
 sg.ko
 gh_arm_drv.ko
 gh_dbl.ko

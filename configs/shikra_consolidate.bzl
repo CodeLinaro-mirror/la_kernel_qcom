@@ -2,6 +2,7 @@ shikra_consolidate_config = {
     # keep sorted
     "CONFIG_ATOMIC64_SELFTEST": "m",
     "CONFIG_CMA_DEBUGFS": "y",
+    "CONFIG_CPU_IDLE_SIMPLE_GOV_QCOM_LPM": "m",
     "CONFIG_DEBUG_PAGEALLOC": "y",
     "CONFIG_DEBUG_PAGEALLOC_ENABLE_DEFAULT": "y",
     "CONFIG_DEBUG_SPINLOCK": "y",
@@ -12,5 +13,6 @@ shikra_consolidate_config = {
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_PAGE_POISONING": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
+    "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_TORTURE_TEST": "m",
 }

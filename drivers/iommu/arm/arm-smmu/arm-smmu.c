@@ -1648,6 +1648,11 @@ static int arm_smmu_init_domain_context(struct arm_smmu_domain *smmu_domain,
 			goto out_clear_smmu;
 	}
 
+	if (IS_ENABLED(CONFIG_QCOM_SMMU_IRGN0_ERRATA)) {
+		if (of_property_read_bool(smmu->dev->of_node, "qcom,irgn0-errata"))
+			pgtbl_cfg->quirks |= IO_PGTABLE_QUIRK_QCOM_TCR_IRGN_NC;
+	}
+
 	if (smmu_domain->pgtbl_quirks)
 		pgtbl_cfg->quirks |= smmu_domain->pgtbl_quirks;
 
@@ -3307,6 +3312,7 @@ static int arm_smmu_handoff_cbs(struct arm_smmu_device *smmu)
 	struct arm_smmu_smr	*handoff_smrs;
 	int num_handoff_smrs;
 	const __be32 *cell;
+	int count = 0;
 
 	cell = of_get_property(smmu->dev->of_node, "qcom,handoff-smrs", NULL);
 	if (!cell)
@@ -3384,6 +3390,7 @@ static int arm_smmu_handoff_cbs(struct arm_smmu_device *smmu)
 
 				smmu->s2crs[i].pinned = true;
 				bitmap_set(smmu->context_map, smmu->s2crs[i].cbndx, 1);
+				count++;
 
 				if (!(smmu->options & ARM_SMMU_OPT_MULTI_MATCH_HANDOFF_SMR)) {
 					handoff_smrs[index].valid = false;
@@ -3398,7 +3405,9 @@ static int arm_smmu_handoff_cbs(struct arm_smmu_device *smmu)
 			}
 		}
 	}
-
+	dev_notice(smmu->dev,
+			"\tpreserved %d qcom,handoff-smrs boot mapping%s\n",
+			count, count == 1 ? "" : "s");
 	kfree(handoff_smrs);
 
 	return 0;

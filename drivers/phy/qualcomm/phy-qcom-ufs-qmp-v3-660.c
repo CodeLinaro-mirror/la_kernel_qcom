@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2018, 2021, The Linux Foundation. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -206,13 +205,10 @@ static int ufs_qcom_phy_qmp_v3_660_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct phy *generic_phy;
 	struct ufs_qcom_phy_qmp_v3_660 *phy;
-	int err = 0;
 
 	phy = devm_kzalloc(dev, sizeof(*phy), GFP_KERNEL);
-	if (!phy) {
-		err = -ENOMEM;
-		goto out;
-	}
+	if (!phy)
+		return -ENOMEM;
 
 	generic_phy = ufs_qcom_phy_generic_probe(pdev, &phy->common_cfg,
 				&ufs_qcom_phy_qmp_v3_660_phy_ops,
@@ -221,8 +217,7 @@ static int ufs_qcom_phy_qmp_v3_660_probe(struct platform_device *pdev)
 	if (!generic_phy) {
 		dev_err(dev, "%s: ufs_qcom_phy_generic_probe() failed\n",
 			__func__);
-		err = -EIO;
-		goto out;
+		return -EIO;
 	}
 
 	phy_set_drvdata(generic_phy, phy);
@@ -230,13 +225,12 @@ static int ufs_qcom_phy_qmp_v3_660_probe(struct platform_device *pdev)
 	strscpy(phy->common_cfg.name, UFS_PHY_NAME,
 		sizeof(phy->common_cfg.name));
 
-out:
-	return err;
+	return 0;
 }
 
 static const struct of_device_id ufs_qcom_phy_qmp_v3_660_of_match[] = {
 	{.compatible = "qcom,ufs-phy-qmp-v3-660"},
-	{},
+	{}
 };
 MODULE_DEVICE_TABLE(of, ufs_qcom_phy_qmp_v3_660_of_match);
 

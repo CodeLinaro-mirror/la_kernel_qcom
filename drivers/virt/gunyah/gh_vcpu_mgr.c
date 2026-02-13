@@ -10,6 +10,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>
+#include <linux/rwsem.h>
 
 #include <linux/gunyah.h>
 #include <linux/gunyah/gh_errno.h>
@@ -46,7 +47,7 @@ static bool oemvm_keep_running = true;
 
 static struct gh_proxy_vm *gh_vms;
 static bool init_done;
-static DEFINE_MUTEX(gh_vm_mutex);
+static DECLARE_RWSEM(gh_vm_rwsem);
 
 static inline bool is_vm_supports_proxy(gh_vmid_t gh_vmid)
 {
@@ -133,7 +134,7 @@ static int gh_wdog_manage(gh_vmid_t vmid, gh_capid_t cap_id, bool populate)
 		return -EINVAL;
 	}
 
-	mutex_lock(&gh_vm_mutex);
+	down_write(&gh_vm_rwsem);
 	vm = gh_get_vm(vmid);
 	if (!vm) {
 		ret = -ENODEV;
@@ -146,7 +147,7 @@ static int gh_wdog_manage(gh_vmid_t vmid, gh_capid_t cap_id, bool populate)
 		vm->wdog_cap_id = GH_CAPID_INVAL;
 
 unlock:
-	mutex_unlock(&gh_vm_mutex);
+	up_write(&gh_vm_rwsem);
 	return ret;
 }
 
@@ -172,7 +173,7 @@ static int gh_populate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 		goto out;
 	}
 
-	mutex_lock(&gh_vm_mutex);
+	down_write(&gh_vm_rwsem);
 	vm = gh_get_vm(vmid);
 	if (vm && !vm->is_vcpu_info_populated) {
 		vcpu = kzalloc(sizeof(*vcpu), GFP_KERNEL);
@@ -205,7 +206,7 @@ static int gh_populate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 		vm->vcpu_count++;
 	}
 unlock:
-	mutex_unlock(&gh_vm_mutex);
+	up_write(&gh_vm_rwsem);
 out:
 	return ret;
 }
@@ -228,7 +229,7 @@ out:
  */
 static void gh_cleanup_proxy_vcpu(struct gh_proxy_vcpu *vcpu, struct gh_proxy_vm *vm)
 {
-	lockdep_assert_held(&gh_vm_mutex);
+	lockdep_assert_held_write(&gh_vm_rwsem);
 
 	wakeup_source_unregister(vcpu->ws);
 	xa_erase(&vm->vcpus, vcpu->idx);
@@ -252,12 +253,12 @@ static int gh_unpopulate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 		goto out;
 	}
 
-	mutex_lock(&gh_vm_mutex);
+	down_write(&gh_vm_rwsem);
 	vm = gh_get_vm(vmid);
 	if (vm && vm->is_vcpu_info_populated) {
 		vcpu = xa_load(&vm->vcpus, cpu_idx);
 		if (!vcpu) {
-			mutex_unlock(&gh_vm_mutex);
+			up_write(&gh_vm_rwsem);
 			goto out;
 		}
 		if (vcpu->vcpu_thread && vcpu->gunyah_vcpu) {
@@ -267,7 +268,7 @@ static int gh_unpopulate_vm_vcpu_info(gh_vmid_t vmid, gh_label_t cpu_idx,
 			gh_cleanup_proxy_vcpu(vcpu, vm);
 		}
 	}
-	mutex_unlock(&gh_vm_mutex);
+	up_write(&gh_vm_rwsem);
 
 out:
 	return 0;
@@ -287,7 +288,7 @@ static void gh_populate_all_res_info(gh_vmid_t vmid, bool res_populated)
 		return;
 	}
 
-	mutex_lock(&gh_vm_mutex);
+	down_write(&gh_vm_rwsem);
 	vm = gh_get_vm(vmid);
 	if (!vm)
 		goto unlock;
@@ -299,7 +300,7 @@ static void gh_populate_all_res_info(gh_vmid_t vmid, bool res_populated)
 		gh_reset_vm(vm);
 	}
 unlock:
-	mutex_unlock(&gh_vm_mutex);
+	up_write(&gh_vm_rwsem);
 }
 
 static int gh_get_nr_vcpus(gh_vmid_t vmid)
@@ -371,6 +372,12 @@ static void android_rvh_gh_before_vcpu_run(void *unused, u16 vmid, u32 vcpu_id)
 	if (vmid > QCOM_SCM_MAX_MANAGED_VMID)
 		return;
 
+	/*
+	 * No need to release rwsem in this function, as
+	 * android_rvh_gh_after_vcpu_run is guaranteed to be called and will
+	 * handle the release there.
+	 */
+	down_read(&gh_vm_rwsem);
 	preempt_disable();
 	vm = gh_get_vm(vmid);
 	if (!vm || !vm->is_active)
@@ -455,10 +462,12 @@ static void android_rvh_gh_after_vcpu_run(void *unused, u16 vmid, u32 vcpu_id, i
 		}
 	}
 
+	up_read(&gh_vm_rwsem);
 	return;
 
 re_enable_preempt:
 	preempt_enable();
+	up_read(&gh_vm_rwsem);
 }
 
 static int gh_vcpu_mgr_reg_rm_cbs(void)
@@ -571,9 +580,9 @@ static int __maybe_unused gh_vcpu_kthread(void *data)
 	/* The cleanup work in vcpu unpopulate is only used to wakeup kthread.
 	 * Once kthread is already in the exit flow, cleanup can be skipped.
 	 */
-	mutex_lock(&gh_vm_mutex);
+	down_write(&gh_vm_rwsem);
 	gh_cleanup_proxy_vcpu(proxy_vcpu, vm);
-	mutex_unlock(&gh_vm_mutex);
+	up_write(&gh_vm_rwsem);
 
 	gunyah_vm_put(vcpu->ghvm);
 
@@ -595,20 +604,21 @@ static void android_rvh_gh_before_vcpu_release(void *unused, u16 vmid,
 	if (!is_keep_running_enable(vmid))
 		return;
 
+	down_read(&gh_vm_rwsem);
 	vm = gh_get_vm(vmid);
 	if (!vm || !vm->is_active)
-		return;
+		goto unlock;
 
 	proxy_vcpu = xa_load(&vm->vcpus, vcpu_id);
 	if (!proxy_vcpu)
-		return;
+		goto unlock;
 	/* Do not need to create kthread if VM is shutdown */
 	if (vcpu->vcpu_run->immediate_exit ||
 	    vcpu->state == GUNYAH_VCPU_RUN_STATE_SYSTEM_DOWN)
-		return;
+		goto unlock;
 	/* VM instance already get a vcpu kref, only need to get VM kref here */
 	if (!gunyah_vm_get(vcpu->ghvm))
-		return;
+		goto unlock;
 
 	proxy_vcpu->gunyah_vcpu = vcpu;
 
@@ -621,8 +631,12 @@ static void android_rvh_gh_before_vcpu_release(void *unused, u16 vmid,
 		pr_err("Failed to create vcpu kthread for VM=%d vcpu=%d\n",
 		       vmid, vcpu_id);
 		gunyah_vm_put(vcpu->ghvm);
-		return;
+		goto unlock;
 	}
+
+unlock:
+	up_read(&gh_vm_rwsem);
+	return;
 }
 
 static void android_rvh_gh_before_vm_release(void *unused, u16 vmid,
@@ -638,11 +652,18 @@ static void android_rvh_gh_before_vm_release(void *unused, u16 vmid,
 	if (!is_keep_running_enable(vmid))
 		return;
 
+	down_read(&gh_vm_rwsem);
 	vm = gh_get_vm(vmid);
 	if (!vm || !vm->is_active)
-		return;
+		goto unlock;
 
+	up_read(&gh_vm_rwsem);
 	ghd_rm_vm_stop(vmid, GH_VM_STOP_SHUTDOWN, 0);
+	return;
+
+unlock:
+	up_read(&gh_vm_rwsem);
+	return;
 }
 
 static void gh_register_hooks(void)

@@ -102,9 +102,13 @@ struct cx_ipeak_client *cx_ipeak_register(struct device_node *dev_node,
 	if (cx_spec.args[0] > 31)
 		return ERR_PTR(-EINVAL);
 
-	if (device_ipeak.core_ops)
-		client =  device_ipeak.core_ops->register_client
-						(cx_spec.args[0]);
+	if (!device_ipeak.core_ops)
+		return ERR_PTR(-ENODEV);
+
+	client = device_ipeak.core_ops->register_client(cx_spec.args[0]);
+
+	if (!client)
+		return NULL;
 
 	client->client_id = cx_spec.args[0];
 

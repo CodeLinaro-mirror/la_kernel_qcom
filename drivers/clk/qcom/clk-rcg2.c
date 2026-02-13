@@ -317,7 +317,9 @@ __clk_rcg2_recalc_rate(struct clk_hw *hw, unsigned long parent_rate, u32 cfg)
 	    || !clk_hw_is_enabled(hw)) && !src) {
 		if (!rcg->current_freq)
 			rcg->current_freq = cxo_f.freq;
-		return rcg->current_freq;
+
+		if (!(clk_hw_get_flags(hw) & CLK_GET_RATE_NOCACHE))
+			return rcg->current_freq;
 	}
 
 	if (rcg->mnd_width) {

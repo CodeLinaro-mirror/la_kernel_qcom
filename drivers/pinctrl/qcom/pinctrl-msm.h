@@ -205,6 +205,8 @@ struct msm_pinctrl_soc_data {
 	const struct pinfunction *functions;
 	unsigned nfunctions;
 	const struct msm_pingroup *groups;
+	unsigned int *no_wake_gpios;
+	unsigned int n_no_wake_gpios;
 	unsigned ngroups;
 	unsigned ngpios;
 	bool pull_no_keeper;

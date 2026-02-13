@@ -1414,7 +1414,8 @@ arm_64_lpae_alloc_pgtable_s1(struct io_pgtable_cfg *cfg, void *cookie)
 	if (cfg->quirks & ~(IO_PGTABLE_QUIRK_ARM_NS |
 			    IO_PGTABLE_QUIRK_ARM_TTBR1 |
 			    IO_PGTABLE_QUIRK_ARM_OUTER_WBWA |
-			    IO_PGTABLE_QUIRK_QCOM_USE_LLC_NWA))
+			    IO_PGTABLE_QUIRK_QCOM_USE_LLC_NWA |
+			    IO_PGTABLE_QUIRK_QCOM_TCR_IRGN_NC))
 		return NULL;
 
 	data = arm_lpae_alloc_pgtable(cfg);
@@ -1424,7 +1425,10 @@ arm_64_lpae_alloc_pgtable_s1(struct io_pgtable_cfg *cfg, void *cookie)
 	/* TCR */
 	if (cfg->coherent_walk) {
 		tcr->sh = ARM_LPAE_TCR_SH_IS;
-		tcr->irgn = ARM_LPAE_TCR_RGN_WBWA;
+		if (cfg->quirks & IO_PGTABLE_QUIRK_QCOM_TCR_IRGN_NC)
+			tcr->irgn = ARM_LPAE_TCR_RGN_NC;
+		else
+			tcr->irgn = ARM_LPAE_TCR_RGN_WBWA;
 		tcr->orgn = ARM_LPAE_TCR_RGN_WBWA;
 		if (WARN_ON(cfg->quirks & (IO_PGTABLE_QUIRK_ARM_OUTER_WBWA |
 					   IO_PGTABLE_QUIRK_QCOM_USE_LLC_NWA)))

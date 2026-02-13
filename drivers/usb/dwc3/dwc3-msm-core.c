@@ -91,6 +91,9 @@
 #define GEN1_U3_EXIT_RSP_RX_CLK(n)	(n)
 #define GEN1_U3_EXIT_RSP_RX_CLK_MASK	GEN1_U3_EXIT_RSP_RX_CLK(0xff)
 
+/* Global USB2 PHY Configuration Register */
+#define DWC3_GUSB2PHYCFG_EUSB2OPMODE	BIT(14)
+
 /* AHB2PHY register offsets */
 #define PERIPH_SS_AHB2PHY_TOP_CFG 0x10
 
@@ -673,6 +676,8 @@ struct dwc3_msm {
 	int			pd_count;
 	struct device		**pd_devs;
 	bool			force_disconnect;
+	bool			disable_force_pull_up_down_quirk;
+	bool			dis_role_switch;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -5209,7 +5214,7 @@ static int dwc3_msm_id_notifier(struct notifier_block *nb,
 	struct dwc3_msm *mdwc = enb->mdwc;
 	enum dwc3_id_state id;
 
-	if (!edev || !mdwc)
+	if (!edev || !mdwc || mdwc->dis_role_switch)
 		return NOTIFY_DONE;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
@@ -5242,7 +5247,7 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 	struct dwc3_msm *mdwc = enb->mdwc;
 	const char *edev_name;
 
-	if (!edev || !mdwc)
+	if (!edev || !mdwc || mdwc->dis_role_switch)
 		return NOTIFY_DONE;
 
 	if (mdwc->dwc3)
@@ -5441,6 +5446,9 @@ static enum usb_role dwc3_msm_usb_role_switch_get_role(struct usb_role_switch *s
 static int dwc3_msm_set_role(struct dwc3_msm *mdwc, enum usb_role role)
 {
 	enum usb_role cur_role;
+
+	if (mdwc->dis_role_switch)
+		return -EPERM;
 
 	if (!dwc3_msm_role_allowed(mdwc, role))
 		return -EINVAL;
@@ -6252,10 +6260,11 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 		}
 	}
 
-	/* Assumes dwc3 is the first DT child of dwc3-msm */
-	dwc3_node = of_get_next_available_child(node, NULL);
-	if (!dwc3_node) {
-		dev_err(mdwc->dev, "failed to find dwc3 child\n");
+	/* Get the dwc3 child node by checking the node name */
+	dwc3_node = of_get_child_by_name(node, "dwc3");
+	if (!dwc3_node || !of_device_is_available(dwc3_node)) {
+		dev_err(mdwc->dev, "dwc3 child is missing or disabled\n");
+		of_node_put(dwc3_node);
 		ret = -ENODEV;
 		goto err;
 	}
@@ -6624,6 +6633,9 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 	mdwc->dis_sending_cm_l1_quirk = of_property_read_bool(node,
 				"qcom,dis-sending-cm-l1-quirk");
 
+	mdwc->disable_force_pull_up_down_quirk = of_property_read_bool(node,
+					"qcom,disable-force-pull-up-down-quirk");
+
 	/* use default as nominal bus voting */
 	mdwc->default_bus_vote = BUS_VOTE_NOMINAL;
 	of_property_read_u32(node, "qcom,default-bus-vote",
@@ -6823,10 +6835,11 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-	/* Assumes dwc3 is the first DT child of dwc3-msm */
-	dwc3_node = of_get_next_available_child(node, NULL);
-	if (!dwc3_node) {
-		dev_err(&pdev->dev, "failed to find dwc3 child\n");
+	/* Get the dwc3 child node by checking the node name */
+	dwc3_node = of_get_child_by_name(node, "dwc3");
+	if (!dwc3_node || !of_device_is_available(dwc3_node)) {
+		dev_err(&pdev->dev, "dwc3 child is missing or disabled\n");
+		of_node_put(dwc3_node);
 		ret = -ENODEV;
 		goto err;
 	}
@@ -6856,6 +6869,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	mutex_init(&mdwc->suspend_resume_mutex);
 	mutex_init(&mdwc->role_switch_mutex);
+	mdwc->dis_role_switch = false;
 
 	if (of_property_read_bool(node, "usb-role-switch")) {
 		struct usb_role_switch_desc role_desc = {
@@ -7018,6 +7032,16 @@ static void dwc3_msm_usb3_phy_poweroff(struct dwc3_msm *mdwc, bool off)
 		phy_init(mdwc->usb3_phy);
 		phy_power_on(mdwc->usb3_phy);
 	}
+}
+
+static void dwc3_msm_shutdown(struct platform_device *pdev)
+{
+	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
+
+	dbg_log_string("Entry\n");
+	dwc3_msm_set_role(mdwc, USB_ROLE_NONE);
+	mdwc->dis_role_switch = true;
+	flush_workqueue(mdwc->sm_usb_wq);
 }
 
 static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
@@ -7299,11 +7323,9 @@ static void msm_dwc3_perf_vote_work(struct work_struct *w)
 	    (mdwc->qos_req_state == PM_QOS_REQ_DYNAMIC && count >= threshold))
 		in_perf_mode = true;
 
-	pr_debug("%s: in_perf_mode:%u, interrupts in last sample:%u\n",
-		 __func__, in_perf_mode, count);
-
 	mdwc->irq_cnt = new;
-	msm_dwc3_perf_vote_update(mdwc, in_perf_mode);
+	if (cpu_latency_qos_request_active(&mdwc->pm_qos_req_dma))
+		msm_dwc3_perf_vote_update(mdwc, in_perf_mode);
 
 	/*
 	 * in PM_QOS_REQ_DEFAULT and PM_QOS_REQ_PERF, both delay is 100ms,
@@ -7336,9 +7358,9 @@ static void msm_dwc3_perf_vote_enable(struct dwc3_msm *mdwc, bool enable)
 		schedule_delayed_work(&mdwc->perf_vote_work,
 				msecs_to_jiffies(PM_QOS_DEFAULT_SAMPLE_MS));
 	} else {
+		cancel_delayed_work_sync(&mdwc->perf_vote_work);
 		if (!cpu_latency_qos_request_active(&mdwc->pm_qos_req_dma))
 			return;
-		cancel_delayed_work_sync(&mdwc->perf_vote_work);
 		msm_dwc3_perf_vote_update(mdwc, false);
 		cpu_latency_qos_remove_request(&mdwc->pm_qos_req_dma);
 	}
@@ -7372,6 +7394,7 @@ static bool is_m31eUSB2_present(struct dwc3_msm *mdwc)
 static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 {
 	int ret = 0;
+	u32 reg;
 	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	if (on) {
@@ -7474,6 +7497,17 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 			dev_dbg(mdwc->dev, "LU3:%08x\n",
 				dwc3_msm_read_reg(mdwc->base,
 					DWC31_LINK_LU3LFPSRXTIM(0)));
+		}
+
+		/*
+		 * Writing "GUSB2PHYCFG.eUSB2OPMODE = 1" addresses a USB2 host compliance
+		 * failure where TEST_J / TEST_K commands issued to the controller do not
+		 * result in proper D+ high / D- high signals.
+		 */
+		if (mdwc->use_eusb2_phy) {
+			reg = dwc3_msm_read_reg(mdwc->base, DWC3_GUSB2PHYCFG(0));
+			dwc3_msm_write_reg(mdwc->base, DWC3_GUSB2PHYCFG(0),
+				reg | DWC3_GUSB2PHYCFG_EUSB2OPMODE);
 		}
 
 		/* xHCI should have incremented child count as necessary */
@@ -7644,19 +7678,21 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 		usb_role_switch_set_role(mdwc->dwc3_drd_sw, USB_ROLE_DEVICE);
 		clk_set_rate(mdwc->core_clk, mdwc->core_clk_rate);
 
-		/*
-		 * Check udc->driver to find out if we are bound to udc or not.
-		 */
-		spin_lock_irqsave(&dwc->lock, flags);
-		if ((mdwc->force_disconnect) && (!dwc->softconnect) &&
-			(dwc->gadget) && (dwc->gadget->udc->driver)) {
-			spin_unlock_irqrestore(&dwc->lock, flags);
-			dbg_event(0xFF, "Force Pullup", 0);
-			usb_gadget_connect(dwc->gadget);
+		if (!mdwc->disable_force_pull_up_down_quirk) {
+			/*
+			 * Check udc->driver to find out if we are bound to udc or not.
+			 */
 			spin_lock_irqsave(&dwc->lock, flags);
+			if ((mdwc->force_disconnect) && (!dwc->softconnect) &&
+				(dwc->gadget) && (dwc->gadget->udc->driver)) {
+				spin_unlock_irqrestore(&dwc->lock, flags);
+				dbg_event(0xFF, "Force Pullup", 0);
+				usb_gadget_connect(dwc->gadget);
+				spin_lock_irqsave(&dwc->lock, flags);
+			}
+			spin_unlock_irqrestore(&dwc->lock, flags);
+			mdwc->force_disconnect = false;
 		}
-		spin_unlock_irqrestore(&dwc->lock, flags);
-		mdwc->force_disconnect = false;
 	} else {
 		dev_dbg(mdwc->dev, "%s: turn off gadget\n", __func__);
 
@@ -7686,17 +7722,20 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 			dbg_event(0xFF, "StopGdgt connected", dwc->connected);
 			pm_runtime_suspend(&mdwc->dwc3->dev);
 		}
-		if ((timeout == 0) && (dwc->connected)) {
-			dbg_event(0xFF, "Force Pulldown", 0);
 
-			/*
-			 * Since we are not taking the udc_lock, there is a
-			 * chance that this might race with gadget_remove driver
-			 * in case this is called in parallel to UDC getting
-			 * cleared in userspace
-			 */
-			usb_gadget_disconnect(dwc->gadget);
-			mdwc->force_disconnect = true;
+		if (!mdwc->disable_force_pull_up_down_quirk) {
+			if ((timeout == 0) && (dwc->connected)) {
+				dbg_event(0xFF, "Force Pulldown", 0);
+
+				/*
+				 * Since we are not taking the udc_lock, there is a
+				 * chance that this might race with gadget_remove driver
+				 * in case this is called in parallel to UDC getting
+				 * cleared in userspace
+				 */
+				usb_gadget_disconnect(dwc->gadget);
+				mdwc->force_disconnect = true;
+			}
 		}
 
 		/* wait for LPM, to ensure h/w is reset after stop_peripheral */
@@ -8032,6 +8071,9 @@ static int dwc3_core_prepare(struct device *dev)
 	struct dwc3 *dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
 
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return 0;
+
 	dbg_event(0xFF, "Core PM prepare", pm_runtime_suspended(dev));
 	/*
 	 * It is recommended to use the PM prepare callback to handle situations
@@ -8058,6 +8100,9 @@ static void dwc3_core_complete(struct device *dev)
 {
 	struct dwc3	*dwc = dev_get_drvdata(dev);
 	struct dwc3_msm *mdwc = dev_get_drvdata(dwc->dev->parent);
+
+	if (strcmp(dev_driver_string(dev->parent), "msm-dwc3") != 0)
+		return;
 
 	/*
 	 * In the PM devices documentation, while leaving system suspend when
@@ -8134,6 +8179,7 @@ MODULE_DEVICE_TABLE(of, of_dwc3_matach);
 static struct platform_driver dwc3_msm_driver = {
 	.probe		= dwc3_msm_probe,
 	.remove		= dwc3_msm_remove,
+	.shutdown	= dwc3_msm_shutdown,
 	.driver		= {
 		.name	= "msm-dwc3",
 		.pm	= &dwc3_msm_dev_pm_ops,

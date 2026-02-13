@@ -127,7 +127,7 @@ enum EV_PRIORITY {
 #define GPII_VERB(gpii, ch, fmt, ...)
 #endif
 
-#define IPC_LOG_PAGES (2)
+#define IPC_LOG_PAGES (40)
 #define GPI_LABEL_SIZE (256)
 #define GPI_DBG_COMMON (99)
 #define MAX_CHANNELS_PER_GPII (2)
@@ -788,9 +788,23 @@ static void gpi_dump_cntxt_regs(struct gpii *gpii)
 	}
 
 	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
+		offset = GPI_GPII_n_CH_k_CNTXT_1_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
+		reg_val = readl_relaxed(gpii->regs + offset);
+		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_CH_%d_CNTXT_1 reg_val:0x%x\n",
+			 gpii->gpii_id, chan, reg_val);
+	}
+
+	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
 		offset = GPI_GPII_n_CH_k_CNTXT_2_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
 		reg_val = readl_relaxed(gpii->regs + offset);
 		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_CH_%d_CNTXT_2 reg_val:0x%x\n",
+			 gpii->gpii_id, chan, reg_val);
+	}
+
+	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
+		offset = GPI_GPII_n_CH_k_CNTXT_3_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
+		reg_val = readl_relaxed(gpii->regs + offset);
+		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_CH_%d_CNTXT_3 reg_val:0x%x\n",
 			 gpii->gpii_id, chan, reg_val);
 	}
 
@@ -802,6 +816,13 @@ static void gpi_dump_cntxt_regs(struct gpii *gpii)
 	}
 
 	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
+		offset = GPI_GPII_n_CH_k_CNTXT_5_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
+		reg_val = readl_relaxed(gpii->regs + offset);
+		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_CH_%d_CNTXT_5 reg_val:0x%x\n",
+			 gpii->gpii_id, chan, reg_val);
+	}
+
+	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
 		offset = GPI_GPII_n_CH_k_CNTXT_6_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
 		reg_val = readl_relaxed(gpii->regs + offset);
 		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_CH_%d_CNTXT_6 reg_val:0x%x\n",
@@ -809,32 +830,51 @@ static void gpi_dump_cntxt_regs(struct gpii *gpii)
 	}
 
 	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
-		offset = GPI_GPII_n_EV_CH_k_CNTXT_0_OFFS(gpii->gpii_id,	gpii->gpii_chan[chan].chid);
+		offset = GPI_GPII_n_CH_k_CNTXT_7_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
 		reg_val = readl_relaxed(gpii->regs + offset);
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_%d_CNTXT_0 reg_val:0x%x\n",
+		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_CH_%d_CNTXT_7 reg_val:0x%x\n",
 			 gpii->gpii_id, chan, reg_val);
 	}
 
-	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
-		offset = GPI_GPII_n_EV_CH_k_CNTXT_2_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
-		reg_val = readl_relaxed(gpii->regs + offset);
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_%d_CNTXT_2 reg_val:0x%x\n",
-			 gpii->gpii_id, chan, reg_val);
-	}
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_0_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_0 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
 
-	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
-		offset = GPI_GPII_n_EV_CH_k_CNTXT_4_OFFS(gpii->gpii_id,	gpii->gpii_chan[chan].chid);
-		reg_val = readl_relaxed(gpii->regs + offset);
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_%d_CNTXT_4 reg_val:0x%x\n",
-			 gpii->gpii_id, chan, reg_val);
-	}
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_1_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_1 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
 
-	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
-		offset = GPI_GPII_n_EV_CH_k_CNTXT_6_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid);
-		reg_val = readl_relaxed(gpii->regs + offset);
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_%d_CNTXT_6 reg_val:0x%x\n",
-			 gpii->gpii_id, chan, reg_val);
-	}
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_2_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_2 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
+
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_3_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_3 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
+
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_4_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_4 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
+
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_5_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_5 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
+
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_6_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_6 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
+
+	offset = GPI_GPII_n_EV_CH_0_CNTXT_7_OFFS(gpii->gpii_id);
+	reg_val = readl_relaxed(gpii->regs + offset);
+	GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_GPII_%d_EV_0_CNTXT_7 reg_val: 0x%x\n",
+		 gpii->gpii_id, reg_val);
 
 	for (chan = 0; chan < MAX_CHANNELS_PER_GPII; chan++) {
 		offset = GPI_GPII_n_CH_k_RE_FETCH_READ_PTR(gpii->gpii_id,
@@ -867,19 +907,21 @@ static void gpi_dump_debug_reg(struct gpii *gpii)
 					(gpii->gpii_id) },
 		{ "TYPE_IRQ_MSK", GPI_GPII_n_CNTXT_TYPE_IRQ_MSK_OFFS
 					(gpii->gpii_id) },
-		{ "CH_IRQ", GPI_GPII_n_CNTXT_SRC_GPII_CH_IRQ_OFFS
+		{ "MCS_CODE_VER", GPI_GPII_n_GSI_MCS_CODE_VER
 					(gpii->gpii_id) },
-		{ "EV_IRQ", GPI_GPII_n_CNTXT_SRC_EV_CH_IRQ_OFFS
+		{ "SRC_CH_IRQ", GPI_GPII_n_CNTXT_SRC_GPII_CH_IRQ_OFFS
 					(gpii->gpii_id) },
-		{ "CH_IRQ_MSK", GPI_GPII_n_CNTXT_SRC_CH_IRQ_MSK_OFFS
+		{ "SRC_EV_IRQ", GPI_GPII_n_CNTXT_SRC_EV_CH_IRQ_OFFS
 					(gpii->gpii_id) },
-		{ "EV_IRQ_MSK", GPI_GPII_n_CNTXT_SRC_EV_CH_IRQ_MSK_OFFS
+		{ "SRC_CH_IRQ_MSK", GPI_GPII_n_CNTXT_SRC_CH_IRQ_MSK_OFFS
 					(gpii->gpii_id) },
-		{ "IEOB_IRQ", GPI_GPII_n_CNTXT_SRC_IEOB_IRQ_OFFS
+		{ "SRC_EV_IRQ_MSK", GPI_GPII_n_CNTXT_SRC_EV_CH_IRQ_MSK_OFFS
 					(gpii->gpii_id) },
-		{ "IEOB_IRQ_MSK", GPI_GPII_n_CNTXT_SRC_IEOB_IRQ_MSK_OFFS
+		{ "SRC_IEOB_IRQ", GPI_GPII_n_CNTXT_SRC_IEOB_IRQ_OFFS
 					(gpii->gpii_id) },
-		{ "GLOB_IRQ", GPI_GPII_n_CNTXT_GLOB_IRQ_STTS_OFFS
+		{ "SRC_IEOB_IRQ_MSK", GPI_GPII_n_CNTXT_SRC_IEOB_IRQ_MSK_OFFS
+					(gpii->gpii_id) },
+		{ "GLOB_IRQ_STTS", GPI_GPII_n_CNTXT_GLOB_IRQ_STTS_OFFS
 					(gpii->gpii_id) },
 		{ "GLOB_IRQ_EN", GPI_GPII_n_CNTXT_GLOB_IRQ_EN_OFFS
 					(gpii->gpii_id) },
@@ -995,7 +1037,7 @@ static void gpi_dump_debug_reg(struct gpii *gpii)
 		dbg_reg_table->ch_scratch_0[chan] = readl_relaxed(gpii->regs +
 				GPI_GPII_n_CH_k_SCRATCH_0_OFFS(gpii->gpii_id,
 						gpii->gpii_chan[chan].chid));
-		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_ch_scratch Reg addr:0x%x->val:0x%x\n",
+		GPII_ERR(gpii, GPI_DBG_COMMON, "GPI_ch_%d_scratch Reg addr:0x%x->val:0x%x\n", chan,
 			 GPI_GPII_n_CH_k_SCRATCH_0_OFFS(gpii->gpii_id, gpii->gpii_chan[chan].chid),
 			 dbg_reg_table->ch_scratch_0[chan]);
 	}
@@ -4533,7 +4575,7 @@ static int gpi_probe(struct platform_device *pdev)
 
 		/* set up ev cntxt register map */
 		gpii->ev_cntxt_base_reg = gpi_dev->ee_base +
-			GPI_GPII_n_EV_CH_k_CNTXT_0_OFFS(i, 0);
+			GPI_GPII_n_EV_CH_0_CNTXT_0_OFFS(i);
 		gpii->ev_cntxt_db_reg = gpi_dev->ee_base +
 			GPI_GPII_n_EV_CH_k_DOORBELL_0_OFFS(i, 0);
 		gpii->ev_ring_base_lsb_reg = gpii->ev_cntxt_base_reg +

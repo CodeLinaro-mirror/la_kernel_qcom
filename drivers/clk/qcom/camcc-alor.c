@@ -76,7 +76,6 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 /* 1200.0 MHz Configuration */
 static const struct alpha_pll_config cam_cc_pll0_config = {
 	.l = 0x3e,
-	.cal_l = 0x48,
 	.alpha = 0x8000,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
@@ -161,7 +160,6 @@ static struct clk_alpha_pll_postdiv cam_cc_pll0_out_odd = {
 /* 665.0 MHz Configuration */
 static const struct alpha_pll_config cam_cc_pll1_config = {
 	.l = 0x22,
-	.cal_l = 0x48,
 	.alpha = 0xa2aa,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
@@ -200,7 +198,6 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 /* 677.6 MHz Configuration */
 static const struct alpha_pll_config cam_cc_pll2_config = {
 	.l = 0x23,
-	.cal_l = 0x48,
 	.alpha = 0x4aaa,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
@@ -239,7 +236,6 @@ static struct clk_alpha_pll cam_cc_pll2 = {
 /* 720.56 MHz Configuration */
 static const struct alpha_pll_config cam_cc_pll3_config = {
 	.l = 0x25,
-	.cal_l = 0x48,
 	.alpha = 0x8777,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
@@ -300,7 +296,6 @@ static struct clk_alpha_pll_postdiv cam_cc_pll3_out_even = {
 /* 720.56 MHz Configuration */
 static const struct alpha_pll_config cam_cc_pll4_config = {
 	.l = 0x25,
-	.cal_l = 0x48,
 	.alpha = 0x8777,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
@@ -361,7 +356,6 @@ static struct clk_alpha_pll_postdiv cam_cc_pll4_out_even = {
 /* 720.56 MHz Configuration */
 static const struct alpha_pll_config cam_cc_pll5_config = {
 	.l = 0x25,
-	.cal_l = 0x48,
 	.alpha = 0x8777,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
@@ -422,7 +416,6 @@ static struct clk_alpha_pll_postdiv cam_cc_pll5_out_even = {
 /* 960.0 MHz Configuration */
 static const struct alpha_pll_config cam_cc_pll6_config = {
 	.l = 0x32,
-	.cal_l = 0x48,
 	.alpha = 0x0,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
@@ -507,7 +500,6 @@ static struct clk_alpha_pll_postdiv cam_cc_pll6_out_odd = {
 /* 1000.0 MHz Configuration */
 static const struct alpha_pll_config cam_cc_pll7_config = {
 	.l = 0x34,
-	.cal_l = 0x48,
 	.alpha = 0x1555,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,

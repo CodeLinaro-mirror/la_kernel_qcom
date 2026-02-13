@@ -1,12 +1,23 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
+
 #ifndef __QCOM_QTEE_SHM_BRIDGE_INT_H_
 #define __QCOM_QTEE_SHM_BRIDGE_INT_H_
 
+#ifdef CONFIG_QTEE_SHM_BRIDGE
 int qtee_shmbridge_driver_init(void);
 void qtee_shmbridge_driver_exit(void);
+
+#else
+static inline int qtee_shmbridge_driver_init(void)
+{
+	return 0;
+}
+
+static inline void qtee_shmbridge_driver_exit(void) {}
+#endif
 
 #define SCM_SVC_RTIC                                0x19
 #define TZ_HLOS_NOTIFY_CORE_KERNEL_BOOTUP           0x7

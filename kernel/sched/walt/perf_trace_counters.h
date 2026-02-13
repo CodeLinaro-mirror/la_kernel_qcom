@@ -125,7 +125,7 @@ TRACE_EVENT(sched_switch_with_ctrs,
 					delta_l1_cnts[i] = 0;
 			}
 
-			if (IS_ENABLED(CONFIG_ARM64_AMU_EXTN)) {
+			if (cpu_has_amu_support) {
 				amu_cnt = read_sysreg_s(SYS_AMEVCNTR0_CORE_EL0);
 				delta_amu_cnts[0] = amu_cnt -
 					per_cpu(previous_amu_cnts[0], cpu);

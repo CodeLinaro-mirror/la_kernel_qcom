@@ -183,6 +183,7 @@ enum smart_freq_ipc_reason {
 };
 #define IPC_PARTICIPATION	(BIT(IPC_A) | BIT(IPC_B) | BIT(IPC_C) | BIT(IPC_D) | BIT(IPC_E))
 
+extern bool cpu_has_amu_support;
 DECLARE_PER_CPU(unsigned int, ipc_level);
 DECLARE_PER_CPU(unsigned long, ipc_cnt);
 DECLARE_PER_CPU(unsigned long, intr_cnt);
@@ -593,6 +594,7 @@ extern unsigned int sysctl_sched_sbt_delay_windows;
 
 extern cpumask_t cpus_for_pipeline;
 extern unsigned int pipeline_swap_util_th;
+extern bool single_cluster_pipeline;
 
 /* WALT cpufreq interface */
 #define WALT_CPUFREQ_ROLLOVER_BIT		BIT(0)
@@ -1737,7 +1739,7 @@ extern void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_deman
 extern unsigned int sysctl_pipeline_force_config;
 extern unsigned long walt_cpu_energy(int cpu,
 				     unsigned long max_util, unsigned long sum_util);
-extern unsigned int gold_cluster_id, prime_cluster_id;
+extern unsigned int pipeline_lower_cluster_id, pipeline_higher_cluster_id;
 extern unsigned int soc_cluster_freq_table_size[MAX_CLUSTERS];
 extern unsigned int soc_cluster_freq_table[MAX_CLUSTERS][MAX_FREQ_TABLE_ENTRIES];
 struct waltgov_policy;

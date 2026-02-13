@@ -1623,7 +1623,8 @@ static int adsp_setup_32b_dma_allocs(struct qcom_adsp *adsp)
 	if (!adsp->dma_phys_below_32b)
 		return 0;
 
-	ret = of_reserved_mem_device_init_by_idx(adsp->dev, adsp->dev->of_node, 2);
+	ret = of_reserved_mem_device_init_by_idx(adsp->dev, adsp->dev->of_node,
+			adsp->dtb_firmware_name ? 2 : 1);
 	if (ret) {
 		dev_err(adsp->dev,
 			"Unable to get the CMA area for performing dma_alloc_* calls\n");
@@ -2628,6 +2629,7 @@ static const struct adsp_data canoe_adsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
+	.auto_boot = true,
 };
 
 static const struct adsp_data canoe_cdsp_resource = {
@@ -2644,6 +2646,7 @@ static const struct adsp_data canoe_cdsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 5,
+	.auto_boot = true,
 };
 
 static const struct adsp_data canoe_mpss_resource = {
@@ -2677,6 +2680,7 @@ static const struct adsp_data canoe_soccp_resource = {
 	.ssr_name = "soccp",
 	.sysmon_name = "soccp",
 	.early_boot = true,
+	.auto_boot = true,
 };
 
 static const struct adsp_data pineapple_adsp_resource = {
@@ -2887,6 +2891,7 @@ static const struct adsp_data alor_adsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
+	.auto_boot = true,
 };
 
 static const struct adsp_data alor_cdsp_resource = {
@@ -2903,6 +2908,7 @@ static const struct adsp_data alor_cdsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 5,
+	.auto_boot = true,
 };
 
 static const struct adsp_data alor_soccp_resource = {
@@ -2916,6 +2922,7 @@ static const struct adsp_data alor_soccp_resource = {
 	.ssr_name = "soccp",
 	.sysmon_name = "soccp",
 	.early_boot = true,
+	.auto_boot = true,
 };
 
 static const struct adsp_data khaje_adsp_resource = {
@@ -2940,6 +2947,7 @@ static const struct adsp_data khaje_cdsp_resource = {
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
 	.uses_elf64 = false,
+	.auto_boot = true,
 };
 
 static const struct adsp_data khaje_mpss_resource = {
@@ -2954,6 +2962,86 @@ static const struct adsp_data khaje_mpss_resource = {
 	.ssctl_id = 0x12,
 	.decrypt_shutdown = true,
 	.both_dumps = true,
+};
+
+static const struct adsp_data bengal_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = false,
+};
+
+static const struct adsp_data bengal_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.pas_id = 18,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = false,
+	.auto_boot = true,
+};
+
+static const struct adsp_data bengal_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data malabar_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.uses_elf64 = true,
+	.auto_boot = true,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data malabar_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data malabar_wpss_resource = {
+	.crash_reason_smem = 626,
+	.firmware_name = "wpss.mdt",
+	.pas_id = 6,
+	.minidump_id = 4,
+	.uses_elf64 = true,
+	.ssr_name = "wpss",
+	.sysmon_name = "wpss",
+	.ssctl_id = 0x19,
 };
 
 static const struct adsp_data chora_adsp_resource = {
@@ -3000,6 +3088,50 @@ static const struct adsp_data chora_wpss_resource = {
 	.ssr_name = "wpss",
 	.sysmon_name = "wpss",
 	.ssctl_id = 0x19,
+};
+
+static const struct adsp_data seraph_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.load_state = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data seraph_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.load_state = "cdsp",
+	.ssctl_id = 0x17,
+};
+
+static const struct adsp_data seraph_soccp_resource = {
+	.crash_reason_smem = 656,
+	.firmware_name = "soccp.mbn",
+	.dtb_firmware_name = "soccp_dtb.mbn",
+	.pas_id = 51,
+	.dtb_pas_id = 0x41,
+	.minidump_id = 24,
+	.uses_elf64 = true,
+	.ssr_name = "soccp",
+	.sysmon_name = "soccp",
+	.early_boot = true,
+	.auto_boot = true,
 };
 
 static const struct of_device_id adsp_of_match[] = {
@@ -3073,6 +3205,9 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,canoe-cdsp-pas", .data = &canoe_cdsp_resource},
 	{ .compatible = "qcom,canoe-modem-pas", .data = &canoe_mpss_resource},
 	{ .compatible = "qcom,canoe-soccp-pas", .data = &canoe_soccp_resource},
+	{ .compatible = "qcom,seraph-adsp-pas", .data = &seraph_adsp_resource},
+	{ .compatible = "qcom,seraph-cdsp-pas", .data = &seraph_cdsp_resource},
+	{ .compatible = "qcom,seraph-soccp-pas", .data = &seraph_soccp_resource},
 	{ .compatible = "qcom,vienna-adsp-pas", .data = &vienna_adsp_resource},
 	{ .compatible = "qcom,vienna-cdsp-pas", .data = &vienna_cdsp_resource},
 	{ .compatible = "qcom,vienna-modem-pas", .data = &vienna_mpss_resource},
@@ -3088,11 +3223,17 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,khaje-adsp-pas", .data = &khaje_adsp_resource},
 	{ .compatible = "qcom,khaje-cdsp-pas", .data = &khaje_cdsp_resource},
 	{ .compatible = "qcom,khaje-modem-pas", .data = &khaje_mpss_resource},
+	{ .compatible = "qcom,malabar-adsp-pas", .data = &malabar_adsp_resource},
+	{ .compatible = "qcom,malabar-modem-pas", .data = &malabar_mpss_resource},
+	{ .compatible = "qcom,malabar-wpss-pas", .data = &malabar_wpss_resource},
 	{ .compatible = "qcom,monaco-adsp-pas", .data = &monaco_adsp_resource},
 	{ .compatible = "qcom,monaco-modem-pas", .data = &monaco_modem_resource},
 	{ .compatible = "qcom,chora-adsp-pas", .data = &chora_adsp_resource},
 	{ .compatible = "qcom,chora-modem-pas", .data = &chora_mpss_resource},
 	{ .compatible = "qcom,chora-wpss-pas", .data = &chora_wpss_resource},
+	{ .compatible = "qcom,bengal-adsp-pas", .data = &bengal_adsp_resource},
+	{ .compatible = "qcom,bengal-cdsp-pas", .data = &bengal_cdsp_resource},
+	{ .compatible = "qcom,bengal-modem-pas", .data = &bengal_mpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

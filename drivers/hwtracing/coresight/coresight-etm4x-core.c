@@ -199,11 +199,12 @@ static inline void etm4_os_unlock_csa(struct etmv4_drvdata *drvdata,
 	drvdata->os_unlock = true;
 }
 
-static void etm4_os_unlock(struct etmv4_drvdata *drvdata)
+void etm4_os_unlock(struct etmv4_drvdata *drvdata)
 {
 	if (!WARN_ON(!drvdata->csdev))
 		etm4_os_unlock_csa(drvdata, &drvdata->csdev->access);
 }
+EXPORT_SYMBOL_GPL(etm4_os_unlock);
 
 static void etm4_os_lock(struct etmv4_drvdata *drvdata)
 {

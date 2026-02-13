@@ -18,6 +18,7 @@
 #include "clk-pm.h"
 #include "clk-rcg.h"
 #include "common.h"
+#include "gdsc.h"
 #include "reset.h"
 #include "vdd-level.h"
 
@@ -2928,6 +2929,118 @@ static struct clk_branch cam_cc_soc_ahb_clk = {
 	},
 };
 
+static struct gdsc cam_cc_titan_top_gdsc = {
+	.gdscr = 0x14028,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_titan_top_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.path_name = "cam-to-ddr",
+	.supply = "vdd_cx",
+};
+
+static struct gdsc cam_cc_bps_gdsc = {
+	.gdscr = 0x10004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_bps_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc cam_cc_ife_0_gdsc = {
+	.gdscr = 0x11004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_ife_0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc cam_cc_ife_1_gdsc = {
+	.gdscr = 0x12004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_ife_1_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc cam_cc_ife_lite_0_gdsc = {
+	.gdscr = 0x13004,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_ife_lite_0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc cam_cc_ife_lite_1_gdsc = {
+	.gdscr = 0x13078,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_ife_lite_1_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc cam_cc_ife_lite_2_gdsc = {
+	.gdscr = 0x130ec,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_ife_lite_2_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_cx",
+};
+
+static struct gdsc cam_cc_ipe_0_gdsc = {
+	.gdscr = 0x10080,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0xf,
+	.pd = {
+		.name = "cam_cc_ipe_0_gdsc",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.parent = &cam_cc_titan_top_gdsc.pd,
+	.supply = "vdd_cx",
+};
+
 static struct clk_regmap *cam_cc_seraph_clocks[] = {
 	[CAM_CC_BPS_AHB_CLK] = &cam_cc_bps_ahb_clk.clkr,
 	[CAM_CC_BPS_CLK] = &cam_cc_bps_clk.clkr,
@@ -3066,6 +3179,17 @@ static struct critical_clk_offset critical_clk_list[] = {
 	{ .offset = 0x14074, .mask = BIT(0) },
 };
 
+static struct gdsc *cam_cc_seraph_gdscs[] = {
+	[CAM_CC_BPS_GDSC] = &cam_cc_bps_gdsc,
+	[CAM_CC_IFE_0_GDSC] = &cam_cc_ife_0_gdsc,
+	[CAM_CC_IFE_1_GDSC] = &cam_cc_ife_1_gdsc,
+	[CAM_CC_IFE_LITE_0_GDSC] = &cam_cc_ife_lite_0_gdsc,
+	[CAM_CC_IFE_LITE_1_GDSC] = &cam_cc_ife_lite_1_gdsc,
+	[CAM_CC_IFE_LITE_2_GDSC] = &cam_cc_ife_lite_2_gdsc,
+	[CAM_CC_IPE_0_GDSC] = &cam_cc_ipe_0_gdsc,
+	[CAM_CC_TITAN_TOP_GDSC] = &cam_cc_titan_top_gdsc,
+};
+
 static const struct qcom_reset_map cam_cc_seraph_resets[] = {
 	[CAM_CC_BPS_BCR] = { 0x10000 },
 	[CAM_CC_CAMNOC_BCR] = { 0x132b0 },
@@ -3099,6 +3223,8 @@ static struct qcom_cc_desc cam_cc_seraph_desc = {
 	.num_clk_regulators = ARRAY_SIZE(cam_cc_seraph_regulators),
 	.critical_clk_en = critical_clk_list,
 	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
+	.gdscs = cam_cc_seraph_gdscs,
+	.num_gdscs = ARRAY_SIZE(cam_cc_seraph_gdscs),
 };
 
 static const struct of_device_id cam_cc_seraph_match_table[] = {

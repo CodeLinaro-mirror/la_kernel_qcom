@@ -30,7 +30,6 @@ socinfo.ko
 icc-bcm-voter.ko
 icc-clk.ko
 icc-debug.ko
-qcom_cpucp.ko
 qcom_scmi_vendor.ko
 qcom_scmi_client.ko
 qcom-dcvs.ko
@@ -97,4 +96,5 @@ sdhci-msm.ko
 msm_sharedmem.ko
 nvmem_qfprom.ko
 qcom-cpufreq-hw.ko
+qseecom_proxy.ko
 rtc-pm8xxx.ko

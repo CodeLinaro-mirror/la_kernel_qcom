@@ -54,6 +54,7 @@ enum {
 	HW_PLATFORM_IDP = 34,
 	HW_PLATFORM_WDP = 36,
 	HW_PLATFORM_CRD = 40,
+	HW_PLATFORM_QAR = 44,
 	HW_PLATFORM_WRD = 45,
 	HW_PLATFORM_INVALID
 };
@@ -81,6 +82,7 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_IDP] = "IDP",
 	[HW_PLATFORM_WDP] = "WDP",
 	[HW_PLATFORM_CRD] = "CRD",
+	[HW_PLATFORM_QAR] = "QAR",
 	[HW_PLATFORM_WRD] = "WRD",
 };
 
@@ -607,6 +609,9 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(QCM2150) },
 	{ qcom_board_id(SDA429W) },
 	{ qcom_board_id(SM8350) },
+	{ qcom_board_id(SM8350P) },
+	{ qcom_board_id(SM8325) },
+	{ qcom_board_id(SM8325P) },
 	{ qcom_board_id(QCM2290) },
 	{ qcom_board_id(SM7125) },
 	{ qcom_board_id(SM6115) },
@@ -625,6 +630,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id_named(SM8450_2, "SM8450") },
 	{ qcom_board_id_named(SM8450_3, "SM8450") },
 	{ qcom_board_id(MONACO) },
+	{ qcom_board_id(MONACOP) },
 	{ qcom_board_id(SC7280) },
 	{ qcom_board_id(SC7180P) },
 	{ qcom_board_id(QCM6490) },
@@ -654,6 +660,10 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(X1E80100) },
 	{ qcom_board_id(SM8650) },
 	{ qcom_board_id(SM4450) },
+	{ qcom_board_id(RAVELIN) },
+	{ qcom_board_id(RAVELINP) },
+	{ qcom_board_id(SG_RAVELIN) },
+	{ qcom_board_id(SG_RAVELINP) },
 	{ qcom_board_id(QDU1010) },
 	{ qcom_board_id(QRU1032) },
 	{ qcom_board_id(QRU1052) },
@@ -687,6 +697,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(KHAJEQ) },
 	{ qcom_board_id(KHAJEG) },
 	{ qcom_board_id(KHAJEIOT) },
+	{ qcom_board_id(MALABAR) },
 	{ qcom_board_id(PIKACHU) },
 	{ qcom_board_id(SM7315) },
 	{ qcom_board_id(SM7325) },
