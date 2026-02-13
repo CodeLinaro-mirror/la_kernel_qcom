@@ -1245,10 +1245,7 @@ static int qcom_geni_serial_startup(struct uart_port *uport)
 			return ret;
 	}
 
-	uart_port_lock_irq(uport);
 	qcom_geni_serial_start_rx(uport);
-	uart_port_unlock_irq(uport);
-
 	enable_irq(uport->irq);
 
 	return 0;
