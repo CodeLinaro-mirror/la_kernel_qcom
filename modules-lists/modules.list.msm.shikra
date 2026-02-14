@@ -50,3 +50,6 @@ cqhci.ko
 sdhci-msm.ko
 mdt_loader.ko
 socinfo.ko
+dispcc-shikra.ko
+gpucc-shikra.ko
+qcom-cpufreq-hw.ko

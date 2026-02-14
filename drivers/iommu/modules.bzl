@@ -83,6 +83,7 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
     registry.register(
         name = "drivers/iommu/virtio-iommu",
         out = "virtio-iommu.ko",
@@ -98,5 +99,21 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/iommu/qcom_dpd_proxy_iommu",
+        out = "qcom_dpd_proxy_iommu.ko",
+        config = "CONFIG_QCOM_DPD_PROXY",
+        srcs = [
+            # do not sort
+            "drivers/iommu/qcom_dpd_proxy_iommu.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_dpd_proxy",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )

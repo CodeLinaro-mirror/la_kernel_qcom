@@ -323,7 +323,7 @@ static int walt_proc_pipeline_cpus_handler(const struct ctl_table *table,
 	unsigned int old_value;
 	unsigned long bitmask;
 	const unsigned long *bitmaskp = &bitmask;
-	cpumask_t tmp, cluster_cpus;
+	cpumask_t tmp;
 	static bool written_once;
 	static DEFINE_MUTEX(mutex);
 	struct ctl_table local_table = *table;
@@ -346,11 +346,11 @@ static int walt_proc_pipeline_cpus_handler(const struct ctl_table *table,
 	bitmap_copy(sysctl_bitmap, bitmaskp, WALT_NR_CPUS);
 	cpumask_copy(&tmp, to_cpumask(sysctl_bitmap));
 	for_each_sched_cluster(cluster) {
-		if (cpumask_and(&cluster_cpus, &cluster->cpus, &tmp)) {
+		if (cpumask_intersects(&cluster->cpus, &tmp)) {
 			if (!idx)
-				gold_cluster_id = cluster->id;
+				pipeline_lower_cluster_id = cluster->id;
 			else
-				prime_cluster_id = cluster->id;
+				pipeline_higher_cluster_id = cluster->id;
 			idx++;
 		}
 	}

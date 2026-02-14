@@ -1136,6 +1136,12 @@ static void spi_gsi_rx_callback(void *cb)
 		if (cb_param->length == xfer->len) {
 			SPI_LOG_DBG(mas->ipc, false, mas->dev, "GSI Rx Callback for %d bytes\n",
 				    xfer->len);
+			if (!xfer->rx_dma) {
+				SPI_LOG_ERR(mas->ipc, true, mas->dev,
+					    "RX DMA address not mapped.\n");
+				complete(&mas->rx_cb);
+				return;
+			}
 			/*
 			 * If not maintained coherency, IPC log buffer doesn't get
 			 * valid data instead throws cached data. Ensure the coherency

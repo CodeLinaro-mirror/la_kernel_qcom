@@ -147,6 +147,7 @@ struct ethqos_emac_driver_data {
 	bool has_integrated_pcs;
 	u32 dma_addr_width;
 	unsigned int ptp_clk_rate;
+	unsigned int axi_clk_rate;
 	struct dwmac4_addrs dwmac4_addrs;
 	bool needs_sgmii_loopback;
 	bool has_hdma;
@@ -638,6 +639,7 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.link_clk_name = "phyaux",
 	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
 	.has_hdma = true,
+	.axi_clk_rate = 380000000,
 	.ptp_clk_rate = 250000000,
 	.dwxgmac_addrs = {
 		.dma_even_chan_base  = 0x00008500,
@@ -724,7 +726,6 @@ static int qcom_ethqos_serdes_set_level(struct qcom_ethqos *ethqos)
 		dev = ethqos->pd_list->pd_devs[PERF_SERDES];
 	} else if (ethqos->phy_mode == PHY_INTERFACE_MODE_5GBASER) {
 		dev = ethqos->pd_list->pd_devs[PERF_5G_SERDES];
-		ethqos->speed = SPEED_5000;
 	} else {
 		dev = ethqos->pd_list->pd_devs[PERF_SERDES];
 	}
@@ -1800,6 +1801,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
 	plat_dat->dump_debug_regs = rgmii_dump;
 	plat_dat->ptp_clk_freq_config = ethqos_ptp_clk_freq_config;
+	plat_dat->clk_ref_rate = data->axi_clk_rate;
 	if (ethqos->use_domains)
 		plat_dat->clk_ptp_rate = data->ptp_clk_rate;
 	else

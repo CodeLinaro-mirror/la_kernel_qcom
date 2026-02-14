@@ -123,6 +123,7 @@ static bool handle_scm_extended_abi(struct user_pt_regs *regs)
 static bool smc_filter_host_sip_handler(u32 func_id)
 {
 	const u16 svc_cmd = ARM_SMCCC_FUNC_NUM(func_id);
+	bool blocked = true;
 
 	/*
 	 * Check which SIP calls are permitted from the host.
@@ -135,15 +136,13 @@ static bool smc_filter_host_sip_handler(u32 func_id)
 	case SMC_SIP_INFO_GET_SECURE_STATE:
 	case SMC_SIP_IO_READ:
 	case SMC_SIP_IO_WRITE:
-		/* Forward to TZ */
+		blocked = false;
 		break;
 	default:
-		/* Blocked */
-		return true;
+		break;
 	}
 
-	/* The SMC can be forwarded to TZ */
-	return false;
+	return blocked;
 }
 
 /*
@@ -155,6 +154,7 @@ static bool smc_filter_host_trusted_os_handler(u32 func_id)
 	const u16 svc_cmd = ARM_SMCCC_FUNC_NUM(func_id);
 	const bool is_fast = ARM_SMCCC_IS_FAST_CALL(func_id);
 	const bool is_64 = ARM_SMCCC_IS_64(func_id);
+	bool blocked = true;
 
 	/*
 	 * Check which Trusted OS calls are permitted from the host.
@@ -165,26 +165,17 @@ static bool smc_filter_host_trusted_os_handler(u32 func_id)
 	case SMC_TOS_REQUEST_ENCR_LOG:
 	case SMC_TOS_QUERY_LOG_STATUS:
 	case SMC_TOS_QUERY_TZ_TIME:
-		/* SVC_QSEELOG: forward to TZ */
+		blocked = false;
 		break;
 	case SMC_TOS_SMCINVOKE_INVOKE_FFA:
 	case SMC_TOS_SMCINVOKE_CB_RSP_FFA:
-		/* SVC_SMCINVOKE: block if Fast or 32-bit */
-		return is_fast || !is_64;
+		blocked = is_fast || !is_64;
+		break;
 	default:
-		/* Blocked */
-		return true;
+		break;
 	}
 
-	/* The SMC can be forwarded to TZ */
-	return false;
-}
-
-static inline bool is_ffa_call(u32 func_id)
-{
-	return ARM_SMCCC_IS_FAST_CALL(func_id) &&
-		ARM_SMCCC_FUNC_NUM(func_id) >= FFA_MIN_FUNC_NUM &&
-		ARM_SMCCC_FUNC_NUM(func_id) <= FFA_MAX_FUNC_NUM;
+	return blocked;
 }
 
 /*
@@ -193,25 +184,29 @@ static inline bool is_ffa_call(u32 func_id)
  */
 bool smc_filter_host_handler(struct user_pt_regs *regs)
 {
-	bool blocked = true;
 	const u32 func_id = (u32)regs->regs[SMCCC_FUNC_ID_REG_IDX];
 	const u32 owner = ARM_SMCCC_OWNER_NUM(func_id);
+	bool blocked = true;
+	bool is_scm = false;
 
 	/* MBZ bits must be zero */
 	if (ARM_SMCCC_MBZ(func_id) != 0U)
 		goto terminate_smc;
 
 	switch (owner) {
+	case ARM_SMCCC_OWNER_ARCH:
+		blocked = false;
+		break;
 	case ARM_SMCCC_OWNER_SIP:
 		blocked = smc_filter_host_sip_handler(func_id);
+		is_scm = true;
 		break;
 	case ARM_SMCCC_OWNER_STANDARD:
-		/* FFA calls that do reach here are being passed through. */
-		if (is_ffa_call(func_id))
-			return false;
+		blocked = !ARM_SMCCC_IS_FAST_CALL(func_id);
 		break;
 	case ARM_SMCCC_OWNER_TRUSTED_OS:
 		blocked = smc_filter_host_trusted_os_handler(func_id);
+		is_scm = true;
 		break;
 	default:
 		/* Unhandled Owner ID */
@@ -221,11 +216,10 @@ bool smc_filter_host_handler(struct user_pt_regs *regs)
 	if (blocked)
 		goto terminate_smc;
 
-	/*
-	 * If the owner-specific handler indicates the call can be forwarded,
-	 * check if extended ABI processing is needed.
-	 */
-	return handle_scm_extended_abi(regs);
+	if (is_scm)
+		return handle_scm_extended_abi(regs);
+
+	return false;
 
 terminate_smc:
 	// TODO: revert to printf usage once pKVM common changes in module API-s can be used.
@@ -247,10 +241,10 @@ int smc_filter_hyp_init(const struct pkvm_module_ops *ops)
 
 	ret = ops->register_host_smc_handler(smc_filter_host_handler);
 	if (ret) {
-		ops->puts("ERROR: qcom SMC filter registration failed");
+		ops->puts("[pKVM EL2] ERROR: qcom SMC filter registration failed");
 		return ret;
 	}
 
-	ops->puts("qcom SMC filter module loaded");
+	ops->puts("[pKVM EL2] qcom SMC filter module loaded");
 	return 0;
 }

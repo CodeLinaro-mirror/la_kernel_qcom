@@ -32,9 +32,6 @@
 /* Result registers */
 #define SMCCC_EC_REG_IDX  0  /* Error code is being returned in x0 */
 
-#define FFA_MIN_FUNC_NUM	0x60
-#define FFA_MAX_FUNC_NUM	0xFF
-
 /* SCM Service and Command definitions */
 /* SiP Service Calls */
 #define QCOM_SCM_SVC_BOOT			0x01

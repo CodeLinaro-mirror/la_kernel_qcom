@@ -1,6 +1,7 @@
 seraph_tuivm_config = {
     "CONFIG_ARCH_QTI_VM": "y",
     "CONFIG_ARCH_SERAPH": "y",
+    "CONFIG_ARCH_PIKACHU": "y",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_COMMON_CLK_QCOM": "m",
     "CONFIG_GH_ARM64_DRV": "m",
@@ -26,6 +27,7 @@ seraph_tuivm_config = {
     "CONFIG_MSM_GPI_DMA": "y",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_SERAPH": "m",
+    "CONFIG_PINCTRL_PIKACHU": "m",
     "CONFIG_PM_AUTOSLEEP": "y",
     "CONFIG_PSI": "y",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
@@ -48,6 +50,7 @@ seraph_tuivm_config = {
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SI_CORE_ADCI": "y",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
+    "CONFIG_QCOM_SMMU_IRGN0_ERRATA": "y",
     "CONFIG_QCOM_SOC_WATCHDOG": "m",
     "CONFIG_QCOM_TLMM_VM_IRQCHIP": "m",
     "CONFIG_QCOM_TZMEM": "m",

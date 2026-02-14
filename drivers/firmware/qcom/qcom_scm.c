@@ -812,22 +812,6 @@ int qcom_scm_get_sec_dump_state(u32 *dump_state)
 }
 EXPORT_SYMBOL(qcom_scm_get_sec_dump_state);
 
-int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t size)
-{
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_UTIL,
-		.cmd = QCOM_SCM_UTIL_DUMP_TABLE_ASSIGN,
-		.arginfo = QCOM_SCM_ARGS(3),
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = is_assign,
-		.args[1] = addr,
-		.args[2] = size,
-	};
-
-	return qcom_scm_call(__scm->dev, &desc, NULL);
-}
-EXPORT_SYMBOL(qcom_scm_assign_dump_table_region);
-
 int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val)
 {
 	struct qcom_scm_desc desc = {
@@ -3222,13 +3206,10 @@ int qcom_scm_set_gic_cpuclass(u32 mpidr, u32 clss)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_set_gic_cpuclass);
 
-bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed)
+bool qcom_scm_multi_call_allow(bool multicall_allowed)
 {
-	struct qcom_scm *scm;
-
-	scm = dev_get_drvdata(dev);
 	if (multicall_allowed &&
-		scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
+		__scm && __scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
 		return true;
 
 	return false;

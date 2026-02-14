@@ -60,6 +60,7 @@ struct imm_unmap_cmd {
 
 struct dpd_scatterlist {
 	struct si_object *shm;
+	unsigned int nents_in_mt;
 	struct sg_table sgt;
 	size_t size;
 	atomic_t mapcount;
@@ -70,5 +71,5 @@ struct dpd_scatterlist {
 int dpd_svc_map(struct dpd_scatterlist *dpd_sg, u32 domain, u32 flags, u64 iova);
 int dpd_svc_unmap(struct dpd_scatterlist *dpd_sg, u32 domain, u64 iova);
 int dpd_proxy_available(void);
-
+struct dpd_scatterlist *dpd_mtree_lookup(unsigned long pfn);
 #endif /* _DPD_PROXY_H */

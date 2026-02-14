@@ -398,7 +398,8 @@ void qcom_system_heap_free(struct qcom_sg_buffer *buffer)
 struct page *qcom_sys_heap_alloc_largest_available(struct dynamic_page_pool **pools,
 						   unsigned long size,
 						   unsigned int max_order,
-						   bool movable)
+						   bool movable,
+						   bool alloc_reclaim)
 {
 	struct page *page = NULL;
 	int i;
@@ -422,6 +423,8 @@ struct page *qcom_sys_heap_alloc_largest_available(struct dynamic_page_pool **po
 			page = qcom_movable_heap_alloc_pages(pools[i]);
 		if (!page)
 			page = alloc_pages(pools[i]->gfp_mask, pools[i]->order);
+		if (!page && alloc_reclaim && i == 1)
+			page = alloc_pages(LOW_ORDER_GFP | __GFP_RETRY_MAYFAIL, pools[i]->order);
 		if (!page)
 			continue;
 
@@ -468,7 +471,8 @@ int system_qcom_sg_buffer_alloc(struct dma_heap *heap,
 		page = qcom_sys_heap_alloc_largest_available(sys_heap->pool_list,
 							     size_remaining,
 							     max_order,
-							     movable);
+							     movable,
+							     false);
 		if (!page)
 			goto free_mem;
 

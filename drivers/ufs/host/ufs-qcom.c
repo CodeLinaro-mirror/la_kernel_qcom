@@ -198,7 +198,9 @@ static const struct __ufs_qcom_bw_table {
 static struct ufs_qcom_host *ufs_qcom_hosts[MAX_UFS_QCOM_HOSTS];
 
 static void ufs_qcom_get_default_testbus_cfg(struct ufs_qcom_host *host);
-static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq);
+static unsigned long ufs_qcom_opp_freq_to_clk_freq(struct ufs_hba *hba,
+						   unsigned long freq, char *name);
+static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, bool is_scale_up, unsigned long freq);
 static void ufs_qcom_parse_limits(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_wb(struct ufs_qcom_host *host);
@@ -305,7 +307,7 @@ static inline bool ufs_qcom_is_genpd_supported(struct ufs_hba *hba)
 	struct phy *phy = host->generic_phy;
 
 	if (host->hw_ver.major >= 0x6 && host->hw_ver.minor >= 0x2)
-		host->phy_retention = 1;
+		host->phy_retention = true;
 
 	return !(IS_ERR_OR_NULL(hba->dev->pm_domain) ||
 		 IS_ERR_OR_NULL(phy->dev.parent) ||
@@ -1335,7 +1337,7 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(struct ufs_hba *hba)
 		}
 	}
 
-	return ufs_qcom_core_clk_ctrl(hba, max_freq);
+	return ufs_qcom_core_clk_ctrl(hba, true, max_freq);
 }
 
 /**
@@ -4242,12 +4244,38 @@ static int __ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, u32 clk_1us_cycles,
 	return err;
 }
 
-static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq)
+static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, bool is_scale_up, unsigned long freq)
 {
 	u32 clk_1us_cycles, clk_40ns_cycles;
+	struct list_head *head = &hba->clk_list_head;
+	struct ufs_clk_info *clki;
+	unsigned long clk_freq = 0;
 	int ret = 0;
 
-	switch (freq) {
+	if (hba->use_pm_opp) {
+		clk_freq = ufs_qcom_opp_freq_to_clk_freq(hba, freq, "core_clk_unipro");
+		if (clk_freq)
+			goto set_core_clk_ctrl;
+	}
+
+	list_for_each_entry(clki, head, list) {
+		if (!IS_ERR_OR_NULL(clki->clk) &&
+		    !strcmp(clki->name, "core_clk_unipro")) {
+			if (!clki->max_freq) {
+				clk_freq = 150000000;
+				break;
+			}
+
+			if (is_scale_up)
+				clk_freq = clki->max_freq;
+			else
+				clk_freq = clk_get_rate(clki->clk);
+			break;
+		}
+	}
+
+set_core_clk_ctrl:
+	switch (clk_freq) {
 	case 403000000:
 		clk_40ns_cycles = 16;
 		break;
@@ -4275,15 +4303,16 @@ static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq)
 	}
 
 	if (ret) {
-		dev_err(hba->dev, "freq %lu entry missing\n", freq);
+		dev_err(hba->dev, "freq %lu to clk_freq %lu entry missing\n", freq, clk_freq);
 		dump_stack();
 		return ret;
 	}
 
-	clk_1us_cycles = freq_ceil(freq, (1000 * 1000));
+	clk_1us_cycles = freq_ceil(clk_freq, (1000 * 1000));
 	ret = __ufs_qcom_core_clk_ctrl(hba, clk_1us_cycles, clk_40ns_cycles);
 	if (ret)
-		dev_err(hba->dev, "failed to set core clk ctrl for freq %lu, err %d\n", freq, ret);
+		dev_err(hba->dev, "failed to set core clk ctrl for clk freq %lu, err %d\n",
+			clk_freq, ret);
 
 	return ret;
 }
@@ -4298,7 +4327,7 @@ static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba, unsigned long f
 		return err;
 	}
 
-	return ufs_qcom_core_clk_ctrl(hba, freq);
+	return ufs_qcom_core_clk_ctrl(hba, true, freq);
 }
 
 static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
@@ -4329,7 +4358,7 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba, unsigned lon
 	if (attr)
 		ufs_qcom_cfg_timers(hba, false);
 
-	return ufs_qcom_core_clk_ctrl(hba, freq);
+	return ufs_qcom_core_clk_ctrl(hba, false, freq);
 }
 
 static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
@@ -5479,11 +5508,53 @@ static int ufs_qcom_config_esi(struct ufs_hba *hba)
 	return ret;
 }
 
+static unsigned long ufs_qcom_opp_freq_to_clk_freq(struct ufs_hba *hba,
+						   unsigned long freq, char *name)
+{
+	struct ufs_clk_info *clki;
+	struct dev_pm_opp *opp;
+	unsigned long clk_freq;
+	int idx = 0;
+	bool found = false;
+
+	opp = dev_pm_opp_find_freq_exact_indexed(hba->dev, freq, 0, true);
+	if (IS_ERR(opp)) {
+		dev_err(hba->dev, "Failed to find OPP for exact frequency %lu\n", freq);
+		return 0;
+	}
+
+	list_for_each_entry(clki, &hba->clk_list_head, list) {
+		if (!strcmp(clki->name, name)) {
+			found = true;
+			break;
+		}
+
+		idx++;
+	}
+
+	if (!found) {
+		dev_err(hba->dev, "Failed to find clock '%s' in clk list\n", name);
+		dev_pm_opp_put(opp);
+		return 0;
+	}
+
+	clk_freq = dev_pm_opp_get_freq_indexed(opp, idx);
+
+	dev_pm_opp_put(opp);
+
+	return clk_freq;
+}
+
 static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 {
-	u32 gear = UFS_HS_DONT_CHANGE;
+	u32 gear = 0;
+	unsigned long unipro_freq;
 
-	switch (freq) {
+	if (!hba->use_pm_opp)
+		return gear;
+
+	unipro_freq = ufs_qcom_opp_freq_to_clk_freq(hba, freq, "core_clk_unipro");
+	switch (unipro_freq) {
 	case 403000000:
 		gear = UFS_HS_G5;
 		break;

@@ -44,6 +44,8 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
+#include <asm/kvm_pkvm.h>
+
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-heap.h>
@@ -177,11 +179,25 @@ static void system_heap_free(struct qcom_sg_buffer *buffer)
 	struct qcom_secure_system_heap *sys_heap;
 	struct sg_table *table;
 	struct scatterlist *sg;
+	struct dynamic_page_pool **pools;
 	int i, j;
+	int ret;
 
 	sys_heap = dma_heap_get_drvdata(buffer->heap);
 	table = &buffer->sg_table;
+	pools = sys_heap->pool_list;
 
+	if (is_protected_kvm_enabled()) {
+		ret = hyp_unassign_sg_from_flags(table, sys_heap->vmid, true);
+		if (ret) {
+			const char *name = dma_heap_get_name(buffer->heap);
+
+			pr_err("%s: Failed to hyp_unassign heap '%s' for vmid %d, error is %d\n",
+					__func__, name, sys_heap->vmid, ret);
+			return;
+		}
+		pools = get_sys_heap_page_pool();
+	}
 	for_each_sg(table->sgl, sg, table->nents, i) {
 		struct page *page = sg_page(sg);
 
@@ -189,8 +205,9 @@ static void system_heap_free(struct qcom_sg_buffer *buffer)
 			if (compound_order(page) == orders[j])
 				break;
 		}
-		dynamic_page_pool_free(sys_heap->pool_list[j], page);
+		dynamic_page_pool_free(pools[j], page);
 	}
+
 	atomic_long_sub(buffer->len, &sys_heap->total_allocated);
 	sg_free_table(table);
 	kfree(buffer);
@@ -199,37 +216,35 @@ static void system_heap_free(struct qcom_sg_buffer *buffer)
 static struct page *alloc_largest_available(struct dynamic_page_pool **pools,
 					    unsigned long size,
 					    unsigned int max_order,
-					    bool *page_from_secure_pool)
+					    bool *page_from_secure_pool,
+					    bool alloc_reclaim)
 {
 	struct page *page = NULL;
 	int i;
 	struct dynamic_page_pool **qcom_sys_heap_pools = get_sys_heap_page_pool();
 
-	if (!qcom_sys_heap_pools) {
-		pr_err("%s: Couldn't obtain the pools for the system heap!\n", __func__);
-		return NULL;
-	}
+	if (!is_protected_kvm_enabled()) {
+		*page_from_secure_pool = true;
 
-	*page_from_secure_pool = true;
+		for (i = 0; i < NUM_ORDERS; i++) {
+			unsigned long flags;
 
-	for (i = 0; i < NUM_ORDERS; i++) {
-		unsigned long flags;
+			if (size <  (PAGE_SIZE << orders[i]))
+				continue;
+			if (max_order < orders[i])
+				continue;
 
-		if (size <  (PAGE_SIZE << orders[i]))
-			continue;
-		if (max_order < orders[i])
-			continue;
+			spin_lock_irqsave(&pools[i]->lock, flags);
+			if (pools[i]->high_count)
+				page = dynamic_page_pool_remove(pools[i], true);
+			else if (pools[i]->low_count)
+				page = dynamic_page_pool_remove(pools[i], false);
+			spin_unlock_irqrestore(&pools[i]->lock, flags);
 
-		spin_lock_irqsave(&pools[i]->lock, flags);
-		if (pools[i]->high_count)
-			page = dynamic_page_pool_remove(pools[i], true);
-		else if (pools[i]->low_count)
-			page = dynamic_page_pool_remove(pools[i], false);
-		spin_unlock_irqrestore(&pools[i]->lock, flags);
-
-		if (!page)
-			continue;
-		return page;
+			if (!page)
+				continue;
+			return page;
+		}
 	}
 
 	*page_from_secure_pool = false;
@@ -237,7 +252,8 @@ static struct page *alloc_largest_available(struct dynamic_page_pool **pools,
 	return qcom_sys_heap_alloc_largest_available(qcom_sys_heap_pools,
 						     size,
 						     max_order,
-						     false);
+						     false,
+						     alloc_reclaim);
 }
 
 static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
@@ -261,6 +277,8 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	int ret = -ENOMEM, hyp_ret = 0;
 	int perms;
 	int vmid;
+	int nents;
+	bool alloc_reclaim = false;
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
@@ -285,7 +303,8 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 		page = alloc_largest_available(sys_heap->pool_list,
 					       size_remaining,
 					       max_order,
-					       &page_from_secure_pool);
+					       &page_from_secure_pool,
+					       alloc_reclaim);
 		if (!page)
 			goto free_buffer;
 
@@ -299,6 +318,14 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 		size_remaining -= page_size(page);
 		max_order = compound_order(page);
 		total_pages++;
+
+		if (is_protected_kvm_enabled()) {
+			nents = total_pages + (size_remaining >> PAGE_SHIFT);
+			if (nents > KVM_FFA_MAX_NR_CONSTITUENTS)
+				alloc_reclaim = true;
+			else
+				alloc_reclaim = false;
+		}
 	}
 
 	table = &buffer->sg_table;
@@ -444,6 +471,12 @@ void qcom_secure_system_heap_create(const char *name, const char *secure_system_
 
 	if (get_secure_vmid(vmid) == -EINVAL || hweight_long(vmid) != 1) {
 		pr_err("Invalid VMID or supplied more than one VMID\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!get_sys_heap_page_pool()) {
+		pr_err("%s: Couldn't obtain the pools for the system heap!\n", __func__);
 		ret = -EINVAL;
 		goto out;
 	}

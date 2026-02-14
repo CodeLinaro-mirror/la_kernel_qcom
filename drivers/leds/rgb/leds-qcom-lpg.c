@@ -1685,6 +1685,15 @@ static const struct lpg_data pm660l_lpg_data = {
 	},
 };
 
+static const struct lpg_data pm4125_pwm_data = {
+	.num_channels = 3,
+	.channels = (const struct lpg_channel_data[]) {
+		{ .base = 0xbc00 },
+		{ .base = 0xbd00 },
+		{ .base = 0xbe00 },
+	},
+};
+
 static const struct lpg_data pm6125_pwm_data = {
 	.num_channels = 1,
 	.channels = (const struct lpg_channel_data[]) {
@@ -1852,6 +1861,7 @@ static const struct lpg_data pm6450_pwm_data = {
 };
 
 static const struct of_device_id lpg_of_table[] = {
+	{ .compatible = "qcom,pm4125-pwm", .data = &pm4125_pwm_data },
 	{ .compatible = "qcom,pm6125-pwm", .data = &pm6125_pwm_data },
 	{ .compatible = "qcom,pm6450-pwm", .data = &pm6450_pwm_data },
 	{ .compatible = "qcom,pm660l-lpg", .data = &pm660l_lpg_data },
