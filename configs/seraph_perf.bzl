@@ -1,5 +1,6 @@
 seraph_perf_config = {
     # keep sorted
+    "CONFIG_ARCH_PIKACHU": "y",
     "CONFIG_ARCH_QCOM": "y",
     "CONFIG_ARCH_SERAPH": "y",
     "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
