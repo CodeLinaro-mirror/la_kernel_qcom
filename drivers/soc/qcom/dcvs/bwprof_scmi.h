@@ -131,7 +131,8 @@ struct bwprof_dev_data {
 	struct config_group	*dev_group;
 	const struct qcom_scmi_vendor_ops	*bwprof_ops;
 	struct scmi_protocol_handle	*ph;
-	struct smci_object bwprof_profiler;
+	struct si_object *bwprof_profiler;
+	struct si_object_invoke_ctx oic;
 	struct mbox_client	cl;
 	struct mbox_chan	*ch;
 	spinlock_t rx_lock;
