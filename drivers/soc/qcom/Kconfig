@@ -468,6 +468,15 @@ config QCOM_WDT_CORE
 	   watchdog module must be loaded along with this for watchdog
 	   functionality.
 
+config QCOM_CX_IPEAK
+	tristate "Common driver to handle Cx iPeak limitation"
+	help
+	  Cx ipeak HW module is used to limit the current drawn by various
+	  subsystem blocks on Cx power rail. Each client needs to set their
+	  bit in tcsr register if it is going to cross its own threshold.
+	  If all clients are going to cross their thresholds then Cx ipeak
+	  hw module will raise an interrupt to cDSP block to throttle cDSP fmax.
+
 config QCOM_SOC_WATCHDOG
 	tristate "Qualcomm Technologies, Inc. Soc Watchdog"
 	depends on QCOM_WDT_CORE
@@ -1267,5 +1276,15 @@ config QTI_HW_KEY_MANAGER_V1
 	 and access key manager hardware block. This is used to interface with
 	 HWKM hardware to perform key operations from the kernel which will
 	 be used for storage encryption.
+
+config QCOM_DPD_PROXY
+	tristate "QCOM_DPD_PROXY TEE service"
+	help
+	  Converts legacy qcom_scm_assign_mem or hyp_assign calls into smcinvoke
+	  service messages. For clients with an iommu, the resulting smcinvoke
+	  memory object is preserved for future use by a smcinvoke-compatible
+	  iommu driver.
+
+	  If unsure, say N here.
 
 endmenu

@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/types.h>
 #include <linux/cpumask.h>
+#include <linux/notifier.h>
 
 #include <dt-bindings/firmware/qcom,scm.h>
 
@@ -172,6 +173,7 @@ extern void qcom_scm_set_download_mode(enum qcom_download_mode mode);
 extern int qcom_scm_get_download_mode(unsigned int *mode);
 extern int qcom_scm_config_cpu_errata(void);
 extern void qcom_scm_phy_update_scm_level_shifter(u32 val);
+extern void qcom_scm_deassert_ps_hold(void);
 
 struct qcom_scm_pas_metadata {
 	void *ptr;
@@ -282,6 +284,9 @@ int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr, phys_addr_t size);
 int qcom_scm_pas_auth_and_reset(u32 peripheral);
 int qcom_scm_pas_shutdown(u32 peripheral);
 bool qcom_scm_pas_supported(u32 peripheral);
+void qcom_scm_pas_store_memoryinfo(u32 peripheral, phys_addr_t addr,
+		phys_addr_t size);
+unsigned int qcom_scm_pas_get_shutdown_retry_delay_ms(void);
 
 int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
 int qcom_scm_io_writel(phys_addr_t addr, unsigned int val);
@@ -297,6 +302,15 @@ int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
 int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz, u64 *src,
 			const struct qcom_scm_vmperm *newvm,
 			unsigned int dest_cnt);
+struct qcom_scm_assign_mem_notifier_data {
+	phys_addr_t mem_addr;
+	size_t mem_sz;
+	u64 *srcvm;
+	const struct qcom_scm_vmperm *newvm;
+	unsigned int dest_cnt;
+};
+int qcom_scm_assign_mem_notifier_register(struct notifier_block *nb);
+int qcom_scm_assign_mem_notifier_unregister(struct notifier_block *nb);
 
 bool qcom_scm_ocmem_lock_available(void);
 int qcom_scm_ocmem_lock(enum qcom_scm_ocmem_client id, u32 offset, u32 size,

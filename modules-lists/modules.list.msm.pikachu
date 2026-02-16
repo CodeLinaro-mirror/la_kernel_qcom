@@ -9,6 +9,10 @@ clk-rpmh.ko
 clk-dummy.ko
 gcc-pikachu.ko
 tcsrcc-pikachu.ko
+videocc-pikachu.ko
+evacc-pikachu.ko
+camcc-pikachu.ko
+gpucc-pikachu.ko
 smem.ko
 socinfo.ko
 qcom_tzmem.ko
@@ -28,4 +32,6 @@ mem-prot.ko
 mem_buf.ko
 mem_buf_dev.ko
 msm_dma_iommu_mapping.ko
+qcom_dma_heaps.ko
 arm_smmu_pmu.ko
+deferred-free-helper.ko

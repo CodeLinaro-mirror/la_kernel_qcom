@@ -1623,7 +1623,8 @@ static int adsp_setup_32b_dma_allocs(struct qcom_adsp *adsp)
 	if (!adsp->dma_phys_below_32b)
 		return 0;
 
-	ret = of_reserved_mem_device_init_by_idx(adsp->dev, adsp->dev->of_node, 2);
+	ret = of_reserved_mem_device_init_by_idx(adsp->dev, adsp->dev->of_node,
+			adsp->dtb_firmware_name ? 2 : 1);
 	if (ret) {
 		dev_err(adsp->dev,
 			"Unable to get the CMA area for performing dma_alloc_* calls\n");
@@ -2987,6 +2988,7 @@ static const struct adsp_data khaje_cdsp_resource = {
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
 	.uses_elf64 = false,
+	.auto_boot = true,
 };
 
 static const struct adsp_data khaje_mpss_resource = {
@@ -3048,7 +3050,7 @@ static const struct adsp_data malabar_adsp_resource = {
 	.pas_id = 1,
 	.minidump_id = 5,
 	.uses_elf64 = true,
-	.auto_boot = false,
+	.auto_boot = true,
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
@@ -3057,13 +3059,19 @@ static const struct adsp_data malabar_adsp_resource = {
 static const struct adsp_data malabar_mpss_resource = {
 	.crash_reason_smem = 421,
 	.firmware_name = "modem.mdt",
+	.dtb_firmware_name = "modem_dtb.mdt",
 	.pas_id = 4,
+	.dtb_pas_id = 0x26,
 	.minidump_id = 3,
+	.load_state = "modem",
 	.uses_elf64 = true,
 	.auto_boot = false,
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
 };
 
 static const struct adsp_data malabar_wpss_resource = {

@@ -17,7 +17,6 @@ int soc_sched_lib_name_capacity;
 #define PIPELINE_BUSY_THRESH_8MS_WINDOW 7
 #define PIPELINE_BUSY_THRESH_12MS_WINDOW 11
 #define PIPELINE_BUSY_THRESH_16MS_WINDOW 15
-unsigned int gold_cluster_id, prime_cluster_id;
 unsigned int soc_cluster_freq_table_size[MAX_CLUSTERS];
 unsigned int soc_cluster_freq_table[MAX_CLUSTERS][MAX_FREQ_TABLE_ENTRIES];
 unsigned int demand_scaling_factor;
@@ -115,8 +114,6 @@ void walt_config(void)
 	soc_feat_set(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
 	pipeline_swap_util_th = 0;
-	prime_cluster_id = num_sched_clusters - 1;
-	gold_cluster_id = num_sched_clusters > 2 ? 1 : 0;
 
 	/* Initialize smart freq configurations */
 	smart_freq_init(name);
@@ -126,6 +123,7 @@ void walt_config(void)
 
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP") || !strcmp(name, "CANOE")
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
+			|| !strcmp(name, "ALORP")
 			|| !strcmp(name, "WHALE") || !strcmp(name, "WHALEP")
 			|| !strcmp(name, "CANOEPSG") || !strcmp(name, "CANOEP")) {
 		sysctl_sched_suppress_region2		= 1;
@@ -185,14 +183,16 @@ void walt_config(void)
 				1;
 		}
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
-		if (strcmp(name, "ALOR_INTERPOSER") && strcmp(name, "ALOR"))
+		if (strcmp(name, "ALOR_INTERPOSER") && strcmp(name, "ALOR")
+				&& strcmp(name, "ALORP"))
 			demand_scaling_factor = 70;
 
 		/*
 		 * By default this SOC flag will be disabled. Enable this only
 		 * for Alor platforms
 		 */
-		if (!strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR"))
+		if (!strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
+				|| !strcmp(name, "ALORP"))
 			soc_feat_set(SOC_ENABLE_LIMIT_PRIME_USAGE);
 
 	} else if (!strcmp(name, "PINEAPPLE")) {
@@ -330,7 +330,25 @@ void walt_config(void)
 		 * By default this SOC flag will be disabled. Enable this only
 		 * for X1E80100 platforms
 		 */
+		trailblazer_floor_freq[0] = 2500000;
+		trailblazer_floor_freq[1] = 2500000;
+		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
+	} else if (!strcmp(name, "SERAPH")) {
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
+		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
+		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
+		soc_feat_unset(SOC_ENABLE_PER_TASK_BOOST_ON_MID_BIT);
+
+		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
+		sysctl_walt_features |= WALT_FEAT_TOPAPP_BASED_HISPEED;
+		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
+		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
+		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
+		soc_sched_lib_name_capacity = 4;
+
+
+		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 	}
 
 }

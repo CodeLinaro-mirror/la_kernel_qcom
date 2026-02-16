@@ -198,7 +198,9 @@ static const struct __ufs_qcom_bw_table {
 static struct ufs_qcom_host *ufs_qcom_hosts[MAX_UFS_QCOM_HOSTS];
 
 static void ufs_qcom_get_default_testbus_cfg(struct ufs_qcom_host *host);
-static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq);
+static unsigned long ufs_qcom_opp_freq_to_clk_freq(struct ufs_hba *hba,
+						   unsigned long freq, char *name);
+static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, bool is_scale_up, unsigned long freq);
 static void ufs_qcom_parse_limits(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host);
 static void ufs_qcom_parse_wb(struct ufs_qcom_host *host);
@@ -303,6 +305,9 @@ static inline bool ufs_qcom_is_genpd_supported(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct phy *phy = host->generic_phy;
+
+	if (host->hw_ver.major >= 0x6 && host->hw_ver.minor >= 0x2)
+		host->phy_retention = true;
 
 	return !(IS_ERR_OR_NULL(hba->dev->pm_domain) ||
 		 IS_ERR_OR_NULL(phy->dev.parent) ||
@@ -1332,7 +1337,7 @@ static int ufs_qcom_set_dme_vs_core_clk_ctrl_max_freq_mode(struct ufs_hba *hba)
 		}
 	}
 
-	return ufs_qcom_core_clk_ctrl(hba, max_freq);
+	return ufs_qcom_core_clk_ctrl(hba, true, max_freq);
 }
 
 /**
@@ -1911,7 +1916,8 @@ static void ufs_qcom_device_reset_ctrl(struct ufs_hba *hba, bool asserted)
 	gpiod_set_value_cansleep(host->device_reset, asserted);
 }
 
-static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool always_on)
+static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool core_always_on,
+			bool phy_mem_always_on)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct phy *phy = host->generic_phy;
@@ -1924,13 +1930,15 @@ static void ufs_qcom_genpd_setup(struct ufs_hba *hba, bool always_on)
 	core_genpd = pd_to_genpd(hba->dev->pm_domain);
 	phy_genpd = pd_to_genpd(phy->dev.parent->pm_domain);
 
-	if (always_on) {
+	if (core_always_on)
 		ufs_qcom_genpd_set_always_on(core_genpd);
-		ufs_qcom_genpd_set_always_on(phy_genpd);
-	} else {
+	else
 		ufs_qcom_genpd_clear_always_on(core_genpd);
+
+	if (phy_mem_always_on)
+		ufs_qcom_genpd_set_always_on(phy_genpd);
+	else
 		ufs_qcom_genpd_clear_always_on(phy_genpd);
-	}
 }
 
 static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
@@ -1953,13 +1961,17 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 		if (host->vddp_ref_clk && ufs_qcom_is_link_off(hba))
 			err = ufs_qcom_disable_vreg(hba->dev,
 					host->vddp_ref_clk);
-		if (host->vccq_parent && !ufshcd_is_ufs_dev_active(hba) &&
+		if (host->parent_vreg && !ufshcd_is_ufs_dev_active(hba) &&
 				!hba->auto_bkops_enabled)
-			ufs_qcom_disable_vreg(hba->dev, host->vccq_parent);
+			ufs_qcom_disable_vreg(hba->dev, host->parent_vreg);
 		if (!err)
 			err = ufs_qcom_unvote_qos_all(hba);
+
+		if (!host->phy_retention)
+			ufs_qcom_genpd_setup(hba, false, true);
+
 	} else {
-		ufs_qcom_genpd_setup(hba, true);
+		ufs_qcom_genpd_setup(hba, true, true);
 	}
 
 	if (!err && ufs_qcom_is_link_off(hba) && host->device_reset)
@@ -2041,15 +2053,15 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		ufs_qcom_enable_vreg(hba->dev,
 				      host->vddp_ref_clk);
 
-	if (host->vccq_parent)
-		ufs_qcom_enable_vreg(hba->dev, host->vccq_parent);
+	if (host->parent_vreg)
+		ufs_qcom_enable_vreg(hba->dev, host->parent_vreg);
 
 	ufs_qcom_ice_resume(host);
 	err = ufs_qcom_enable_lane_clks(host);
 	if (err)
 		return err;
 
-	ufs_qcom_genpd_setup(hba, false);
+	ufs_qcom_genpd_setup(hba, false, false);
 
 	/* Scale down clocks before resume */
 	if (hba->spm_lvl == UFS_PM_LVL_5 && pm_op == UFS_SYSTEM_PM) {
@@ -3487,15 +3499,26 @@ static int ufs_qcom_set_cur_therm_state(struct thermal_cooling_device *tcd,
 static void ufs_qcom_enable_vccq_proxy_vote(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct ufs_vreg *vccq_proxy_client = NULL;
+	struct ufs_vreg *vccq2_proxy_client = NULL;
 	int err;
 
-	ufs_qcom_parse_reg_info(host, "qcom,vccq-proxy-vote",
-			&host->vccq_proxy_client);
+	ufs_qcom_parse_reg_info(host, "qcom,vccq-proxy-vote", &vccq_proxy_client);
+	ufs_qcom_parse_reg_info(host, "qcom,vccq2-proxy-vote", &vccq2_proxy_client);
 
-	if (host->vccq_proxy_client) {
-		err = ufs_qcom_enable_vreg(hba->dev, host->vccq_proxy_client);
+	/* Detect ufs VCCQ or VCCQ2 proxy vreg to vote on */
+	if (vccq_proxy_client && vccq2_proxy_client) {
+		host->proxy_client = host->ufs_gen_type ?
+			vccq_proxy_client : vccq2_proxy_client;
+	} else {
+		host->proxy_client = vccq_proxy_client ?
+			vccq_proxy_client : vccq2_proxy_client;
+	}
+
+	if (host->proxy_client) {
+		err = ufs_qcom_enable_vreg(hba->dev, host->proxy_client);
 		if (err)
-			dev_err(hba->dev, "%s: failed enable vccq_proxy err=%d\n",
+			dev_err(hba->dev, "%s: failed enable proxy vote err=%d\n",
 						__func__, err);
 	}
 }
@@ -3846,6 +3869,8 @@ static void ufs_qcom_read_nvmem_cell(struct ufs_qcom_host *host)
 	else
 		host->host_pwr_cap.phy_submode = *data;
 
+	host->ufs_gen_type = host->host_pwr_cap.phy_submode;
+
 	if (host->host_pwr_cap.phy_submode) {
 		dev_info(host->hba->dev, "(%s) UFS device is 3.x, phy_submode = %d\n",
 				__func__, host->host_pwr_cap.phy_submode);
@@ -3882,6 +3907,39 @@ static void ufs_qcom_get_device_id(struct ufs_qcom_host *host)
 		reg = ufshcd_readl(host->hba, REG_UFS_DEBUG_SPARE_CFG);
 		host->device_id = FIELD_GET(GENMASK(23, 8), reg);
 	}
+}
+
+/**
+ * ufs_qcom_setup_vreg_to_enable - Determine and set the appropriate voltage
+ * regulator to enable.
+ * @host: UFS host structure containing the regulator information.
+ *
+ * Return: Pointer to the selected voltage regulator, or NULL if no
+ * appropriate regulator is found.
+ */
+static struct ufs_vreg *ufs_qcom_setup_vreg_to_enable(struct ufs_qcom_host *host)
+{
+	struct ufs_vreg *vccq_parent = NULL;
+	struct ufs_vreg *vccq2_parent = NULL;
+	int err;
+
+	err = ufs_qcom_parse_reg_info(host, "qcom,vccq-parent", &vccq_parent);
+
+	err = ufs_qcom_parse_reg_info(host, "qcom,vccq2-parent", &vccq2_parent);
+
+	/* Detect ufs VCCQ or VCCQ2 parent vreg to vote on */
+	if (vccq_parent && vccq2_parent) {
+		host->parent_vreg = host->ufs_gen_type ?
+					vccq_parent : vccq2_parent;
+	} else {
+		host->parent_vreg = vccq_parent ? vccq_parent : vccq2_parent;
+		if (!host->parent_vreg) {
+			dev_info(host->hba->dev, "vccq or vccq2 parent node is not provided\n");
+			return NULL;
+		}
+	}
+
+	return host->parent_vreg;
 }
 
 /**
@@ -3992,13 +4050,12 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		}
 	}
 
-	err = ufs_qcom_parse_reg_info(host, "qcom,vccq-parent",
-				      &host->vccq_parent);
-	if (host->vccq_parent) {
-		err = ufs_qcom_enable_vreg(dev, host->vccq_parent);
+	host->parent_vreg = ufs_qcom_setup_vreg_to_enable(host);
+	if (host->parent_vreg) {
+		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
 		if (err) {
-			dev_err(dev, "%s: failed enable vccq-parent err=%d\n",
-				__func__, err);
+			dev_err(dev, "%s: failed to enable %s err=%d\n",
+					__func__, host->parent_vreg->name, err);
 			goto out_disable_vddp;
 		}
 	}
@@ -4013,7 +4070,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	err = ufs_qcom_init_lane_clks(host);
 	if (err)
-		goto out_disable_vccq_parent;
+		goto out_disable_parent_vreg;
 
 	if (!host->disable_lpm && ufs_qcom_is_genpd_supported(hba)) {
 		hba->host->rpm_autosuspend_delay = UFS_QCOM_AUTO_SUSPEND_DELAY;
@@ -4108,9 +4165,9 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	return 0;
 
-out_disable_vccq_parent:
-	if (host->vccq_parent)
-		ufs_qcom_disable_vreg(dev, host->vccq_parent);
+out_disable_parent_vreg:
+	if (host->parent_vreg)
+		ufs_qcom_disable_vreg(dev, host->parent_vreg);
 out_disable_vddp:
 	if (host->vddp_ref_clk)
 		ufs_qcom_disable_vreg(dev, host->vddp_ref_clk);
@@ -4187,12 +4244,38 @@ static int __ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, u32 clk_1us_cycles,
 	return err;
 }
 
-static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq)
+static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, bool is_scale_up, unsigned long freq)
 {
 	u32 clk_1us_cycles, clk_40ns_cycles;
+	struct list_head *head = &hba->clk_list_head;
+	struct ufs_clk_info *clki;
+	unsigned long clk_freq = 0;
 	int ret = 0;
 
-	switch (freq) {
+	if (hba->use_pm_opp) {
+		clk_freq = ufs_qcom_opp_freq_to_clk_freq(hba, freq, "core_clk_unipro");
+		if (clk_freq)
+			goto set_core_clk_ctrl;
+	}
+
+	list_for_each_entry(clki, head, list) {
+		if (!IS_ERR_OR_NULL(clki->clk) &&
+		    !strcmp(clki->name, "core_clk_unipro")) {
+			if (!clki->max_freq) {
+				clk_freq = 150000000;
+				break;
+			}
+
+			if (is_scale_up)
+				clk_freq = clki->max_freq;
+			else
+				clk_freq = clk_get_rate(clki->clk);
+			break;
+		}
+	}
+
+set_core_clk_ctrl:
+	switch (clk_freq) {
 	case 403000000:
 		clk_40ns_cycles = 16;
 		break;
@@ -4220,15 +4303,16 @@ static int ufs_qcom_core_clk_ctrl(struct ufs_hba *hba, unsigned long freq)
 	}
 
 	if (ret) {
-		dev_err(hba->dev, "freq %lu entry missing\n", freq);
+		dev_err(hba->dev, "freq %lu to clk_freq %lu entry missing\n", freq, clk_freq);
 		dump_stack();
 		return ret;
 	}
 
-	clk_1us_cycles = freq_ceil(freq, (1000 * 1000));
+	clk_1us_cycles = freq_ceil(clk_freq, (1000 * 1000));
 	ret = __ufs_qcom_core_clk_ctrl(hba, clk_1us_cycles, clk_40ns_cycles);
 	if (ret)
-		dev_err(hba->dev, "failed to set core clk ctrl for freq %lu, err %d\n", freq, ret);
+		dev_err(hba->dev, "failed to set core clk ctrl for clk freq %lu, err %d\n",
+			clk_freq, ret);
 
 	return ret;
 }
@@ -4243,7 +4327,7 @@ static int ufs_qcom_clk_scale_up_pre_change(struct ufs_hba *hba, unsigned long f
 		return err;
 	}
 
-	return ufs_qcom_core_clk_ctrl(hba, freq);
+	return ufs_qcom_core_clk_ctrl(hba, true, freq);
 }
 
 static int ufs_qcom_clk_scale_up_post_change(struct ufs_hba *hba)
@@ -4274,7 +4358,7 @@ static int ufs_qcom_clk_scale_down_post_change(struct ufs_hba *hba, unsigned lon
 	if (attr)
 		ufs_qcom_cfg_timers(hba, false);
 
-	return ufs_qcom_core_clk_ctrl(hba, freq);
+	return ufs_qcom_core_clk_ctrl(hba, false, freq);
 }
 
 static int ufs_qcom_clk_scale_notify(struct ufs_hba *hba, bool scale_up,
@@ -5424,11 +5508,53 @@ static int ufs_qcom_config_esi(struct ufs_hba *hba)
 	return ret;
 }
 
+static unsigned long ufs_qcom_opp_freq_to_clk_freq(struct ufs_hba *hba,
+						   unsigned long freq, char *name)
+{
+	struct ufs_clk_info *clki;
+	struct dev_pm_opp *opp;
+	unsigned long clk_freq;
+	int idx = 0;
+	bool found = false;
+
+	opp = dev_pm_opp_find_freq_exact_indexed(hba->dev, freq, 0, true);
+	if (IS_ERR(opp)) {
+		dev_err(hba->dev, "Failed to find OPP for exact frequency %lu\n", freq);
+		return 0;
+	}
+
+	list_for_each_entry(clki, &hba->clk_list_head, list) {
+		if (!strcmp(clki->name, name)) {
+			found = true;
+			break;
+		}
+
+		idx++;
+	}
+
+	if (!found) {
+		dev_err(hba->dev, "Failed to find clock '%s' in clk list\n", name);
+		dev_pm_opp_put(opp);
+		return 0;
+	}
+
+	clk_freq = dev_pm_opp_get_freq_indexed(opp, idx);
+
+	dev_pm_opp_put(opp);
+
+	return clk_freq;
+}
+
 static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 {
-	u32 gear = UFS_HS_DONT_CHANGE;
+	u32 gear = 0;
+	unsigned long unipro_freq;
 
-	switch (freq) {
+	if (!hba->use_pm_opp)
+		return gear;
+
+	unipro_freq = ufs_qcom_opp_freq_to_clk_freq(hba, freq, "core_clk_unipro");
+	switch (unipro_freq) {
 	case 403000000:
 		gear = UFS_HS_G5;
 		break;

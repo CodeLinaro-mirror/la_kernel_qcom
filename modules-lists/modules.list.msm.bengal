@@ -30,7 +30,6 @@ socinfo.ko
 icc-bcm-voter.ko
 icc-clk.ko
 icc-debug.ko
-qcom_cpucp.ko
 qcom_scmi_vendor.ko
 qcom_scmi_client.ko
 qcom-dcvs.ko

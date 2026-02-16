@@ -641,8 +641,10 @@ const struct mpm_pin mpm_bengal_gic_chip_data[] = {
 	{-1},
 };
 
-const struct mpm_pin mpm_colibri_gic_chip_data[] = {
+const struct mpm_pin mpm_shikra_gic_chip_data[] = {
 	{12, 422}, /* qmp_usb3_lfps_rxterm_irq_cx */
+	{58, 272}, /* qusb2phy_dmse_hv_vddmx */
+	{59, 273}, /* qusb2phy_dpse_hv_vddmx */
 	{86, 183}, /* mpm_wake,spmi_m */
 	{90, 157}, /* eud_p0_dmse_int_mx */
 	{91, 158}, /* eud_p0_dpse_int_mx */
@@ -654,6 +656,17 @@ const struct mpm_pin mpm_malabar_gic_chip_data[] = {
 	{86, 183}, /* mpm_wake,spmi_m */
 	{93, 188}, /* eud_p0_dmse_int_mx */
 	{94, 184}, /* eud_p0_dpse_int_mx */
+	{-1},
+};
+
+const struct mpm_pin mpm_scuba_gic_chip_data[] = {
+	{2, 275}, /*tsens0_tsens_upper_lower_int */
+	{5, 296}, /* lpass_irq_out_sdc */
+	{12, 422}, /* b3_lfps_rxterm_irq */
+	{24, 79}, /* bi_px_lpi_1_aoss_mx */
+	{86, 183}, /* mpm_wake,spmi_m */
+	{90, 260}, /* eud_p0_dpse_int_mx */
+	{91, 260}, /* eud_p0_dmse_int_mx */
 	{-1},
 };
 
@@ -683,12 +696,16 @@ static const struct of_device_id mpm_gic_chip_data_table[] = {
 		.data = mpm_bengal_gic_chip_data,
 	},
 	{
-		.compatible = "qcom,mpm-colibri",
-		.data = mpm_colibri_gic_chip_data,
+		.compatible = "qcom,mpm-shikra",
+		.data = mpm_shikra_gic_chip_data,
 	},
 	{
 		.compatible = "qcom,mpm-malabar",
 		.data = mpm_malabar_gic_chip_data,
+	},
+	{
+		.compatible = "qcom,mpm-scuba",
+		.data = mpm_scuba_gic_chip_data,
 	},
 	{}
 };

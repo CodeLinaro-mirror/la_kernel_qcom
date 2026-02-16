@@ -4747,6 +4747,8 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	if ((skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) && priv->hwts_tx_en)
 		set_ic = true;
+	else if (tx_q->tbs & STMMAC_TBS_EN)
+		set_ic = true;
 	else if (!priv->tx_coal_frames[queue])
 		set_ic = false;
 	else if (tx_packets > priv->tx_coal_frames[queue])
@@ -7884,6 +7886,9 @@ int stmmac_dvr_probe(struct device *device,
 			__func__, ret);
 		goto error_netdev_register;
 	}
+
+	if (priv->plat->flags & STMMAC_FLAG_USE_THREADED_NAPI)
+		dev_set_threaded(ndev, true);
 
 #ifdef CONFIG_DEBUG_FS
 	stmmac_init_fs(ndev);

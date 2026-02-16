@@ -39,7 +39,6 @@
 #include <linux/reset-controller.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
-#include <linux/gunyah/gh_rm_drv.h>
 #include <linux/qti-lcp-ppddr.h>
 #include <include/linux/arm-smccc.h>
 #include <linux/qtee_shmbridge.h>
@@ -182,7 +181,9 @@ static struct qcom_scm *__scm;
 
 #define SCM_NOT_INITIALIZED()  (unlikely(!__scm) ? pr_err("SCM not initialized\n") : 0)
 
-static int qcom_scm_clk_enable(void)
+SRCU_NOTIFIER_HEAD_STATIC(qcom_scm_assign_mem_nh);
+
+int qcom_scm_clk_enable(void)
 {
 	int ret;
 
@@ -208,14 +209,14 @@ bail:
 	return ret;
 }
 
-static void qcom_scm_clk_disable(void)
+void qcom_scm_clk_disable(void)
 {
 	clk_disable_unprepare(__scm->core_clk);
 	clk_disable_unprepare(__scm->iface_clk);
 	clk_disable_unprepare(__scm->bus_clk);
 }
 
-static int qcom_scm_bw_enable(void)
+int qcom_scm_bw_enable(void)
 {
 	int ret = 0;
 
@@ -237,7 +238,7 @@ err_bw:
 	return ret;
 }
 
-static void qcom_scm_bw_disable(void)
+void qcom_scm_bw_disable(void)
 {
 	if (!__scm->path)
 		return;
@@ -247,6 +248,19 @@ static void qcom_scm_bw_disable(void)
 		icc_set_bw(__scm->path, 0, 0);
 	mutex_unlock(&__scm->scm_bw_lock);
 }
+
+struct device *qcom_scm_get_dev(void)
+{
+	if (!__scm)
+		return NULL;
+	return __scm->dev;
+}
+
+unsigned int qcom_scm_pas_get_shutdown_retry_delay_ms(void)
+{
+	return pas_shutdown_retry_delay_ms;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_pas_get_shutdown_retry_delay_ms);
 
 enum qcom_scm_convention qcom_scm_convention = SMC_CONVENTION_UNKNOWN;
 static DEFINE_SPINLOCK(scm_query_lock);
@@ -332,7 +346,7 @@ found:
  * Sends a command to the SCM and waits for the command to finish processing.
  * This should *only* be called in pre-emptible context.
  */
-static int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
+int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
 			 struct qcom_scm_res *res)
 {
 	might_sleep();
@@ -399,7 +413,7 @@ static int qcom_scm_call_noretry(struct device *dev,
 	}
 }
 
-static bool __qcom_scm_is_call_available(struct device *dev, u32 svc_id,
+bool __qcom_scm_is_call_available(struct device *dev, u32 svc_id,
 					 u32 cmd_id)
 {
 	int ret;
@@ -692,24 +706,6 @@ int qcom_scm_config_cpu_errata(void)
 }
 EXPORT_SYMBOL(qcom_scm_config_cpu_errata);
 
-/**
- * qcom_scm_pas_init_image() - Initialize peripheral authentication service
- *			       state machine for a given peripheral, using the
- *			       metadata
- * @peripheral: peripheral id
- * @metadata:	pointer to memory containing ELF header, program header table
- *		and optional blob of data used for authenticating the metadata
- *		and the rest of the firmware
- * @size:	size of the metadata
- * @ctx:	optional metadata context
- *
- * Return: 0 on success.
- *
- * Upon successful return, the PAS metadata context (@ctx) will be used to
- * track the metadata allocation, this needs to be released by invoking
- * qcom_scm_pas_metadata_release() by the caller.
- */
-
 void qcom_scm_phy_update_scm_level_shifter(u32 val)
 {
 	int ret;
@@ -733,79 +729,6 @@ void qcom_scm_phy_update_scm_level_shifter(u32 val)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_phy_update_scm_level_shifter);
 
-
-int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
-			    struct qcom_scm_pas_metadata *ctx, struct device *dev_32bit)
-{
-	struct device *dma_dev = __scm->dev;
-	dma_addr_t mdata_phys;
-	void *mdata_buf;
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_PIL,
-		.cmd = QCOM_SCM_PIL_PAS_INIT_IMAGE,
-		.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_VAL, QCOM_SCM_RW),
-		.args[0] = peripheral,
-		.owner = ARM_SMCCC_OWNER_SIP,
-	};
-	struct qcom_scm_res res;
-
-	/*
-	 * Only use 32bit dma device for dma memory allocation but use
-	 * Scm device for any scm calls.
-	 */
-	if (dev_32bit)
-		dma_dev = dev_32bit;
-
-	/*
-	 * During the scm call memory protection will be enabled for the meta
-	 * data blob, so make sure it's physically contiguous, 4K aligned and
-	 * non-cachable to avoid XPU violations.
-	 *
-	 * For PIL calls the hypervisor creates SHM Bridges for the blob
-	 * buffers on behalf of Linux so we must not do it ourselves hence
-	 * not using the TZMem allocator here.
-	 *
-	 * If we pass a buffer that is already part of an SHM Bridge to this
-	 * call, it will fail.
-	 */
-	mdata_buf = dma_alloc_coherent(dma_dev, size, &mdata_phys,
-				       GFP_KERNEL);
-	if (!mdata_buf) {
-		dev_err(dma_dev, "Allocation of metadata buffer failed.\n");
-		return -ENOMEM;
-	}
-	memcpy(mdata_buf, metadata, size);
-
-	ret = qcom_scm_clk_enable();
-	if (ret)
-		goto out;
-
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		goto disable_clk;
-
-	desc.args[1] = mdata_phys;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-	qcom_scm_bw_disable();
-
-disable_clk:
-	qcom_scm_clk_disable();
-
-out:
-	if (ret < 0 || !ctx) {
-		dma_free_coherent(dma_dev, size, mdata_buf, mdata_phys);
-	} else if (ctx) {
-		ctx->ptr = mdata_buf;
-		ctx->phys = mdata_phys;
-		ctx->size = size;
-	}
-
-	return ret ? : res.result[0];
-}
-EXPORT_SYMBOL_GPL(qcom_scm_pas_init_image);
-
 /**
  * qcom_scm_pas_metadata_release() - release metadata context
  * @ctx:	metadata context
@@ -828,167 +751,6 @@ void qcom_scm_pas_metadata_release(struct qcom_scm_pas_metadata *ctx,
 	ctx->size = 0;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_pas_metadata_release);
-
-/**
- * qcom_scm_pas_mem_setup() - Prepare the memory related to a given peripheral
- *			      for firmware loading
- * @peripheral:	peripheral id
- * @addr:	start address of memory area to prepare
- * @size:	size of the memory area to prepare
- *
- * Returns 0 on success.
- */
-int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr, phys_addr_t size)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_PIL,
-		.cmd = QCOM_SCM_PIL_PAS_MEM_SETUP,
-		.arginfo = QCOM_SCM_ARGS(3),
-		.args[0] = peripheral,
-		.args[1] = addr,
-		.args[2] = size,
-		.owner = ARM_SMCCC_OWNER_SIP,
-	};
-	struct qcom_scm_res res;
-
-	ret = qcom_scm_clk_enable();
-	if (ret)
-		return ret;
-
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		goto disable_clk;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-	qcom_scm_bw_disable();
-
-disable_clk:
-	qcom_scm_clk_disable();
-
-	return ret ? : res.result[0];
-}
-EXPORT_SYMBOL_GPL(qcom_scm_pas_mem_setup);
-
-/**
- * qcom_scm_pas_auth_and_reset() - Authenticate the given peripheral firmware
- *				   and reset the remote processor
- * @peripheral:	peripheral id
- *
- * Return 0 on success.
- */
-int qcom_scm_pas_auth_and_reset(u32 peripheral)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_PIL,
-		.cmd = QCOM_SCM_PIL_PAS_AUTH_AND_RESET,
-		.arginfo = QCOM_SCM_ARGS(1),
-		.args[0] = peripheral,
-		.owner = ARM_SMCCC_OWNER_SIP,
-	};
-	struct qcom_scm_res res;
-
-	ret = qcom_scm_clk_enable();
-	if (ret)
-		return ret;
-
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		goto disable_clk;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-	qcom_scm_bw_disable();
-
-disable_clk:
-	qcom_scm_clk_disable();
-
-	return ret ? : res.result[0];
-}
-EXPORT_SYMBOL_GPL(qcom_scm_pas_auth_and_reset);
-
-/**
- * qcom_scm_pas_shutdown() - Shut down the remote processor
- * @peripheral: peripheral id
- *
- * Returns 0 on success.
- */
-int qcom_scm_pas_shutdown(u32 peripheral)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_PIL,
-		.cmd = QCOM_SCM_PIL_PAS_SHUTDOWN,
-		.arginfo = QCOM_SCM_ARGS(1),
-		.args[0] = peripheral,
-		.owner = ARM_SMCCC_OWNER_SIP,
-	};
-	struct qcom_scm_res res;
-
-	ret = qcom_scm_clk_enable();
-	if (ret)
-		return ret;
-
-	ret = qcom_scm_bw_enable();
-	if (ret)
-		goto disable_clk;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-	qcom_scm_bw_disable();
-
-disable_clk:
-	qcom_scm_clk_disable();
-
-	return ret ? : res.result[0];
-}
-EXPORT_SYMBOL_GPL(qcom_scm_pas_shutdown);
-
-int qcom_scm_pas_shutdown_retry(u32 peripheral)
-{
-	int ret;
-
-	ret = qcom_scm_pas_shutdown(peripheral);
-	/* No need to retry if the first try worked */
-	if (!ret)
-		return ret;
-
-	pr_err("PAS Shutdown: First call to shutdown failed with error: %d\n", ret);
-	pr_err("PAS Shutdown: Sleeping for: %u\n", pas_shutdown_retry_delay_ms);
-	msleep(pas_shutdown_retry_delay_ms);
-
-	pr_err("PAS Shutdown: Attempting to shutdown peripheral again\n");
-	return qcom_scm_pas_shutdown(peripheral);
-}
-EXPORT_SYMBOL_GPL(qcom_scm_pas_shutdown_retry);
-
-/**
- * qcom_scm_pas_supported() - Check if the peripheral authentication service is
- *			      available for the given peripherial
- * @peripheral:	peripheral id
- *
- * Returns true if PAS is supported for this peripheral, otherwise false.
- */
-bool qcom_scm_pas_supported(u32 peripheral)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_PIL,
-		.cmd = QCOM_SCM_PIL_PAS_IS_SUPPORTED,
-		.arginfo = QCOM_SCM_ARGS(1),
-		.args[0] = peripheral,
-		.owner = ARM_SMCCC_OWNER_SIP,
-	};
-	struct qcom_scm_res res;
-
-	if (!__qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_PIL,
-					  QCOM_SCM_PIL_PAS_IS_SUPPORTED))
-		return false;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-
-	return ret ? false : !!res.result[0];
-}
-EXPORT_SYMBOL_GPL(qcom_scm_pas_supported);
 
 static int __qcom_scm_pas_mss_reset(struct device *dev, bool reset)
 {
@@ -1049,22 +811,6 @@ int qcom_scm_get_sec_dump_state(u32 *dump_state)
 	return ret;
 }
 EXPORT_SYMBOL(qcom_scm_get_sec_dump_state);
-
-int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t size)
-{
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_UTIL,
-		.cmd = QCOM_SCM_UTIL_DUMP_TABLE_ASSIGN,
-		.arginfo = QCOM_SCM_ARGS(3),
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = is_assign,
-		.args[1] = addr,
-		.args[2] = size,
-	};
-
-	return qcom_scm_call(__scm->dev, &desc, NULL);
-}
-EXPORT_SYMBOL(qcom_scm_assign_dump_table_region);
 
 int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val)
 {
@@ -1175,6 +921,30 @@ void qcom_scm_halt_spmi_pmic_arbiter(void)
 	if (ret)
 		pr_debug("Failed to halt_spmi_pmic_arbiter=0x%x\n", ret);
 }
+
+/**
+ * qcom_deassert_ps_hold() - Deassert PS_HOLD
+ *
+ * Deassert PS_HOLD to signal the PMIC that we are ready to power down or reset.
+ *
+ * This function should never return if the SCM call is available.
+ */
+void qcom_scm_deassert_ps_hold(void)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_PWR,
+		.cmd = QCOM_SCM_PWR_IO_DEASSERT_PS_HOLD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = 0,
+		.arginfo = QCOM_SCM_ARGS(1),
+	};
+
+	ret = qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
+	if (ret)
+		pr_err("Failed to deassert_ps_hold=0x%x\n", ret);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_deassert_ps_hold);
 
 int qcom_scm_spmi_permission_switch(u8 mode)
 {
@@ -1350,6 +1120,25 @@ static int __qcom_scm_assign_mem(struct device *dev, phys_addr_t mem_region,
 	return ret ? : res.result[0];
 }
 
+/*
+ * Refer to qcom_scm_assign_mem_notifier_register().
+ */
+static int qcom_scm_assign_mem_notify(phys_addr_t mem_addr, size_t mem_sz,
+			u64 *srcvm,
+			const struct qcom_scm_vmperm *newvm,
+			unsigned int dest_cnt)
+{
+	struct qcom_scm_assign_mem_notifier_data data = {
+		.mem_addr = mem_addr,
+		.mem_sz = mem_sz,
+		.srcvm = srcvm,
+		.newvm = newvm,
+		.dest_cnt = dest_cnt,
+	};
+
+	return srcu_notifier_call_chain(&qcom_scm_assign_mem_nh, 0, &data);
+}
+
 /**
  * qcom_scm_assign_mem() - Make a secure call to reassign memory ownership
  * @mem_addr: mem region whose ownership need to be reassigned
@@ -1381,8 +1170,10 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	int ret, i, b;
 	u64 srcvm_bits = *srcvm;
 
-	if (!gh_rm_needs_scm_assign(srcvm, newvm, dest_cnt))
-		return 0;
+	ret = qcom_scm_assign_mem_notify(mem_addr, mem_sz, srcvm, newvm, dest_cnt);
+	/* If notifier handled it (NOTIFY_STOP) or returned an error, return early */
+	if (ret & NOTIFY_STOP_MASK)
+		return notifier_to_errno(ret);
 
 	src_sz = hweight64(srcvm_bits) * sizeof(*src);
 	mem_to_map_sz = sizeof(*mem_to_map);
@@ -1435,6 +1226,30 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_assign_mem);
+
+/**
+ * qcom_scm_assign_mem_notifier_register() -
+ * Register a handler for qcom_scm_assign_mem().
+ * The values returned by this notifier have the following interpretation:
+ * NOTIFY_STOP - Success. No fallback to arm 'smc' instruction.
+ * NOTIFY_OK   - No error. Fallback to arm 'smc'.
+ * values that notifier_to_errno() would consider errors -
+ *               Stop. Do not call futher notifiers nor arm 'smc'.
+ *
+ * This notifier is intended to support a compatibility layer between
+ * client-facing apis and different secure memory implemenations.
+ */
+int qcom_scm_assign_mem_notifier_register(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_register(&qcom_scm_assign_mem_nh, nb);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_mem_notifier_register);
+
+int qcom_scm_assign_mem_notifier_unregister(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_unregister(&qcom_scm_assign_mem_nh, nb);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_mem_notifier_unregister);
 
 /**
  * qcom_scm_assign_mem_regions() - Make a secure call to reassign memory
@@ -3391,13 +3206,10 @@ int qcom_scm_set_gic_cpuclass(u32 mpidr, u32 clss)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_set_gic_cpuclass);
 
-bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed)
+bool qcom_scm_multi_call_allow(bool multicall_allowed)
 {
-	struct qcom_scm *scm;
-
-	scm = dev_get_drvdata(dev);
 	if (multicall_allowed &&
-		scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
+		__scm && __scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
 		return true;
 
 	return false;
@@ -3608,6 +3420,7 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	struct qcom_scm *scm;
 	int ret;
 
+	struct device_node *dload = of_find_node_by_path("/soc/dload_mode");
 	scm = devm_kzalloc(&pdev->dev, sizeof(*scm), GFP_KERNEL);
 	if (!scm)
 		return -ENOMEM;
@@ -3675,11 +3488,15 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	scm->restart_nb.priority = 130;
 	register_restart_handler(&scm->restart_nb);
 
-	if (scm->dload_mode_addr &&
-	    IS_ERR(platform_device_register_data(&pdev->dev, "qcom-dload-mode",
-						 PLATFORM_DEVID_NONE, NULL, 0)))
-		dev_err(&pdev->dev, "failed to register qcom dload device\n");
-
+	if (!dload) {
+		if (scm->dload_mode_addr &&
+				IS_ERR(platform_device_register_data(&pdev->dev, "qcom-dload-mode",
+						PLATFORM_DEVID_NONE, NULL, 0)))
+			dev_err(&pdev->dev,
+					"Failed to register qcom dload device\n");
+	} else {
+		of_node_put(dload);
+	}
 	/*
 	 * If requested enable "download mode", from this point on warmboot
 	 * will cause the boot stages to enter download mode, unless

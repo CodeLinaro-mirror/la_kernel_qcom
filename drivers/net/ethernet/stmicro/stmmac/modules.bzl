@@ -58,6 +58,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/net/pcs/pcs-xpcs",
+            "drivers/net/mdio_fe/emac-mdio-fe",
         ],
     )
 

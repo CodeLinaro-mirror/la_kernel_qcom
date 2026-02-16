@@ -569,14 +569,6 @@ void qcom_sg_buffer_init(struct qcom_sg_buffer *buffer)
 }
 EXPORT_SYMBOL_GPL(qcom_sg_buffer_init);
 
-static void qcom_sg_release_rcu_cb(struct rcu_head *rcu)
-{
-	struct qcom_sg_buffer *buffer = container_of(rcu, struct qcom_sg_buffer, rcu);
-
-	if (buffer->free)
-		buffer->free(buffer);
-}
-
 /* Releases memory associated with buffer */
 void qcom_sg_release(struct kref *kref)
 {
@@ -584,16 +576,8 @@ void qcom_sg_release(struct kref *kref)
 
 	buffer = container_of(kref, struct qcom_sg_buffer, kref);
 	mem_buf_vmperm_free(buffer->vmperm);
-
-	/*
-	 * Ensure all pre-existing RCU readers have completed before scheduling
-	 * final cleanup. Readers may still hold references to the embedded kref
-	 * within vmperm, and freeing the buffer prematurely could lead to a
-	 * use-after-free. The actual release is deferred to an RCU callback to
-	 * avoid blocking in this context.
-	 */
-
-	call_rcu(&buffer->rcu, qcom_sg_release_rcu_cb);
+	if (buffer->free)
+		buffer->free(buffer);
 }
 EXPORT_SYMBOL_GPL(qcom_sg_release);
 

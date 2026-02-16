@@ -282,7 +282,7 @@ int sched_smart_freq_ipc_handler(const struct ctl_table *table, int write,
 	if (!smart_freq_init_done)
 		return -EINVAL;
 
-	if (!IS_ENABLED(CONFIG_ARM64_AMU_EXTN))
+	if (!cpu_has_amu_support)
 		return -EINVAL;
 
 	mutex_lock(&freq_reason_mutex);
@@ -744,6 +744,7 @@ void smart_freq_init(const char *name)
 
 	if (!strcmp(name, "SUN") || !strcmp(name, "SUNP") || !strcmp(name, "CANOE")
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "WHALE")
+			|| !strcmp(name, "ALORP")
 			|| !strcmp(name, "WHALEP") || !strcmp(name, "CANOEPSG")
 			|| !strcmp(name, "ALOR") || !strcmp(name, "CANOEP")) {
 		for_each_sched_cluster(cluster) {

@@ -677,6 +677,7 @@ struct dwc3_msm {
 	struct device		**pd_devs;
 	bool			force_disconnect;
 	bool			disable_force_pull_up_down_quirk;
+	bool			dis_role_switch;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -5213,7 +5214,7 @@ static int dwc3_msm_id_notifier(struct notifier_block *nb,
 	struct dwc3_msm *mdwc = enb->mdwc;
 	enum dwc3_id_state id;
 
-	if (!edev || !mdwc)
+	if (!edev || !mdwc || mdwc->dis_role_switch)
 		return NOTIFY_DONE;
 
 	dwc = platform_get_drvdata(mdwc->dwc3);
@@ -5246,7 +5247,7 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 	struct dwc3_msm *mdwc = enb->mdwc;
 	const char *edev_name;
 
-	if (!edev || !mdwc)
+	if (!edev || !mdwc || mdwc->dis_role_switch)
 		return NOTIFY_DONE;
 
 	if (mdwc->dwc3)
@@ -5445,6 +5446,9 @@ static enum usb_role dwc3_msm_usb_role_switch_get_role(struct usb_role_switch *s
 static int dwc3_msm_set_role(struct dwc3_msm *mdwc, enum usb_role role)
 {
 	enum usb_role cur_role;
+
+	if (mdwc->dis_role_switch)
+		return -EPERM;
 
 	if (!dwc3_msm_role_allowed(mdwc, role))
 		return -EINVAL;
@@ -6256,10 +6260,11 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 		}
 	}
 
-	/* Assumes dwc3 is the first DT child of dwc3-msm */
-	dwc3_node = of_get_next_available_child(node, NULL);
-	if (!dwc3_node) {
-		dev_err(mdwc->dev, "failed to find dwc3 child\n");
+	/* Get the dwc3 child node by checking the node name */
+	dwc3_node = of_get_child_by_name(node, "dwc3");
+	if (!dwc3_node || !of_device_is_available(dwc3_node)) {
+		dev_err(mdwc->dev, "dwc3 child is missing or disabled\n");
+		of_node_put(dwc3_node);
 		ret = -ENODEV;
 		goto err;
 	}
@@ -6830,10 +6835,11 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-	/* Assumes dwc3 is the first DT child of dwc3-msm */
-	dwc3_node = of_get_next_available_child(node, NULL);
-	if (!dwc3_node) {
-		dev_err(&pdev->dev, "failed to find dwc3 child\n");
+	/* Get the dwc3 child node by checking the node name */
+	dwc3_node = of_get_child_by_name(node, "dwc3");
+	if (!dwc3_node || !of_device_is_available(dwc3_node)) {
+		dev_err(&pdev->dev, "dwc3 child is missing or disabled\n");
+		of_node_put(dwc3_node);
 		ret = -ENODEV;
 		goto err;
 	}
@@ -6863,6 +6869,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 
 	mutex_init(&mdwc->suspend_resume_mutex);
 	mutex_init(&mdwc->role_switch_mutex);
+	mdwc->dis_role_switch = false;
 
 	if (of_property_read_bool(node, "usb-role-switch")) {
 		struct usb_role_switch_desc role_desc = {
@@ -7025,6 +7032,16 @@ static void dwc3_msm_usb3_phy_poweroff(struct dwc3_msm *mdwc, bool off)
 		phy_init(mdwc->usb3_phy);
 		phy_power_on(mdwc->usb3_phy);
 	}
+}
+
+static void dwc3_msm_shutdown(struct platform_device *pdev)
+{
+	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
+
+	dbg_log_string("Entry\n");
+	dwc3_msm_set_role(mdwc, USB_ROLE_NONE);
+	mdwc->dis_role_switch = true;
+	flush_workqueue(mdwc->sm_usb_wq);
 }
 
 static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
@@ -8162,6 +8179,7 @@ MODULE_DEVICE_TABLE(of, of_dwc3_matach);
 static struct platform_driver dwc3_msm_driver = {
 	.probe		= dwc3_msm_probe,
 	.remove		= dwc3_msm_remove,
+	.shutdown	= dwc3_msm_shutdown,
 	.driver		= {
 		.name	= "msm-dwc3",
 		.pm	= &dwc3_msm_dev_pm_ops,

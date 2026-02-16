@@ -70,6 +70,7 @@ pinctrl-msm.ko
 pinctrl-alor.ko
 pinctrl-canoe.ko
 pinctrl-chora.ko
+pinctrl-ravelin.ko
 qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko
@@ -82,6 +83,7 @@ qnoc-qos.ko
 qnoc-canoe.ko
 qnoc-chora.ko
 qnoc-alor.ko
+qnoc-ravelin.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko
 iommu-logger.ko

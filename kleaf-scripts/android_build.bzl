@@ -19,6 +19,7 @@ load(":kleaf-scripts/dtbs.bzl", "define_qcom_dtbs")
 load(":kleaf-scripts/modules_unprotected.bzl", "get_unprotected_vendor_modules_list")
 load(":kleaf-scripts/msm_dtc.bzl", "define_dtc_dist")
 load(":kleaf-scripts/techpack_modules.bzl", "define_techpack_modules")
+load(":qcom_libraries.bzl", "library_registry")
 load(":qcom_modules.bzl", "registry")
 
 def define_common_android_rules():
@@ -56,6 +57,28 @@ def define_single_android_build(
         implicit_config_fragment = None,
         config_path = None):
     stem = "{}_{}".format(name, variant)
+
+    library_targets = library_registry.define_libraries(
+        target_variant = stem,
+        config_fragment = config_fragment,
+        base_kernel = base_kernel,
+        ddk_config_deps = ddk_config_deps,
+        implicit_config_fragment = implicit_config_fragment,
+        config_path = config_path,
+    )
+
+    library_names = {}
+    for t in library_targets:
+        if t.startswith(stem + "_"):
+            logical = t[len(stem) + 1:]
+            library_names[logical] = t
+        else:
+            parts = t.split("/", 1)
+            if len(parts) > 1:
+                library_names[parts[1]] = t
+            else:
+                fail("Library target {} does not match stem {}_".format(t, stem))
+
     modules = registry.define_modules(
         stem,
         config_fragment,
@@ -63,6 +86,7 @@ def define_single_android_build(
         ddk_config_deps,
         implicit_config_fragment,
         config_path = config_path,
+        library_names = library_names,
     )
 
     hermetic_genrule(

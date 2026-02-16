@@ -54,6 +54,7 @@ enum {
 	HW_PLATFORM_IDP = 34,
 	HW_PLATFORM_WDP = 36,
 	HW_PLATFORM_CRD = 40,
+	HW_PLATFORM_QAR = 44,
 	HW_PLATFORM_WRD = 45,
 	HW_PLATFORM_INVALID
 };
@@ -81,6 +82,7 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_IDP] = "IDP",
 	[HW_PLATFORM_WDP] = "WDP",
 	[HW_PLATFORM_CRD] = "CRD",
+	[HW_PLATFORM_QAR] = "QAR",
 	[HW_PLATFORM_WRD] = "WRD",
 };
 
@@ -658,6 +660,10 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(X1E80100) },
 	{ qcom_board_id(SM8650) },
 	{ qcom_board_id(SM4450) },
+	{ qcom_board_id(RAVELIN) },
+	{ qcom_board_id(RAVELINP) },
+	{ qcom_board_id(SG_RAVELIN) },
+	{ qcom_board_id(SG_RAVELINP) },
 	{ qcom_board_id(QDU1010) },
 	{ qcom_board_id(QRU1032) },
 	{ qcom_board_id(QRU1052) },
