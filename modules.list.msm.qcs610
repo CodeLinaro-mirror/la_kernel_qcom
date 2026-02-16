@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
-/*
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
- */
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 arm_smmu.ko
 iommu-logger.ko
 msm_dma_iommu_mapping.ko
@@ -69,4 +67,3 @@ spi-msm-geni.ko
 qnoc-qos.ko
 qnoc-sm6150.ko
 phy-msm-qusb.ko
-sps_drv.ko
