@@ -39,8 +39,6 @@
 #define VIRTIO_ID_GLINK_BRIDGE (49162)
 #define SSR_PWRUP_TIMEOUT 5000
 
-static struct workqueue_struct *ds_qb_wq;
-
 enum {
 	CDSP0,
 	CDSP1,
@@ -109,6 +107,10 @@ struct virtio_glink_bridge_dsp_info {
 	struct mutex ssr_lock;
 	struct work_struct ssr_work;
 	struct list_head node;
+	wait_queue_head_t wq;
+	bool pending_vq;
+	bool ssr;
+
 };
 
 struct virtio_glink_bridge {
@@ -116,12 +118,10 @@ struct virtio_glink_bridge {
 	struct virtqueue *vq;
 	struct list_head dsp_infos;
 	struct work_struct rx_work;
-	struct completion send_done;
+	struct workqueue_struct *ds_qb_wq;
 	spinlock_t ds_qb_lock;
 	int ds_qb_status;
 	int dsp_count;
-	bool pending_vq;
-	bool ssr;
 	void *buf;
 	void *ilc;
 };
@@ -220,35 +220,46 @@ static int virtio_glink_bridge_send_msg_ack(struct virtio_glink_bridge *vgbridge
 
 static void virtio_glink_bridge_ssr_after_powerup(struct work_struct *work)
 {
-	int err;
 	struct virtio_glink_bridge_dsp_info *dsp_info = container_of(work,
 						struct virtio_glink_bridge_dsp_info, ssr_work);
-	spin_lock(&dsp_info->vgbridge->ds_qb_lock);
-	dsp_info->vgbridge->ssr = true;
-	spin_unlock(&dsp_info->vgbridge->ds_qb_lock);
+	unsigned long flags;
+	int err;
 
-	if (!dsp_info->vgbridge->pending_vq) {
+	if (!dsp_info->vgbridge) {
+		pr_err("%s: vgbridge uninitialized\n", __func__);
+		return;
+	}
+
+	spin_lock_irqsave(&dsp_info->vgbridge->ds_qb_lock, flags);
+	dsp_info->ssr = true;
+
+	if (!dsp_info->pending_vq) {
 		if (virtio_glink_bridge_send_msg(dsp_info->vgbridge, MSG_SSR_AFTER_POWERUP,
 					     dsp_info->label) != 0) {
+			pr_err("%s: send AFTER_POWERUP failed\n", __func__);
+			spin_unlock_irqrestore(&dsp_info->vgbridge->ds_qb_lock, flags);
 			return;
 		}
-		err = wait_for_completion_interruptible_timeout(&dsp_info->vgbridge->send_done,
-							msecs_to_jiffies(SSR_PWRUP_TIMEOUT));
+
+		err = wait_event_lock_irq_timeout(dsp_info->wq, !dsp_info->ssr,
+						  dsp_info->vgbridge->ds_qb_lock,
+						  msecs_to_jiffies(SSR_PWRUP_TIMEOUT));
 		if (err <= 0) {
-			dsp_info->vgbridge->pending_vq = true;
+			dsp_info->pending_vq = true;
 			pr_err("%s: Failed to recv resp for MSG_SSR_AFTER_POWERUP dsp: %s err:%d\n",
 				 __func__, dsp_info->label_str, err);
 		}
-	/** TODO: Handle case where RECLAIM received after timeout **/
-
 	} else {
 		pr_err("%s: Skip MSG_SSR_AFTER_POWERUP for dsp:%s, prev pkt resp pending\n",
 			__func__, dsp_info->label_str);
 	}
+	spin_unlock_irqrestore(&dsp_info->vgbridge->ds_qb_lock, flags);
 }
 
 static void virtio_glink_bridge_ssr_after_shutdown(struct virtio_glink_bridge_dsp_info *dsp_info)
 {
+	if (!dsp_info || !dsp_info->gdev)
+		return;
 	qcom_glink_cma_unregister(dsp_info->gdev);
 	dsp_info->gdev = NULL;
 }
@@ -265,8 +276,9 @@ static int virtio_glink_bridge_ssr_cb(struct notifier_block *nb,
 	if (dsp_info->vgbridge->ds_qb_status == QB_IN_PROGRESS ||
 			dsp_info->vgbridge->ds_qb_status == DS_DONE) {
 		VIRTIO_GLINK_DEBUG_LOG(dsp_info->vgbridge->ilc,
-				       "event %lu recvd for label %d state %d skip ssr",
-				       state, dsp_info->label, dsp_info->vgbridge->ds_qb_status);
+				       "event %lu recvd for label %s state %d skip ssr",
+				       state, dsp_info->label_str,
+				       dsp_info->vgbridge->ds_qb_status);
 		spin_unlock(&dsp_info->vgbridge->ds_qb_lock);
 		return NOTIFY_DONE;
 	}
@@ -275,12 +287,12 @@ static int virtio_glink_bridge_ssr_cb(struct notifier_block *nb,
 	mutex_lock(&dsp_info->ssr_lock);
 	dev = &dsp_info->vgbridge->vdev->dev;
 
-	VIRTIO_GLINK_DEBUG_LOG(dsp_info->vgbridge->ilc, "received cb state %ld for %d\n",
-			       state, dsp_info->label);
+	VIRTIO_GLINK_DEBUG_LOG(dsp_info->vgbridge->ilc, "received cb state %ld for %s\n",
+			       state, dsp_info->label_str);
 
 	switch (state) {
 	case QCOM_SSR_AFTER_POWERUP:
-		queue_work(ds_qb_wq, &dsp_info->ssr_work);
+		queue_work(dsp_info->vgbridge->ds_qb_wq, &dsp_info->ssr_work);
 		break;
 	case QCOM_SSR_AFTER_SHUTDOWN:
 		virtio_glink_bridge_ssr_after_shutdown(dsp_info);
@@ -314,11 +326,12 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 								rx_work);
 	struct virtio_glink_bridge_dsp_info *dsp_info;
 	struct virtio_device *vdev = vgbridge->vdev;
+	u32 msg_type, msg_ack_type = MSG_ERR;
 	struct virtio_glink_bridge_msg *msg;
 	struct device *dev = &vdev->dev;
 	struct glink_cma_config *config;
-	u32 msg_type, msg_ack_type;
 	u32 label, address, size;
+	unsigned long flags;
 	unsigned int len;
 	void *handle;
 	int rc;
@@ -328,7 +341,6 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 	msg = (struct virtio_glink_bridge_msg *)virtqueue_get_buf(vgbridge->vq, &len);
 	if (!msg || len != sizeof(*msg)) {
 		dev_err(dev, "fail to get virtqueue buffer, len %u\n", len);
-		msg_ack_type = MSG_ERR;
 		label = VIRTIO_GLINK_BRIDGE_NO_LABEL;
 		rc = VIRTIO_GLINK_BRIDGE_EINVAL;
 		goto out;
@@ -342,37 +354,49 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 
 	if (!virtio_glink_bridge_msg_type_supported(msg_type)) {
 		dev_err(dev, "unsupported msg type %u\n", msg_type);
-		msg_ack_type = MSG_ERR;
 		rc = VIRTIO_GLINK_BRIDGE_EINVAL;
 		goto out;
 	}
 
-	if (msg_type == MSG_INBUF_RECLAIM) {
-		spin_lock(&vgbridge->ds_qb_lock);
-		if (vgbridge->ssr) {
-			vgbridge->ssr = false;
-			complete(&vgbridge->send_done);
-			VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "Received RECLAIM for label %u",
-					       label);
-			if (vgbridge->ds_qb_status == QB_IN_PROGRESS) {
-				vgbridge->dsp_count--;
-				if (!vgbridge->dsp_count)
-					vgbridge->ds_qb_status = IDLE_STATE;
-			}
-		}
-		spin_unlock(&vgbridge->ds_qb_lock);
-		return;
-	}
-	msg_ack_type = virtio_glink_bridge_to_msg_ack_type(msg_type);
-	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "Received msg_type %u and to be sent ack_type %u",
-			       msg_type, msg_ack_type);
-
 	dsp_info = virtio_glink_bridge_get_dsp_info(vgbridge, label);
 	if (!dsp_info) {
+		if (msg_type == MSG_INBUF_RECLAIM)
+			return;
 		dev_err(dev, "fail to find dsp_info %u\n", label);
 		rc = VIRTIO_GLINK_BRIDGE_ENODEV;
 		goto out;
 	}
+
+	if (msg_type == MSG_INBUF_RECLAIM) {
+		spin_lock_irqsave(&vgbridge->ds_qb_lock, flags);
+		if (!dsp_info->ssr) {
+			spin_unlock_irqrestore(&vgbridge->ds_qb_lock, flags);
+			return;
+		}
+		dsp_info->ssr = false;
+		spin_unlock_irqrestore(&vgbridge->ds_qb_lock, flags);
+		wake_up(&dsp_info->wq);
+		VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "Received RECLAIM for label %u", label);
+
+		spin_lock_irqsave(&vgbridge->ds_qb_lock, flags);
+		if (dsp_info->pending_vq) {
+			pr_err("%s: Recvd delayed RECLAIM for label %s\n", __func__,
+			       dsp_info->label_str);
+			dsp_info->pending_vq = false;
+		}
+
+		if (vgbridge->ds_qb_status == QB_IN_PROGRESS) {
+			vgbridge->dsp_count--;
+			if (!vgbridge->dsp_count)
+				vgbridge->ds_qb_status = IDLE_STATE;
+		}
+		spin_unlock_irqrestore(&vgbridge->ds_qb_lock, flags);
+		return;
+	}
+
+	msg_ack_type = virtio_glink_bridge_to_msg_ack_type(msg_type);
+	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "Received msg_type %u and to be sent ack_type %u",
+			       msg_type, msg_ack_type);
 
 	mutex_lock(&dsp_info->ssr_lock);
 
@@ -418,8 +442,8 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 		VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "ssr register");
 		handle = qcom_register_ssr_notifier(dsp_info->label_str, &dsp_info->nb);
 		if (IS_ERR_OR_NULL(handle)) {
-			dev_err(dev, "fail to register with SSR notifier for %d\n",
-				dsp_info->label);
+			dev_err(dev, "fail to register with SSR notifier for %s\n",
+				dsp_info->label_str);
 			rc = VIRTIO_GLINK_BRIDGE_EINVAL;
 			goto unlock;
 		}
@@ -495,6 +519,8 @@ static int virtio_glink_bridge_of_parse(struct virtio_glink_bridge *vgbridge)
 		mutex_init(&dsp_info->ssr_lock);
 		dsp_info->np = child_np;
 
+		dsp_info->pending_vq = false;
+		init_waitqueue_head(&dsp_info->wq);
 		INIT_WORK(&dsp_info->ssr_work, virtio_glink_bridge_ssr_after_powerup);
 
 		list_add_tail(&dsp_info->node, &vgbridge->dsp_infos);
@@ -546,13 +572,10 @@ static int virtio_glink_bridge_probe(struct virtio_device *vdev)
 	if (rc)
 		goto err;
 
-	vgbridge->pending_vq = false;
-
-	init_completion(&vgbridge->send_done);
 	spin_lock_init(&vgbridge->ds_qb_lock);
 	vgbridge->ds_qb_status = IDLE_STATE;
-	ds_qb_wq = create_singlethread_workqueue("virtio_glink_wq");
-	if (!ds_qb_wq) {
+	vgbridge->ds_qb_wq = create_singlethread_workqueue("virtio_glink_wq");
+	if (!vgbridge->ds_qb_wq) {
 		pr_err("%s: failed to create wq\n", __func__);
 		rc = -ENOMEM;
 		goto err;
@@ -574,12 +597,14 @@ static void virtio_glink_bridge_remove(struct virtio_device *vdev)
 	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "Enter");
 
 	list_for_each_entry(dsp_info, &vgbridge->dsp_infos, node) {
-		qcom_glink_cma_unregister(dsp_info->gdev);
-		dsp_info->gdev = NULL;
+		if (dsp_info->gdev) {
+			qcom_glink_cma_unregister(dsp_info->gdev);
+			dsp_info->gdev = NULL;
+		}
 	}
 
 	cancel_work_sync(&vgbridge->rx_work);
-	destroy_workqueue(ds_qb_wq);
+	destroy_workqueue(vgbridge->ds_qb_wq);
 
 	vdev->config->reset(vdev);
 	vdev->config->del_vqs(vdev);
@@ -592,6 +617,7 @@ static int virtio_glink_suspend(struct device *dev)
 	struct virtio_glink_bridge_dsp_info *dsp_info;
 	struct virtio_device *vdev = dev_to_virtio(dev);
 	struct virtio_glink_bridge *vgbridge;
+	unsigned long flags;
 
 	vgbridge = (struct virtio_glink_bridge *)vdev->priv;
 	vgbridge->dsp_count = 0;
@@ -599,14 +625,18 @@ static int virtio_glink_suspend(struct device *dev)
 	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "\n");
 
 	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+		spin_lock_irqsave(&vgbridge->ds_qb_lock, flags);
 		vgbridge->ds_qb_status = DS_DONE;
+		spin_unlock_irqrestore(&vgbridge->ds_qb_lock, flags);
 
 		VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "virtio glink DS");
 
 		list_for_each_entry(dsp_info, &vgbridge->dsp_infos, node) {
 			vgbridge->dsp_count++;
-			qcom_glink_cma_unregister(dsp_info->gdev);
-			dsp_info->gdev = NULL;
+			if (dsp_info->gdev) {
+				qcom_glink_cma_unregister(dsp_info->gdev);
+				dsp_info->gdev = NULL;
+			}
 		}
 	}
 	return 0;
@@ -617,13 +647,16 @@ static int virtio_glink_resume(struct device *dev)
 	struct virtio_device *vdev = dev_to_virtio(dev);
 	struct virtio_glink_bridge *vgbridge = (struct virtio_glink_bridge *)vdev->priv;
 	struct virtio_glink_bridge_dsp_info *dsp_info;
+	unsigned long flags;
 
 	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "\n");
+	spin_lock_irqsave(&vgbridge->ds_qb_lock, flags);
 	if (vgbridge->ds_qb_status == DS_DONE) {
 		list_for_each_entry(dsp_info, &vgbridge->dsp_infos, node)
-			queue_work(ds_qb_wq, &dsp_info->ssr_work);
+			queue_work(vgbridge->ds_qb_wq, &dsp_info->ssr_work);
 		vgbridge->ds_qb_status = QB_IN_PROGRESS;
 	}
+	spin_unlock_irqrestore(&vgbridge->ds_qb_lock, flags);
 
 	return 0;
 }
