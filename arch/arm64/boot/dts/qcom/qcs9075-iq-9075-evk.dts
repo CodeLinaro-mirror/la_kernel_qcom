@@ -502,10 +502,11 @@
 	hd3ss3220@67 {
 		compatible = "ti,hd3ss3220";
 		reg = <0x67>;
-		interrupt-parent = <&pmm8654au_2_gpios>;
-		interrupts = < 5 IRQ_TYPE_EDGE_FALLING>;
-		pinctrl-0 = <&usb0_intr_state>;
+		interrupts-extended = <&pmm8654au_2_gpios 5 IRQ_TYPE_EDGE_FALLING>;
+		id-gpios = <&tlmm 50 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&usb0_id>, <&usb0_intr_state>;
 		pinctrl-names = "default";
+		vbus-supply = <&vbus_supply_regulator_0>;
 		wakeup-source;
 
 		connector@0 {
@@ -536,6 +537,7 @@
 		pinctrl-0 = <&usb1_id>, <&usb1_intr_state>;
 		pinctrl-names = "default";
 		vbus-supply = <&vbus_supply_regulator_1>;
+		wakeup-source;
 
 		connector@1 {
 			compatible = "usb-c-connector";
@@ -598,20 +600,6 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&expander1_int>;
 		reg = <0x39>;
-
-		io-exp-hog2 {
-			gpio-hog;
-			gpios = <2 GPIO_ACTIVE_HIGH>;
-			output-low;
-			line-name = "io_exp_gpio2";
-		};
-
-		io-exp-hog3 {
-			gpio-hog;
-			gpios = <3 GPIO_ACTIVE_HIGH>;
-			output-low;
-			line-name = "io_exp_gpio3";
-		};
 	};
 
 	expander2: pca953x@3a {
@@ -637,6 +625,7 @@
 		interrupts = <39 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&expander3_int>;
+		wakeup-source;
 		reg = <0x3b>;
 	};
 
@@ -1004,6 +993,12 @@
 		bias-pull-up;
 	};
 
+	usb0_id: usb0-id-state {
+		pins = "gpio50";
+		function = "gpio";
+		bias-pull-up;
+	};
+
 	usb1_id: usb1-id-state {
 		pins = "gpio51";
 		function = "gpio";
@@ -1113,25 +1108,6 @@
 };
 
 &soc {
-	connector_usb2: connector-usb2 {
-		compatible = "gpio-usb-b-connector";
-		id-gpio = <&pmm8654au_2_gpios 11 GPIO_ACTIVE_HIGH>;
-		vbus-supply = <&vbus_supply_regulator_2>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&usb2_id_det_default>;
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				usb2_port_connector: endpoint {
-					remote-endpoint = <&usb2_port>;
-				};
-			};
-		};
-	};
-
 	vreg_sdc: regulator-sdc {
 		compatible = "regulator-gpio";
 
@@ -1220,7 +1196,6 @@
 	snps,dis_enblslpm_quirk;
 	qcom,enable-rt;
 	wakeup-source;
-	vbus_dwc3-supply = <&vbus_supply_regulator_0>;
 	status = "okay";
 
 	ports {
@@ -1362,6 +1337,28 @@
 	wakeup-source;
 
 	status = "okay";
+
+	connector_usb2: connector-usb2 {
+		compatible = "gpio-usb-b-connector";
+		label = "micro-USB";
+		type = "micro";
+		id-gpio = <&pmm8654au_2_gpios 11 GPIO_ACTIVE_HIGH>;
+		vbus-gpio = <&expander3 3 GPIO_ACTIVE_HIGH>;
+		vbus-supply = <&vbus_supply_regulator_2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_id_det_default>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				usb2_port_connector: endpoint {
+					remote-endpoint = <&usb2_port>;
+				};
+			};
+		};
+	};
 
 	ports {
 
