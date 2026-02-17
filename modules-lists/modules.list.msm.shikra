@@ -14,6 +14,7 @@ spmi-pmic-arb.ko
 qcom_dma_heaps.ko
 qcom_iommu_debug.ko
 qcom_iommu_util.ko
+qcom_tsens.ko
 qcom-scm.ko
 qcom-mpm.ko
 qcom_tzmem.ko
@@ -44,3 +45,19 @@ usb_f_ccid.ko
 usb_f_cdev.ko
 usb_f_gsi.ko
 usb_f_qdss.ko
+qcom_ice.ko
+cqhci.ko
+sdhci-msm.ko
+mdt_loader.ko
+socinfo.ko
+dispcc-shikra.ko
+gpucc-shikra.ko
+qcom-cpufreq-hw.ko
+qcom_soc_wdt.ko
+regmap-spmi.ko
+qti-regmap-debugfs.ko
+qcom-spmi-pmic.ko
+nvmem_qcom-spmi-sdam.ko
+rtc-pm8xxx.ko
+pmic-pon-log.ko
+spmi-pmic-arb.ko

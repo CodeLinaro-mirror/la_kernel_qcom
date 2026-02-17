@@ -94,6 +94,8 @@ autogvm_perf_config = {
     "CONFIG_MHI_BUS_MISC": "y",
     "CONFIG_QRTR": "m",
     "CONFIG_QRTR_MHI": "m",
+    "CONFIG_QRTR_NODE_ID": "27",
+    "CONFIG_QRTR_SMD": "m",
     "CONFIG_QTI_QMI_COOLING_DEVICE": "n",
     "CONFIG_QTI_QMI_SENSOR_V2": "n",
     "CONFIG_R8712U": "n",

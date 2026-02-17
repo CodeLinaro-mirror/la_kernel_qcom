@@ -69,6 +69,22 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-lahaina",
+        out = "phy-qcom-ufs-qmp-v4-lahaina.ko",
+        config = "CONFIG_PHY_QCOM_UFS_V4_LAHAINA",
+        srcs = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs-i.h",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-lahaina.c",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-lahaina.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs",
+        ],
+    )
+
+    registry.register(
         name = "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v3-660",
         out = "phy-qcom-ufs-qmp-v3-660.ko",
         config = "CONFIG_PHY_QCOM_UFS_V3",

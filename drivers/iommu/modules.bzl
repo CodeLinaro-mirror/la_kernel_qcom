@@ -1,9 +1,9 @@
 load(":drivers/iommu/arm/arm-smmu/modules.bzl", register_arm_arm_smmu = "register_modules")
-load(":drivers/iommu/arm/arm-smmu-v3/modules.bzl", register_arm_arm_smmu_v3 = "register_modules")
+#load(":drivers/iommu/arm/arm-smmu-v3/modules.bzl", register_arm_arm_smmu_v3 = "register_modules")
 
 def register_modules(registry):
     register_arm_arm_smmu(registry)
-    register_arm_arm_smmu_v3(registry)
+    #    register_arm_arm_smmu_v3(registry)
 
     registry.register(
         name = "drivers/iommu/iommu-logger",
@@ -83,6 +83,7 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
     registry.register(
         name = "drivers/iommu/virtio-iommu",
         out = "virtio-iommu.ko",
@@ -98,5 +99,21 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/iommu/qcom_dpd_proxy_iommu",
+        out = "qcom_dpd_proxy_iommu.ko",
+        config = "CONFIG_QCOM_DPD_PROXY",
+        srcs = [
+            # do not sort
+            "drivers/iommu/qcom_dpd_proxy_iommu.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_dpd_proxy",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )

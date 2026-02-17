@@ -2,6 +2,7 @@ seraph_consolidate_config = {
     # keep sorted
     "CONFIG_ATOMIC64_SELFTEST": "m",
     "CONFIG_CMA_DEBUGFS": "y",
+    "CONFIG_CORESIGHT_SOURCE_ETM4X": "m",
     "CONFIG_DEBUG_PAGEALLOC": "y",
     "CONFIG_DEBUG_PAGEALLOC_ENABLE_DEFAULT": "y",
     "CONFIG_DEBUG_SPINLOCK": "y",
@@ -11,9 +12,11 @@ seraph_consolidate_config = {
     "CONFIG_MHI_BUS_DEBUG": "y",
     "CONFIG_MSM_GPI_DMA_DEBUG": "y",
     "CONFIG_PAGE_OWNER": "y",
-    "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
+    "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_RUNTIME_TESTING_MENU": "y",
+    "CONFIG_SCHED_WALT_DEBUG": "m",
+    "CONFIG_SCHED_WALT_STATS": "m",
     "CONFIG_SDHCI_MSM_DBG": "y",
     "CONFIG_TORTURE_TEST": "m",
 }

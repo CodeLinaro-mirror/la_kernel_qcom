@@ -47,6 +47,8 @@
 
 #define QRTR_LOCAL_PVM_NODE_ID	0x1
 #define QRTR_LOCAL_MDM_NODE_ID	0x2
+/* LA GVM QRTR node-id */
+#define QRTR_GVM_NODE_ID 27
 
 /**
  * struct qrtr_hdr_v1 - (I|R)PCrouter packet header version 1
@@ -1852,7 +1854,8 @@ static struct sk_buff *qrtr_sock_alloc_skb_send(struct sock *sk,
 	 * iovec structures.
 	 */
 
-	if (is_primary(qrtr_local_nid)) {
+	/* Adding a check for LAGVM qrtr node-id too to avoid qrtr communication issue with wlan */
+	if (is_primary(qrtr_local_nid) || qrtr_local_nid == QRTR_GVM_NODE_ID) {
 		if (plen > SKB_MAX_ALLOC) {
 			data_len = min_t(size_t,
 					 plen - SKB_MAX_ALLOC,

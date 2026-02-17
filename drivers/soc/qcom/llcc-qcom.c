@@ -85,12 +85,10 @@
 #define LLCC_TRP_WRSC_CACHEABLE_EN    0x21f2c
 #define LLCC_TRP_ALGO_CFG8	      0x21f30
 
-#define SLC_SCT_MEM_LAYOUT_V0           (0) /* SCT Memory layout version 0 */
-#define SLC_SCT_MEM_LAYOUT_V1           (1) /* SCT Memory layout version 1 */
-#define SLC_SCT_MEM_LAYOUT_VERSION      SLC_SCT_MEM_LAYOUT_V0 /* SCT Memory layout version */
-#define SLC_SCT_DONE                    (0x00534354444f4e45) /* SCT programming OK */
-#define SLC_SCT_FAIL                    (0x005343544641494c) /* SCT programming failed */
-#define SLC_SCT_NAME_LEN                (15)
+#define SLC_SCT_MEM_LAYOUT_VERSION	(1) /* SCT Memory layout version */
+#define SLC_SCT_DONE			(0x00534354444f4e45) /* SCT programming OK */
+#define SLC_SCT_FAIL			(0x005343544641494c) /* SCT programming failed */
+#define SLC_SCT_NAME_LEN		(15)
 
 /**
  * llcc_slice_config - Data associated with the llcc slice
@@ -241,27 +239,13 @@ struct slc_sct_slice_desc {
 /**
  * slc_sct_mem - Shared memory structure
  * @sct_status: Status of SCT programming
- * @slice_descs_count: Number of slice desc present in SCT
- * @scid_max: Maximum no. of SCIDs supported
- * @slice_descs: Array of SCT slice desc
- */
-struct slc_sct_mem {
-	struct slc_sct_status sct_status;
-	uint32_t slice_descs_count;
-	uint32_t scid_max;
-	struct slc_sct_slice_desc slice_descs[];
-};
-
-/**
- * slc_sct_mem_v1 - Shared memory structure V1
- * @sct_status: Status of SCT programming
  * @sct_details: Sct revision and name details
  * @tcm_mem_info: TCM shared memory presence & offset info
  * @slice_descs_count: Number of slice desc present in SCT
  * @scid_max: Maximum no. of SCIDs supported
  * @slice_descs: Array of SCT slice desc
  */
-struct slc_sct_mem_v1 {
+struct slc_sct_mem {
 	struct slc_sct_status sct_status;
 	struct slc_sct_details sct_details;
 	struct slc_tcm_mem_info tcm_mem_info;
@@ -1270,6 +1254,12 @@ static const struct qcom_llcc_config alor_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config seraph_cfg[] = {
+	{
+		.reg_offset = llcc_v6_reg_offset,
+		.edac_reg_offset = &llcc_v6_edac_reg_offset,
+	},
+};
 static const struct qcom_sct_config qdu1000_cfgs = {
 	.llcc_config	= qdu1000_cfg,
 	.num_config	= ARRAY_SIZE(qdu1000_cfg),
@@ -1381,11 +1371,21 @@ static const struct qcom_sct_config alor_cfgs = {
 	.num_config = ARRAY_SIZE(alor_cfg),
 };
 
+static const struct qcom_sct_config seraph_cfgs = {
+	.llcc_config    = seraph_cfg,
+	.num_config = ARRAY_SIZE(seraph_cfg),
+};
+
 static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
 
 static struct llcc_slice_desc *llcc_slice_getd_sct_initialized(u32 uid)
 {
 	u32 i;
+
+	if (!drv_data->uid_slice_lookup) {
+		pr_err("llcc-qcom: UID-slice lookup table not initialized\n");
+		return ERR_PTR(-EINVAL);
+	}
 
 	for (i = 0; i < drv_data->cfg_size; i++) {
 		if (uid == drv_data->uid_slice_lookup[i].uid)
@@ -1896,135 +1896,6 @@ static int _qcom_llcc_cfg_program(const struct llcc_slice_config *config,
 	return ret;
 }
 
-static int _qcom_llcc_mem_verification(struct device *dev, struct slc_sct_mem *slc_mem)
-{
-	const struct slc_sct_status *slc_status = &slc_mem->sct_status;
-	const struct slc_sct_mem_v1 *slc_mem_v1 = (struct slc_sct_mem_v1 *)slc_mem;
-
-	if (!slc_status->program_status)
-		return -EPROBE_DEFER;
-
-	if (slc_status->program_status == SLC_SCT_DONE) {
-		if ((slc_status->version == SLC_SCT_MEM_LAYOUT_VERSION) &&
-		    slc_mem->slice_descs_count <= slc_mem->scid_max) {
-			dev_info(dev, "SCT initialized with slice descriptor : %d\n",
-					slc_mem->slice_descs_count);
-			return 0;
-		} else if ((slc_status->version == SLC_SCT_MEM_LAYOUT_V1) &&
-			   slc_mem_v1->slice_descs_count <= slc_mem_v1->scid_max) {
-			dev_info(dev, "SCT initialized with slice descriptor : %d\n",
-					slc_mem_v1->slice_descs_count);
-			return 0;
-		}
-
-	} else if (slc_status->program_status == SLC_SCT_FAIL) {
-		switch (slc_status->version) {
-		case SLC_SCT_MEM_LAYOUT_VERSION:
-		case SLC_SCT_MEM_LAYOUT_V1:
-			dev_err(dev, "SCT Initialization failed with error : %llu and param: %llu\n",
-					slc_status->error.code, slc_status->error.param);
-			break;
-		default:
-			dev_err(dev, "Error Undefined version\n");
-			break;
-		}
-	} else {
-		dev_err(dev, "Unknown SCT Initialization error\n");
-	}
-
-	dev_err(dev, "LLCC memory based init memory verification failed\n");
-	return -EINVAL;
-}
-
-static int qcom_llcc_mem_based_init(struct platform_device *pdev)
-{
-	int ret = -EINVAL;
-	u32 i, sz, scid_max;
-	struct slc_sct_slice_desc *memslice;
-	struct device *dev = &pdev->dev;
-	struct resource *res;
-	struct slc_sct_mem __iomem *slc_mem = NULL;
-
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "slc_mem_base");
-	if (!res)
-		return ret;
-
-	slc_mem = devm_ioremap_resource(dev, res);
-	if (IS_ERR_OR_NULL(slc_mem)) {
-		dev_err(dev, "Failed to get SLC shared memory\n");
-		return ret;
-	}
-
-	/* Check program status to verify SLC shared memory initialization */
-	ret = _qcom_llcc_mem_verification(dev, slc_mem);
-	if (ret)
-		goto end;
-
-	switch (slc_mem->sct_status.version) {
-	case SLC_SCT_MEM_LAYOUT_VERSION:
-		sz = slc_mem->slice_descs_count;
-		scid_max = slc_mem->scid_max;
-		memslice = &slc_mem->slice_descs[0];
-		break;
-	case SLC_SCT_MEM_LAYOUT_V1:
-		sz = ((struct slc_sct_mem_v1 *)slc_mem)->slice_descs_count;
-		scid_max = ((struct slc_sct_mem_v1 *)slc_mem)->scid_max;
-		memslice = &((struct slc_sct_mem_v1 *)slc_mem)->slice_descs[0];
-
-		dev_dbg(dev, "SCT Table revision: %i\n",
-				((struct slc_sct_mem_v1 *)slc_mem)->sct_details.revision);
-		dev_dbg(dev, "SCT Table name: %s\n",
-				((struct slc_sct_mem_v1 *)slc_mem)->sct_details.name);
-		break;
-	default:
-		dev_err(dev, "Invalid slc_sct_mem version\n");
-		ret = -EINVAL;
-		goto end;
-
-	}
-
-	drv_data->desc = devm_kzalloc(dev, sizeof(struct llcc_slice_desc)*sz, GFP_KERNEL);
-	drv_data->uid_slice_lookup = devm_kzalloc(dev, sizeof(struct llcc_uid_slice_pair)*sz,
-						  GFP_KERNEL);
-
-	if (!drv_data->desc || !drv_data->uid_slice_lookup) {
-		ret = -ENOMEM;
-		goto end;
-	}
-
-	for (i = 0; i < sz; i++) {
-
-		/* Assign slice desc info from shared mem */
-		drv_data->desc[i].slice_id = memslice->slice_id;
-		drv_data->desc[i].slice_size = 0; /* slice size not supported */
-
-		/* Assign uid in lookup */
-		drv_data->uid_slice_lookup[i].uid = memslice->usecase_id;
-
-		/* Add uid slice lookup entry */
-		drv_data->uid_slice_lookup[i].desc = &drv_data->desc[i];
-
-		memslice++;
-	}
-
-	drv_data->bitmap = devm_kcalloc(dev, BITS_TO_LONGS(scid_max),
-					sizeof(unsigned long), GFP_KERNEL);
-	if (!drv_data->bitmap) {
-		ret = -ENOMEM;
-		goto end;
-	}
-
-	drv_data->cfg = NULL;
-	drv_data->cfg_size = sz;
-	drv_data->max_slices = scid_max;
-
-	dev_warn(dev, "llcc slice size not supported and is set to 0\n");
-end:
-	devm_iounmap(dev, slc_mem);
-
-	return ret;
-}
-
 static int _qcom_llcc_cfg_program_v6(const struct llcc_slice_config *config,
 				  const struct qcom_llcc_config *cfg)
 {
@@ -2239,6 +2110,107 @@ static int qcom_llcc_get_cfg_index(struct platform_device *pdev, u8 *cfg_index, 
 	return ret;
 }
 
+static int _qcom_llcc_mem_verification(struct device *dev, struct slc_sct_mem *slc_mem)
+{
+	const struct slc_sct_status *slc_status = &slc_mem->sct_status;
+
+	if (!slc_status->program_status)
+		return -EPROBE_DEFER;
+
+	if (slc_status->program_status == SLC_SCT_DONE) {
+		if (slc_mem->slice_descs_count <= slc_mem->scid_max) {
+			dev_info(dev, "SCT initialized with slice descriptor : %d\n",
+					slc_mem->slice_descs_count);
+			return 0;
+		}
+
+	} else if (slc_status->program_status == SLC_SCT_FAIL) {
+		if (slc_status->version == SLC_SCT_MEM_LAYOUT_VERSION)
+			dev_err(dev, "SCT Initialization failed with error : %llu and param: %llu\n",
+					slc_status->error.code, slc_status->error.param);
+		else
+			dev_err(dev, "Error Undefined version\n");
+	} else
+		dev_err(dev, "Unknown SCT Initialization error\n");
+
+
+	return -EINVAL;
+}
+
+static int qcom_llcc_mem_based_init(struct platform_device *pdev)
+{
+	int ret = -EINVAL;
+	u32 i, sz;
+	struct slc_sct_slice_desc *memslice;
+	struct device *dev = &pdev->dev;
+	struct resource *res;
+	struct slc_sct_mem __iomem *slc_mem = NULL;
+
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "slc_mem_base");
+	if (!res)
+		return ret;
+
+	slc_mem = devm_ioremap_resource(dev, res);
+	if (IS_ERR_OR_NULL(slc_mem)) {
+		dev_err(dev, "Failed to get SLC shared memory\n");
+		return ret;
+	}
+
+	/* Check program status to verify SLC shared memory initialization */
+	ret = _qcom_llcc_mem_verification(dev, slc_mem);
+	if (ret)
+		goto end;
+
+	sz = slc_mem->slice_descs_count;
+
+	drv_data->desc = devm_kzalloc(dev, sizeof(struct llcc_slice_desc)*sz,
+				      GFP_KERNEL);
+	if (!drv_data->desc) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	drv_data->uid_slice_lookup = devm_kzalloc(dev,
+						  sizeof(struct llcc_uid_slice_pair)*sz,
+						  GFP_KERNEL);
+	if (!drv_data->uid_slice_lookup) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	for (i = 0; i < sz; i++) {
+		memslice = &slc_mem->slice_descs[i];
+
+		/* Assign slice desc info from shared mem */
+		drv_data->desc[i].slice_id = memslice->slice_id;
+		drv_data->desc[i].slice_size = 0; /* slice size not supported */
+		atomic_set(&drv_data->desc[i].refcount, 0);
+
+		/* Assign uid in lookup */
+		drv_data->uid_slice_lookup[i].uid = memslice->usecase_id;
+
+		/* Add uid slice lookup entry */
+		drv_data->uid_slice_lookup[i].desc = &drv_data->desc[i];
+	}
+
+	drv_data->bitmap = devm_kcalloc(dev, BITS_TO_LONGS(slc_mem->scid_max),
+					sizeof(unsigned long), GFP_KERNEL);
+	if (!drv_data->bitmap) {
+		ret = -ENOMEM;
+		goto end;
+	}
+
+	drv_data->cfg = NULL;
+	drv_data->cfg_size = sz;
+	drv_data->max_slices = slc_mem->scid_max;
+
+	dev_warn(dev, "llcc slice size not supported and is set to 0\n");
+end:
+	devm_iounmap(dev, slc_mem);
+
+	return ret;
+}
+
 static void qcom_llcc_remove(struct platform_device *pdev)
 {
 	/* Set the global pointer to a error code to avoid referencing it */
@@ -2268,9 +2240,9 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 {
 	u32 num_banks;
 	struct device *dev = &pdev->dev;
-	int ret=0, i=0;
-//	struct platform_device *llcc_edac;
-	const struct qcom_sct_config *cfgs;
+	int ret, i;
+	struct platform_device *llcc_edac;
+	const struct qcom_sct_config *cfgs = NULL;
 	const struct qcom_llcc_config *cfg;
 	const struct llcc_slice_config *llcc_cfg;
 	u32 sz;
@@ -2294,102 +2266,89 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	mutex_init(&drv_data->lock);
-	platform_set_drvdata(pdev, drv_data);
+	cfgs = of_device_get_match_data(&pdev->dev);
+	if (!cfgs) {
+		ret = -EINVAL;
+		goto err;
+	}
+	ret = qcom_llcc_get_cfg_index(pdev, &cfg_index, cfgs->num_config);
+	if (ret)
+		goto err;
+	cfg = &cfgs->llcc_config[cfg_index];
 
-	drv_data->sct_initialized = of_property_read_bool(pdev->dev.of_node,
-							  "qcom,sct-initialized");
-	if (drv_data->sct_initialized) {
-		i=1;
+	ret = regmap_read(regmap, cfg->reg_offset[LLCC_COMMON_STATUS0], &num_banks);
+	if (ret)
+		goto err;
+
+	num_banks &= LLCC_LB_CNT_MASK;
+	num_banks >>= LLCC_LB_CNT_SHIFT;
+	drv_data->num_banks = num_banks;
+
+	drv_data->regmaps = devm_kcalloc(dev, num_banks, sizeof(*drv_data->regmaps), GFP_KERNEL);
+	if (!drv_data->regmaps) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	drv_data->regmaps[0] = regmap;
+
+	/* Initialize rest of LLCC bank regmaps */
+	for (i = 1; i < num_banks; i++) {
+		char *base __free(kfree) = kasprintf(GFP_KERNEL, "llcc%d_base", i);
+
+		drv_data->regmaps[i] = qcom_llcc_init_mmio(pdev, i, base);
+		if (IS_ERR(drv_data->regmaps[i])) {
+			ret = PTR_ERR(drv_data->regmaps[i]);
+			goto err;
+		}
+	}
+
+	/*For Single channel there is no BCAST region. hence use regmap0 for register access */
+	if (num_banks == 1) {
+		drv_data->bcast_regmap = drv_data->regmaps[0];
+	} else {
 		drv_data->bcast_regmap = qcom_llcc_init_mmio(pdev, i, "llcc_broadcast_or_base");
 		if (IS_ERR(drv_data->bcast_regmap)) {
 			ret = PTR_ERR(drv_data->bcast_regmap);
 			goto err;
 		}
+	}
+
+	/* Extract version of the IP */
+	ret = regmap_read(drv_data->bcast_regmap, cfg->reg_offset[LLCC_COMMON_HW_INFO],
+			  &version);
+	if (ret)
+		goto err;
+
+	drv_data->version = version;
+
+	/* Applicable only when drv_data->version >= 4.1 */
+	if (drv_data->version >= LLCC_VERSION_4_1_0_0) {
 		drv_data->bcast_and_regmap = qcom_llcc_init_mmio(pdev, i + 1, "llcc_broadcast_and_base");
-                        if (IS_ERR(drv_data->bcast_and_regmap)) {
-                                ret = PTR_ERR(drv_data->bcast_and_regmap);
-                                if (ret == -EINVAL)
-                                        drv_data->bcast_and_regmap = NULL;
-                                else
-                                        goto err;
-                        }
+		if (IS_ERR(drv_data->bcast_and_regmap)) {
+			ret = PTR_ERR(drv_data->bcast_and_regmap);
+			if (ret == -EINVAL)
+				drv_data->bcast_and_regmap = NULL;
+			else
+				goto err;
+		}
+	}
+
+	mutex_init(&drv_data->lock);
+	drv_data->sct_initialized = of_property_read_bool(pdev->dev.of_node,
+							  "qcom,sct-initialized");
+	platform_set_drvdata(pdev, drv_data);
+	drv_data->edac_reg_offset = cfg->edac_reg_offset;
+
+	if (drv_data->sct_initialized) {
 		ret = qcom_llcc_mem_based_init(pdev);
 		if (ret)
 			goto err;
-	}else{
-		cfgs = of_device_get_match_data(&pdev->dev);
-		if (!cfgs) {
-			ret = -EINVAL;
-			goto err;
-		}
-		ret = qcom_llcc_get_cfg_index(pdev, &cfg_index, cfgs->num_config);
-		if (ret)
-			goto err;
-		cfg = &cfgs->llcc_config[cfg_index];
-
-		ret = regmap_read(regmap, cfg->reg_offset[LLCC_COMMON_STATUS0], &num_banks);
-		if (ret)
-			goto err;
-
-		num_banks &= LLCC_LB_CNT_MASK;
-		num_banks >>= LLCC_LB_CNT_SHIFT;
-		drv_data->num_banks = num_banks;
-
-		drv_data->regmaps = devm_kcalloc(dev, num_banks, sizeof(*drv_data->regmaps), GFP_KERNEL);
-		if (!drv_data->regmaps) {
-			ret = -ENOMEM;
-			goto err;
-		}
-
-		drv_data->regmaps[0] = regmap;
-
-		/* Initialize rest of LLCC bank regmaps */
-		for (i = 1; i < num_banks; i++) {
-			char *base __free(kfree) = kasprintf(GFP_KERNEL, "llcc%d_base", i);
-
-			drv_data->regmaps[i] = qcom_llcc_init_mmio(pdev, i, base);
-			if (IS_ERR(drv_data->regmaps[i])) {
-				ret = PTR_ERR(drv_data->regmaps[i]);
-				goto err;
-			}
-		}
-
-		/*For Single channel there is no BCAST region. hence use regmap0 for register access */
-		if (num_banks == 1) {
-			drv_data->bcast_regmap = drv_data->regmaps[0];
-		} else {
-			drv_data->bcast_regmap = qcom_llcc_init_mmio(pdev, i, "llcc_broadcast_or_base");
-			if (IS_ERR(drv_data->bcast_regmap)) {
-				ret = PTR_ERR(drv_data->bcast_regmap);
-				goto err;
-			}
-		}
-
-		/* Extract version of the IP */
-		ret = regmap_read(drv_data->bcast_regmap, cfg->reg_offset[LLCC_COMMON_HW_INFO],
-				&version);
-		if (ret)
-			goto err;
-
-		drv_data->version = version;
-
-		/* Applicable only when drv_data->version >= 4.1 */
-		if (drv_data->version >= LLCC_VERSION_4_1_0_0) {
-			drv_data->bcast_and_regmap = qcom_llcc_init_mmio(pdev, i + 1, "llcc_broadcast_and_base");
-			if (IS_ERR(drv_data->bcast_and_regmap)) {
-				ret = PTR_ERR(drv_data->bcast_and_regmap);
-				if (ret == -EINVAL)
-					drv_data->bcast_and_regmap = NULL;
-				else
-					goto err;
-			}
-		}
-
+	} else {
 		llcc_cfg = cfg->sct_data;
 		sz = cfg->size;
-
 		drv_data->desc = devm_kzalloc(dev, sizeof(struct llcc_slice_desc)*sz, GFP_KERNEL);
+
 		if (IS_ERR_OR_NULL(drv_data->desc)) {
 			ret = -ENOMEM;
 			goto err;
@@ -2400,7 +2359,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 				drv_data->max_slices = llcc_cfg[i].slice_id;
 
 		drv_data->bitmap = devm_bitmap_zalloc(dev, drv_data->max_slices,
-					      GFP_KERNEL);
+						      GFP_KERNEL);
 		if (!drv_data->bitmap) {
 			ret = -ENOMEM;
 			goto err;
@@ -2408,14 +2367,12 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 
 		drv_data->cfg = llcc_cfg;
 		drv_data->cfg_size = sz;
-		drv_data->edac_reg_offset = cfg->edac_reg_offset;
-		platform_set_drvdata(pdev, drv_data);
 
 		ret = qcom_llcc_cfg_program(pdev, cfg);
 		if (ret)
-		goto err;
-
+			goto err;
 	}
+
 	drv_data->ecc_irq = platform_get_irq_optional(pdev, 0);
 
 	/*
@@ -2424,13 +2381,13 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	 * Hence, disable the creation of EDAC platform device for the
 	 * problematic platforms.
 	 */
-/*	if (!cfg->no_edac) {
+	if (!cfg->no_edac) {
 		llcc_edac = platform_device_register_data(&pdev->dev,
 						"qcom_llcc_edac", -1, drv_data,
 						sizeof(*drv_data));
 		if (IS_ERR(llcc_edac))
 			dev_err(dev, "Failed to register llcc edac driver\n");
-	}*/
+	}
 
 	if (of_platform_populate(dev->of_node, NULL, NULL, dev) < 0)
 		dev_err(dev, "llcc populate failed!!\n");
@@ -2464,7 +2421,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,yupik-llcc", .data = &yupik_cfgs},
 	{ .compatible = "qcom,vienna-llcc", .data = &vienna_cfgs },
 	{ .compatible = "qcom,alor-llcc", .data = &alor_cfgs },
-	{ .compatible = "qcom,seraph-llcc" },
+	{ .compatible = "qcom,seraph-llcc", .data = &seraph_cfgs},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_llcc_of_match);

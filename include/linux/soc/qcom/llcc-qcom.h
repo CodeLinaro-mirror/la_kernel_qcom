@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/platform_device.h>
@@ -140,7 +140,6 @@
 #define LLCC_CAM_META_ADVANCED 291
 #define LLCC_CAM_IPE_CSC       292
 
-
 #define LLCC_VERSION_2_0_0_0          0x02000000
 #define LLCC_VERSION_2_1_0_0          0x02010000
 #define LLCC_VERSION_3_1_0_0          0x03010000
@@ -226,7 +225,7 @@ struct llcc_uid_slice_pair {
  * @ecc_irq: interrupt for llcc cache error detection and reporting
  * @version: Indicates the LLCC version
  * @desc: Array pointer of llcc_slice_desc
-  * @uid_slice_lookup: Lookup form UID to slice desc
+ * @uid_slice_lookup: Lookup form UID to slice desc
  * @sct_initialized: Indicates that SCT is already initialized outside llcc-qcom
  */
 struct llcc_drv_data {

@@ -2,6 +2,7 @@ bengal_perf_config = {
     # keep sorted
     "CONFIG_ARCH_BENGAL": "y",
     "CONFIG_ARCH_KHAJE": "y",
+    "CONFIG_ARCH_SCUBA": "y",
     "CONFIG_ARM64_AMU_EXTN": "n",
     "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
@@ -176,6 +177,7 @@ bengal_perf_config = {
     "CONFIG_QCOM_MPM": "n",
     "CONFIG_QCOM_PANEL_EVENT_NOTIFIER": "m",
     "CONFIG_QCOM_PANIC_ON_PDR_NOTIF_TIMEOUT": "y",
+    "CONFIG_QCOM_PBS": "m",
     "CONFIG_QCOM_PDR_HELPERS": "m",
     "CONFIG_QCOM_PDR_MSG": "m",
     "CONFIG_QCOM_PD_MAPPER": "m",
@@ -224,6 +226,7 @@ bengal_perf_config = {
     "CONFIG_QCOM_WDT_CORE": "m",
     "CONFIG_QPNP_QG": "m",
     "CONFIG_QPNP_SMB5": "m",
+    "CONFIG_QPNP_SMBLITE": "m",
     "CONFIG_QPNP_USB_PDPHY": "m",
     "CONFIG_QRTR": "m",
     "CONFIG_QRTR_SMD": "m",

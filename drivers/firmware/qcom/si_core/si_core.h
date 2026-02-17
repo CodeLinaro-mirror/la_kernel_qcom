@@ -13,6 +13,13 @@
 #include <linux/scatterlist.h>
 #include <linux/uuid.h>
 
+struct qtee_object_invoke;
+struct qtee_callback;
+
+/* Process callback buffer; used by doorbell. */
+void si_object_invoke(struct si_object_invoke_ctx *oic,
+		      struct qtee_callback *msg);
+
 /* QTEE object ID API. */
 
 enum si_object_type si_object_type(unsigned int object_id);

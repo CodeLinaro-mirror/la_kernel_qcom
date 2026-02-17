@@ -83,7 +83,7 @@ struct qcom_scm;
 extern struct completion *qcom_scm_lookup_wq(struct qcom_scm *scm, u32 wq_ctx);
 extern void scm_waitq_flag_handler(struct completion *wq, u32 flags);
 extern int scm_get_wq_ctx(u32 *wq_ctx, u32 *flags, u32 *more_pending, bool multi_smc);
-extern bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed);
+extern bool qcom_scm_multi_call_allow(bool multicall_allowed);
 
 #define SCM_SMC_FNID(s, c)	((((s) & 0xFF) << 8) | ((c) & 0xFF))
 int __scm_smc_call(struct device *dev, const struct qcom_scm_desc *desc,
@@ -150,6 +150,7 @@ int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
 #define QCOM_SCM_SVC_PWR			0x09
 #define QCOM_SCM_PWR_IO_DISABLE_PMIC_ARBITER	0x01
 #define QCOM_SCM_PWR_GPIO_TRANSFER_ACCESS	0x0D
+#define QCOM_SCM_PWR_IO_DEASSERT_PS_HOLD	0x02
 #define QCOM_SCM_SVC_MP				0x0c
 #define QCOM_SCM_MP_RESTORE_SEC_CFG		0x02
 #define QCOM_SCM_MP_IOMMU_SECURE_PTBL_SIZE	0x03

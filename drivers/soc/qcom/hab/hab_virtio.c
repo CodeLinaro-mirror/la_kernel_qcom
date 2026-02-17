@@ -771,8 +771,7 @@ static int virthab_probe(struct virtio_device *vdev)
 		return -ENODEV;
 	}
 
-	if (!mutex_trylock(&virthab_init_lock))
-		return -EPROBE_DEFER;
+	mutex_lock(&virthab_init_lock);
 
 	if (init_failed) {
 		mutex_unlock(&virthab_init_lock);

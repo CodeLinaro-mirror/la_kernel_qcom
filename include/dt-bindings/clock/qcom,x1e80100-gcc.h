@@ -400,6 +400,7 @@
 #define GCC_QSPI_CNOC_PERIPH_AHB_CLK				390
 #define GCC_QSPI_CORE_CLK_SRC					391
 #define GCC_QSPI_CORE_CLK					392
+#define GCC_HLOS1_VOTE_MMU_TCU_CLK				393
 
 /* GCC power domains */
 #define GCC_PCIE_0_TUNNEL_GDSC					0
@@ -429,6 +430,7 @@
 #define GCC_USB_0_PHY_GDSC					24
 #define GCC_USB_1_PHY_GDSC					25
 #define GCC_USB_2_PHY_GDSC					26
+#define GCC_HLOS1_VOTE_MMU_TCU_GDS				27
 
 /* GCC resets */
 #define GCC_AV1E_BCR						0

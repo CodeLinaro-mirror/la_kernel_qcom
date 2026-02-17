@@ -39,7 +39,6 @@
 #include <linux/reset-controller.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
-#include <linux/gunyah/gh_rm_drv.h>
 #include <linux/qti-lcp-ppddr.h>
 #include <include/linux/arm-smccc.h>
 #include <linux/qtee_shmbridge.h>
@@ -181,6 +180,8 @@ static const char * const qcom_scm_convention_names[] = {
 static struct qcom_scm *__scm;
 
 #define SCM_NOT_INITIALIZED()  (unlikely(!__scm) ? pr_err("SCM not initialized\n") : 0)
+
+SRCU_NOTIFIER_HEAD_STATIC(qcom_scm_assign_mem_nh);
 
 int qcom_scm_clk_enable(void)
 {
@@ -811,22 +812,6 @@ int qcom_scm_get_sec_dump_state(u32 *dump_state)
 }
 EXPORT_SYMBOL(qcom_scm_get_sec_dump_state);
 
-int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t size)
-{
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_UTIL,
-		.cmd = QCOM_SCM_UTIL_DUMP_TABLE_ASSIGN,
-		.arginfo = QCOM_SCM_ARGS(3),
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = is_assign,
-		.args[1] = addr,
-		.args[2] = size,
-	};
-
-	return qcom_scm_call(__scm->dev, &desc, NULL);
-}
-EXPORT_SYMBOL(qcom_scm_assign_dump_table_region);
-
 int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val)
 {
 	struct qcom_scm_desc desc = {
@@ -936,6 +921,30 @@ void qcom_scm_halt_spmi_pmic_arbiter(void)
 	if (ret)
 		pr_debug("Failed to halt_spmi_pmic_arbiter=0x%x\n", ret);
 }
+
+/**
+ * qcom_deassert_ps_hold() - Deassert PS_HOLD
+ *
+ * Deassert PS_HOLD to signal the PMIC that we are ready to power down or reset.
+ *
+ * This function should never return if the SCM call is available.
+ */
+void qcom_scm_deassert_ps_hold(void)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_PWR,
+		.cmd = QCOM_SCM_PWR_IO_DEASSERT_PS_HOLD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = 0,
+		.arginfo = QCOM_SCM_ARGS(1),
+	};
+
+	ret = qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, NULL);
+	if (ret)
+		pr_err("Failed to deassert_ps_hold=0x%x\n", ret);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_deassert_ps_hold);
 
 int qcom_scm_spmi_permission_switch(u8 mode)
 {
@@ -1111,6 +1120,25 @@ static int __qcom_scm_assign_mem(struct device *dev, phys_addr_t mem_region,
 	return ret ? : res.result[0];
 }
 
+/*
+ * Refer to qcom_scm_assign_mem_notifier_register().
+ */
+static int qcom_scm_assign_mem_notify(phys_addr_t mem_addr, size_t mem_sz,
+			u64 *srcvm,
+			const struct qcom_scm_vmperm *newvm,
+			unsigned int dest_cnt)
+{
+	struct qcom_scm_assign_mem_notifier_data data = {
+		.mem_addr = mem_addr,
+		.mem_sz = mem_sz,
+		.srcvm = srcvm,
+		.newvm = newvm,
+		.dest_cnt = dest_cnt,
+	};
+
+	return srcu_notifier_call_chain(&qcom_scm_assign_mem_nh, 0, &data);
+}
+
 /**
  * qcom_scm_assign_mem() - Make a secure call to reassign memory ownership
  * @mem_addr: mem region whose ownership need to be reassigned
@@ -1142,8 +1170,10 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	int ret, i, b;
 	u64 srcvm_bits = *srcvm;
 
-	if (!gh_rm_needs_scm_assign(srcvm, newvm, dest_cnt))
-		return 0;
+	ret = qcom_scm_assign_mem_notify(mem_addr, mem_sz, srcvm, newvm, dest_cnt);
+	/* If notifier handled it (NOTIFY_STOP) or returned an error, return early */
+	if (ret & NOTIFY_STOP_MASK)
+		return notifier_to_errno(ret);
 
 	src_sz = hweight64(srcvm_bits) * sizeof(*src);
 	mem_to_map_sz = sizeof(*mem_to_map);
@@ -1196,6 +1226,30 @@ int qcom_scm_assign_mem(phys_addr_t mem_addr, size_t mem_sz,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_assign_mem);
+
+/**
+ * qcom_scm_assign_mem_notifier_register() -
+ * Register a handler for qcom_scm_assign_mem().
+ * The values returned by this notifier have the following interpretation:
+ * NOTIFY_STOP - Success. No fallback to arm 'smc' instruction.
+ * NOTIFY_OK   - No error. Fallback to arm 'smc'.
+ * values that notifier_to_errno() would consider errors -
+ *               Stop. Do not call futher notifiers nor arm 'smc'.
+ *
+ * This notifier is intended to support a compatibility layer between
+ * client-facing apis and different secure memory implemenations.
+ */
+int qcom_scm_assign_mem_notifier_register(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_register(&qcom_scm_assign_mem_nh, nb);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_mem_notifier_register);
+
+int qcom_scm_assign_mem_notifier_unregister(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_unregister(&qcom_scm_assign_mem_nh, nb);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_mem_notifier_unregister);
 
 /**
  * qcom_scm_assign_mem_regions() - Make a secure call to reassign memory
@@ -3152,13 +3206,10 @@ int qcom_scm_set_gic_cpuclass(u32 mpidr, u32 clss)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_set_gic_cpuclass);
 
-bool qcom_scm_multi_call_allow(struct device *dev, bool multicall_allowed)
+bool qcom_scm_multi_call_allow(bool multicall_allowed)
 {
-	struct qcom_scm *scm;
-
-	scm = dev_get_drvdata(dev);
 	if (multicall_allowed &&
-		scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
+		__scm && __scm->waitq.wq_feature == QCOM_SCM_MULTI_SMC_WHITE_LIST_ALLOW)
 		return true;
 
 	return false;

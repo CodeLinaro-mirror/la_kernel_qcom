@@ -10,7 +10,6 @@
 #include <linux/pinctrl/pinctrl.h>
 
 #include "pinctrl-msm.h"
-#define None 0
 
 #define REG_BASE 0x100000
 #define REG_SIZE 0x1000
@@ -1816,7 +1815,7 @@ static const struct msm_pinctrl_soc_data malabar_vm_tlmm = {
 };
 
 static const struct of_device_id malabar_tlmm_of_match[] = {
-	{ .compatible = "qcom,malabar-pinctrl", .data = &malabar_tlmm },
+	{ .compatible = "qcom,malabar-tlmm", .data = &malabar_tlmm },
 	{ .compatible = "qcom,malabar-vm-tlmm", .data = &malabar_vm_tlmm },
 	{},
 };

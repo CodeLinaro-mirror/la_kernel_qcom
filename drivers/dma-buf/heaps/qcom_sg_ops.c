@@ -565,49 +565,47 @@ void qcom_sg_buffer_init(struct qcom_sg_buffer *buffer)
 {
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
-	kref_init(&buffer->kref);
 }
 EXPORT_SYMBOL_GPL(qcom_sg_buffer_init);
 
-static void qcom_sg_release_rcu_cb(struct rcu_head *rcu)
-{
-	struct qcom_sg_buffer *buffer = container_of(rcu, struct qcom_sg_buffer, rcu);
-
-	if (buffer->free)
-		buffer->free(buffer);
-}
-
 /* Releases memory associated with buffer */
-void qcom_sg_release(struct kref *kref)
+void qcom_sg_release(void *buffer)
 {
-	struct qcom_sg_buffer *buffer;
+	struct qcom_sg_buffer *buf = (struct qcom_sg_buffer *)buffer;
 
-	buffer = container_of(kref, struct qcom_sg_buffer, kref);
-	mem_buf_vmperm_free(buffer->vmperm);
-
-	/*
-	 * Ensure all pre-existing RCU readers have completed before scheduling
-	 * final cleanup. Readers may still hold references to the embedded kref
-	 * within vmperm, and freeing the buffer prematurely could lead to a
-	 * use-after-free. The actual release is deferred to an RCU callback to
-	 * avoid blocking in this context.
-	 */
-
-	call_rcu(&buffer->rcu, qcom_sg_release_rcu_cb);
+	mem_buf_vmperm_free(buf->vmperm);
+	if (buf->free)
+		buf->free(buf);
 }
 EXPORT_SYMBOL_GPL(qcom_sg_release);
 
 /*
  * Attempt return to the default security state, and
  * cleanup lazily-freed iommu mappings.
- * Drops the initial refcount from qcom_sg_buffer_init()
+ *
+ * This function is called when the dmabuf is closed (last fd closed).
+ * It drops the initial reference that was taken during vmperm allocation.
  */
 static void qcom_sg_exit(struct qcom_sg_buffer *buffer)
 {
-	mem_buf_vmperm_try_reclaim(buffer->vmperm, false);
+	struct mem_buf_vmperm *vmperm;
 
+	vmperm = buffer->vmperm;
+	mem_buf_vmperm_try_reclaim(vmperm, false);
 	msm_dma_buf_freed(buffer);
-	kref_put(&buffer->kref, qcom_sg_release);
+
+	/*
+	 * Drop the initial reference from kref_init().
+	 *
+	 * If this is the last reference (e.g., no active memparcel, no active
+	 * notifiers), vmperm_kref_release() will be called which calls
+	 * qcom_sg_release().
+	 *
+	 * If there are still active references (e.g., memparcel not reclaimed,
+	 * or notifier holding a ref), the buffer will stay alive until those
+	 * refs are dropped.
+	 */
+	mem_buf_vmperm_put(buffer->vmperm);
 }
 
 void qcom_sg_dmabuf_release(struct dma_buf *dmabuf)
@@ -655,3 +653,4 @@ int qti_smmu_proxy_register_callbacks(smmu_proxy_map_sgtable map_sgtable_fn_ptr,
 	return 0;
 }
 EXPORT_SYMBOL(qti_smmu_proxy_register_callbacks);
+

@@ -17,6 +17,8 @@ debug-regulator.ko
 gdsc-regulator.ko
 gcc-sc7280.ko
 dispcc-sc7280.ko
+gcc-sm8350.ko
+dispcc-sm8350.ko
 smem.ko
 debug_symbol.ko
 socinfo.ko
@@ -54,6 +56,7 @@ qcom_aoss.ko
 qrtr.ko
 msm_qmp.ko
 qnoc-qos.ko
+qnoc-lahaina.ko
 qnoc-yupik.ko
 qcom_iommu_debug.ko
 qcom_ipc_logging.ko

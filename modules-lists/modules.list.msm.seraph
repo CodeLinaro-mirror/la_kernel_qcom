@@ -16,6 +16,13 @@ qnoc-qos.ko
 icc-debug.ko
 icc-bcm-voter.ko
 icc-rpmh.ko
+dcvs_fp.ko
+qcom-dcvs.ko
+qcom_cpucp.ko
+qcom_scmi_vendor.ko
+qcom_scmi_client.ko
+qcom_llcc_pmu.ko
+qcom-pmu-lib.ko
 icc-clk.ko
 cmd-db.ko
 qcom_rpmh.ko
@@ -80,10 +87,12 @@ phy-msm-ssusb-qmp.ko
 phy-msm-m31-eusb2.ko
 repeater.ko
 repeater-i2c-eusb2.ko
-llcc-qcom.ko
 debug_symbol.ko
 qcom_cpu_vendor_hooks.ko
 qcom_logbuf_boot_log.ko
 qcom_logbuf_vendor_hooks.ko
 minidump.ko
 gic_intr_routing.ko
+sched-walt.ko
+sched-walt-debug.ko
+llcc-qcom.ko

@@ -231,6 +231,56 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/interconnect/qcom/qnoc-lahaina",
+        out = "qnoc-lahaina.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_LAHAINA",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/lahaina.c",
+            "drivers/interconnect/qcom/icc-rpmh.h",
+            "drivers/interconnect/qcom/qnoc-qos.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos",
+            "drivers/interconnect/qcom/icc-rpmh",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/interconnect/qcom/icc-bcm-voter",
+            "drivers/soc/qcom/qcom_rpmh",
+            "drivers/soc/qcom/cmd-db",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/interconnect/qcom/qnoc-ravelin",
+        out = "qnoc-ravelin.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_RAVELIN",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/ravelin.c",
+            "drivers/interconnect/qcom/icc-rpmh.h",
+            "drivers/interconnect/qcom/qnoc-qos.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos",
+            "drivers/interconnect/qcom/icc-rpmh",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/interconnect/qcom/icc-bcm-voter",
+            "drivers/soc/qcom/qcom_rpmh",
+            "drivers/soc/qcom/cmd-db",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
         name = "drivers/interconnect/qcom/qnoc-yupik",
         out = "qnoc-yupik.ko",
         config = "CONFIG_INTERCONNECT_QCOM_YUPIK",
