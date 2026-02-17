@@ -43,6 +43,7 @@ extern int qcom_scm_query_encrypted_log_feature(u64 *enabled);
 extern int qcom_scm_request_encrypted_log(phys_addr_t buf,
 			size_t len, uint32_t log_id, bool is_full_tz_logs_supported,
 			bool is_full_tz_logs_enabled);
+extern int qcom_scm_query_log_status(u64 *status);
 extern bool qcom_scm_kgsl_set_smmu_aperture_available(void);
 extern int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank);
 extern int qcom_scm_kgsl_set_smmu_gos_aperture(unsigned int reg_index,
@@ -146,6 +147,11 @@ static inline int qcom_scm_query_encrypted_log_feature(u64 *enabled)
 static inline int qcom_scm_request_encrypted_log(phys_addr_t buf,
 			size_t len, uint32_t log_id, bool is_full_tz_logs_supported,
 			bool is_full_tz_logs_enabled)
+{
+	return -EPERM;
+}
+
+static inline int qcom_scm_query_log_status(u64 *status)
 {
 	return -EPERM;
 }
