@@ -4012,13 +4012,13 @@ static int __stmmac_open(struct net_device *dev,
 
 	stmmac_init_coalesce(priv);
 
-	phylink_start(priv->phylink);
-	/* We may have called phylink_speed_down before */
-	phylink_speed_up(priv->phylink);
-
 	ret = stmmac_request_irq(dev);
 	if (ret)
 		goto irq_error;
+
+	phylink_start(priv->phylink);
+	/* We may have called phylink_speed_down before */
+	phylink_speed_up(priv->phylink);
 
 	stmmac_enable_all_queues(priv);
 	netif_tx_start_all_queues(priv->dev);
