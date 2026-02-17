@@ -375,6 +375,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <56 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander0_int_default>;
+		pinctrl-names = "default";
 		reg = <0x38>;
 	};
 
@@ -382,6 +388,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <16 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander1_int_default>;
+		pinctrl-names = "default";
 		reg = <0x39>;
 
 		io-exp-hog3 {
@@ -396,6 +408,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <95 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander2_int_default>;
+		pinctrl-names = "default";
 		reg = <0x3a>;
 	};
 
@@ -403,6 +421,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander3_int_default>;
+		pinctrl-names = "default";
 		reg = <0x3b>;
 	};
 
@@ -410,6 +434,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <96 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander4_int_default>;
+		pinctrl-names = "default";
 		reg = <0x3c>;
 	};
 
@@ -417,6 +447,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander5_int_default>;
+		pinctrl-names = "default";
 		reg = <0x3d>;
 
 		io-exp-hog5 {
@@ -431,6 +467,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <52 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander6_int_default>;
+		pinctrl-names = "default";
 		reg = <0x3e>;
 	};
 
@@ -663,6 +705,55 @@
 		pins = "gpio94";
 		function = "edp0_hot";
 		bias-disable;
+	};
+
+	expander0_int_default: expander0-int-default-state {
+		pins = "gpio56";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander1_int_default: expander1-int-default-state {
+		pins = "gpio16";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander2_int_default: expander2-int-default-state {
+		pins = "gpio95";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander3_int_default: expander3-int-default-state {
+		pins = "gpio24";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander4_int_default: expander4-int-default-state {
+		pins = "gpio96";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander5_int_default: expander5-int-default-state {
+		pins = "gpio3";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander6_int_default:  expander6-int-default-state {
+		pins = "gpio52";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
 	};
 
 	ethernet0_default: ethernet0-default-state {
