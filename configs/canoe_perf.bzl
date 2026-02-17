@@ -126,6 +126,7 @@ canoe_perf_config = {
     "CONFIG_MODULE_SIG_ALL": "n",
     "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_MSM_CORE_HANG_DETECT": "m",
+    "CONFIG_MSM_DWC_PCIE_PMU": "m",
     "CONFIG_MSM_GPI_DMA": "m",
     "CONFIG_MSM_HSUSB_PHY": "m",
     "CONFIG_MSM_PERFORMANCE": "m",
