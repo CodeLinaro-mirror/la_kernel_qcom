@@ -131,6 +131,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_LAZY_MAPPING": "m",
     "CONFIG_QCOM_LLCC": "m",
     "CONFIG_QCOM_LLCC_MISS": "m",
+    "CONFIG_QCOM_LLCC_OCCUPANCY": "m",
     "CONFIG_QCOM_LLCC_PMU": "m",
     "CONFIG_QCOM_LOGBUF_BOOTLOG": "m",
     "CONFIG_QCOM_LOGBUF_VENDOR_HOOKS": "m",
