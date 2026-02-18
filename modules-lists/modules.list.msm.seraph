@@ -97,5 +97,12 @@ gic_intr_routing.ko
 sched-walt.ko
 sched-walt-debug.ko
 llcc-qcom.ko
+gcc-pikachu.ko
+tcsrcc-pikachu.ko
+videocc-pikachu.ko
+evacc-pikachu.ko
+gpucc-pikachu.ko
+camcc-pikachu.ko
+debugcc-pikachu.ko
 qcom_hib.ko
 msm_show_resume_irq.ko
