@@ -11,6 +11,7 @@ shikra_perf_config = {
     "CONFIG_CLK_SHIKRA_GCC": "m",
     "CONFIG_CLK_SHIKRA_GPUCC": "m",
     "CONFIG_COMMON_CLK_QCOM": "m",
+    "CONFIG_CRYPTO_DEV_QCOM_RNG": "m",
     "CONFIG_CPU_IDLE_GOV_QCOM_LPM": "m",
     "CONFIG_DMABUF_HEAPS_SYSTEM": "y",
     "CONFIG_EDAC_KRYO_ARM64": "m",
