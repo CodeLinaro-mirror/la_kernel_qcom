@@ -102,6 +102,7 @@ seraph_perf_config = {
     "CONFIG_POWER_RESET_QCOM_PON": "m",
     "CONFIG_POWER_RESET_QCOM_REBOOT_REASON": "m",
     "CONFIG_QCOM_AOSS_QMP": "m",
+    "CONFIG_QCOM_BUS_LAT": "m",
     "CONFIG_QCOM_BUS_PROF": "m",
     "CONFIG_QCOM_BWMON": "m",
     "CONFIG_QCOM_CLK_RPMH": "m",
