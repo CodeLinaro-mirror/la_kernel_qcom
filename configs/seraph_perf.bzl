@@ -32,6 +32,7 @@ seraph_perf_config = {
     "CONFIG_CORESIGHT_TGU": "m",
     "CONFIG_CORESIGHT_TPDA": "m",
     "CONFIG_CORESIGHT_TPDM": "m",
+    "CONFIG_CPU_IDLE_GOV_QCOM_LPM": "m",
     "CONFIG_GH_ARM64_DRV": "m",
     "CONFIG_GH_CTRL": "m",
     "CONFIG_GH_DBL": "m",
