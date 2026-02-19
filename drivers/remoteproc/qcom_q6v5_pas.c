@@ -3103,6 +3103,8 @@ static const struct adsp_data seraph_adsp_resource = {
 	.sysmon_name = "adsp",
 	.load_state = "adsp",
 	.ssctl_id = 0x14,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
 };
 
 static const struct adsp_data seraph_cdsp_resource = {
@@ -3118,6 +3120,8 @@ static const struct adsp_data seraph_cdsp_resource = {
 	.sysmon_name = "cdsp",
 	.load_state = "cdsp",
 	.ssctl_id = 0x17,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
 };
 
 static const struct adsp_data seraph_soccp_resource = {

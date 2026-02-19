@@ -45,6 +45,7 @@ struct qcom_q6v5 {
 	struct rproc_subdev *glink_subdev;
 
 	struct work_struct crash_handler;
+	struct work_struct symbol_loader;
 
 	bool handover_issued;
 
