@@ -7704,6 +7704,20 @@ static void ethqos_get_dt_qos_config(struct device_node *np)
 	strscpy(mparams.qoscfg_name, qoscfg, sizeof(mparams.qoscfg_name));
 }
 
+static void ethqos_get_dt_rss_config(struct device_node *np)
+{
+	const char *rsscfg;
+	int err;
+
+	err = of_property_read_string(np, "config-rss", &rsscfg);
+	if (err < 0) {
+		mparams.rsscfg_name[0] = '\0';
+		return;
+	}
+
+	strscpy(mparams.rsscfg_name, rsscfg, sizeof(mparams.rsscfg_name));
+}
+
 #ifdef MODULE
 static int ethqos_set_early_eth_params(void)
 {
@@ -7876,6 +7890,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	if (!(strlen(mparams.qoscfg_name) != 0))
 		ethqos_get_dt_qos_config(np);
+
+	if (!(strlen(mparams.rsscfg_name) != 0))
+		ethqos_get_dt_rss_config(np);
 
 	qcom_ethqos_probe_config_dt(pdev, &stmmac_res);
 
