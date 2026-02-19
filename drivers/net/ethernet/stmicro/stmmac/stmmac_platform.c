@@ -134,6 +134,7 @@ static struct device_node *get_qos_mtl_queue_config(struct device_node *node,
 	const char *config_name;
 	u32 count = 0, i;
 	int ret = 0;
+	struct device_node *qos_mtl_node = NULL;
 
 	count = of_property_count_elems_of_size(node, mtl_queue_str,
 						sizeof(u32)) - 1;
@@ -145,21 +146,21 @@ static struct device_node *get_qos_mtl_queue_config(struct device_node *node,
 		return of_parse_phandle(node, mtl_queue_str, 0);
 
 	for (i = count; i >= 0; i--) {
-		node = of_parse_phandle(node, mtl_queue_str, i);
-		if (!node)
+		qos_mtl_node = of_parse_phandle(node, mtl_queue_str, i);
+		if (!qos_mtl_node)
 			return NULL;
 
-		ret = of_property_read_string(node, "qcom,config-name", &config_name);
+		ret = of_property_read_string(qos_mtl_node, "qcom,config-name", &config_name);
 		if (ret < 0)
 			continue;
 
 		if (!strcasecmp(config_name, qoscfg_str)) {
 			*qos_config_found = true;
-			return node;
+			return qos_mtl_node;
 		}
 	}
 
-	return node;
+	return qos_mtl_node;
 }
 
 static struct device_node *get_rss_mtl_queue_config(struct device_node *node,
