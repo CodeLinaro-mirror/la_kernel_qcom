@@ -72,3 +72,4 @@ debug-regulator.ko
 proxy-consumer.ko
 qti-fixed-regulator.ko
 clk-smd-rpm.ko
+gic_intr_routing.ko
