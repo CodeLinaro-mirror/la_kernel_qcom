@@ -11,59 +11,47 @@
 #include <ufs/ufshcd.h>
 #include "ufshcd-priv.h"
 #include <ufs/ufshci.h>
-#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
 #include <linux/crypto-qti-common.h>
-#endif
 
 #ifdef CONFIG_SCSI_UFS_CRYPTO
 
 static inline void ufshcd_prepare_lrbp_crypto(struct request *rq,
 					      struct ufshcd_lrb *lrbp)
 {
-	/* Default: no inline crypto */
-	lrbp->crypto_key_slot = -1;
-	lrbp->data_unit_num = 0;
+	if (IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)) {
+		lrbp->crypto_key_slot = -1;
+		lrbp->data_unit_num = 0;
 
-	if (!rq)
-		return;
+		if (!rq)
+			return;
 
-#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
-	/*
-	 * FDE path:
-	 * If there is no blk-crypto keyslot, try QTI FDE ICE configuration.
-	 * This covers pure FDE cases (dm-req-crypt, etc.).
-	 */
-	if (!rq->crypt_keyslot) {
-		struct ice_data_setting setting;
+		if (!rq->crypt_keyslot) {
+			struct ice_data_setting setting;
 
-		if (!crypto_qti_ice_config_start(rq, &setting)) {
-			bool bypass = (rq_data_dir(rq) == WRITE) ?
-					setting.encr_bypass :
-					setting.decr_bypass;
+			if (!crypto_qti_ice_config_start(rq, &setting)) {
+				bool bypass = (rq_data_dir(rq) == WRITE) ?
+						setting.encr_bypass :
+						setting.decr_bypass;
 
-			if (!bypass) {
-				lrbp->crypto_key_slot =
-					setting.crypto_data.key_index;
-				lrbp->data_unit_num =
-					rq->bio->bi_iter.bi_sector >>
-					ICE_CRYPTO_DATA_UNIT_4_KB;
+				if (!bypass && rq->bio) {
+					lrbp->crypto_key_slot =
+						setting.crypto_data.key_index;
+					lrbp->data_unit_num =
+						rq->bio->bi_iter.bi_sector >>
+							ICE_CRYPTO_DATA_UNIT_4_KB;
+				}
 			}
+			return;
 		}
+	}
 
-		/* Whether FDE configured crypto or not, we are done */
+	if (!rq || !rq->crypt_keyslot) {
+		lrbp->crypto_key_slot = -1;
 		return;
 	}
-#endif /* CONFIG_QTI_CRYPTO_FDE */
 
-	/*
-	 * FBE / generic blk-crypto path:
-	 * rq->crypt_keyslot is set, use blk-crypto context.
-	 */
-	if (rq->crypt_keyslot && rq->crypt_ctx) {
-		lrbp->crypto_key_slot =
-			blk_crypto_keyslot_index(rq->crypt_keyslot);
-		lrbp->data_unit_num = rq->crypt_ctx->bc_dun[0];
-	}
+	lrbp->crypto_key_slot =	blk_crypto_keyslot_index(rq->crypt_keyslot);
+	lrbp->data_unit_num = rq->crypt_ctx->bc_dun[0];
 }
 
 static inline void
