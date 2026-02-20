@@ -2115,6 +2115,9 @@ static int geni_i2c_gsi_write(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[],
 		return GENI_I2C_ERR_PREP_SG;
 	}
 
+	I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
+		    "Debug: gi2c->tx_desc:%p\n", gi2c->tx_desc);
+
 	/* we don't need call back if bei bit is set */
 	if (gsi_bei) {
 		I2C_LOG_DBG(gi2c->ipcl, false, gi2c->dev,
@@ -2613,6 +2616,15 @@ static int geni_i2c_gsi_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 				ret = gi2c->err;
 				goto  geni_i2c_err_prep_sg;
 			}
+
+			if (gi2c->err || gi2c->gsi_err) {
+				I2C_LOG_ERR(gi2c->ipcl, true, gi2c->dev,
+					    "I2C gsi err set return\n");
+				geni_i2c_stop_on_bus(gi2c);
+				ret = gi2c->err;
+				goto  geni_i2c_err_prep_sg;
+			}
+
 			/**
 			 * if it's not last message, submitting MAX_NUM_TRE_MSGS
 			 * continuously without waiting, in b/w if any one of the
