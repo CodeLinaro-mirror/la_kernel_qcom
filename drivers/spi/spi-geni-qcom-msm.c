@@ -1084,6 +1084,23 @@ static int geni_spi_set_level(struct device *dev, unsigned long clk_freq)
 	return ret;
 }
 
+static int geni_spi_power_state(struct device *dev, bool power_on)
+{
+
+	struct spi_controller *spi = dev_get_drvdata(dev);
+	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
+	int ret = 0;
+
+	if (!power_on) {
+		ret = mas->dev_data->geni_spi_set_rate(mas->se.dev, 1000);
+		if (ret)
+			dev_err(mas->se.dev, "failed to reduce SPI rate during power-off: %d\n",
+				ret);
+	}
+
+	return ret;
+}
+
 static int geni_spi_resources_off(struct spi_geni_master *mas)
 {
 	int ret;
@@ -1352,6 +1369,7 @@ static const struct geni_spi_desc sa8255p_geni_spi = {
 	},
 	.geni_spi_pwr_rsc_init = geni_spi_pwr_init,
 	.geni_spi_set_rate = geni_spi_set_level,
+	.geni_spi_switch_power_state = geni_spi_power_state,
 };
 
 static const struct of_device_id spi_geni_dt_match[] = {
