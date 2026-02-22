@@ -357,6 +357,7 @@ struct smem_image_version {
 		part_info = kmalloc_array(num_parts, sizeof(*part_info), GFP_KERNEL); \
 		if (!part_info)							      \
 			return -ENOMEM;						      \
+		memset(part_info, 0, num_parts*sizeof(*part_info)); \
 		socinfo_get_subpart_info(part_enum, part_info, num_parts); \
 		for (i = 0; i < num_parts; i++) { \
 			str_pos += scnprintf(buf+str_pos, PAGE_SIZE-str_pos, "0x%x", \
@@ -1087,6 +1088,9 @@ socinfo_get_subpart_info(enum subset_part_type part,
 		return -EINVAL;
 
 	num_subset_parts = socinfo_get_num_subset_parts();
+	if (part >= num_subset_parts)
+		return -EINVAL;
+
 	offset = socinfo_get_nsubset_parts_array_offset();
 	if (socinfo_format >= SOCINFO_VERSION(0, 21))
 		offset = socinfo_get_nsubpart_feat_array_offset();
@@ -1280,6 +1284,10 @@ CREATE_PART_FUNCTION(comp1, PART_COMP1);
 CREATE_PART_FUNCTION(display1, PART_DISPLAY1);
 CREATE_PART_FUNCTION(nsp, PART_NSP);
 CREATE_PART_FUNCTION(eva, PART_EVA);
+CREATE_PART_FUNCTION(pcie, PART_PCIE);
+CREATE_PART_FUNCTION(cpu, PART_CPU);
+CREATE_PART_FUNCTION(ddr, PART_DDR);
+CREATE_PART_FUNCTION(slc, PART_SLC);
 
 /* Version 16 */
 static ssize_t
@@ -1381,6 +1389,10 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 		msm_custom_socinfo_attrs[i++] = &dev_attr_display1.attr;
 		msm_custom_socinfo_attrs[i++] = &dev_attr_nsp.attr;
 		msm_custom_socinfo_attrs[i++] = &dev_attr_eva.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_pcie.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_cpu.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_ddr.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_slc.attr;
 		fallthrough;
 	case SOCINFO_VERSION(0, 13):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_chip_id.attr;

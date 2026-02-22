@@ -459,6 +459,10 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/llcc-qcom.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/socinfo",
+        ],
     )
 
     registry.register(
