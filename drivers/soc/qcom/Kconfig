@@ -1287,4 +1287,26 @@ config QCOM_DPD_PROXY
 
 	  If unsure, say N here.
 
+config MSM_BAM_DMUX
+	tristate "BAM Data Mux Driver"
+	depends on SPS
+	depends on QCOM_SMEM
+	depends on QCOM_SMSM
+	help
+	  Support Muxed Data Channels over BAM interface.
+	  BAM has a limited number of pipes.  This driver
+	  provides a means to support more logical channels
+	  via muxing than BAM could without muxing.
+
+config MSM_BAM_DMUX_DEBUG
+	bool "Enable BAM DMUX debug mode"
+	depends on MSM_BAM_DMUX
+	help
+	  Enable debug mode for BAM DMUX driver. This enables additional
+	  debug logging and statistics tracking. The debug information is
+	  logged via IPC logging infrastructure and can be viewed through
+	  debugfs.
+
+	  If unsure, say N.
+
 endmenu
