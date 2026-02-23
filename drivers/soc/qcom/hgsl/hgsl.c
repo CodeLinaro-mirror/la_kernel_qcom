@@ -190,6 +190,7 @@ static void hgsl_work_period_update(struct qcom_hgsl *device,
 						struct gpu_work_period *period, u64 active);
 static struct gpu_work_period *hgsl_get_work_period(struct qcom_hgsl *device, uid_t uid);
 static void hgsl_put_work_period(struct gpu_work_period *wp);
+static void hgsl_work_period_account_submit(struct hgsl_priv *priv);
 
 static int hgsl_ctxt_init_profiling(struct hgsl_hab_channel_t *hab_channel,
 				    struct hgsl_context *ctxt);
@@ -3270,21 +3271,7 @@ static int hgsl_db_issueib_with_alloc_list(struct hgsl_priv *priv,
 	if (!ret) {
 		ctxt->queued_ts = *timestamp;
 
-		if (ctxt->priv && ctxt->priv->period) {
-			atomic_inc(&priv->period->active_cmds);
-			spin_lock(&priv->dev->work_period_lock);
-			if (!__test_and_set_bit(HGSL_WORK_PERIOD, &priv->dev->flags)) {
-				mod_timer(&priv->dev->work_period_timer,
-					  jiffies + msecs_to_jiffies(HGSL_WORK_PERIOD_MS));
-				priv->dev->gpu_period.begin = ktime_get_ns();
-			}
-
-			/* Take a refcount here and put it back in hgsl_work_period_timer() */
-			if (!__test_and_set_bit(HGSL_WORK_PERIOD, &priv->period->flags))
-				kref_get(&priv->period->refcount);
-
-			spin_unlock(&priv->dev->work_period_lock);
-		}
+		hgsl_work_period_account_submit(priv);
 	}
 out:
 	hgsl_free(ib_descs);
@@ -4694,13 +4681,50 @@ static void _defer_work_period_put(struct work_struct *work)
 	hgsl_put_work_period(wp);
 }
 
+/*
+ * Common helper: mark a GPU work submission as active for the current work period.
+ * This keeps the submission paths consistent (issueib/drawobj/etc) and is gated by
+ * the runtime sysfs enable.
+ */
+static void hgsl_work_period_account_submit(struct hgsl_priv *priv)
+{
+	if (!priv || !priv->dev || !priv->period || !trace_gpu_work_period_enabled())
+		return;
+
+	if (!READ_ONCE(priv->dev->work_period_enabled))
+		return;
+
+	atomic_inc(&priv->period->active_cmds);
+
+	spin_lock(&priv->dev->work_period_lock);
+
+	if (!__test_and_set_bit(HGSL_WORK_PERIOD, &priv->dev->flags)) {
+		mod_timer(&priv->dev->work_period_timer,
+			  jiffies + msecs_to_jiffies(HGSL_WORK_PERIOD_MS));
+		priv->dev->gpu_period.begin = ktime_get_ns();
+	}
+
+	/* Take a refcount here and put it back in hgsl_work_period_timer() */
+	if (!__test_and_set_bit(HGSL_WORK_PERIOD, &priv->period->flags))
+		kref_get(&priv->period->refcount);
+
+	spin_unlock(&priv->dev->work_period_lock);
+}
+
 static struct gpu_work_period *hgsl_get_work_period(struct qcom_hgsl *device, uid_t uid)
 {
 	struct gpu_work_period *wp;
 
 	spin_lock(&device->wp_list_lock);
 	list_for_each_entry(wp, &device->wp_list, list) {
-		if ((uid == wp->uid) && kref_get_unless_zero(&wp->refcount)) {
+		if (uid == wp->uid) {
+			/*
+			 * Driver-lifetime model: the base kref keeps this object
+			 * alive until qcom_hgsl_remove(). Do NOT take an extra ref
+			 * here — callers store the pointer in priv->period and never
+			 * drop a ref, so kref_get_unless_zero() would leak one count
+			 * per context-create for the same UID.
+			 */
 			spin_unlock(&device->wp_list_lock);
 			return wp;
 		}
@@ -4712,7 +4736,11 @@ static struct gpu_work_period *hgsl_get_work_period(struct qcom_hgsl *device, ui
 		return ERR_PTR(-ENOMEM);
 	}
 
-	/* Initial kref is the device/list lifetime reference. */
+	/*
+	 * kref starts at 1: this is the single "device/list lifetime" reference.
+	 * It is dropped in qcom_hgsl_remove() after timers and workqueues are
+	 * stopped, so no worker can race with the free.
+	 */
 	kref_init(&wp->refcount);
 	wp->uid = uid;
 	INIT_WORK(&wp->defer_ws, _defer_work_period_put);
@@ -4726,6 +4754,10 @@ static void hgsl_work_period_update(struct qcom_hgsl *device,
 				    struct gpu_work_period *period, u64 active)
 {
 	if (!device || !period)
+		return;
+
+	/* Respect runtime disable */
+	if (!READ_ONCE(device->work_period_enabled))
 		return;
 
 	spin_lock(&device->work_period_lock);
@@ -4768,7 +4800,7 @@ static void _log_gpu_work_events(struct work_struct *work)
 		 * to provide information to the Android OS about how
 		 * apps are using the GPU.
 		 */
-		if (active_time)
+		if (active_time && READ_ONCE(device->work_period_enabled))
 			trace_gpu_work_period(HGSL_GPU_ID, wp->uid,
 					device->gpu_period.begin,
 					device->gpu_period.end,
@@ -4943,6 +4975,10 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 	hgsl_dev->cache_flags.writecombine_enable = of_property_read_bool(pdev->dev.of_node,
 							"writecombine_enable");
 	platform_set_drvdata(pdev, hgsl_dev);
+
+	/* Default: enabled; runtime control via sysfs (/sys/class/hgsl/hgsl/work_period/enable) */
+	hgsl_dev->work_period_enabled = true;
+
 	hgsl_sysfs_init(pdev);
 	hgsl_debugfs_init(pdev);
 
@@ -4951,7 +4987,8 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 		WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
 		if (!hgsl_dev->lockless_workqueue) {
 			LOGE("hgsl: Failed to allocate lockless workqueue");
-			goto exit_dereg;
+			ret = -ENOMEM;
+			goto exit_hyp;
 		}
 	}
 	timer_setup(&hgsl_dev->work_period_timer, hgsl_work_period_timer, 0);
@@ -4963,6 +5000,13 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 	mod_timer(&hgsl_dev->prof_retire_timer, jiffies + msecs_to_jiffies(100));
 
 	return 0;
+
+exit_hyp:
+	if (hgsl_dev->global_hyp_inited)
+		hgsl_hyp_close(&hgsl_dev->global_hyp);
+	idr_destroy(&hgsl_dev->isync_timeline_idr);
+	if (hgsl_dev->release_wq)
+		destroy_workqueue(hgsl_dev->release_wq);
 
 exit_dereg:
 	qcom_hgsl_deregister(pdev);
@@ -5032,6 +5076,12 @@ static int qcom_hgsl_remove(struct platform_device *pdev)
 	for (i = 0; i < MAX_DB_QUEUE; i++)
 		if (hgsl->dbq[i].state == DB_STATE_Q_INIT_DONE)
 			hgsl_reset_dbq(&hgsl->dbq[i]);
+
+	if (hgsl->global_hyp_inited)
+		hgsl_hyp_close(&hgsl->global_hyp);
+
+	if (hgsl->release_wq)
+		destroy_workqueue(hgsl->release_wq);
 
 	idr_destroy(&hgsl->isync_timeline_idr);
 	mutex_destroy(&hgsl->mutex);
