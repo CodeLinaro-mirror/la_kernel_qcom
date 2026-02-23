@@ -146,6 +146,7 @@ bengal_perf_config = {
     "CONFIG_QCOM_EUD": "m",
     "CONFIG_QCOM_FDCVS": "m",
     "CONFIG_QCOM_FORCE_WDOG_BITE_ON_PANIC": "y",
+    "CONFIG_QCOM_FSA4480_I2C": "m",
     "CONFIG_QCOM_GDSC_REGULATOR": "m",
     "CONFIG_QCOM_GLINK": "m",
     "CONFIG_QCOM_GLINK_PKT": "m",
