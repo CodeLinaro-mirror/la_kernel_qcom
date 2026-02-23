@@ -2665,7 +2665,7 @@ static int _qcom_llcc_mem_verification(struct device *dev, struct slc_sct_mem *s
 static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 {
 	int ret = -EINVAL;
-	u32 i, sz;
+	u32 i, sz, scid_max;
 	struct slc_sct_slice_desc *memslice;
 	struct device *dev = &pdev->dev;
 	struct resource *res;
@@ -2686,7 +2686,21 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 	if (ret)
 		goto end;
 
-	sz = slc_mem->slice_descs_count;
+	switch (slc_mem->sct_status.version) {
+	case SLC_SCT_MEM_LAYOUT_VERSION:
+		sz = slc_mem->slice_descs_count;
+		scid_max = slc_mem->scid_max;
+		memslice = &slc_mem->slice_descs[0];
+
+		dev_dbg(dev, "SCT Table revision: %i\n", slc_mem->sct_details.revision);
+		dev_dbg(dev, "SCT Table name: %s\n", slc_mem->sct_details.name);
+		break;
+	default:
+		dev_err(dev, "Invalid slc_sct_mem version\n");
+		ret = -EINVAL;
+		goto end;
+
+	}
 
 	drv_data->desc = devm_kzalloc(dev, sizeof(struct llcc_slice_desc)*sz,
 				      GFP_KERNEL);
@@ -2704,7 +2718,6 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < sz; i++) {
-		memslice = &slc_mem->slice_descs[i];
 
 		/* Assign slice desc info from shared mem */
 		drv_data->desc[i].slice_id = memslice->slice_id;
@@ -2716,6 +2729,8 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 
 		/* Add uid slice lookup entry */
 		drv_data->uid_slice_lookup[i].desc = &drv_data->desc[i];
+
+		memslice++;
 	}
 
 	drv_data->bitmap = devm_kcalloc(dev, BITS_TO_LONGS(slc_mem->scid_max),
@@ -2727,7 +2742,7 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 
 	drv_data->cfg = NULL;
 	drv_data->cfg_size = sz;
-	drv_data->max_slices = slc_mem->scid_max;
+	drv_data->max_slices = scid_max;
 
 	dev_warn(dev, "llcc slice size not supported and is set to 0\n");
 end:
