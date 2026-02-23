@@ -291,7 +291,7 @@ static struct clk_branch gpu_cc_gpu_smmu_vote_clk = {
 
 static struct clk_branch gpu_cc_gx_gfx3d_clk = {
 	.halt_reg = 0x1054,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_DELAY,
 	.clkr = {
 		.enable_reg = 0x1054,
 		.enable_mask = BIT(0),

@@ -2450,7 +2450,7 @@ static struct clk_regmap_div gcc_usb30_prim_mock_utmi_postdiv_clk_src = {
 
 static struct clk_branch gcc_ahb2phy_csi_clk = {
 	.halt_reg = 0x1d004,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_DELAY,
 	.hwcg_reg = 0x1d004,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -2958,7 +2958,7 @@ static struct clk_branch gcc_cfg_noc_usb2_prim_axi_clk = {
 
 static struct clk_branch gcc_cfg_noc_usb3_prim_axi_clk = {
 	.halt_reg = 0x1a07c,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.hwcg_reg = 0x1a07c,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -3394,6 +3394,7 @@ static struct clk_branch gcc_gpu_memnoc_gfx_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gcc_gpu_memnoc_gfx_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -4034,7 +4035,7 @@ static struct clk_branch gcc_qupv3_wrap_0_s_ahb_clk = {
 
 static struct clk_branch gcc_sdcc1_ahb_clk = {
 	.halt_reg = 0x38008,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT,
 	.hwcg_reg = 0x38008,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -4087,7 +4088,7 @@ static struct clk_branch gcc_sdcc1_ice_core_clk = {
 
 static struct clk_branch gcc_sdcc2_ahb_clk = {
 	.halt_reg = 0x1e008,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT,
 	.hwcg_reg = 0x1e008,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -4140,7 +4141,7 @@ static struct clk_branch gcc_sys_noc_usb2_prim_axi_clk = {
 
 static struct clk_branch gcc_sys_noc_usb3_prim_axi_clk = {
 	.halt_reg = 0x1a078,
-	.halt_check = BRANCH_HALT,
+	.halt_check = BRANCH_HALT_VOTED,
 	.hwcg_reg = 0x1a078,
 	.hwcg_bit = 1,
 	.clkr = {
@@ -4275,7 +4276,7 @@ static struct clk_branch gcc_usb20_sleep_clk = {
 
 static struct clk_branch gcc_usb30_prim_master_clk = {
 	.halt_reg = 0x1a010,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT,
 	.hwcg_reg = 0x1a010,
 	.hwcg_bit = 1,
 	.clkr = {
