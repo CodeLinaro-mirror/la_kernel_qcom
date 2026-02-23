@@ -97,3 +97,5 @@ gic_intr_routing.ko
 sched-walt.ko
 sched-walt-debug.ko
 llcc-qcom.ko
+qcom_hib.ko
+msm_show_resume_irq.ko
