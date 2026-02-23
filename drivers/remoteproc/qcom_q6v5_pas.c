@@ -3136,6 +3136,38 @@ static const struct adsp_data seraph_soccp_resource = {
 	.auto_boot = true,
 };
 
+static const struct adsp_data shikra_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
+};
+
+static const struct adsp_data shikra_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.both_dumps = true,
+};
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -3236,6 +3268,8 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,bengal-adsp-pas", .data = &bengal_adsp_resource},
 	{ .compatible = "qcom,bengal-cdsp-pas", .data = &bengal_cdsp_resource},
 	{ .compatible = "qcom,bengal-modem-pas", .data = &bengal_mpss_resource},
+	{ .compatible = "qcom,shikra-cdsp-pas", .data = &shikra_cdsp_resource},
+	{ .compatible = "qcom,shikra-modem-pas", .data = &shikra_mpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
