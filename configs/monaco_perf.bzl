@@ -150,7 +150,7 @@ monaco_perf_config = {
     "CONFIG_QCOM_GLINK_PKT": "m",
     "CONFIG_QCOM_HUNG_TASK_ENH": "n",
     "CONFIG_QCOM_INLINE_CRYPTO_ENGINE": "m",
-    "CONFIG_QCOM_IOMMU_DEBUG": "n",
+    "CONFIG_QCOM_IOMMU_DEBUG": "m",
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_IPA": "n",
     "CONFIG_QCOM_IRQ_STAT": "y",
