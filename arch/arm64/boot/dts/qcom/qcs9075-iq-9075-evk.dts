@@ -627,6 +627,13 @@
 		pinctrl-0 = <&expander3_int>;
 		wakeup-source;
 		reg = <0x3b>;
+
+		rtss-can-sel {
+			gpio-hog;
+			gpios = <4 GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "rtss-can-sel";
+		};
 	};
 
 	eeprom0: eeprom@50 {
