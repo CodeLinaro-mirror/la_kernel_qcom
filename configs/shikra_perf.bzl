@@ -81,6 +81,7 @@ shikra_perf_config = {
     "CONFIG_QCOM_IRQ_STAT": "y",
     "CONFIG_QCOM_POWER_SUPPLY": "y",
     "CONFIG_QCOM_SCM": "m",
+    "CONFIG_QCOM_SCM_INVOKE_LEGACY": "y",
     "CONFIG_QCOM_SECURE_BUFFER": "m",
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
     "CONFIG_QCOM_SI_CORE": "m",
