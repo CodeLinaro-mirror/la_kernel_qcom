@@ -4283,7 +4283,6 @@ set_core_clk_ctrl:
 		clk_40ns_cycles = 12;
 		break;
 	case 201500000:
-	case 200000000:
 		clk_40ns_cycles = 8;
 		break;
 	case 150000000:
@@ -4295,7 +4294,6 @@ set_core_clk_ctrl:
 	case 75000000:
 		clk_40ns_cycles = 3;
 		break;
-	case 50000000:
 	case 37500000:
 		clk_40ns_cycles = 2;
 		break;
@@ -5564,7 +5562,6 @@ static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 		gear = UFS_HS_G4;
 		break;
 	case 201500000:
-	case 200000000:
 		gear = UFS_HS_G3;
 		break;
 	case 150000000:
@@ -5572,7 +5569,6 @@ static u32 ufs_qcom_freq_to_gear_speed(struct ufs_hba *hba, unsigned long freq)
 		gear = UFS_HS_G2;
 		break;
 	case 75000000:
-	case 50000000:
 	case 37500000:
 		gear = UFS_HS_G1;
 		break;
