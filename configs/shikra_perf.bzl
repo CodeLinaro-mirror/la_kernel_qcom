@@ -32,6 +32,8 @@ shikra_perf_config = {
     "CONFIG_LEDS_QCOM_LPG": "m",
     "CONFIG_LEDS_QPNP_VIBRATOR_LDO": "m",
     "CONFIG_MFD_SPMI_PMIC": "m",
+    "CONFIG_MSM_BAM_DMUX": "m",
+    "CONFIG_MSM_BAM_DMUX_DEBUG": "y",
     "CONFIG_MPM_LEGACY": "m",
     "CONFIG_MSM_HAB": "n",
     "CONFIG_MSM_PERFORMANCE": "m",
@@ -73,6 +75,7 @@ shikra_perf_config = {
     "CONFIG_QCOM_SMEM": "m",
     "CONFIG_QCOM_SMP2P": "m",
     "CONFIG_QCOM_SMP2P_SLEEPSTATE": "m",
+    "CONFIG_QCOM_SMSM": "m",
     "CONFIG_QCOM_TSENS": "m",
     "CONFIG_QCOM_STATS": "m",
     "CONFIG_QCOM_SPMI_ADC5": "m",
@@ -137,4 +140,6 @@ shikra_perf_config = {
     "CONFIG_QCOM_BWMON": "m",
     "CONFIG_QCOM_MEMLAT": "m",
     "CONFIG_SCHED_WALT": "m",
+    "CONFIG_SPS": "m",
+    "CONFIG_SPS_SUPPORT_NDP_BAM": "y",
 }
