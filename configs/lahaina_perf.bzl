@@ -2,6 +2,7 @@ lahaina_perf_config = {
     # keep sorted
     "CONFIG_ARCH_YUPIK": "y",
     "CONFIG_ARCH_LAHAINA": "y",
+    "CONFIG_SENSORS_SSC": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_HW": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_HW_DEBUG": "m",
     "CONFIG_ARM_QCOM_CPUFREQ_NVMEM": "n",
