@@ -1239,6 +1239,15 @@ static int qcom_geni_serial_startup(struct uart_port *uport)
 	int ret;
 	struct qcom_geni_serial_port *port = to_dev_port(uport);
 
+	if (pm_runtime_status_suspended(uport->dev)) {
+		/* Set pm_state to OFF on failure */
+		if (uport->state)
+			uport->state->pm_state = UART_PM_STATE_OFF;
+
+		dev_err(uport->dev, "Device is suspended, please retry\n");
+		return -EAGAIN;
+	}
+
 	if (!port->setup) {
 		ret = qcom_geni_serial_port_setup(uport);
 		if (ret)
@@ -1810,6 +1819,10 @@ static void qcom_geni_serial_pm(struct uart_port *uport,
 			return;
 		}
 	} else if (new_state == UART_PM_STATE_OFF && old_state == UART_PM_STATE_ON) {
+		if (pm_runtime_status_suspended(uport->dev)) {
+			dev_err(uport->dev, "Device is already suspended\n");
+			return;
+		}
 		pm_runtime_put_sync(uport->dev);
 	}
 }
