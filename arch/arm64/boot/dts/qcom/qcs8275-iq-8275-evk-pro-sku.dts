@@ -473,6 +473,7 @@
 		interrupts = <52 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-0 = <&expander6_int_default>;
 		pinctrl-names = "default";
+		wakeup-source;
 		reg = <0x3e>;
 	};
 
@@ -642,25 +643,6 @@
 				reg = <0>;
 				usb1_port_connector: endpoint {
 					remote-endpoint = <&usb1_port>;
-				};
-			};
-		};
-	};
-
-	connector_usb2: connector-usb2 {
-		compatible = "gpio-usb-b-connector";
-		id-gpio = <&pmm8620au_0_gpios 9 GPIO_ACTIVE_HIGH>;
-		vbus-supply = <&vbus_supply_regulator2>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&usb2_id_det_default>;
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				usb2_port_connector: endpoint {
-					remote-endpoint = <&usb2_port>;
 				};
 			};
 		};
@@ -1019,6 +1001,28 @@
 	wakeup-source;
 
 	status = "okay";
+
+	connector_usb2: connector-usb2 {
+		compatible = "gpio-usb-b-connector";
+		label = "micro-USB";
+		type = "micro";
+		id-gpio = <&pmm8620au_0_gpios 9 GPIO_ACTIVE_HIGH>;
+		vbus-gpio = <&expander6 7 GPIO_ACTIVE_HIGH>;
+		vbus-supply = <&vbus_supply_regulator2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_id_det_default>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				usb2_port_connector: endpoint {
+					remote-endpoint = <&usb2_port>;
+				};
+			};
+		};
+	};
 
 	ports {
 
