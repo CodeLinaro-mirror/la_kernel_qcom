@@ -56,6 +56,10 @@ properties:
       - qcom,sm8550-rpmhpd
       - qcom,sm8650-rpmhpd
       - qcom,x1e80100-rpmhpd
+      - items:
+          - enum:
+              - qcom,msm8937-rpmpd
+          - const: qcom,msm8917-rpmpd
 
   '#power-domain-cells':
     const: 1
