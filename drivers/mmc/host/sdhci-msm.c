@@ -3033,7 +3033,7 @@ static int sdhci_msm_ice_init(struct sdhci_msm_host *msm_host,
 						    "cqhci_ice_hwkm");
 	if (!ice_hwkm_res) {
 		dev_warn(dev, "ICE HWKM registers not found\n");
-		goto disable;
+		return 0;
 	}
 	msm_host->ice_hwkm_mem = devm_ioremap_resource(dev, ice_hwkm_res);
 	if (IS_ERR(msm_host->ice_hwkm_mem)) {
