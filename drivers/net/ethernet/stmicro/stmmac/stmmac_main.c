@@ -528,6 +528,9 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 	if (!priv->dma_cap.eee)
 		return false;
 
+	if (priv->plat->phy_interface == PHY_INTERFACE_MODE_SGMII)
+		return false;
+
 	mutex_lock(&priv->lock);
 
 	/* Check if it needs to be deactivated */
