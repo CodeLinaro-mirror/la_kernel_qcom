@@ -77,3 +77,4 @@ qcom_logbuf_vendor_hooks.ko
 qcom_logbuf_boot_log.ko
 debug_symbol.ko
 minidump.ko
+qcom-dload-mode.ko
