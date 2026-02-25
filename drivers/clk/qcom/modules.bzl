@@ -3751,3 +3751,16 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/clk/qcom/clk-spmi-pmic-div",
+        out = "clk-spmi-pmic-div.ko",
+        config = "CONFIG_SPMI_PMIC_CLKDIV",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-spmi-pmic-div.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )

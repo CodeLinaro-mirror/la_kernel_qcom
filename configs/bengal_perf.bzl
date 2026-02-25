@@ -293,6 +293,7 @@ bengal_perf_config = {
     "CONFIG_SND_USB_AUDIO_QMI": "m",
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
+    "CONFIG_SPMI_PMIC_CLKDIV": "m",
     "CONFIG_SPS": "m",
     "CONFIG_SPS_SUPPORT_NDP_BAM": "y",
     "CONFIG_STM": "m",
