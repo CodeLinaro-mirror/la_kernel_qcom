@@ -12,7 +12,18 @@ def define_hamoa():
     for variant in la_variants:
         board_kernel_cmdline_extras = []
         board_bootconfig_extras = []
-        kernel_vendor_cmdline_extras = ["bootconfig"]
+        kernel_vendor_cmdline_extras = [
+            "bootconfig",
+            "androidboot.bootdevice=1bf8000.pcie",
+            "androidboot.boot_devices=soc/1bf8000.pcie",
+            "androidboot.load_modules_parallel=true",
+            "android_arch_task_struct_size=512",
+            "kvm-arm.mode=protected",
+            "cpufreq.default_governor=performance",
+            "log_buf_len=512K",
+            "irqaffinity=0-3",
+            "firmware_class.path=/vendor/firmware_mnt/image",
+        ]
 
         if variant == "consolidate":
             board_bootconfig_extras += ["androidboot.serialconsole=1"]
