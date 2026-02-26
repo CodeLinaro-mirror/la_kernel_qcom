@@ -7950,7 +7950,7 @@ static struct gdsc gcc_ufs_mem_phy_gdsc = {
 		.name = "gcc_ufs_mem_phy_gdsc",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | ALWAYS_ON,
 	.supply = "vdd_cx",
 };
 
@@ -7963,7 +7963,7 @@ static struct gdsc gcc_ufs_phy_gdsc = {
 		.name = "gcc_ufs_phy_gdsc",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | ALWAYS_ON,
 	.supply = "vdd_cx",
 };
 
