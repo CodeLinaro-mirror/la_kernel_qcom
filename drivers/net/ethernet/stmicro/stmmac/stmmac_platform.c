@@ -132,7 +132,8 @@ static struct device_node *get_qos_mtl_queue_config(struct device_node *node,
 						    bool *qos_config_found)
 {
 	const char *config_name;
-	u32 count = 0, i;
+	u32 count = 0;
+	int i;
 	int ret = 0;
 	struct device_node *qos_mtl_node = NULL;
 
