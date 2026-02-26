@@ -29,6 +29,7 @@ properties:
       - enum:
           - qcom,apq8016-sbc-sndcard
           - qcom,iq8-8275-evk-sndcard
+          - qcom,lemans-amr-sndcard
           - qcom,monaco-monza-sndcard
           - qcom,msm8916-qdsp6-sndcard
           - qcom,qcm6490-sndcard

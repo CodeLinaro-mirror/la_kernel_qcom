@@ -195,6 +195,7 @@ struct ath11k_cfr {
 	u64 clear_txrx_event;
 	u64 cfr_dma_aborts;
 	bool enabled;
+	enum wmi_phy_mode phymode;
 	struct cfr_unassoc_pool_entry unassoc_pool[ATH11K_MAX_CFR_ENABLED_CLIENTS];
 };
 
@@ -235,7 +236,12 @@ void ath11k_cfr_release_lut_entry(struct ath11k_look_up_table *lut);
 int ath11k_process_cfr_capture_event(struct ath11k_base *ab,
 				     struct ath11k_cfr_peer_tx_param *params);
 
+void ath11k_cfr_update_phymode(struct ath11k *ar, enum wmi_phy_mode phymode);
 #else
+static inline void ath11k_cfr_update_phymode(struct ath11k *ar,
+					     enum wmi_phy_mode phymode)
+{
+}
 static inline int ath11k_cfr_init(struct ath11k_base *ab)
 {
 	return 0;

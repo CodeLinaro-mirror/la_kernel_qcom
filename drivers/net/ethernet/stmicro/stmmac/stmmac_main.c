@@ -3669,6 +3669,9 @@ static int stmmac_request_irq_multi(struct net_device *dev)
 			irq_err = REQ_IRQ_ERR_SFTY;
 			goto irq_error;
 		}
+		/* disable the irq at bootup and only enable at link up */
+		if (priv->plat->safety_irq)
+			priv->plat->safety_irq(priv, false);
 	}
 
 	/* Request the Safety Feature Correctible Error line in

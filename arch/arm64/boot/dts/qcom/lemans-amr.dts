@@ -26,58 +26,32 @@
 		serial0 = &uart10;
 		spi7 = &spi7;
 		spi14 = &spi14;
+		i2c1  = &i2c1;
+		i2c19 = &i2c19;
 	};
 
 	chosen {
 		stdout-path = "serial0:115200n8";
 	};
 
-	wcn6855-pmu {
-		compatible = "qcom,wcn6855-pmu";
+	hdmi-connector1 {
+		compatible = "hdmi-connector";
+		type = "a";
 
-		pinctrl-names = "default";
-		pinctrl-0 = <&wlan_en_state>;
-		wlan-enable-gpios = <&pmm8654au_1_gpios 7 GPIO_ACTIVE_HIGH>;
-
-		regulators {
-			vreg_pmu_rfa_cmn: ldo0 {
-				regulator-name = "vreg_pmu_rfa_cmn";
+		port {
+			hdmi_con1: endpoint {
+				remote-endpoint = <&it6162_1_out>;
 			};
+		};
+	};
 
-			vreg_pmu_aon_0p59: ldo1 {
-				regulator-name = "vreg_pmu_aon_0p59";
-			};
+	hdmi-connector2 {
+		compatible = "hdmi-connector";
+		type = "a";
 
-			vreg_pmu_wlcx_0p8: ldo2 {
-				regulator-name = "vreg_pmu_wlcx_0p8";
-			};
-
-			vreg_pmu_wlmx_0p85: ldo3 {
-				regulator-name = "vreg_pmu_wlmx_0p85";
-			};
-
-			vreg_pmu_btcmx_0p85: ldo4 {
-				regulator-name = "vreg_pmu_btcmx_0p85";
-			};
-
-			vreg_pmu_rfa_0p8: ldo5 {
-				regulator-name = "vreg_pmu_rfa_0p8";
-			};
-
-			vreg_pmu_rfa_1p2: ldo6 {
-				regulator-name = "vreg_pmu_rfa_1p2";
-			};
-
-			vreg_pmu_rfa_1p7: ldo7 {
-				regulator-name = "vreg_pmu_rfa_1p7";
-			};
-
-			vreg_pmu_pcie_0p9: ldo8 {
-				regulator-name = "vreg_pmu_pcie_0p9";
-			};
-
-			vreg_pmu_pcie_1p8: ldo9 {
-				regulator-name = "vreg_pmu_pcie_1p8";
+		port {
+			hdmi_con2: endpoint {
+				remote-endpoint = <&it6162_2_out>;
 			};
 		};
 	};
@@ -316,7 +290,7 @@
 
 &ethernet0 {
 	phy-handle = <&sgmii_phy0>;
-	phy-mode = "sgmii";
+	phy-mode = "2500base-x";
 
 	pinctrl-0 = <&ethernet0_default>;
 	pinctrl-names = "default";
@@ -324,8 +298,6 @@
 	snps,mtl-rx-config = <&mtl_rx_setup>;
 	snps,mtl-tx-config = <&mtl_tx_setup>;
 	snps,ps-speed = <1000>;
-	nvmem-cells = <&mac_addr0>;
-	nvmem-cell-names = "mac-address";
 
 	status = "okay";
 
@@ -334,9 +306,9 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		sgmii_phy0: phy@1c {
-			compatible = "ethernet-phy-id004d.d101";
-			reg = <0x1c>;
+		sgmii_phy0: phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c45";
+			reg = <0x1>;
 			device_type = "ethernet-phy";
 			reset-gpios = <&pmm8654au_2_gpios 8 GPIO_ACTIVE_LOW>;
 			reset-assert-us = <11000>;
@@ -420,35 +392,48 @@
 	status = "okay";
 };
 
-&i2c11 {
-	pinctrl-0 = <&qup_i2c11_default>, <&usb0_intr_state>;
-	pinctrl-names = "default";
-
+&i2c1 {
 	status = "okay";
+	clock-frequency = <400000>;
 
-	hd3ss3220@67 {
-		compatible = "ti,hd3ss3220";
-		reg = <0x67>;
-		interrupt-parent = <&pmm8654au_2_gpios>;
-		interrupt-extended = < 5 IRQ_TYPE_EDGE_FALLING>;
-		wakeup-source;
+	tpm@2e {
+		compatible = "st,st33ktpm2xi2c", "tcg,tpm-tis-i2c";
+		reg = <0x2e>;
 
-		connector@0 {
-			compatible = "usb-c-connector";
-			label = "USB-C";
-			data-role = "dual";
-			power-role = "dual";
+		interrupts-extended = <&tlmm 18 IRQ_TYPE_LEVEL_HIGH>;
+		reset-gpios = <&tlmm 17 GPIO_ACTIVE_LOW>;
+	};
 
-			ports {
-				#address-cells = <1>;
-				#size-cells = <0>;
+	it6162_1_codec: hdmi-bridge@58 {
+		compatible = "ite,it6162";
+		reg = <0x58>;
+		#sound-dai-cells = <1>;
+		ite,i2s-audio;
 
-				port@0 {
-					reg = <0>;
+		interrupts-extended = <&tlmm 95 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&it6162_1_irq_pin>;
 
-					hd3ss3220_ep: endpoint {
-						remote-endpoint = <&usb_role_switch>;
-					};
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				it6162_1_a: endpoint {
+					data-lanes = <0 1 2 3>;
+					// ite,mipi-dsi-phy-pn-swap;
+					// ite,mipi-dsi-phy-link-swap;
+					remote-endpoint = <&mdss0_dsi0_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				it6162_1_out: endpoint {
+					remote-endpoint = <&hdmi_con1>;
 				};
 			};
 		};
@@ -459,7 +444,7 @@
 	pinctrl-0 = <&qup_i2c18_default>;
 	pinctrl-names = "default";
 
-	status = "okay";
+	status = "disabled";
 
 	expander0: pca953x@38 {
 		compatible = "ti,tca9538";
@@ -473,20 +458,6 @@
 		#gpio-cells = <2>;
 		gpio-controller;
 		reg = <0x39>;
-
-		io-exp-hog2 {
-			gpio-hog;
-			gpios = <2 GPIO_ACTIVE_HIGH>;
-			output-low;
-			line-name = "io_exp_gpio2";
-		};
-
-		io-exp-hog3 {
-			gpio-hog;
-			gpios = <3 GPIO_ACTIVE_HIGH>;
-			output-low;
-			line-name = "io_exp_gpio3";
-		};
 	};
 
 	expander2: pca953x@3a {
@@ -520,6 +491,46 @@
 	};
 };
 
+&i2c19 {
+	clock-frequency = <400000>;
+	qcom,load-firmware;
+	qcom,xfer-mode = <1>;
+
+	it6162_2_codec: hdmi-bridge@58 {
+		compatible = "ite,it6162";
+		reg = <0x58>;
+
+		interrupts-extended = <&tlmm 97 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&it6162_2_irq_pin>;
+		status = "disabled";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				it6162_2_a: endpoint {
+					data-lanes = <0 1 2 3>;
+					// ite,mipi-dsi-phy-pn-swap;
+					// ite,mipi-dsi-phy-link-swap;
+					remote-endpoint = <&mdss0_dsi1_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				it6162_2_out: endpoint {
+					remote-endpoint = <&hdmi_con2>;
+				};
+			};
+		};
+	};
+};
+
 &ice {
 	status = "okay";
 };
@@ -532,17 +543,9 @@
 	status = "okay";
 };
 
-&mdss0_dp0 {
-	status = "okay";
-};
-
 &mdss0_dp0_out {
 	data-lanes = <0 1 2 3>;
 	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
-};
-
-&mdss0_dp1 {
-	status = "okay";
 };
 
 &mdss0_dp1_out {
@@ -550,12 +553,32 @@
 	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
 };
 
-&mdss0_edp_phy {
+&mdss0_dsi0 {
+	vdda-supply = <&vreg_l1c>;
 	status = "okay";
 };
 
-&mdss0_edp1_phy {
+&mdss0_dsi0_out {
+	remote-endpoint = <&it6162_1_a>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss0_dsi0_phy {
+	vdds-supply = <&vreg_l4a>;
 	status = "okay";
+};
+
+&mdss0_dsi1 {
+	vdda-supply = <&vreg_l1c>;
+};
+
+&mdss0_dsi1_out {
+	remote-endpoint = <&it6162_2_a>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss0_dsi1_phy {
+	vdds-supply = <&vreg_l4a>;
 };
 
 &pcie0 {
@@ -564,6 +587,45 @@
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_default_state>;
+
+	// Max up to 66 PCIe nodes (BDF)
+	// <(BDF) &pcie_smmu (stream ID) 0x1>
+	iommu-map = <0x0 &pcie_smmu 0x0000 0x1>,
+		<0x100 &pcie_smmu 0x0001 0x1>,
+		<0x101 &pcie_smmu 0x0002 0x1>,
+		<0x208 &pcie_smmu 0x0003 0x1>,
+		<0x210 &pcie_smmu 0x0004 0x1>,
+		<0x218 &pcie_smmu 0x0005 0x1>,
+		<0x280 &pcie_smmu 0x0006 0x1>,
+		<0x281 &pcie_smmu 0x0007 0x1>,
+		<0x282 &pcie_smmu 0x0008 0x1>,
+		<0x283 &pcie_smmu 0x0009 0x1>,
+		<0x284 &pcie_smmu 0x000a 0x1>,
+		<0x285 &pcie_smmu 0x000b 0x1>,
+		<0x286 &pcie_smmu 0x000c 0x1>,
+		<0x287 &pcie_smmu 0x000d 0x1>,
+		<0x288 &pcie_smmu 0x000e 0x1>,
+		<0x289 &pcie_smmu 0x000f 0x1>,
+		<0x28a &pcie_smmu 0x0010 0x1>,
+		<0x28b &pcie_smmu 0x0011 0x1>,
+		<0x28c &pcie_smmu 0x0012 0x1>,
+		<0x28d &pcie_smmu 0x0013 0x1>,
+		<0x28e &pcie_smmu 0x0014 0x1>,
+		<0x28f &pcie_smmu 0x0015 0x1>,
+		<0x290 &pcie_smmu 0x0016 0x1>,
+		<0x291 &pcie_smmu 0x0017 0x1>,
+		<0x292 &pcie_smmu 0x0018 0x1>,
+		<0x293 &pcie_smmu 0x0019 0x1>,
+		<0x300 &pcie_smmu 0x001a 0x1>,
+		<0x400 &pcie_smmu 0x001b 0x1>,
+		<0x500 &pcie_smmu 0x001c 0x1>,
+		<0x501 &pcie_smmu 0x001d 0x1>,
+		<0x600 &pcie_smmu 0x001e 0x1>,
+		<0x601 &pcie_smmu 0x001f 0x1>,
+		<0x700 &pcie_smmu 0x0020 0x1>,
+		<0x701 &pcie_smmu 0x0021 0x1>,
+		<0x800 &pcie_smmu 0x0022 0x1>,
+		<0x801 &pcie_smmu 0x0023 0x1>;
 
 	status = "okay";
 };
@@ -592,23 +654,6 @@
 	status = "okay";
 };
 
-&pcieport0 {
-	wifi@0 {
-		compatible = "qcom,wcn6855-wifi";
-		reg = <0x10000 0x0 0x0 0x0 0x0>;
-
-		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
-		vddaon-supply = <&vreg_pmu_aon_0p59>;
-		vddwlcx-supply = <&vreg_pmu_wlcx_0p8>;
-		vddwlmx-supply = <&vreg_pmu_wlmx_0p85>;
-		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
-		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
-		vddrfa1p7-supply = <&vreg_pmu_rfa_1p7>;
-		vddpcie0p9-supply = <&vreg_pmu_pcie_0p9>;
-		vddpcie1p8-supply = <&vreg_pmu_pcie_1p8>;
-	};
-};
-
 &pmm8654au_0_pon_resin {
 	linux,code = <KEY_VOLUMEDOWN>;
 	status = "okay";
@@ -626,34 +671,34 @@
 			  "USB2_PWR_EN",
 			  "USB2_FAULT";
 
-	usb2_en_state: usb2-en-state {
-		pins = "gpio9";
-		function = "normal";
-		output-high;
-		power-source = <0>;
-	};
-
-	wlan_en_state: wlan-en-state {
-		pins = "gpio7";
-		function = "normal";
-		output-low;
-		bias-pull-down;
-	};
-
 	bt_en_state: bt-en-state {
 		pins = "gpio8";
 		function = "normal";
 		output-low;
 		bias-pull-down;
 	};
+
+	wlan_en_hog: wlan-en-hog {
+		gpio-hog;
+		gpios = <7 GPIO_ACTIVE_HIGH>;
+		output-high;
+		input-disable;
+		line-name = "WLAN_EN";
+	};
 };
 
 &pmm8654au_2_gpios {
-	usb0_intr_state: usb0-intr-state {
-		pins = "gpio5";
+	usb0_en_state: usb0-en-state {
+		pins = "gpio3";
 		function = "normal";
-		input-enable;
-		bias-pull-up;
+		output-high;
+		power-source = <0>;
+	};
+
+	usb1_en_state: usb1-en-state {
+		pins = "gpio10";
+		function = "normal";
+		output-high;
 		power-source = <0>;
 	};
 };
@@ -753,33 +798,6 @@
 		states = <1800000 0x1
 			  2950000 0x0>;
 	};
-
-	vbus_supply_regulator_0: vbus_supply_regulator_0 {
-		compatible = "regulator-fixed";
-
-		regulator-name = "vbus_supply_0";
-		regulator-min-microvolt = <5000000>;
-		regulator-max-microvolt = <5000000>;
-		regulator-boot-on;
-
-		gpio = <&expander1 2 GPIO_ACTIVE_HIGH>;
-
-		enable-active-high;
-	};
-
-	vbus_supply_regulator_1: vbus_supply_regulator_1 {
-		compatible = "regulator-fixed";
-
-		regulator-name = "vbus_supply_1";
-		regulator-min-microvolt = <5000000>;
-		regulator-max-microvolt = <5000000>;
-		regulator-boot-on;
-		regulator-always-on;
-
-		gpio = <&expander1 3 GPIO_ACTIVE_HIGH>;
-
-		enable-active-high;
-	};
 };
 
 &spi7 {
@@ -805,21 +823,6 @@
 		spi-max-frequency = <10000000>;
 		interrupt-names = "can_irq";
 		interrupts-extended = <&tlmm 84 IRQ_TYPE_LEVEL_LOW>;
-	};
-};
-
-&spi16 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&qup_spi16_cs>, <&qup_spi16_data_clk>;
-	status = "okay";
-
-	st33htpm0: st33htpm@0 {
-		compatible = "st,st33htpm-spi";
-		reg = <0>;
-		spi-max-frequency = <20000000>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		status = "okay";
 	};
 };
 
@@ -850,6 +853,20 @@
 			drive-strength = <16>;
 			bias-pull-up;
 		};
+	};
+
+	it6162_1_irq_pin: it6162_1_irq_pin {
+		pins = "gpio95";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-high;
+	};
+
+	it6162_2_irq_pin: it6162_2_irq_pin {
+		pins = "gpio97";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-high;
 	};
 
 	pcie0_default_state: pcie0-default-state {
@@ -910,16 +927,6 @@
 		function = "qup1_se4";
 		drive-strength = <2>;
 		bias-pull-up;
-	};
-
-	qup_spi16_cs: qup-spi16-cs-state {
-		pins = "gpio89";
-		function = "qup2_se2";
-	};
-
-	qup_spi16_data_clk: qup-spi16-data-clk-state {
-		pins = "gpio86", "gpio87", "gpio88";
-		function = "qup2_se2";
 	};
 
 	qup_i2c19_default: qup-i2c19-state {
@@ -1042,31 +1049,15 @@
 	phys = <&usb_0_hsphy>, <&usb_0_qmpphy>;
 	phy-names = "usb2-phy", "usb3-phy";
 
-	dr_mode = "otg";
-	usb-role-switch;
+	dr_mode = "host";
 	snps,dis_u2_susphy_quirk;
 	snps,dis_enblslpm_quirk;
 	maximum-speed = "super-speed-plus";
 	qcom,enable-rt;
 	wakeup-source;
-	vbus_dwc3;
-	vbus_dwc3-supply = <&vbus_supply_regulator_0>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&usb0_en_state>;
 	status = "okay";
-
-	ports {
-
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		port@0 {
-			reg = <0>;
-
-			usb_role_switch: endpoint {
-				remote-endpoint = <&hd3ss3220_ep>;
-			};
-		};
-
-	};
 };
 
 &usb_0_hsphy {
@@ -1107,10 +1098,9 @@
 	qcom,enable-rt;
 	wakeup-source;
 	maximum-speed = "super-speed-plus";
-	dr_mode = "otg";
-	usb-role-switch;
-	role-switch-default-mode = "host";
-	vbus_dwc3-supply = <&vbus_supply_regulator_1>;
+	dr_mode = "host";
+	pinctrl-names = "default";
+	pinctrl-0 = <&usb1_en_state>;
 	status = "okay";
 };
 
@@ -1143,16 +1133,6 @@
 	iommus = <&apps_smmu 0x020 0x0>;
 	phys = <&usb_2_hsphy>;
 	phy-names = "usb2-phy";
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&usb2_en_state>;
-
-	dr_mode = "otg";
-	usb-role-switch;
-	role-switch-default-mode = "host";
-	qcom,enable-rt;
-	wakeup-source;
-
 	status = "okay";
 };
 
