@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -2048,6 +2048,35 @@ static long mhi_uci_client_ioctl(struct file *file, unsigned int cmd,
 			sizeof(epinfo));
 		if (rc)
 			uci_log(UCI_DBG_ERROR, "copying to user space failed");
+	} else if (cmd == MHI_CONFIGURE_LTR) {
+		struct mhi_ltr_config ltr_config;
+
+		uci_log(UCI_DBG_DBG, "Configure LTR for client:%d\n", uci_handle->client_index);
+
+		rc = copy_from_user(&ltr_config, (void __user *)arg,
+				    sizeof(ltr_config));
+		if (rc) {
+			uci_log(UCI_DBG_ERROR, "Failed to copy LTR config from user space\n");
+			rc = -EFAULT;
+		} else {
+			uci_log(UCI_DBG_INFO,
+				"Configuring LTR: req_bit=%d, ltr_val=0x%x\n",
+				ltr_config.req_bit, ltr_config.ltr_us);
+			if (!uci_handle->out_handle) {
+				uci_log(UCI_DBG_ERROR, "Chan not opened, cannot configure LTR\n");
+				rc = -ENODEV;
+			} else {
+				rc = mhi_dev_configure_ltr(uci_handle->out_handle,
+							   ltr_config.req_bit,
+							   ltr_config.ltr_us);
+				if (rc)
+					uci_log(UCI_DBG_ERROR,
+						"Failed to configure LTR: rc=%d\n", rc);
+				else
+					uci_log(UCI_DBG_INFO,
+						"LTR configuration successful\n");
+			}
+		}
 	} else {
 		uci_log(UCI_DBG_ERROR, "wrong parameter:%d\n", cmd);
 		rc = -EINVAL;

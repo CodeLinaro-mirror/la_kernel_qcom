@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-//Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef __MHI_H
 #define __MHI_H
@@ -1232,6 +1232,14 @@ void mhi_uci_chan_state_notify(struct mhi_dev *mhi,
  * @enable:     Flag to enable or disable timer
  */
 int mhi_dev_configure_inactivity_timer(struct mhi_dev *mhi, bool enable);
+
+/**
+ * mhi_dev_configure_ltr() - Configure LTR (Latency Tolerance Reporting) message.
+ * @client:     MHI device client handle
+ * @req_bit:    Request bit for LTR message
+ * @ltr_val:    LTR value to be configured
+ */
+int mhi_dev_configure_ltr(struct mhi_dev_client *client, bool req_bit, u32 ltr_val);
 
 void mhi_dev_pm_relax(struct mhi_dev *mhi_ctx);
 void mhi_dev_resume_init_with_link_up(struct ep_pcie_notify *notify);
