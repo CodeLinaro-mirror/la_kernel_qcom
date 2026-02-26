@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
+
 /*
  * MSM PCIe endpoint service layer.
  */
@@ -145,6 +146,15 @@ int ep_pcie_get_msi_config(struct ep_pcie_hw *phandle,
 	return phandle->get_msi_config(cfg, vf_id);
 }
 EXPORT_SYMBOL_GPL(ep_pcie_get_msi_config);
+
+int ep_pcie_send_ltr_msg(struct ep_pcie_hw *phandle, bool req, u32 ltr_us)
+{
+	if (WARN_ON(!phandle))
+		return -EINVAL;
+
+	return phandle->send_ltr_msg(req, ltr_us);
+}
+EXPORT_SYMBOL_GPL(ep_pcie_send_ltr_msg);
 
 int ep_pcie_trigger_msi(struct ep_pcie_hw *phandle, u32 idx, u32 vf_id)
 {

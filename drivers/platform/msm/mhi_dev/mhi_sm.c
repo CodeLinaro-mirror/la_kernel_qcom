@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <linux/kernel.h>
 #include <linux/export.h>
@@ -583,6 +583,14 @@ static int mhi_sm_prepare_resume(struct mhi_sm_dev *mhi_sm_ctx)
 			mhi_sm_mstate_str(old_state));
 		goto exit;
 	}
+
+	/**
+	 * To ensure host has restored config space fully and to avoid implementation of LTR
+	 * notification interrupt we are sending LTR message from M0 instead of D0 or from LTR
+	 * enable interrupt handler. Currently we have no LTR latency requirement, so sending a
+	 * LTR message with requirement bit set to 0.
+	 */
+	ep_pcie_send_ltr_msg(mhi->mhi_hw_ctx->phandle, 0, 0);
 
 	mhi_sm_mmio_set_mhistatus(mhi_sm_ctx, MHI_DEV_M0_STATE);
 
