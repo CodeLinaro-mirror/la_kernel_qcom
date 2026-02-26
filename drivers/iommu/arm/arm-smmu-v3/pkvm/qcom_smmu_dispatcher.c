@@ -75,6 +75,11 @@ static void smmu_tlb_flush_all(void *cookie)
 	int i;
 
 	for (i = 0; i < num_registered_drivers; i++) {
+		if (!registered_drivers[i]->callbacks->tlb_ops) {
+			mod_ops->puts("WARN!! Possible stale TLB entries, tlb ops not implemented");
+			continue;
+		}
+
 		if (registered_drivers[i]->callbacks->tlb_ops->tlb_flush_all)
 			registered_drivers[i]->callbacks->tlb_ops->tlb_flush_all(cookie);
 	}
@@ -86,6 +91,11 @@ static void smmu_tlb_flush_walk(unsigned long iova, size_t size,
 	int i;
 
 	for (i = 0; i < num_registered_drivers; i++) {
+		if (!registered_drivers[i]->callbacks->tlb_ops) {
+			mod_ops->puts("WARN!! Possible stale TLB entries, tlb ops not implemented");
+			continue;
+		}
+
 		if (registered_drivers[i]->callbacks->tlb_ops->tlb_flush_walk)
 			registered_drivers[i]->callbacks->tlb_ops->tlb_flush_walk(iova, size,
 										  granule, cookie);
@@ -99,6 +109,11 @@ static void smmu_tlb_add_page(struct iommu_iotlb_gather *gather,
 	int i;
 
 	for (i = 0; i < num_registered_drivers; i++) {
+		if (!registered_drivers[i]->callbacks->tlb_ops) {
+			mod_ops->puts("WARN!! Possible stale TLB entries, tlb ops not implemented");
+			continue;
+		}
+
 		if (registered_drivers[i]->callbacks->tlb_ops->tlb_add_page)
 			registered_drivers[i]->callbacks->tlb_ops->tlb_add_page(gather, iova,
 										granule, cookie);
