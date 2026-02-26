@@ -2379,7 +2379,12 @@ int mhi_dev_configure_ltr(struct mhi_dev_client *client, bool req_bit, u32 ltr_v
 	}
 
 	mhi_log(client->vf_id, MHI_MSG_INFO,
-		"Configuring LTR: req_bit=%d, ltr_val=0x%x\n", req_bit, ltr_val);
+		"Configuring and caching LTR: req_bit=%d, ltr_val=0x%x\n", req_bit, ltr_val);
+
+	/* Cache the LTR values for use during M0 transitions */
+	mhi->ltr_configured = true;
+	mhi->cached_ltr_req_bit = req_bit;
+	mhi->cached_ltr_val = ltr_val;
 
 	rc = ep_pcie_send_ltr_msg(mhi->mhi_hw_ctx->phandle, req_bit, ltr_val);
 	if (rc) {

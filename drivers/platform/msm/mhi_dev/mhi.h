@@ -658,6 +658,11 @@ struct mhi_dev {
 
 	bool				no_path_from_ipa_to_pcie;
 
+	/* LTR configuration caching */
+	bool				ltr_configured;
+	bool				cached_ltr_req_bit;
+	u32				cached_ltr_val;
+
 	int (*device_to_host)(uint64_t dst_pa, void *src, uint32_t len,
 				struct mhi_dev *mhi, struct mhi_req *req);
 
