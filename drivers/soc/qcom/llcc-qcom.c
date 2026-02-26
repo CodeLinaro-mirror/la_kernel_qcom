@@ -1525,6 +1525,14 @@ static const struct qcom_llcc_config seraph_cfg[] = {
 		.edac_reg_offset = &llcc_v6_edac_reg_offset,
 	},
 };
+
+static const struct qcom_llcc_config pikachu_cfg[] = {
+	{
+		.reg_offset = llcc_v6_reg_offset,
+		.edac_reg_offset = &llcc_v6_edac_reg_offset,
+	},
+};
+
 static const struct qcom_sct_config qdu1000_cfgs = {
 	.llcc_config	= qdu1000_cfg,
 	.num_config	= ARRAY_SIZE(qdu1000_cfg),
@@ -1644,6 +1652,11 @@ static const struct qcom_sct_config alor_cfgs = {
 static const struct qcom_sct_config seraph_cfgs = {
 	.llcc_config    = seraph_cfg,
 	.num_config = ARRAY_SIZE(seraph_cfg),
+};
+
+static const struct qcom_sct_config pikachu_cfgs = {
+	.llcc_config    = pikachu_cfg,
+	.num_config = ARRAY_SIZE(pikachu_cfg),
 };
 
 static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
@@ -2718,6 +2731,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,vienna-llcc", .data = &vienna_cfgs },
 	{ .compatible = "qcom,alor-llcc", .data = &alor_cfgs },
 	{ .compatible = "qcom,seraph-llcc", .data = &seraph_cfgs},
+	{ .compatible = "qcom,pikachu-llcc", .data = &pikachu_cfgs},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_llcc_of_match);
