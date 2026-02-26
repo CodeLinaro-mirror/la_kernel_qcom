@@ -136,7 +136,7 @@ static void android_rvh_cpu_capacity_show(void *unused,
 			fake_capacity = false;
 	}
 
-	if(fake_capacity)
+	if (fake_capacity)
 		*capacity = 100;
 }
 
