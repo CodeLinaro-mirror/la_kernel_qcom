@@ -296,7 +296,8 @@ static int arm_vsmmu_impl_install_ste(struct arm_smmu_master *master,
 				struct arm_smmu_domain *new_domain,
 				struct arm_smmu_domain *old_domain)
 {
-	int i, j, ret;
+	int i, j;
+	int ret = 0;
 	struct arm_smmu_device *smmu = master->smmu;
 
 	for (i = 0; i < master->num_streams; ++i) {
@@ -527,14 +528,16 @@ static int arm_smmu_virtio_fault_handler(struct device *dev, void *data)
 		report_flags |= IOMMU_FAULT_WRITE;
 
 	domain = iommu_get_domain_for_dev(client);
+	if (domain) {
+		/* If no handler registered, EOPNOTSUPP is returned. */
+		ret = report_iommu_fault(domain, client, iova, report_flags);
+		if (ret != -EOPNOTSUPP)
+			return 0;
 
-	/* If no handler registered, EOPNOTSUPP is returned. */
-	ret = report_iommu_fault(domain, client, iova, report_flags);
-	if (ret != -EOPNOTSUPP)
-		return 0;
+		phys = iommu_iova_to_phys(domain, iova);
+		dev_err(client, "SW PGTABLE WALK: %#llx -> %pa\n", iova, &phys);
+	}
 
-	phys = iommu_iova_to_phys(domain, iova);
-	dev_err(client, "SW PGTABLE WALK: %#llx -> %pa\n", iova, &phys);
 	return 0;
 }
 
@@ -675,7 +678,7 @@ static int arm_vsmmu_device_probe(struct platform_device *pdev)
 	struct arm_vsmmu_device *vsmmu;
 	struct arm_smmu_device *smmu;
 	struct device *dev = &pdev->dev;
-	struct virtio_device *vdev;
+	struct virtio_device *vdev = NULL;
 
 	vsmmu = devm_kzalloc(dev, sizeof(*vsmmu), GFP_KERNEL);
 
