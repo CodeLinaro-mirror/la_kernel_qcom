@@ -61,6 +61,7 @@ mem_buf.ko
 mem_buf_dev.ko
 mem_buf_msgq.ko
 msm_dma_iommu_mapping.ko
+sc_tcm.ko
 qcom_dma_heaps.ko
 gh_arm_drv.ko
 gh_dbl.ko
