@@ -309,6 +309,44 @@ static struct si_object *get_dcvs_instance(u32 instance_id)
 	return g_dcvs_instance;
 }
 
+int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
+				   u32 cp_nonpixel_start,
+				   u32 cp_nonpixel_size)
+{
+	struct si_object *video_var_service = NULL;
+	int ret = 0, result = 0;
+
+	struct {
+		uint32_t m_cp_start;
+		uint32_t m_cp_size;
+		uint32_t m_nonpixel_start;
+		uint32_t m_nonpixel_size;
+	} __packed buf = {cp_start, cp_size, cp_nonpixel_start, cp_nonpixel_size};
+
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &buf, .size = sizeof(buf) },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	ret = qcom_smci_init_client_service(SMCI_VIDEOVAROBJECT_UID, &video_var_service);
+	if (ret) {
+		pr_err("Failed to initialize video var service: %d\n", ret);
+		return ret;
+	}
+
+	ret = qcom_smci_call(video_var_service, SMCI_SET_VIDEO_VAR, args, &result);
+	if (ret)
+		pr_err("Setting video vars failed with result %d: ret %d\n", result, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_mem_protect_video_var);
+
 int qcom_scm_assign_dump_table_region(bool __always_unused is_assign,
 				      phys_addr_t addr, size_t size)
 {
