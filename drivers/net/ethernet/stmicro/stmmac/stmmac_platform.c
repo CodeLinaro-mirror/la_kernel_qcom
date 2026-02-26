@@ -168,7 +168,8 @@ static struct device_node *get_rss_mtl_queue_config(struct device_node *node,
 						    char *rsscfg_str)
 {
 	const char *config_name;
-	u32 count = 0, i;
+	u32 count = 0;
+	int i;
 	int ret = 0;
 	struct device_node *rss_mtl_node = NULL;
 
