@@ -101,3 +101,4 @@ qcom_hib.ko
 msm_show_resume_irq.ko
 trace-bus-prof.ko
 llcc_miss.ko
+llcc_occ.ko
