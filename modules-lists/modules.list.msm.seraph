@@ -13,6 +13,7 @@ cqhci.ko
 sdhci-msm.ko
 qcom_tzmem.ko
 qnoc-seraph.ko
+qnoc-pikachu.ko
 qnoc-qos.ko
 icc-debug.ko
 icc-bcm-voter.ko
