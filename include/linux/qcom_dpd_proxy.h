@@ -25,6 +25,7 @@ struct dpd_scatterlist {
 
 int dpd_svc_map(struct dpd_scatterlist *dpd_sg, u32 domain, u32 flags, u64 iova);
 int dpd_svc_unmap(struct dpd_scatterlist *dpd_sg, u32 domain, u64 iova);
+int dpd_svc_register_cbo(struct si_object *si);
 int dpd_proxy_available(void);
 struct dpd_scatterlist *dpd_mtree_lookup(unsigned long pfn);
 #endif /* _DPD_PROXY_H */

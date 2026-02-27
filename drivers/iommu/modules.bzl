@@ -110,6 +110,7 @@ def register_modules(registry):
             # do not sort
             "drivers/iommu/qcom_dpd_proxy_iommu.c",
             "drivers/iommu/qcom_dpd_proxy_tee.h",
+            "drivers/iommu/arm/arm-smmu/arm-smmu.h",
         ],
         deps = [
             # do not sort
