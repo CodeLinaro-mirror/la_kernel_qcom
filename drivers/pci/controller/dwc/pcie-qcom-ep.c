@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Qualcomm PCIe Endpoint controller driver
  *
@@ -7,6 +7,8 @@
  *
  * Copyright (c) 2021, Linaro Ltd.
  * Author: Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org
+ *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -166,9 +168,11 @@ enum qcom_pcie_ep_link_status {
  * @disable_mhi_ram_parity_check: Disable MHI RAM data parity error check
  */
 struct qcom_pcie_ep_cfg {
-	bool hdma_support;
-	bool override_no_snoop;
-	bool disable_mhi_ram_parity_check;
+	bool	hdma_support;
+	u32	hdma_rd_channels;
+	u32	hdma_wr_channels;
+	bool	override_no_snoop;
+	bool	disable_mhi_ram_parity_check;
 };
 
 /**
@@ -853,8 +857,15 @@ static int qcom_pcie_ep_probe(struct platform_device *pdev)
 
 	pcie_ep->cfg = of_device_get_match_data(dev);
 	if (pcie_ep->cfg && pcie_ep->cfg->hdma_support) {
-		pcie_ep->pci.edma.ll_wr_cnt = 8;
-		pcie_ep->pci.edma.ll_rd_cnt = 8;
+		if (pcie_ep->cfg->hdma_wr_channels)
+			pcie_ep->pci.edma.ll_wr_cnt = pcie_ep->cfg->hdma_wr_channels;
+		else
+			pcie_ep->pci.edma.ll_wr_cnt = 8;
+		if (pcie_ep->cfg->hdma_rd_channels)
+			pcie_ep->pci.edma.ll_rd_cnt = pcie_ep->cfg->hdma_rd_channels;
+		else
+			pcie_ep->pci.edma.ll_rd_cnt = 8;
+
 		pcie_ep->pci.edma.mf = EDMA_MF_HDMA_NATIVE;
 	}
 
@@ -912,6 +923,8 @@ static void qcom_pcie_ep_remove(struct platform_device *pdev)
 
 static const struct qcom_pcie_ep_cfg cfg_1_34_0 = {
 	.hdma_support = true,
+	.hdma_rd_channels = 1,
+	.hdma_wr_channels = 1,
 	.override_no_snoop = true,
 	.disable_mhi_ram_parity_check = true,
 };
