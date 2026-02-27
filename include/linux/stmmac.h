@@ -253,6 +253,8 @@ struct plat_stmmacenet_data {
 	u32 tx_queues_to_use;
 	bool has_hdma;
 	bool has_virtio_mdio;
+	int phy_type;
+	int board_type;
 	bool insert_ts_pktid;
 	u8 rx_sched_algorithm;
 	u8 tx_sched_algorithm;
