@@ -15,6 +15,7 @@
 #include <linux/qcom_dpd_proxy.h>
 #include <linux/pci.h>
 #include "drivers/iommu/dma-iommu.h"
+#include "qcom_dpd_proxy_tee.h"
 
 #define MSI_IOVA_BASE                   0x8000000
 #define MSI_IOVA_LENGTH                 0x100000

@@ -13,6 +13,7 @@
 #include <linux/of.h>
 #include <soc/qcom/secure_buffer.h>
 #include <asm/kvm_pkvm.h>
+#include "qcom_dpd_proxy_tee.h"
 
 struct dpd_proxy {
 	struct device *dev;
