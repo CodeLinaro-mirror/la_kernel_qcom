@@ -4947,6 +4947,13 @@ static int max1720x_regmap_write(struct max1720x_priv *priv, unsigned int reg, u
 
 	mutex_lock(&priv->lock);
 
+	/* Protect NNVCFG1 bit 8 (enProt) from being cleared */
+	if (reg == priv->regs[NNVCFG1_REG]) {
+		if (!(val & BIT(8))) {
+			val |= BIT(8);
+		}
+	}
+
 	if (priv->driver_data == ID_MAX17320 || priv->driver_data == ID_MAX17330 ||
 	    priv->driver_data == ID_MAX17332 || priv->driver_data == ID_MAX17335) {
 		ret = regmap_read(priv->regmap, priv->regs[COMMSTAT_REG], &data);
