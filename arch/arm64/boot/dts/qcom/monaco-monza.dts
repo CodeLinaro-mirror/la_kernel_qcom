@@ -12,6 +12,7 @@
 #include "qcs8300-thermal.dtsi"
 #include "qcs8300-pmics.dtsi"
 
+/delete-node/ &usb_1_dwc3;
 / {
 	model = "Qualcomm Technologies, Inc. Monaco Monza";
 	compatible = "qcom,monaco-monza", "qcom,qcs8300";
@@ -21,6 +22,7 @@
 
 	aliases {
 		ethernet0 = &ethernet0;
+		i2c8 = &i2c8;
 		serial0 = &uart7;
 	};
 
@@ -34,6 +36,17 @@
 
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
+	};
+
+	vdc_5v: vdc-5v {
+		compatible = "regulator-fixed";
+		regulator-name = "vdc_5v";
+
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&tlmm 49 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
 	};
 
 	edp-connector {
@@ -199,7 +212,7 @@
 };
 
 &ethernet0 {
-	phy-mode = "sgmii";
+	phy-mode = "2500base-x";
 	phy-handle = <&hsgmii_phy0>;
 
 	pinctrl-0 = <&ethernet0_default>;
@@ -218,7 +231,7 @@
 		hsgmii_phy0: phy@1c {
 			compatible = "ethernet-phy-id004d.d101";
 			reg = <0x1c>;
-			reset-gpios = <&tlmm 31 GPIO_ACTIVE_LOW>;
+			reset-gpios = <&tlmm 50 GPIO_ACTIVE_LOW>;
 			reset-assert-us = <11000>;
 			reset-deassert-us = <70000>;
 		};
@@ -290,6 +303,52 @@
 
 &gpi_dma1 {
 	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	firmware-name = "qcom/qcs8300/a623_zap.mbn";
+};
+
+&i2c8 {
+	pinctrl-0 = <&qup_i2c8_default>, <&usb0_intr_state>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	typec@8 {
+		compatible = "cypress,cypd6129";
+		reg = <0x08>;
+		interrupt-parent = <&tlmm>;
+		interrupts = < 3 IRQ_TYPE_LEVEL_LOW>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+
+		ccg_typec_con0: connector@0 {
+			compatible = "usb-c-connector";
+			reg = <0>;
+			label = "USB-C";
+			data-role = "dual";
+			power-role = "dual";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+
+				port@0 {
+					reg = <0>;
+
+					ucsi_ccg_port: endpoint {
+						remote-endpoint = <&usb_role_switch>;
+					};
+				};
+			};
+		};
+	};
 };
 
 &ice {
@@ -505,6 +564,19 @@
 		};
 	};
 
+	qup_i2c8_default: qup-i2c8-state {
+		  pins = "gpio37", "gpio38";
+		  function = "qup1_se0";
+		  drive-strength = <16>;
+		  bias-pull-up;
+	};
+
+	usb0_intr_state: usb0-intr-state {
+		 pins = "gpio3";
+		 drive-strength = <16>;
+		 bias-pull-up;
+	};
+
 	wcn_usb_bt_n: wcn-usb-bt-n-state {
 		pins = "gpio55";
 		function = "gpio";
@@ -541,12 +613,45 @@
 };
 
 &usb_1 {
-	status = "okay";
-};
+	reg = <0x0 0x0a600000 0x0 0x20000>;
 
-&usb_1_dwc3 {
+	interrupts-extended = <&intc GIC_SPI 292 IRQ_TYPE_LEVEL_HIGH>,
+		<&intc GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>,
+		<&pdc 14 IRQ_TYPE_EDGE_BOTH>,
+		<&pdc 15 IRQ_TYPE_EDGE_BOTH>,
+		<&pdc 12 IRQ_TYPE_LEVEL_HIGH>;
+	interrupt-names = "dwc_usb3",
+		"pwr_event",
+		"dp_hs_phy_irq",
+		"dm_hs_phy_irq",
+		"ss_phy_irq";
+
+	iommus = <&apps_smmu 0x80 0x0>;
+	snps,dis_u2_susphy_quirk;
+	snps,dis_enblslpm_quirk;
+	phys = <&usb_1_hsphy>, <&usb_qmpphy>;
+	phy-names = "usb2-phy", "usb3-phy";
+	maximum-speed = "super-speed-plus";
+
 	usb-role-switch;
-	dr_mode = "peripheral";
+	dr_mode = "otg";
+
+	qcom,enable-rt;
+	wakeup-source;
+	status = "okay";
+
+	ports {
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+				usb_role_switch: endpoint {
+					remote-endpoint = <&ucsi_ccg_port>;
+			};
+		};
+	};
 };
 
 &usb_1_hsphy {

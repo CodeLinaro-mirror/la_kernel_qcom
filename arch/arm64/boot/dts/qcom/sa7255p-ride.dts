@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -10,7 +9,7 @@
 
 #include "sa7255p.dtsi"
 #include "sa7255p-scmi.dtsi"
-#include "sa8255p-pmics.dtsi"
+#include "sa7255p-pmics.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. SA7255P Ride";
@@ -121,6 +120,18 @@
 
 &pmm8654au_3_thermal {
 	thermal-sensors = <&scmi23_sensor 3>;
+};
+
+&pmm8654au_4_thermal {
+	thermal-sensors = <&scmi23_sensor 7>;
+};
+
+&pmm8654au_5_thermal {
+	thermal-sensors = <&scmi23_sensor 9>;
+};
+
+&pmm8654au_6_thermal {
+	thermal-sensors = <&scmi23_sensor 14>;
 };
 
 &tlmm {
@@ -285,7 +296,8 @@
 };
 
 &usb_0_dwc3 {
-	dr_mode = "peripheral";
+	dr_mode = "otg";
+	usb-role-switch;
 };
 
 &usb_0_hsphy {
@@ -310,7 +322,9 @@
 };
 
 &usb_1_dwc3 {
-	dr_mode = "host";
+	dr_mode = "otg";
+	usb-role-switch;
+	role-switch-default-mode = "host";
 };
 
 &usb_1_hsphy {

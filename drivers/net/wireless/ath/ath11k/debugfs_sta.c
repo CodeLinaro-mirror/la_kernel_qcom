@@ -292,7 +292,6 @@ static ssize_t ath11k_dbg_sta_write_cfr_capture(struct file *file,
 	}
 
 	if (cfr_capture_enable > WMI_PEER_CFR_CAPTURE_ENABLE ||
-	    cfr_capture_bw > arsta->bw ||
 	    cfr_capture_bw > WMI_PEER_CFR_CAPTURE_BW_80 ||
 	    cfr_capture_method > ATH11K_CFR_CAPTURE_METHOD_NULL_FRAME_WITH_PHASE ||
 	    cfr_capture_period > WMI_PEER_CFR_PERIODICITY_MAX) {

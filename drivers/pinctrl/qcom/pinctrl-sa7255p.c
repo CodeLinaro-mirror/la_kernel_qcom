@@ -1248,6 +1248,7 @@ MODULE_DEVICE_TABLE(of, sa7255p_pinctrl_of_match);
 static struct platform_driver sa7255p_pinctrl_driver = {
 	.driver = {
 		.name = "sa7255p-tlmm",
+		.pm = &msm_pinctrl_dev_pm_ops,
 		.of_match_table = sa7255p_pinctrl_of_match,
 	},
 	.probe = sa7255p_pinctrl_probe,

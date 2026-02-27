@@ -24,6 +24,7 @@
 #include <linux/usb/hcd.h>
 #include <linux/usb.h>
 #include "core.h"
+#include <linux/pm_domain.h>
 
 /* USB QSCRATCH Hardware registers */
 #define QSCRATCH_HS_PHY_CTRL			0x10
@@ -453,12 +454,17 @@ static void dwc3_qcom_enable_interrupts(struct dwc3_qcom *qcom)
 
 static void dwc3_qcom_vbus_regulator_enable(struct dwc3_qcom *qcom, bool on)
 {
+	int ret;
+
 	if (!qcom->vbus_reg)
 		return;
 
 	if (!qcom->is_vbus_enabled && on) {
-		regulator_enable(qcom->vbus_reg);
-		qcom->is_vbus_enabled = true;
+		ret = regulator_enable(qcom->vbus_reg);
+		if (ret)
+			dev_err(qcom->dev, "Failed to enable vbus: %d\n", ret);
+		else
+			qcom->is_vbus_enabled = true;
 	} else if (qcom->is_vbus_enabled && !on) {
 		regulator_disable(qcom->vbus_reg);
 		qcom->is_vbus_enabled = false;
@@ -469,6 +475,8 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 {
 	u32 val;
 	int i, ret;
+	struct device *dev = qcom->dev;
+	struct generic_pm_domain *genpd;
 
 	if (qcom->is_suspended)
 		return 0;
@@ -493,6 +501,17 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 		dwc3_qcom_enable_interrupts(qcom);
 	}
 
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		if (genpd) {
+			if (dwc3_qcom_is_host(qcom)) {
+				genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
+				genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+				dev_dbg(dev, "GDSC flags ON\n");
+			}
+		}
+	}
+
 	qcom->is_suspended = true;
 	pm_relax(qcom->dev);
 
@@ -504,6 +523,8 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 	bool legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(qcom->dev);
 	int ret;
 	int i;
+	struct device *dev = qcom->dev;
+	struct generic_pm_domain *genpd;
 
 	if (!qcom->is_suspended)
 		return 0;
@@ -514,6 +535,15 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 		ret = reset_control_deassert(qcom->dwc.reset);
 		if (ret)
 			return ret;
+	}
+
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		if (genpd) {
+			genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
+			genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+			dev_dbg(dev, "GDSC flags OFF\n");
+		}
 	}
 
 	if (dwc3_qcom_is_host(qcom) && wakeup)
@@ -931,6 +961,7 @@ node_put:
 	return ret;
 }
 
+#ifdef CONFIG_ACPI
 static int dwc3_qcom_acpi_merge_urs_resources(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -998,6 +1029,7 @@ static int dwc3_qcom_acpi_merge_urs_resources(struct platform_device *pdev)
 
 	return ret;
 }
+#endif
 
 static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
 {
@@ -1058,11 +1090,13 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 			return ret;
 		}
 
+#ifdef CONFIG_ACPI
 		if (qcom->acpi_pdata->is_urs) {
 			ret = dwc3_qcom_acpi_merge_urs_resources(pdev);
 			if (ret < 0)
 				goto clk_disable;
 		}
+#endif
 	}
 
 	qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
@@ -1422,7 +1456,9 @@ static struct platform_driver dwc3_qcom_driver = {
 		.name	= "dwc3-qcom",
 		.pm	= &dwc3_qcom_dev_pm_ops,
 		.of_match_table	= dwc3_qcom_of_match,
+#ifdef CONFIG_ACPI
 		.acpi_match_table = ACPI_PTR(dwc3_qcom_acpi_match),
+#endif
 	},
 };
 

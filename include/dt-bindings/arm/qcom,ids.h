@@ -277,6 +277,7 @@
 #define QCOM_ID_QCS615			680
 #define QCOM_ID_QAM8397P		689
 #define QCOM_ID_QAM8797P		690
+#define QCOM_ID_QAM8787P		742
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and

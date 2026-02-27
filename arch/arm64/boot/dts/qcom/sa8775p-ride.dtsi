@@ -1288,7 +1288,6 @@
 	snps,dis_u2_susphy_quirk;
 	snps,dis_u3_susphy_quirK;
 	snps,dis_enblslpm_quirk;
-	maximum-speed = "super-speed";
 	wakeup-source;
 	pinctrl-names = "default";
 	pinctrl-0 = <&usb0_en_state>;

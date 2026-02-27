@@ -977,6 +977,7 @@ properties:
 
       - items:
           - enum:
+	      - qcom,lemans-amr
               - qcom,qcs9075-addons-iq-9075-evk
               - qcom,qcs9075-addons-ride
               - qcom,qcs9075-addons-ride-r3

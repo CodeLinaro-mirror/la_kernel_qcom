@@ -37,6 +37,11 @@ properties:
               - qcom,sa8775p-epss-l3-cl0
               - qcom,sa8775p-epss-l3-cl1
           - const: qcom,epss-l3
+      - items:
+          - enum:
+              - qcom,qcs615-osm-l3
+          - const: qcom,sm8150-osm-l3
+          - const: qcom,osm-l3
 
   reg:
     maxItems: 1

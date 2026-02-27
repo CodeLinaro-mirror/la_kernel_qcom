@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/qcom,emu-phy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm Technologies, Inc. emulation USB PHY driver
+
+maintainers:
+  - Wesley Cheng <quic_wcheng@quicinc.com>
+
+description:
+  Enable this to support the USB transceiver used on
+  Qualcomm Technologies, Inc. emulation platforms. It simply performs
+  PHY initialization given a basic register write sequence.
+
+properties:
+  compatible:
+    const: qcom,usb-emu-phy
+
+  reg:
+    maxItems: 2
+
+  "#phy-cells":
+    const: 0
+
+  qcom,emu-init-seq:
+    $ref: /schemas/types.yaml#/definitions/uint8-matrix
+    description: >
+      Sequence of address and value pairs to
+      program the emulated PHY.
+    maxItems: 64 # no hard limit
+    items:
+      items:
+        - description: >
+            the address is offset from base.
+        - description: value to be programmed.
+
+required:
+  - compatible
+  - reg
+  - "#phy-cells"
+  - qcom,emu-init-seq
+
+additionalProperties: false
+
+examples:
+  - |
+    usb_emu_phy_0: usb_emu_phy@a784000 {
+        compatible = "qcom,usb-emu-phy";
+        reg = <0 0x0a784000 0 0x9500>;
+        #phy-cells = <0>;
+        qcom,emu-init-seq = <0xfffff 0x4
+                             0x2110010 0x34
+                             0x0110010 0x34
+                             0xffff3 0x4
+                             0xffff0 0x4
+                             0x100000 0x20
+                             0x0 0x20
+                             0x1A0 0x20
+                             0x100000 0x3c
+                             0x0 0x3c
+                             0x10060 0x3c
+                             0x0 0x4
+                             0x9 0x14>;
+    };

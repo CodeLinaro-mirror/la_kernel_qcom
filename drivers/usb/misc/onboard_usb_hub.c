@@ -286,6 +286,8 @@ static int onboard_hub_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
+	msleep(100);
+
 	/*
 	 * The USB driver might have been detached from the USB devices by
 	 * onboard_hub_remove() (e.g. through an 'unbind' by userspace),
@@ -434,6 +436,8 @@ static const struct usb_device_id onboard_hub_id_table[] = {
 	{ USB_DEVICE(VENDOR_ID_GENESYS, 0x0608) }, /* Genesys Logic GL850G USB 2.0 */
 	{ USB_DEVICE(VENDOR_ID_GENESYS, 0x0610) }, /* Genesys Logic GL852G USB 2.0 */
 	{ USB_DEVICE(VENDOR_ID_GENESYS, 0x0620) }, /* Genesys Logic GL3523 USB 3.1 */
+	{ USB_DEVICE(VENDOR_ID_GENESYS, 0x0625) }, /* Genesys Logic GL3590 USB 3.2 HUB */
+	{ USB_DEVICE(VENDOR_ID_GENESYS, 0x0626) }, /* Genesys Logic GL3590 USB 3.1 HUB */
 	{ USB_DEVICE(VENDOR_ID_MICROCHIP, 0x2412) }, /* USB2412 USB 2.0 */
 	{ USB_DEVICE(VENDOR_ID_MICROCHIP, 0x2514) }, /* USB2514B USB 2.0 */
 	{ USB_DEVICE(VENDOR_ID_MICROCHIP, 0x2517) }, /* USB2517 USB 2.0 */

@@ -521,6 +521,7 @@
 			iommus = <&apps_smmu 0x5a3 0x0>;
 			#address-cells = <2>;
 			#size-cells = <2>;
+			dma-coherent;
 			status = "disabled";
 
 			i2c14: i2c@880000 {
@@ -678,7 +679,7 @@
 				reg = <0x0 0x898000 0x0 0x4000>;
 				#address-cells = <1>;
 				#size-cells = <0>;
-				interrupts = <GIC_SPI 834 IRQ_TYPE_LEVEL_HIGH>;
+				interrupts = <GIC_SPI 833 IRQ_TYPE_LEVEL_HIGH>;
 				status = "disabled";
 			};
 
@@ -687,14 +688,14 @@
 				reg = <0x0 0x898000 0x0 0x4000>;
 				#address-cells = <1>;
 				#size-cells = <0>;
-				interrupts = <GIC_SPI 834 IRQ_TYPE_LEVEL_HIGH>;
+				interrupts = <GIC_SPI 833 IRQ_TYPE_LEVEL_HIGH>;
 				status = "disabled";
 			};
 
 			uart20: serial@898000 {
 				compatible = "qcom,sa8255p-geni-uart";
 				reg = <0x0 0x00898000 0x0 0x4000>;
-				interrupts = <GIC_SPI 834 IRQ_TYPE_LEVEL_HIGH>;
+				interrupts = <GIC_SPI 833 IRQ_TYPE_LEVEL_HIGH>;
 				status = "disabled";
 			};
 		};
@@ -706,6 +707,7 @@
 			#size-cells = <2>;
 			ranges;
 			iommus = <&apps_smmu 0x403 0x0>;
+			dma-coherent;
 			status = "disabled";
 
 			i2c0: i2c@980000 {
@@ -866,6 +868,7 @@
 			#size-cells = <2>;
 			ranges;
 			iommus = <&apps_smmu 0x443 0x0>;
+			dma-coherent;
 			status = "disabled";
 
 			i2c7: i2c@a80000 {
@@ -1042,6 +1045,7 @@
 			#size-cells = <2>;
 			ranges;
 			iommus = <&apps_smmu 0x43 0x0>;
+			dma-coherent;
 			status = "disabled";
 
 			i2c21: i2c@b80000 {

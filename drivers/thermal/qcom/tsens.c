@@ -640,6 +640,7 @@ static irqreturn_t tsens_irq_thread(int irq, void *data)
 	struct tsens_priv *priv = data;
 	struct tsens_irq_data d;
 	int i;
+	bool disable = false;
 
 	for (i = 0; i < priv->num_sensors; i++) {
 		const struct tsens_sensor *s = &priv->sensor[i];
@@ -649,6 +650,14 @@ static irqreturn_t tsens_irq_thread(int irq, void *data)
 			continue;
 		if (!tsens_threshold_violated(priv, hw_id, &d))
 			continue;
+
+		if (d.up_viol &&
+		    !masked_irq(hw_id, d.up_irq_mask, tsens_version(priv))) {
+			tsens_set_interrupt(priv, hw_id, UPPER, disable);
+		} else if (d.low_viol &&
+			   !masked_irq(hw_id, d.low_irq_mask, tsens_version(priv))) {
+			tsens_set_interrupt(priv, hw_id, LOWER, disable);
+		}
 
 		thermal_zone_device_update(s->tzd, THERMAL_EVENT_UNSPECIFIED);
 

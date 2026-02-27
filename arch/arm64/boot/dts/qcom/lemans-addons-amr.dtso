@@ -1,0 +1,190 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+/dts-v1/;
+
+#include "lemans-amr.dts"
+#include "sa8775p-addons.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Addons Lemans AMR";
+	compatible = "qcom,lemans-amr", "qcom,qcs9075", "qcom,sa8775p";
+
+	aliases {
+		ethernet1 = &ethernet1;
+	};
+
+	sound {
+		compatible = "qcom,lemans-amr-sndcard";
+		model = "LEMANS-AMR-EVK";
+
+		clocks = <&q6prmcc LPASS_HW_MACRO_VOTE LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
+			    <&q6prmcc LPASS_HW_DCODEC_VOTE LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+		clock-names = "macro", "dcodec";
+
+		hs0-mi2s-playback-dai-link {
+			link-name = "MI2S-LPAIF_SDR-RX-PRIMARY";
+
+			cpu {
+				sound-dai = <&q6apmbedai PRIMARY_MI2S_RX>;
+			};
+
+			codec {
+				sound-dai = <&msm_stub_codec 0>;
+			};
+		};
+
+		lpi-i2s3-capture-dai-link {
+			link-name = "MI2S-LPAIF_AUD-TX-PRIMARY";
+
+			cpu {
+				sound-dai = <&q6apmbedai PRIMARY_MI2S_TX>;
+			};
+
+			codec {
+				sound-dai = <&msm_stub_codec 1>;
+			};
+		};
+
+		hdmi-dai-link {
+			link-name = "HDMI_PORT-RX";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_1>;
+			};
+
+			codec {
+				sound-dai = <&it6162_1_codec 0>;
+			};
+		};
+	};
+};
+
+&lpass_tlmm {
+	lpi_i2s3_clk: lpi-i2s3-clk-state {
+		pins = "gpio19";
+		function = "i2s3_clk";
+		drive-strength = <8>;
+		bias-disable;
+		output-high;
+	};
+
+	lpi_i2s3_clk_sleep: lpi-i2s3-clk-sleep-state {
+		pins = "gpio19";
+		function = "i2s3_clk";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	lpi_i2s3_data: lpi-i2s3-data-state {
+		pins = "gpio21", "gpio22";
+		function = "i2s3_data";
+		drive-strength = <8>;
+		bias-disable;
+		output-high;
+	};
+
+	lpi_i2s3_data_sleep: lpi-i2s3-data-sleep-state {
+		pins = "gpio21", "gpio22";
+		function = "i2s3_data";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	lpi_i2s3_ws: lpi-i2s3-ws-state {
+		pins = "gpio20";
+		function = "i2s3_ws";
+		drive-strength = <8>;
+		bias-disable;
+		output-high;
+	};
+
+	lpi_i2s3_ws_sleep: lpi-i2s3-ws-sleep-state {
+		pins = "gpio20";
+		function = "i2s3_ws";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+};
+
+&soc {
+	msm_stub_codec: msm-stub-codec {
+		compatible = "qcom,msm-stub-codec";
+		#sound-dai-cells = <1>;
+
+		pinctrl-names = "default", "mi2s_aud_active", "mi2s_aud_sleep";
+		pinctrl-0 = <&hs0_mi2s_data0_sleep>,<&hs0_mi2s_sclk_sleep>, <&hs0_mi2s_data1_sleep>, <&hs0_mi2s_ws_sleep>,
+			<&lpi_i2s3_clk_sleep>,<&lpi_i2s3_ws_sleep>,<&lpi_i2s3_data_sleep>;
+		pinctrl-1 = <&hs0_mi2s_data0>,<&hs0_mi2s_sclk>, <&hs0_mi2s_data1>, <&hs0_mi2s_ws>,
+			<&lpi_i2s3_clk>,<&lpi_i2s3_ws>,<&lpi_i2s3_data>;
+		pinctrl-2 = <&hs0_mi2s_data0_sleep>,<&hs0_mi2s_sclk_sleep>, <&hs0_mi2s_data1_sleep>, <&hs0_mi2s_ws_sleep>,
+			<&lpi_i2s3_clk_sleep>,<&lpi_i2s3_ws_sleep>,<&lpi_i2s3_data_sleep>;
+	};
+};
+
+&tlmm {
+	hs0_mi2s_data0_sleep: hs0-mi2s-data0-sleep-state {
+		pins = "gpio116";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	hs0_mi2s_data0: hs0-mi2s-data0-state {
+		pins = "gpio116";
+		function = "hs0_mi2s";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	hs0_mi2s_data1_sleep: hs0-mi2s-data1-sleep-state {
+		pins = "gpio117";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	hs0_mi2s_data1: hs0-mi2s-data1-state {
+		pins = "gpio117";
+		function = "hs0_mi2s";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	hs0_mi2s_sclk_sleep: hs0-mi2s-sclk-sleep-state {
+		pins = "gpio114";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	hs0_mi2s_sclk: hs0-mi2s-sclk-state {
+		pins = "gpio114";
+		function = "hs0_mi2s";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	hs0_mi2s_ws_sleep: hs0-mi2s-ws-sleep-state {
+		pins = "gpio115";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	hs0_mi2s_ws: hs0-mi2s-ws-state {
+		pins = "gpio115";
+		function = "hs0_mi2s";
+		drive-strength = <8>;
+		bias-disable;
+		output-high;
+	};
+};

@@ -2,7 +2,7 @@
 /*
  * Synopsys DesignWare XPCS platform device driver
  *
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __LINUX_PCS_XPCS_QCOM_H
@@ -10,6 +10,8 @@
 
 #include <linux/phy.h>
 #include <linux/phylink.h>
+#include <linux/reset.h>
+
 
 /* AN mode */
 #define DW_AN_C37_USXGMII		1
@@ -27,6 +29,7 @@ struct dw_xpcs_qcom {
 	bool intr_en;
 	bool needs_aneg;
 	int phy_interface;
+	struct reset_control *reset_serdes;
 };
 
 struct phylink_pcs *qcom_xpcs_create(struct device_node *np,
