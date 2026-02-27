@@ -193,3 +193,39 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom-scm",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/llcc_occ",
+        out = "llcc_occ.ko",
+        config = "CONFIG_QCOM_LLCC_OCCUPANCY",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/llcc_occ.c",
+            "drivers/soc/qcom/dcvs/bus_prof.h",
+            "drivers/soc/qcom/dcvs/trace-bus-prof.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/soc/qcom/dcvs/trace-bus-prof",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/mem_lat_prof",
+        out = "mem_lat_prof.ko",
+        config = "CONFIG_QCOM_BUS_LAT",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/mem_lat_prof.c",
+            "drivers/soc/qcom/dcvs/smci_mem_lat.h",
+            "drivers/soc/qcom/dcvs/bus_prof.h",
+            "drivers/soc/qcom/dcvs/trace-bus-prof.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/soc/qcom/dcvs/trace-bus-prof",
+            "drivers/firmware/qcom/si_core/si_core_module",
+        ],
+    )
