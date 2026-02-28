@@ -95,3 +95,4 @@ minidump.ko
 gic_intr_routing.ko
 sched-walt.ko
 sched-walt-debug.ko
+llcc-qcom.ko

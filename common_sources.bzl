@@ -178,6 +178,7 @@ COPY_FILES = [
     "net/mac80211/wpa.c",
     "net/mac80211/wpa.h",
     # mac80211.ko files end
+    "drivers/soc/qcom/qcom-pbs.c",
 ]
 
 def define_common_upstream_files():

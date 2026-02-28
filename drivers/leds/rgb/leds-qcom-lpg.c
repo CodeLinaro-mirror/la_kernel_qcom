@@ -451,8 +451,6 @@ static int lpg_calc_freq(struct lpg_channel *chan, uint64_t period)
 	 */
 
 	if (chan->subtype == LPG_SUBTYPE_HI_RES_PWM) {
-		clk_rate_arr = lpg_clk_rates_hi_res;
-		clk_len = ARRAY_SIZE(lpg_clk_rates_hi_res);
 		if (chan->lpg->avoid_hi_res_clk_rates) {
 			clk_rate_arr = lpg_clk_rates;
 			clk_len = ARRAY_SIZE(lpg_clk_rates);

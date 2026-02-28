@@ -2,6 +2,7 @@
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 qcom-scm.ko
 arm_smmu.ko
+arm_smmu_v3.ko
 smem.ko
 qcom_iommu_util.ko
 qcom_iommu_debug.ko
@@ -75,6 +76,7 @@ nvmem_qcom-spmi-sdam.ko
 rtc-pm8xxx.ko
 pmic-pon-log.ko
 pinctrl-spmi-gpio.ko
+ps883x.ko
 phy-qcom-eusb2-repeater.ko
 phy-qcom-snps-eusb2.ko
 phy-qcom-qmp-combo.ko
@@ -95,6 +97,8 @@ qcom-pmu-lib.ko
 qcom_scmi_vendor.ko
 qcom_scmi_client.ko
 si_core_module.ko
+qcom_dpd_proxy.ko
+qcom_dpd_proxy_iommu.ko
 qcom_scm_smci.ko
 pkvm-geni.ko
 pkvm-smc-filter.ko

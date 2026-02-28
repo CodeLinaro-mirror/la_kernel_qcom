@@ -30,7 +30,6 @@ load(
 )
 load(":kleaf-scripts/targets/malabar_vms.bzl", "define_malabar_vms")
 load(":kleaf-scripts/targets/monaco.bzl", "define_monaco")
-load(":kleaf-scripts/targets/pikachu.bzl", "define_pikachu")
 load(
     ":kleaf-scripts/targets/seraph.bzl",
     "define_seraph",
@@ -339,8 +338,6 @@ define_canoe_tuivm()
 define_canoe_oemvm()
 
 define_canoe_vms()
-
-define_pikachu()
 
 define_vienna()
 

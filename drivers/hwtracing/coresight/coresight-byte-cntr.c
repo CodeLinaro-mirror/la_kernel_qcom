@@ -134,7 +134,6 @@ static ssize_t tmc_etr_byte_cntr_read(struct file *fp, char __user *data,
 					"timeout: irq_cnt: %d, req_size: 0x%lx, rwp offset %lx, offset %lx\n",
 					atomic_read(&byte_cntr_data->irq_cnt),
 					req_size, rwp_offset, byte_cntr_data->offset);
-				byte_cntr_data->rwp_offset = rwp_offset;
 				actual = tmc_etr_flush_remaining_bytes(tmcdrvdata,
 						byte_cntr_data->offset, len, &bufp);
 				if (actual > 0) {
@@ -148,7 +147,8 @@ static ssize_t tmc_etr_byte_cntr_read(struct file *fp, char __user *data,
 				mutex_unlock(&byte_cntr_data->byte_cntr_lock);
 				return -ERESTARTSYS;
 			}
-			if (!byte_cntr_data->read_active) {
+			if (!byte_cntr_data->read_active
+			    || !atomic_read(&byte_cntr_data->irq_cnt)) {
 				actual = tmc_etr_flush_remaining_bytes(tmcdrvdata,
 						byte_cntr_data->offset, len, &bufp);
 				if (actual > 0) {
