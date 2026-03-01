@@ -53,6 +53,7 @@ shikra_perf_config = {
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
     "CONFIG_POWER_RESET_QCOM_PON": "m",
     "CONFIG_QCOM_APCS_IPC": "m",
+    "CONFIG_QCOM_BAM_DMA": "m",
     "CONFIG_QCOM_CLK_SMD_RPM": "m",
     "CONFIG_QCOM_CPUSS_SLEEP_STATS": "m",
     "CONFIG_QCOM_DMABUF_HEAPS": "m",
