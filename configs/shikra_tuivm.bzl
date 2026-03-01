@@ -25,6 +25,7 @@ shikra_tuivm_config = {
     "CONFIG_INTERCONNECT_CLK": "m",
     "CONFIG_MSM_GPI_DMA": "y",
     "CONFIG_PINCTRL_MSM": "m",
+    "CONFIG_PINCTRL_SHIKRA": "m",
     "CONFIG_PM_AUTOSLEEP": "y",
     "CONFIG_PSI": "y",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
