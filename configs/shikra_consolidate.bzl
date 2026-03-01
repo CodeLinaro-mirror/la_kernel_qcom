@@ -15,6 +15,7 @@ shikra_consolidate_config = {
     "CONFIG_PAGE_POISONING": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
+    "CONFIG_SDHCI_MSM_DBG": "y",
     "CONFIG_TORTURE_TEST": "m",
     "CONFIG_SCHED_WALT_DEBUG": "m",
 }
