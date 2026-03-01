@@ -1966,6 +1966,10 @@ int llcc_configure_staling_mode(struct llcc_slice_desc *desc,
 	sid = desc->slice_id;
 	m = p->staling_mode;
 
+#ifdef CONFIG_QCOM_LLCC_FORCE_CAPACITY_ON_MTE
+	if (kasan_hw_tags_enabled())
+		m = LLCC_STALING_MODE_CAPACITY;
+#endif
 	/*
 	 * Look up op corresponding to staling mode and call it
 	 * with the params passed

@@ -189,6 +189,14 @@ config QCOM_LLCC_HEURISTICS
 	  enablement from DTB itself. Also Provide the capability to disable,
 	  enable HERISTIC SCID functionality from SYSFS.
 
+config QCOM_LLCC_FORCE_CAPACITY_ON_MTE
+bool "Force staling-mode-capacity when kasan MTE is enabled"
+	help
+	  Force LLCC staling mode to LLCC_STALING_MODE_CAPACITY, when MTE
+	  is active. When enabled, the LLCC driver overrides the requested
+	  staling mode and uses capacity-based staling whenever hardware
+	  tag-based KASAN (MTE) is in use (kasan_hw_tags_enabled()).
+
 config QCOM_SLC_PERFMON
 	tristate "Qualcomm Technologies, Inc. SLC PERFMON Driver"
 	help
