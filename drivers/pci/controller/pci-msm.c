@@ -286,7 +286,8 @@
 #define MAX_PROP_SIZE (32)
 #define MAX_RC_NAME_LEN (15)
 #define MSM_PCIE_MAX_VREG (6)
-#define MAX_RC_NUM (5)
+#define MAX_RC_NUM (8)
+#define MSM_PCIE_RESET_NAME_MAX_LEN 40
 #define MAX_DEVICE_NUM (20)
 #define PCIE_TLP_RD_SIZE (0x5)
 #define PCIE_LOG_PAGES (50)
@@ -660,7 +661,7 @@ struct msm_pcie_vreg_info_t {
 /* reset info structure */
 struct msm_pcie_reset_info_t {
 	struct reset_control *hdl;
-	char *name;
+	char name[MSM_PCIE_RESET_NAME_MAX_LEN];
 	bool required;
 };
 
@@ -1363,89 +1364,24 @@ static struct msm_pcie_gpio_info_t msm_pcie_gpio_info[MSM_PCIE_MAX_GPIO] = {
 	{"qcom,ep-gpio", 0, 1, 1, 0, 0}
 };
 
-/* resets */
-static struct msm_pcie_reset_info_t
-msm_pcie_reset_info[MAX_RC_NUM][MSM_PCIE_MAX_RESET] = {
-	{
-		{NULL, "pcie_0_core_reset", false},
-		{NULL, "pcie_phy_reset", false},
-		{NULL, "pcie_phy_com_reset", false},
-		{NULL, "pcie_phy_nocsr_com_phy_reset", false},
-		{NULL, "pcie_0_phy_reset", false}
-	},
-	{
-		{NULL, "pcie_1_core_reset", false},
-		{NULL, "pcie_phy_reset", false},
-		{NULL, "pcie_phy_com_reset", false},
-		{NULL, "pcie_phy_nocsr_com_phy_reset", false},
-		{NULL, "pcie_1_phy_reset", false}
-	},
-	{
-		{NULL, "pcie_2_core_reset", false},
-		{NULL, "pcie_phy_reset", false},
-		{NULL, "pcie_phy_com_reset", false},
-		{NULL, "pcie_phy_nocsr_com_phy_reset", false},
-		{NULL, "pcie_2_phy_reset", false}
-	},
-	{
-		{NULL, "pcie_3_core_reset", false},
-		{NULL, "pcie_phy_reset", false},
-		{NULL, "pcie_phy_com_reset", false},
-		{NULL, "pcie_phy_nocsr_com_phy_reset", false},
-		{NULL, "pcie_3_phy_reset", false}
-	},
-	{
-		{NULL, "pcie_4_core_reset", false},
-		{NULL, "pcie_phy_reset", false},
-		{NULL, "pcie_phy_com_reset", false},
-		{NULL, "pcie_phy_nocsr_com_phy_reset", false},
-		{NULL, "pcie_4_phy_reset", false}
-	}
+/*template info for resets: per type, no RC index embedded */
+static const char *const msm_pcie_reset_name_tmpl[MSM_PCIE_MAX_RESET] = {
+	"pcie_%d_core_reset",
+	"pcie_phy_reset",
+	"pcie_phy_com_reset",
+	"pcie_phy_nocsr_com_phy_reset",
+	"pcie_%d_phy_reset",
 };
 
-/* pipe reset  */
-static struct msm_pcie_reset_info_t
-msm_pcie_pipe_reset_info[MAX_RC_NUM][MSM_PCIE_MAX_PIPE_RESET] = {
-	{
-		{NULL, "pcie_0_phy_pipe_reset", false}
-	},
-	{
-		{NULL, "pcie_1_phy_pipe_reset", false}
-	},
-	{
-		{NULL, "pcie_2_phy_pipe_reset", false}
-	},
-	{
-		{NULL, "pcie_3_phy_pipe_reset", false}
-	},
-	{
-		{NULL, "pcie_4_phy_pipe_reset", false}
-	}
+/* template info for pipe resets */
+static const char *const msm_pcie_pipe_reset_name_tmpl[MSM_PCIE_MAX_PIPE_RESET] = {
+	"pcie_%d_phy_pipe_reset",
 };
 
-/* linkdown recovery resets  */
-static struct msm_pcie_reset_info_t
-msm_pcie_linkdown_reset_info[MAX_RC_NUM][MSM_PCIE_MAX_LINKDOWN_RESET] = {
-	{
-		{NULL, "pcie_0_link_down_reset", false},
-		{NULL, "pcie_0_phy_nocsr_com_phy_reset", false},
-	},
-	{
-		{NULL, "pcie_1_link_down_reset", false},
-		{NULL, "pcie_1_phy_nocsr_com_phy_reset", false},
-	},
-	{
-		{NULL, "pcie_2_link_down_reset", false},
-		{NULL, "pcie_2_phy_nocsr_com_phy_reset", false},
-	},
-	{
-		{NULL, "pcie_3_link_down_reset", false},
-		{NULL, "pcie_3_phy_nocsr_com_phy_reset", false},
-	},
-	{
-		{NULL, "pcie_4_link_down_reset", false},
-		{NULL, "pcie_4_phy_nocsr_com_phy_reset", false},
-	},
+/* template info for linkdown resets */
+static const char *const msm_pcie_linkdown_reset_name_tmpl[MSM_PCIE_MAX_LINKDOWN_RESET] = {
+	"pcie_%d_link_down_reset",
+	"pcie_%d_phy_nocsr_com_phy_reset",
 };
 
 /* resources */
@@ -8438,6 +8374,68 @@ out:
 							pcie_dev->rc_idx);
 }
 
+static int msm_pcie_init_reset_names_helper(struct msm_pcie_dev_t *pcie_dev,
+					    struct msm_pcie_reset_info_t *reset_array,
+					    const char *const *name_templates,
+					    int max_count, const char *type_name)
+{
+	int i, ret;
+	int rc_idx = pcie_dev->rc_idx;
+
+	for (i = 0; i < max_count; i++) {
+		const char *tmpl = name_templates[i];
+
+		if (!tmpl)
+			continue;
+
+		reset_array[i].required = false;
+		reset_array[i].hdl = NULL;
+		memset(reset_array[i].name, 0, MSM_PCIE_RESET_NAME_MAX_LEN);
+
+		if (strchr(tmpl, '%'))
+			ret = snprintf(reset_array[i].name,
+					MSM_PCIE_RESET_NAME_MAX_LEN, tmpl, rc_idx);
+		else
+			ret = snprintf(reset_array[i].name,
+					MSM_PCIE_RESET_NAME_MAX_LEN, "%s", tmpl);
+
+		if (ret < 0 || ret >= MSM_PCIE_RESET_NAME_MAX_LEN) {
+			PCIE_ERR(pcie_dev,
+				 "PCIe: RC%d: %s Failed to construct reset string(ret=%d)\n",
+				 rc_idx, type_name, ret);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+
+static int msm_pcie_init_reset_names(struct msm_pcie_dev_t *pcie_dev)
+{
+	int ret;
+
+	ret = msm_pcie_init_reset_names_helper(pcie_dev, pcie_dev->reset,
+						msm_pcie_reset_name_tmpl,
+						MSM_PCIE_MAX_RESET, "core");
+	if (ret)
+		return ret;
+
+	ret = msm_pcie_init_reset_names_helper(pcie_dev, pcie_dev->pipe_reset,
+						msm_pcie_pipe_reset_name_tmpl,
+						MSM_PCIE_MAX_PIPE_RESET, "pipe");
+	if (ret)
+		return ret;
+
+	ret = msm_pcie_init_reset_names_helper(pcie_dev, pcie_dev->linkdown_reset,
+						msm_pcie_linkdown_reset_name_tmpl,
+						MSM_PCIE_MAX_LINKDOWN_RESET, "linkdown");
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
 static void msm_pcie_create_ipc_logs(u32 rc_idx)
 {
@@ -8933,12 +8931,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	memcpy(pcie_dev->gpio, msm_pcie_gpio_info, sizeof(msm_pcie_gpio_info));
 	memcpy(pcie_dev->res, msm_pcie_res_info, sizeof(msm_pcie_res_info));
 	memcpy(pcie_dev->irq, msm_pcie_irq_info, sizeof(msm_pcie_irq_info));
-	memcpy(pcie_dev->reset, msm_pcie_reset_info[rc_idx],
-		sizeof(msm_pcie_reset_info[rc_idx]));
-	memcpy(pcie_dev->pipe_reset, msm_pcie_pipe_reset_info[rc_idx],
-		sizeof(msm_pcie_pipe_reset_info[rc_idx]));
-	memcpy(pcie_dev->linkdown_reset, msm_pcie_linkdown_reset_info[rc_idx],
-		sizeof(msm_pcie_linkdown_reset_info[rc_idx]));
+	ret = msm_pcie_init_reset_names(pcie_dev);
+	if (ret) {
+		PCIE_ERR(pcie_dev, "PCIe: RC%d: Failed to init reset names\n", pcie_dev->rc_idx);
+		goto decrease_rc_num;
+	}
 
 	init_completion(&pcie_dev->speed_change_completion);
 
