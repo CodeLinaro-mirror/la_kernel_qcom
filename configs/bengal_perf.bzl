@@ -118,6 +118,7 @@ bengal_perf_config = {
     "CONFIG_PINCTRL_KHAJE": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
+    "CONFIG_PINCTRL_SCUBA": "m",
     "CONFIG_PLFXLC": "n",
     "CONFIG_POWER_RESET_QCOM_PON": "m",
     "CONFIG_QCE_OPTIMIZED_BAM": "y",
