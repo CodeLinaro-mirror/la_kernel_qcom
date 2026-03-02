@@ -624,26 +624,32 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 	}
 
 	demux_sel = spi_slv->chip_select;
-	mas->cur_speed_hz = spi_slv->max_speed_hz;
-	mas->cur_word_len = spi_slv->bits_per_word;
-
-	ret = get_spi_clk_cfg(mas->cur_speed_hz, mas, &idx, &div);
-	if (ret) {
-		dev_err(mas->dev, "Err setting clks ret(%d) for %d\n",
-							ret, mas->cur_speed_hz);
-		goto setup_fifo_params_exit;
+	if (mas->cur_speed_hz != spi_slv->max_speed_hz) {
+		mas->cur_speed_hz = spi_slv->max_speed_hz;
+		ret = get_spi_clk_cfg(mas->cur_speed_hz, mas, &idx, &div);
+		if (ret) {
+			dev_err(mas->dev, "Err setting clks ret(%d) for %d\n",
+				ret, mas->cur_speed_hz);
+			goto setup_fifo_params_exit;
+		}
 	}
 
-	spi_setup_word_len(mas, spi_slv->mode, spi_slv->bits_per_word);
+	if (mas->cur_word_len != spi_slv->bits_per_word) {
+		mas->cur_word_len = spi_slv->bits_per_word;
+		spi_setup_word_len(mas, spi_slv->mode, spi_slv->bits_per_word);
+	}
+
 	geni_write_reg(loopback_cfg, mas->base, SE_SPI_LOOPBACK);
 	geni_write_reg(demux_sel, mas->base, SE_SPI_DEMUX_SEL);
 	geni_write_reg(cpha, mas->base, SE_SPI_CPHA);
 	geni_write_reg(cpol, mas->base, SE_SPI_CPOL);
 	geni_write_reg(demux_output_inv, mas->base, SE_SPI_DEMUX_OUTPUT_INV);
 	geni_write_reg(spi_delay_params, mas->base, SE_SPI_DELAY_COUNTERS);
-	SPI_LOG_DBG(mas->ipc, false, mas->dev, "%s: Loopback:%d demux_sel:0x%x demux_op_inv:0x%x\n",
+	SPI_LOG_DBG(mas->ipc, false, mas->dev,
+		    "%s:Loopback%d demux_sel0x%x demux_op_inv 0x%x\n",
 		    __func__, loopback_cfg, demux_sel, demux_output_inv);
-	SPI_LOG_DBG(mas->ipc, false, mas->dev, "%s:cpol %d cpha %d delay 0x%x\n",
+	SPI_LOG_DBG(mas->ipc, false, mas->dev,
+		    "%s:cpol %d cpha %d delay 0x%x\n",
 		    __func__, cpol, cpha, spi_delay_params);
 	/* Ensure message level attributes are written before returning */
 	mb();
@@ -1414,8 +1420,6 @@ static int spi_geni_unprepare_message(struct spi_master *spi_mas,
 	start_time = geni_capture_start_time(&mas->spi_rsc, mas->ipc_log_kpi, __func__,
 					     mas->spi_kpi);
 
-	mas->cur_speed_hz = 0;
-	mas->cur_word_len = 0;
 	if (mas->cur_xfer_mode == GENI_GPI_DMA)
 		spi_geni_unmap_buf(mas, spi_msg);
 
@@ -2305,6 +2309,36 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 	mas->rx_rem_bytes -= rx_bytes;
 }
 
+/**
+ * spi_geni_is_dma_xfer_done() - Check if DMA transfer is complete
+ * @mas: SPI master structure
+ * @dma_tx_status: TX DMA status
+ * @dma_rx_status: RX DMA status
+ *
+ * Determines if the current DMA transfer is complete based on the transfer
+ * type (full-duplex, TX-only, or RX-only) and corresponding DMA done flags.
+ *
+ * Return: true if transfer is complete, false otherwise
+ */
+static bool spi_geni_is_dma_xfer_done(struct spi_geni_master *mas,
+				      u32 dma_tx_status, u32 dma_rx_status)
+{
+	if (!mas->cur_xfer)
+		return false;
+
+	if (mas->cur_xfer->tx_buf && mas->cur_xfer->rx_buf)
+		return (dma_tx_status & TX_DMA_DONE) && (dma_rx_status & RX_DMA_DONE) &&
+			!mas->tx_rem_bytes && !mas->rx_rem_bytes;
+
+	if (mas->cur_xfer->tx_buf)
+		return (dma_tx_status & TX_DMA_DONE) && !mas->tx_rem_bytes;
+
+	if (mas->cur_xfer->rx_buf)
+		return (dma_rx_status & RX_DMA_DONE) && !mas->rx_rem_bytes;
+
+	return false;
+}
+
 static irqreturn_t geni_spi_irq(int irq, void *data)
 {
 	struct spi_geni_master *mas = data;
@@ -2375,9 +2409,7 @@ static irqreturn_t geni_spi_irq(int irq, void *data)
 			mas->tx_rem_bytes = 0;
 		if (dma_rx_status & RX_DMA_DONE)
 			mas->rx_rem_bytes = 0;
-		if (!mas->tx_rem_bytes && !mas->rx_rem_bytes &&
-			(dma_tx_status & TX_DMA_DONE) &&
-			(dma_rx_status & RX_DMA_DONE))
+		if (spi_geni_is_dma_xfer_done(mas, dma_tx_status, dma_rx_status))
 			mas->cmd_done = true;
 		if ((m_irq & M_CMD_CANCEL_EN) || (m_irq & M_CMD_ABORT_EN))
 			mas->cmd_done = true;
@@ -3050,6 +3082,8 @@ void spi_geni_deep_sleep_enable_check(struct spi_geni_master *geni_mas)
 		if (!geni_mas->gsi_mode) {
 			geni_mas->setup = false;
 			geni_mas->slave_setup = false;
+			geni_mas->cur_speed_hz = 0;
+			geni_mas->cur_word_len = 0;
 		}
 	}
 }
