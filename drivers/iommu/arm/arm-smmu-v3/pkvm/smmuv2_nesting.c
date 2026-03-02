@@ -642,8 +642,87 @@ static int hw_profile_init(void)
 	return 0;
 }
 
+/* Wait for any pending TLB invalidations to complete */
+static int __arm_smmu_tlb_sync(struct smmu_v2_nested *smmu, int cb,
+				int sync, int status)
+{
+	unsigned int inc, delay;
+	u32 reg;
+
+	arm_smmu_cb_write(smmu, cb, sync, QCOM_DUMMY_VAL);
+
+	for (delay = 1, inc = 1; delay < TLB_LOOP_TIMEOUT; delay += inc) {
+		reg = arm_smmu_cb_read(smmu, cb, status);
+		if (!(reg & ARM_SMMU_sTLBGSTATUS_GSACTIVE))
+			return 0;
+
+		pkvm_udelay(inc);
+
+		if (inc < TLB_LOOP_INC_MAX)
+			inc *= 2;
+	}
+
+	return -EINVAL;
+}
+
+static void arm_smmu_tlb_sync_context(struct smmu_v2_nested *smmu)
+{
+	if (__arm_smmu_tlb_sync(smmu, smmu->host_s2_cb_idx,
+				ARM_SMMU_CB_TLBSYNC,
+				ARM_SMMU_CB_TLBSTATUS)) {
+		/* Fatal assertion in case of TLB sync failure*/
+		BUG_ON(1);
+	}
+}
+
+static void arm_smmu_tlb_inv_range_s2(struct smmu_v2_nested *smmu,
+				      unsigned long iova, size_t size,
+				      size_t granule, void *cookie, int reg)
+{
+	iova >>= PAGE_SHIFT;
+
+	do {
+		arm_smmu_cb_writeq(smmu, smmu->host_s2_cb_idx, reg, iova);
+		iova += granule >> PAGE_SHIFT;
+	} while (size > granule && (size -= granule));
+}
+
+static void arm_smmu_tlb_add_page_s2(struct iommu_iotlb_gather *gather,
+				     unsigned long iova, size_t granule,
+				     void *cookie)
+{
+	struct smmu_v2_nested *smmu;
+
+	for_each_smmu(smmu) {
+		kvm_iommu_lock(&smmu->iommu);
+		arm_smmu_tlb_inv_range_s2(smmu, iova, granule, granule, cookie,
+					  ARM_SMMU_CB_S2_TLBIIPAS2L);
+		arm_smmu_tlb_sync_context(smmu);
+		kvm_iommu_unlock(&smmu->iommu);
+	}
+}
+
+static void arm_smmu_tlb_inv_walk_s2(unsigned long iova, size_t size,
+				     size_t granule, void *cookie)
+{
+	struct smmu_v2_nested *smmu;
+
+	for_each_smmu(smmu) {
+		kvm_iommu_lock(&smmu->iommu);
+		arm_smmu_tlb_inv_range_s2(smmu, iova, size, granule, cookie,
+					  ARM_SMMU_CB_S2_TLBIIPAS2);
+		arm_smmu_tlb_sync_context(smmu);
+		kvm_iommu_unlock(&smmu->iommu);
+	}
+}
+
+static const struct iommu_flush_ops arm_smmu_s2_tlb_ops_v2 = {
+	.tlb_flush_walk	= arm_smmu_tlb_inv_walk_s2,
+	.tlb_add_page	= arm_smmu_tlb_add_page_s2,
+};
+
 const struct smmu_vendor_callbacks v2callbacks = {
-	.tlb_ops = NULL, /* fix me */
+	.tlb_ops = &arm_smmu_s2_tlb_ops_v2,
 	.get_cfg = NULL, /* fix me */
 	.post_init = smmu_attach_stage_2,
 	.dabt_hdl = smmuv2_nesting_dabt_handler,
