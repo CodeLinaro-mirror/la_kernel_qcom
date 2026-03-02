@@ -137,6 +137,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_LLCC_MISS": "m",
     "CONFIG_QCOM_LLCC_OCCUPANCY": "m",
     "CONFIG_QCOM_LLCC_PMU": "m",
+    "CONFIG_QCOM_LLCC_DEBUG": "m",
     "CONFIG_QCOM_LOGBUF_BOOTLOG": "m",
     "CONFIG_QCOM_LOGBUF_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_MDT_LOADER": "m",

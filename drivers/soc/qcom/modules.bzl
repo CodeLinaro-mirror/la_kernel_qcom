@@ -466,6 +466,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/llcc_perf_debug",
+        out = "llcc_perf_debug.ko",
+        config = "CONFIG_QCOM_LLCC_DEBUG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/llcc_perf_debug.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/mdt_loader",
         out = "mdt_loader.ko",
         config = "CONFIG_QCOM_MDT_LOADER",
