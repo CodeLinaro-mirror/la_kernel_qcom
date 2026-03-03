@@ -1,0 +1,238 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * pKVM host driver for the Arm SMMUv3
+ *
+ * Copyright (C) 2022 Linaro Ltd.
+ */
+#include <asm/kvm_mmu.h>
+#include <asm/kvm_pkvm.h>
+
+#include <linux/of_address.h>
+#include <linux/of_platform.h>
+#include <linux/platform_device.h>
+
+#include "arm-smmu-v3.h"
+#include "pkvm/arm_smmu_v3_nested.h"
+
+#define SMMU_KVM_CMDQ_ORDER				4
+#define SMMU_KVM_STRTAB_ORDER				(get_order(STRTAB_MAX_L1_ENTRIES * \
+							 sizeof(struct arm_smmu_strtab_l1)))
+
+extern struct kvm_iommu_ops kvm_nvhe_sym(smmu_ops);
+
+/*
+ * Pre allocated pages that can be used from the EL2 part of the driver from atomic
+ * context, ideally used for page table pages for identity domains.
+ */
+static int atomic_pages;
+module_param(atomic_pages, int, 0);
+
+static size_t				kvm_arm_smmu_count;
+static struct hyp_arm_smmu_v3_device	*kvm_arm_smmu_array;
+static size_t				kvm_arm_smmu_cur;
+
+static void kvm_arm_smmu_array_free(void)
+{
+	int order;
+
+	order = get_order(kvm_arm_smmu_count * sizeof(*kvm_arm_smmu_array));
+	free_pages((unsigned long)kvm_arm_smmu_array, order);
+}
+
+/*
+ * The hypervisor have to know the basic information about the SMMUs
+ * from the firmware.
+ * This has to be done before the SMMUv3 probes and does anything meaningful
+ * with the hardware, otherwise it becomes harder to reason about the SMMU
+ * state and we'd require to hand-off the state to the hypervisor at certain point
+ * while devices are live, which is complicated and dangerous.
+ * Instead, the hypervisor is interested in a very small part of the probe path,
+ * so just add a separate logic for it.
+ */
+static int kvm_arm_smmu_array_alloc(void)
+{
+	int smmu_order;
+	struct device_node *np;
+
+	for_each_compatible_node(np, NULL, "arm,smmu-v3")
+		kvm_arm_smmu_count++;
+
+	if (!kvm_arm_smmu_count)
+		return -ENODEV;
+	smmu_order = get_order(kvm_arm_smmu_count * sizeof(*kvm_arm_smmu_array));
+	kvm_arm_smmu_array = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, smmu_order);
+	if (!kvm_arm_smmu_array)
+		return -ENOMEM;
+	return 0;
+}
+
+static struct platform_driver smmuv3_nesting_driver;
+static int smmuv3_nesting_probe(struct platform_device *pdev)
+{
+	struct resource *res;
+	void *cmdq_base, *strtab;
+	struct hyp_arm_smmu_v3_device *smmu = &kvm_arm_smmu_array[kvm_arm_smmu_cur];
+
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	smmu->mmio_addr = res->start;
+	smmu->mmio_size = resource_size(res);
+	if (smmu->mmio_size < SZ_128K) {
+		dev_err(&pdev->dev, "MMIO region too small(%pr)\n", &res);
+		return -EINVAL;
+	}
+
+	if (of_dma_is_coherent(pdev->dev.of_node))
+		smmu->features |= ARM_SMMU_FEAT_COHERENCY;
+
+	/*
+	 * Allocate the shadow command queue, it doesn't have to be the same
+	 * size as the host.
+	 * Only populate base_dma and llq.max_n_shift, the hypervisor will init
+	 * the rest.
+	 */
+	cmdq_base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, SMMU_KVM_CMDQ_ORDER);
+	if (!cmdq_base)
+		return -ENOMEM;
+
+	smmu->cmdq.base_dma = virt_to_phys(cmdq_base);
+	smmu->cmdq.llq.max_n_shift = SMMU_KVM_CMDQ_ORDER + PAGE_SHIFT - CMDQ_ENT_SZ_SHIFT;
+
+	strtab = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, SMMU_KVM_STRTAB_ORDER);
+	if (!strtab)
+		return -ENOMEM;
+
+	smmu->strtab_dma = virt_to_phys(strtab);
+	smmu->strtab_size = PAGE_SIZE << SMMU_KVM_STRTAB_ORDER;
+
+	kvm_arm_smmu_cur++;
+	return 0;
+}
+
+static int smmu_alloc_atomic_mc(struct kvm_hyp_memcache *atomic_mc)
+{
+	int ret;
+#ifndef MODULE
+	u64 i;
+	phys_addr_t start, end;
+
+	/*
+	 * Allocate pages to cover mapping with PAGE_SIZE for all memory
+	 * Then allocate extra for 1GB of MMIO.
+	 * Add 10 extra pages as we map the rest with first level blocks
+	 * for PAGE_SIZE = 4KB, that should cover 5TB of address space.
+	 */
+	for_each_mem_range(i, &start, &end) {
+		atomic_pages += __hyp_pgtable_max_pages((end - start) >> PAGE_SHIFT);
+	}
+
+	atomic_pages += __hyp_pgtable_max_pages(SZ_1G >> PAGE_SHIFT) + 10;
+#endif
+
+	/* Module didn't set that parameter. */
+	if (!atomic_pages)
+		return 0;
+
+	/* For PGD*/
+	ret = topup_hyp_memcache(atomic_mc, 1, 3);
+	if (ret)
+		return ret;
+	ret = topup_hyp_memcache(atomic_mc, atomic_pages, 0);
+	if (ret)
+		return ret;
+	pr_info("smmuv3: Allocated %d MiB for atomic usage\n",
+		(atomic_pages << PAGE_SHIFT) / SZ_1M);
+	/* Topup hyp alloc so IOMMU driver can allocate domains. */
+	__pkvm_topup_hyp_alloc(1);
+
+	return ret;
+}
+
+static int kvm_arm_smmu_v3_post_init(void)
+{
+	if (!is_protected_kvm_enabled() || !kvm_arm_smmu_cur)
+		return 0;
+
+	platform_driver_unregister(&smmuv3_nesting_driver);
+	(void)bus_rescan_devices(&platform_bus_type);
+	return 0;
+}
+
+static pkvm_handle_t kvm_arm_v3_id_by_of(struct device_node *np)
+{
+	return 0;
+}
+
+static int kvm_arm_smmu_v3_init_drv(void)
+{
+	struct kvm_hyp_memcache atomic_mc;
+	int ret;
+
+	ret = kvm_arm_smmu_array_alloc();
+	if (ret)
+		return ret;
+
+	ret = platform_driver_probe(&smmuv3_nesting_driver, smmuv3_nesting_probe);
+	if (ret)
+		goto err_free;
+
+	if (kvm_arm_smmu_cur != kvm_arm_smmu_count) {
+		/* A device exists but failed to probe */
+		ret = -EUNATCH;
+		goto err_free;
+	}
+
+#ifdef MODULE
+	/* TBD: pkvm_load_el2_module */
+#endif
+
+	/*
+	 * These variables are stored in the nVHE image, and won't be accessible
+	 * after KVM initialization. Ownership of kvm_arm_smmu_array will be
+	 * transferred to the hypervisor as well.
+	 */
+	kvm_hyp_arm_smmu_v3_smmus = kvm_arm_smmu_array;
+	kvm_hyp_arm_smmu_v3_count = kvm_arm_smmu_count;
+
+	init_hyp_memcache(&atomic_mc);
+
+	ret = smmu_alloc_atomic_mc(&atomic_mc);
+	if (ret)
+		goto err_free;
+
+	ret = kvm_iommu_init_hyp(kern_hyp_va(lm_alias(&kvm_nvhe_sym(smmu_ops))), &atomic_mc);
+	if (ret)
+		return ret;
+
+	return kvm_arm_smmu_v3_post_init();
+err_free:
+	kvm_arm_smmu_array_free();
+	return ret;
+}
+
+static struct kvm_iommu_driver kvm_smmu_v3_ops = {
+	.init_driver = kvm_arm_smmu_v3_init_drv,
+	.get_iommu_id_by_of = kvm_arm_v3_id_by_of,
+};
+
+static int kvm_arm_smmu_v3_register(void)
+{
+	if (!is_protected_kvm_enabled())
+		return 0;
+
+	return kvm_iommu_register_driver(&kvm_smmu_v3_ops);
+};
+
+static struct platform_driver smmuv3_nesting_driver;
+
+static const struct of_device_id smmuv3_nested_of_match[] = {
+	{ .compatible = "arm,smmu-v3", },
+	{ },
+};
+
+static struct platform_driver smmuv3_nesting_driver = {
+	.driver = {
+		.name = "smmuv3-nesting",
+		.of_match_table = smmuv3_nested_of_match,
+	},
+};
+subsys_initcall(kvm_arm_smmu_v3_register);
