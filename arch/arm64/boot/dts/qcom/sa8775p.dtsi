@@ -6395,6 +6395,7 @@
 
 		etm@6040000 {
 			compatible = "arm,primecell";
+			arm,primecell-periphid = <0x000bbd4b>;
 			reg = <0x0 0x6040000 0x0 0x1000>;
 			cpu = <&CPU0>;
 
@@ -6415,6 +6416,7 @@
 
 		etm@6140000 {
 			compatible = "arm,primecell";
+			arm,primecell-periphid = <0x000bbd4b>;
 			reg = <0x0 0x6140000 0x0 0x1000>;
 			cpu = <&CPU1>;
 
@@ -6435,6 +6437,7 @@
 
 		etm@6240000 {
 			compatible = "arm,primecell";
+			arm,primecell-periphid = <0x000bbd4b>;
 			reg = <0x0 0x6240000 0x0 0x1000>;
 			cpu = <&CPU2>;
 
@@ -6455,6 +6458,7 @@
 
 		etm@6340000 {
 			compatible = "arm,primecell";
+			arm,primecell-periphid = <0x000bbd4b>;
 			reg = <0x0 0x6340000 0x0 0x1000>;
 			cpu = <&CPU3>;
 
@@ -6475,6 +6479,7 @@
 
 		etm@6440000 {
 			compatible = "arm,primecell";
+			arm,primecell-periphid = <0x000bbd4b>;
 			reg = <0x0 0x6440000 0x0 0x1000>;
 			cpu = <&CPU4>;
 
@@ -6495,6 +6500,7 @@
 
 		etm@6540000 {
 			compatible = "arm,primecell";
+			arm,primecell-periphid = <0x000bbd4b>;
 			reg = <0x0 0x6540000 0x0 0x1000>;
 			cpu = <&CPU5>;
 
@@ -6515,6 +6521,7 @@
 
 		etm@6640000 {
 			compatible = "arm,primecell";
+			arm,primecell-periphid = <0x000bbd4b>;
 			reg = <0x0 0x6640000 0x0 0x1000>;
 			cpu = <&CPU6>;
 
@@ -6535,6 +6542,7 @@
 
 		etm@6740000 {
 			compatible = "arm,primecell";
+			arm,primecell-periphid = <0x000bbd4b>;
 			reg = <0x0 0x6740000 0x0 0x1000>;
 			cpu = <&CPU7>;
 
