@@ -2279,7 +2279,7 @@ static int etm_suspend(struct device *dev)
 {
 	struct etmv4_drvdata *drvdata = dev_get_drvdata(dev);
 
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		coresight_disable_sysfs(drvdata->csdev);
 
 	return 0;
