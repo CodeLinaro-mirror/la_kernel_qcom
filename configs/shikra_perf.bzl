@@ -15,6 +15,7 @@ shikra_perf_config = {
     "CONFIG_COMMON_CLK_QCOM": "m",
     "CONFIG_CORESIGHT": "m",
     "CONFIG_CORESIGHT_CSR": "m",
+    "CONFIG_CORESIGHT_CTI": "m",
     "CONFIG_CORESIGHT_LINKS_AND_SINKS": "m",
     "CONFIG_CORESIGHT_LINK_AND_SINK_TMC": "m",
     "CONFIG_CORESIGHT_STM": "m",
