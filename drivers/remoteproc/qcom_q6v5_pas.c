@@ -3177,6 +3177,50 @@ static const struct adsp_data seraph_soccp_resource = {
 	.auto_boot = true,
 };
 
+static const struct adsp_data pikachu_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.load_state = "adsp",
+	.ssctl_id = 0x14,
+};
+
+static const struct adsp_data pikachu_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.load_state = "cdsp",
+	.ssctl_id = 0x17,
+};
+
+static const struct adsp_data pikachu_soccp_resource = {
+	.crash_reason_smem = 656,
+	.firmware_name = "soccp.mbn",
+	.dtb_firmware_name = "soccp_dtb.mbn",
+	.pas_id = 51,
+	.dtb_pas_id = 0x41,
+	.minidump_id = 24,
+	.uses_elf64 = true,
+	.ssr_name = "soccp",
+	.sysmon_name = "soccp",
+	.early_boot = true,
+	.auto_boot = true,
+};
+
 static const struct adsp_data shikra_cdsp_resource = {
 	.crash_reason_smem = 601,
 	.firmware_name = "cdsp.mdt",
@@ -3295,6 +3339,9 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,seraph-adsp-pas", .data = &seraph_adsp_resource},
 	{ .compatible = "qcom,seraph-cdsp-pas", .data = &seraph_cdsp_resource},
 	{ .compatible = "qcom,seraph-soccp-pas", .data = &seraph_soccp_resource},
+	{ .compatible = "qcom,pikachu-adsp-pas", .data = &pikachu_adsp_resource},
+	{ .compatible = "qcom,pikachu-cdsp-pas", .data = &pikachu_cdsp_resource},
+	{ .compatible = "qcom,pikachu-soccp-pas", .data = &pikachu_soccp_resource},
 	{ .compatible = "qcom,vienna-adsp-pas", .data = &vienna_adsp_resource},
 	{ .compatible = "qcom,vienna-cdsp-pas", .data = &vienna_cdsp_resource},
 	{ .compatible = "qcom,vienna-modem-pas", .data = &vienna_mpss_resource},
