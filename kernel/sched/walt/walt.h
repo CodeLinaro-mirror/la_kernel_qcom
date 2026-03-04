@@ -1742,6 +1742,7 @@ extern unsigned long walt_map_util_freq(unsigned long util,
 extern void early_walt_config(void);
 extern unsigned int sysctl_topapp_weight_pct;
 extern u64 trailblazer_boost_state_ns;
+extern unsigned int trailblazer_boost_thresh_ipc;
 extern u64 oscillate_ts_ns;
 
 /*

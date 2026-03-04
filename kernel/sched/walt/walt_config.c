@@ -118,6 +118,8 @@ void walt_config(void)
 	prime_cluster_id = num_sched_clusters - 1;
 	gold_cluster_id = num_sched_clusters > 2 ? 1 : 0;
 
+	trailblazer_boost_thresh_ipc = TRAILBLAZER_BOOST_THRESH_IPC;
+
 	/* Initialize smart freq configurations */
 	smart_freq_init(name);
 	/* return if socinfo is not available */
