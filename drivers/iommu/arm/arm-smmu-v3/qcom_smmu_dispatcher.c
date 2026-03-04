@@ -85,9 +85,6 @@ static int smmu_alloc_atomic_mc(struct kvm_hyp_memcache *atomic_mc)
 	pr_info("smmuv3: Allocated %d MiB for atomic usage\n",
 		(atomic_pages << PAGE_SHIFT) / SZ_1M);
 
-	/* Topup hyp alloc so IOMMU driver can allocate domains. */
-	__pkvm_topup_hyp_alloc(1);
-
 	return 0;
 }
 
