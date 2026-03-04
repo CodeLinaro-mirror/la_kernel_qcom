@@ -15,6 +15,7 @@ extern const struct pkvm_module_ops		*mod_ops;
 
 #undef memset
 #undef memcpy
+#undef udelay
 #undef kvm_flush_dcache_to_poc
 #undef kern_hyp_va
 
@@ -41,6 +42,8 @@ extern const struct pkvm_module_ops		*mod_ops;
 #define __pkvm_hyp_donate_host(x, y)		CALL_FROM_OPS(hyp_donate_host, x, y)
 #define __pkvm_host_share_hyp(x)		CALL_FROM_OPS(host_share_hyp, x)
 #define hyp_pin_shared_mem(x, y)		CALL_FROM_OPS(pin_shared_mem, x, y)
+#define __pkvm_host_unshare_hyp(x)		CALL_FROM_OPS(host_unshare_hyp, x)
+#define hyp_unpin_shared_mem(x, y)		CALL_FROM_OPS(unpin_shared_mem, x, y)
 #define kvm_iommu_iotlb_gather_add_page(x, y, z, w) \
 					CALL_FROM_OPS(iommu_iotlb_gather_add_page, x, y, z, w)
 #define iommu_pkvm_unuse_dma(x, y)		CALL_FROM_OPS(pkvm_unuse_dma, x, y)
