@@ -586,7 +586,7 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 	struct slc_mon_config mon_cfg = {0};
 	int ret = -EINVAL;
 	uint32_t firmware_ver;
-	bool is_cache_mon;
+	bool is_cache_mon, is_fe_be_mon = false;
 
 	query = (struct msc_query *)msc_partid;
 	mon_cfg_val = (struct slc_mon_config_val *)msc_partconfig;
@@ -626,9 +626,7 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 			if ((partid_cap.mon_support & (1 << fe_mon_support)) == 0)
 				return -EPERM;
 
-			if (llcc_perf_clk_enable(true,
-				slc_capability->firmware_ver.firmware_version))
-				return -EPERM;
+			is_fe_be_mon = true;
 			break;
 
 		case CACHE_BE_MON_CONFIG:
@@ -638,13 +636,17 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 			if ((partid_cap.mon_support & (1 << be_mon_support)) == 0)
 				return -EPERM;
 
-			if (mon_cfg_val->enable && !perf_clk_enable && llcc_perfmon_clock)
-				if (llcc_perf_clk_enable(true,
-					slc_capability->firmware_ver.firmware_version))
-					return -EPERM;
+			is_fe_be_mon = true;
 			break;
 
 		}
+	}
+
+	if (is_fe_be_mon) {
+		if (mon_cfg_val->enable && !perf_clk_enable && llcc_perfmon_clock)
+			if (llcc_perf_clk_enable(true,
+				slc_capability->firmware_ver.firmware_version))
+				return -EPERM;
 	}
 
 	memcpy(&mon_cfg.query, msc_partid, sizeof(struct msc_query));
