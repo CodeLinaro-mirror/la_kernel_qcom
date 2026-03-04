@@ -74,6 +74,7 @@ shikra_perf_config = {
     "CONFIG_QCOM_BWMON": "m",
     "CONFIG_QCOM_CLK_SMD_RPM": "m",
     "CONFIG_QCOM_CPUSS_SLEEP_STATS": "m",
+    "CONFIG_QCOM_DCC_V2": "m",
     "CONFIG_QCOM_DCVS": "m",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
     "CONFIG_QCOM_DMABUF_HEAPS": "m",
