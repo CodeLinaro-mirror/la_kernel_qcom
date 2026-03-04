@@ -14,6 +14,7 @@
 #include <linux/regmap.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
+#include <linux/ipc_logging.h>
 
 /*
  * This driver implements the Qualcomm Shared Memory State Machine, a mechanism
@@ -55,6 +56,12 @@
  */
 #define SMSM_DEFAULT_NUM_ENTRIES	8
 #define SMSM_DEFAULT_NUM_HOSTS		3
+
+/* IPC Logging */
+static void *smsm_ilc;
+#define SMSM_LOG_PAGE_CNT 2
+#define SMSM_INFO(x, ...)	\
+	ipc_log_string(smsm_ilc, "[%s]: "x, __func__, ##__VA_ARGS__)
 
 struct smsm_entry;
 struct smsm_host;
@@ -158,8 +165,14 @@ static int smsm_update_bits(void *data, u32 mask, u32 value)
 	changes = val ^ orig;
 	if (!changes) {
 		spin_unlock_irqrestore(&smsm->lock, flags);
+		SMSM_INFO("No change: state 0x%08x (mask: 0x%08x, value: 0x%08x)\n",
+			  orig, mask, value);
 		goto done;
 	}
+
+	/* Log state update */
+	SMSM_INFO("State update: 0x%08x->0x%08x (mask: 0x%08x, value: 0x%08x)\n",
+		  orig, val, mask, value);
 
 	/* Write out the new value */
 	writel(val, smsm->local_state);
@@ -174,6 +187,8 @@ static int smsm_update_bits(void *data, u32 mask, u32 value)
 
 		val = readl(smsm->subscription + host);
 		if (val & changes && hostp->ipc_regmap) {
+			SMSM_INFO("IPC kick to host %d (subscription: 0x%08x)\n",
+				  host, val);
 			regmap_write(hostp->ipc_regmap,
 				     hostp->ipc_offset,
 				     BIT(hostp->ipc_bit));
@@ -207,6 +222,10 @@ static irqreturn_t smsm_intr(int irq, void *data)
 	val = readl(entry->remote_state);
 	changed = val ^ xchg(&entry->last_value, val);
 
+	/* Log interrupt reception with state changes */
+	SMSM_INFO("IRQ %d: state 0x%08lx->0x%08x (changed: 0x%08x)\n",
+		  irq, entry->last_value, val, changed);
+
 	for_each_set_bit(i, entry->irq_enabled, 32) {
 		if (!(changed & BIT(i)))
 			continue;
@@ -214,11 +233,15 @@ static irqreturn_t smsm_intr(int irq, void *data)
 		if (val & BIT(i)) {
 			if (test_bit(i, entry->irq_rising)) {
 				irq_pin = irq_find_mapping(entry->domain, i);
+				SMSM_INFO("Trigger rising IRQ %d (bit %d)\n",
+					  irq_pin, i);
 				handle_nested_irq(irq_pin);
 			}
 		} else {
 			if (test_bit(i, entry->irq_falling)) {
 				irq_pin = irq_find_mapping(entry->domain, i);
+				SMSM_INFO("Trigger falling IRQ %d (bit %d)\n",
+					  irq_pin, i);
 				handle_nested_irq(irq_pin);
 			}
 		}
@@ -241,10 +264,13 @@ static void smsm_mask_irq(struct irq_data *irqd)
 	struct qcom_smsm *smsm = entry->smsm;
 	u32 val;
 
+	SMSM_INFO("Mask IRQ %lu\n", irq);
+
 	if (entry->subscription) {
 		val = readl(entry->subscription + smsm->local_host);
 		val &= ~BIT(irq);
 		writel(val, entry->subscription + smsm->local_host);
+		SMSM_INFO("Updated subscription: 0x%08x\n", val);
 	}
 
 	clear_bit(irq, entry->irq_enabled);
@@ -264,6 +290,8 @@ static void smsm_unmask_irq(struct irq_data *irqd)
 	struct qcom_smsm *smsm = entry->smsm;
 	u32 val;
 
+	SMSM_INFO("Unmask IRQ %lu\n", irq);
+
 	/* Make sure our last cached state is up-to-date */
 	if (readl(entry->remote_state) & BIT(irq))
 		set_bit(irq, &entry->last_value);
@@ -276,6 +304,7 @@ static void smsm_unmask_irq(struct irq_data *irqd)
 		val = readl(entry->subscription + smsm->local_host);
 		val |= BIT(irq);
 		writel(val, entry->subscription + smsm->local_host);
+		SMSM_INFO("Updated subscription: 0x%08x\n", val);
 	}
 }
 
@@ -413,6 +442,8 @@ static int smsm_inbound_entry(struct qcom_smsm *smsm,
 		return -EINVAL;
 	}
 
+	SMSM_INFO("Setting up inbound entry, IRQ %d\n", irq);
+
 	ret = devm_request_threaded_irq(smsm->dev, irq,
 					NULL, smsm_intr,
 					IRQF_ONESHOT,
@@ -427,6 +458,8 @@ static int smsm_inbound_entry(struct qcom_smsm *smsm,
 		dev_err(smsm->dev, "failed to add irq_domain\n");
 		return -ENOMEM;
 	}
+
+	SMSM_INFO("Inbound entry setup complete, IRQ %d\n", irq);
 
 	return 0;
 }
@@ -485,6 +518,10 @@ static int qcom_smsm_probe(struct platform_device *pdev)
 	u32 *states;
 	u32 id;
 	int ret;
+
+	/* Initialize IPC logging context */
+	if (!smsm_ilc)
+		smsm_ilc = ipc_log_context_create(SMSM_LOG_PAGE_CNT, "smsm", 0);
 
 	smsm = devm_kzalloc(&pdev->dev, sizeof(*smsm), GFP_KERNEL);
 	if (!smsm)
