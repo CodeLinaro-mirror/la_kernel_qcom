@@ -283,6 +283,7 @@ void walt_config(void)
 		 * By default this SOC flag will be disabled. Enable this only
 		 * for X1E80100 platforms
 		 */
+		trailblazer_boost_thresh_ipc = 225;
 		trailblazer_floor_freq[0] = 2500000;
 		trailblazer_floor_freq[1] = 2500000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
