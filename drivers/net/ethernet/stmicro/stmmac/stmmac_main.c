@@ -3434,11 +3434,20 @@ static void stmmac_mtl_configuration(struct stmmac_priv *priv)
 
 static void stmmac_safety_feat_configuration(struct stmmac_priv *priv)
 {
-	if (priv->dma_cap.asp) {
+	if (priv->dma_cap.asp && priv->sfty_irq > 0) {
 		netdev_info(priv->dev, "Enabling Safety Features\n");
 		stmmac_safety_feat_config(priv, priv->ioaddr, priv->dma_cap.asp,
 					  priv->plat->safety_feat_cfg);
 	} else {
+		if (priv->dma_cap.asp) {
+			/* Hardware has ASP capability but no IRQ configured.
+			 * Explicitly disable all safety features to prevent
+			 * unhandled interrupts, especially DPP which may be
+			 * enabled by hardware default (causes FC:157 errors).
+			 */
+			netdev_info(priv->dev, "Disable Safety Feature when no IRQ configured\n");
+			stmmac_safety_feat_disable(priv, priv->ioaddr);
+		}
 		netdev_info(priv->dev, "No Safety Features support found\n");
 	}
 }
