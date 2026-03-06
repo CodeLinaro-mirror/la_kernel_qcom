@@ -5,6 +5,7 @@ targets = [
     "autogvm",
     "bengal",
     "hamoa",
+    "hamoa_la",
     "lahaina",
     "malabar",
     "monaco",

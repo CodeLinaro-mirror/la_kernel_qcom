@@ -1374,9 +1374,7 @@ static void qcom_ethqos_exit(struct platform_device *pdev, void *prv)
 static int qcom_ethqos_init(struct platform_device *pdev, void *prv)
 {
 	struct qcom_ethqos *ethqos = prv;
-	int ret = 0;
 
-	ret = qcom_ethqos_domain_transition_d0d3(prv, true);
 	qcom_ethqos_serdes_set_level(ethqos);
 
 	/* Enable functional clock to prevent DMA reset to timeout due
@@ -1386,7 +1384,7 @@ static int qcom_ethqos_init(struct platform_device *pdev, void *prv)
 	 */
 	ethqos_set_func_clk_en(ethqos);
 
-	return ret;
+	return 0;
 }
 
 static int qcom_ethqos_serdes_powerup(struct net_device *ndev, void *priv)
@@ -1411,6 +1409,40 @@ static void qcom_ethqos_serdes_powerdown(struct net_device *ndev, void *priv)
 
 	phy_power_off(ethqos->serdes_phy);
 	phy_exit(ethqos->serdes_phy);
+}
+
+static int qcom_ethqos_suspend(struct device *dev, void *prv)
+{
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv = netdev_priv(ndev);
+	struct qcom_ethqos *ethqos = prv;
+
+	if (priv->dev->irq > 0)
+		disable_irq(priv->dev->irq);
+
+	set_bit(STMMAC_DOWN, &priv->state);
+
+	dev_dbg(&ethqos->pdev->dev, "Perf/power domain will turned off by SCMI framework.");
+
+	return 0;
+}
+
+static int qcom_ethqos_resume(struct device *dev, void *prv)
+{
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv = netdev_priv(ndev);
+	struct qcom_ethqos *ethqos = prv;
+	int ret = 0;
+
+	ret = qcom_ethqos_init(ethqos->pdev, prv);
+
+	if (priv->dev->irq > 0)
+		enable_irq(priv->dev->irq);
+
+	dev_dbg(&ethqos->pdev->dev, "Perf/power domain will turned on by SCMI framework.");
+
+	clear_bit(STMMAC_DOWN, &priv->state);
+	return ret;
 }
 
 static int ethqos_clks_config(void *priv, bool enabled)
@@ -1740,6 +1772,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->serdes_powerdown = qcom_ethqos_serdes_down;
 		plat_dat->exit = qcom_ethqos_exit;
 		plat_dat->init = qcom_ethqos_init;
+		plat_dat->suspend = qcom_ethqos_suspend;
+		plat_dat->resume = qcom_ethqos_resume;
 
 		qcom_ethqos_domain_transition_d0d3(ethqos, true);
 		qcom_ethqos_serdes_set_level(ethqos);

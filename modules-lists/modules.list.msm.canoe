@@ -57,6 +57,7 @@ regmap-spmi.ko
 qti-regmap-debugfs.ko
 qcom-spmi-pmic.ko
 nvmem_qcom-spmi-sdam.ko
+nvmem_qfprom.ko
 rtc-pm8xxx.ko
 pmic-pon-log.ko
 qcom-pdc.ko
