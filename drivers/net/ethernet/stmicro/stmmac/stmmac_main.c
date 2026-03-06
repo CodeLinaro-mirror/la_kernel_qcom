@@ -2840,6 +2840,9 @@ static bool stmmac_safety_feat_interrupt(struct stmmac_priv *priv)
 {
 	int ret;
 
+	if (priv->plat->report_uevents)
+		priv->plat->report_uevents(priv, FUSA_ERROR);
+
 	ret = stmmac_safety_feat_irq_status(priv, priv->dev,
 			priv->ioaddr, priv->dma_cap.asp, &priv->sstats);
 	if (ret && (ret != -EINVAL)) {
