@@ -112,6 +112,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_COMMAND_DB": "m",
     "CONFIG_QCOM_CPU_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_DCC_V2": "m",
+    "CONFIG_QCOM_CRASH_SYMBOL_MATCH": "y",
     "CONFIG_QCOM_DCVS": "m",
     "CONFIG_QCOM_DCVS_FP": "m",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
