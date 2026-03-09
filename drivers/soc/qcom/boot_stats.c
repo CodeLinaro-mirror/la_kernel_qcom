@@ -40,10 +40,13 @@
 struct boot_stats {
 	uint32_t bootloader_start;
 	uint32_t bootloader_end;
-	uint32_t bootloader_load_kernel;
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-	uint32_t bootloader_load_kernel_start;
-	uint32_t bootloader_load_kernel_end;
+	uint32_t bootloader_load_boot_start;
+	uint32_t bootloader_load_boot_end;
+	uint32_t bootloader_load_vendor_boot_start;
+	uint32_t bootloader_load_vendor_boot_end;
+	uint32_t bootloader_load_init_boot_start;
+	uint32_t bootloader_load_init_boot_end;
 #endif
 };
 
@@ -313,17 +316,31 @@ static void set_bootloader_stats(bool hibernation_restore)
 	_create_boot_marker("M - APPSBL Start - ",
 		readl_relaxed(&boot_stats->bootloader_start));
 	if (!hibernation_restore) {
-		_create_boot_marker("M - APPSBL Kernel Load Start - ",
-			readl_relaxed(&boot_stats->bootloader_load_kernel_start));
-		_create_boot_marker("M - APPSBL Kernel Load End - ",
-			readl_relaxed(&boot_stats->bootloader_load_kernel_end));
-		_create_boot_marker("D - APPSBL Kernel Load Time - ",
-			readl_relaxed(&boot_stats->bootloader_load_kernel));
+		_create_boot_marker("M - APPSBL Boot Load Start - ",
+                       readl_relaxed(&boot_stats->bootloader_load_boot_start));
+		_create_boot_marker("M - APPSBL Boot Load End - ",
+                       readl_relaxed(&boot_stats->bootloader_load_boot_end));
+		_create_boot_marker("M - APPSBL Init Boot Load Start - ",
+                       readl_relaxed(&boot_stats->bootloader_load_init_boot_start));
+		_create_boot_marker("M - APPSBL Init Boot Load End - ",
+                       readl_relaxed(&boot_stats->bootloader_load_init_boot_end));
+		_create_boot_marker("M - APPSBL Vendor Boot Load Start - ",
+                       readl_relaxed(&boot_stats->bootloader_load_vendor_boot_start));
+		_create_boot_marker("M - APPSBL Vendor Boot Load End - ",
+                       readl_relaxed(&boot_stats->bootloader_load_vendor_boot_end));
 	} else {
-		_create_boot_marker("M - APPSBL Hibernation Image Load Start -",
-			readl_relaxed(&boot_stats->bootloader_load_kernel_start));
-		_create_boot_marker("M - APPSBL Hibernation Image Load End - ",
-			readl_relaxed(&boot_stats->bootloader_load_kernel_end));
+		_create_boot_marker("M - APPSBL Hibernation Boot Load Start -",
+                       readl_relaxed(&boot_stats->bootloader_load_boot_start));
+		_create_boot_marker("M - APPSBL Hibernation Boot Load End - ",
+                       readl_relaxed(&boot_stats->bootloader_load_boot_end));
+		_create_boot_marker("M - APPSBL Hibernation Init Boot Load Start -",
+                       readl_relaxed(&boot_stats->bootloader_load_init_boot_start));
+		_create_boot_marker("M - APPSBL Hibernation Init Boot Load End - ",
+                       readl_relaxed(&boot_stats->bootloader_load_init_boot_end));
+		_create_boot_marker("M - APPSBL Hibernation Vendor Boot Load Start -",
+                       readl_relaxed(&boot_stats->bootloader_load_vendor_boot_start));
+		_create_boot_marker("M - APPSBL Hibernation Vendor Boot Load End - ",
+                       readl_relaxed(&boot_stats->bootloader_load_vendor_boot_end));
 	}
 	_create_boot_marker("M - APPSBL End - ",
 		readl_relaxed(&boot_stats->bootloader_end));
@@ -570,8 +587,6 @@ static void print_boot_stats(void)
 		readl_relaxed(&boot_stats->bootloader_start));
 	pr_info("KPI: Bootloader end count = %u\n",
 		readl_relaxed(&boot_stats->bootloader_end));
-	pr_info("KPI: Bootloader load kernel count = %u\n",
-		readl_relaxed(&boot_stats->bootloader_load_kernel));
 	pr_info("KPI: Kernel MPM timestamp = %u\n",
 		readl_relaxed(mpm_counter_base));
 	pr_info("KPI: Kernel MPM Clock frequency = %u\n",
