@@ -12,6 +12,7 @@ def define_gen3gvmcoqos():
         "drivers/char/virtio_console.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/dma-buf/heaps/system_heap.ko",
+        "drivers/gpio/gpio-virtio.ko",
         "drivers/firmware/qcom-scm.ko",
         "drivers/gpu/drm/virtio/virtio-gpu.ko",
         "drivers/i2c/busses/i2c-msm-geni.ko",
