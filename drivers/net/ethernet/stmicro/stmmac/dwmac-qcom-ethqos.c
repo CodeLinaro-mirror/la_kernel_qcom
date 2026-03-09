@@ -2965,7 +2965,7 @@ static int ethqos_schedule_poll(struct stmmac_priv *priv, int chan)
 
 	if (!priv->plat->rx_queues_cfg[chan].skip_sw) {
 		if (likely(napi_schedule_prep(&ch->rx_napi))) {
-			priv->hw->dma->disable_dma_irq(priv->ioaddr, chan, 1, 0);
+			priv->hw->dma->disable_dma_irq(priv, priv->ioaddr, chan, 1, 0);
 			__napi_schedule(&ch->rx_napi);
 		}
 	}
@@ -7704,6 +7704,20 @@ static void ethqos_get_dt_qos_config(struct device_node *np)
 	strscpy(mparams.qoscfg_name, qoscfg, sizeof(mparams.qoscfg_name));
 }
 
+static void ethqos_get_dt_rss_config(struct device_node *np)
+{
+	const char *rsscfg;
+	int err;
+
+	err = of_property_read_string(np, "config-rss", &rsscfg);
+	if (err < 0) {
+		mparams.rsscfg_name[0] = '\0';
+		return;
+	}
+
+	strscpy(mparams.rsscfg_name, rsscfg, sizeof(mparams.rsscfg_name));
+}
+
 #ifdef MODULE
 static int ethqos_set_early_eth_params(void)
 {
@@ -7752,6 +7766,23 @@ static int qcom_ethqos_probe_config_dt(struct platform_device *pdev,
 		memset(plat_dat->tx_queues_cfg, 0,
 		       (plat_dat->tx_queues_to_use * sizeof(struct stmmac_txq_cfg)));
 		ret = stmmac_mtl_setup(pdev, plat_dat);
+		if (ret) {
+			stmmac_remove_config_dt(pdev, plat_dat);
+			return ret;
+		}
+	}
+
+	if (strlen(mparams.rsscfg_name) != 0) {
+		plat_dat->rss_en = true;
+
+		strscpy(plat_dat->rsscfg, mparams.rsscfg_name, sizeof(mparams.rsscfg_name));
+		memset(plat_dat->rx_queues_cfg, 0,
+		       (plat_dat->rx_queues_to_use * sizeof(struct stmmac_rxq_cfg)));
+		memset(plat_dat->tx_queues_cfg, 0,
+		       (plat_dat->tx_queues_to_use * sizeof(struct stmmac_txq_cfg)));
+
+		ret = stmmac_mtl_setup(pdev, plat_dat);
+
 		if (ret) {
 			stmmac_remove_config_dt(pdev, plat_dat);
 			return ret;
@@ -7859,6 +7890,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	if (!(strlen(mparams.qoscfg_name) != 0))
 		ethqos_get_dt_qos_config(np);
+
+	if (!(strlen(mparams.rsscfg_name) != 0))
+		ethqos_get_dt_rss_config(np);
 
 	qcom_ethqos_probe_config_dt(pdev, &stmmac_res);
 
@@ -8134,6 +8168,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ethqos_mac_rec_init(ethqos);
 	if (of_property_read_bool(np, "mdio-drv-str") || of_property_read_bool(np, "mdc-drv-str"))
 		ethqos_update_mdio_drv_strength(ethqos, np);
+
+	if (stmmac_res.rx_irq[0] > 0 && stmmac_res.tx_irq[0] > 0 && plat_dat->rss_en)
+		plat_dat->flags |= STMMAC_FLAG_MULTI_IRQ_EN;
+
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;

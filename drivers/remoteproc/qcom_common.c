@@ -45,6 +45,7 @@
 #define MINIDUMP_SS_ENABLED		('E' << 24 | 'N' << 16 | 'B' << 8 | 'L' << 0)
 
 #define SMEM_ID_DUMP_LEVEL		681
+#define QCOM_SMEM_HOST_MODEM		1
 #define DUMP_LEVEL_MIN			1
 #define DUMP_LEVEL_MAX			4
 
@@ -120,11 +121,6 @@ static struct kobject *sysfs_kobject;
 bool qcom_device_shutdown_in_progress;
 EXPORT_SYMBOL(qcom_device_shutdown_in_progress);
 
-#define QCOM_SMEM_HOST_MODEM	1
-
-void (*qcom_rproc_dump_level_notify_fn)(void) = NULL;
-EXPORT_SYMBOL_GPL(qcom_rproc_dump_level_notify_fn);
-
 static bool qcom_collect_both_coredumps;
 
 static LIST_HEAD(qcom_ssr_subsystem_list);
@@ -178,7 +174,7 @@ static struct kobj_attribute both_coredumps_attr =
 	       qcom_collect_both_coredumps_store);
 
 /* ---------- dump_level sysfs ---------- */
-static int qcom_dump_level_smem_init(void)
+int qcom_dump_level_set_default(void)
 {
 	__le32 *ptr;
 	size_t size;
@@ -195,30 +191,13 @@ static int qcom_dump_level_smem_init(void)
 	if (size < sizeof(__le32))
 		return -EINVAL;
 
-	if (le32_to_cpu(READ_ONCE(*ptr)) == 0) {
-		WRITE_ONCE(*ptr, cpu_to_le32(DUMP_LEVEL_MIN));
-		/* Ensure remote can see this initial value */
-		smp_wmb();
-	}
+	WRITE_ONCE(*ptr, cpu_to_le32(DUMP_LEVEL_MIN));
+	/* Ensure remote can see this default value */
+	smp_wmb();
 
 	return 0;
 }
-
-static __le32 *qcom_dump_level_get_ptr(size_t *size)
-{
-	__le32 *ptr;
-	int ret;
-
-	ptr = qcom_smem_get(QCOM_SMEM_HOST_MODEM, SMEM_ID_DUMP_LEVEL, size);
-	if (IS_ERR(ptr)) {
-		ret = qcom_dump_level_smem_init();
-		if (ret)
-			return ERR_PTR(ret);
-		ptr = qcom_smem_get(QCOM_SMEM_HOST_MODEM, SMEM_ID_DUMP_LEVEL, size);
-	}
-
-	return ptr;
-}
+EXPORT_SYMBOL_GPL(qcom_dump_level_set_default);
 
 static ssize_t dump_level_show(struct kobject *kobj,
 				struct kobj_attribute *attr, char *buf)
@@ -227,7 +206,7 @@ static ssize_t dump_level_show(struct kobject *kobj,
 	size_t size;
 	u32 val;
 
-	ptr = qcom_dump_level_get_ptr(&size);
+	ptr = qcom_smem_get(QCOM_SMEM_HOST_MODEM, SMEM_ID_DUMP_LEVEL, &size);
 	if (IS_ERR(ptr))
 		return PTR_ERR(ptr);
 
@@ -248,17 +227,16 @@ static ssize_t dump_level_store(struct kobject *kobj,
 {
 	__le32 *ptr;
 	size_t size;
-	unsigned long new_val;
+	u32 new_val;
 	u32 current_val;
-	void (*notify)(void) = NULL;
 
-	if (kstrtoul(buf, 0, &new_val))
+	if (kstrtou32(buf, 0, &new_val))
 		return -EINVAL;
 
-	if (new_val < DUMP_LEVEL_MIN || new_val > DUMP_LEVEL_MAX)
+	if (!new_val || new_val > DUMP_LEVEL_MAX)
 		return -ERANGE;
 
-	ptr = qcom_dump_level_get_ptr(&size);
+	ptr = qcom_smem_get(QCOM_SMEM_HOST_MODEM, SMEM_ID_DUMP_LEVEL, &size);
 	if (IS_ERR(ptr))
 		return PTR_ERR(ptr);
 
@@ -271,11 +249,7 @@ static ssize_t dump_level_store(struct kobject *kobj,
 		WRITE_ONCE(*ptr, cpu_to_le32((u32)new_val));
 		/* Ensure visibility before notifying remote */
 		smp_wmb();
-		notify = qcom_rproc_dump_level_notify_fn;
 	}
-
-	if (notify)
-		notify();
 
 	return count;
 }
@@ -994,13 +968,13 @@ static int __init qcom_common_init(void)
 	ret = sysfs_create_file(sysfs_kobject, &dump_level_attr.attr);
 	if (ret) {
 		pr_err("qcom rproc: failed to create dump_level sysfs file\n");
-		goto remove_dump_level_sysfs;
+		goto remove_coredump_sysfs;
 	}
 
 	ret = register_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
 	if (ret) {
 		pr_err("qcom rproc: failed to register trace hooks\n");
-		goto remove_coredump_sysfs;
+		goto remove_dump_level_sysfs;
 	}
 
 	ret = register_trace_android_vh_rproc_recovery_set(rproc_recovery_notifier, NULL);
@@ -1013,10 +987,10 @@ static int __init qcom_common_init(void)
 
 unregister_rproc_recovery_vh:
 	unregister_trace_android_vh_rproc_recovery(qcom_check_ssr_status, NULL);
-remove_coredump_sysfs:
-	sysfs_remove_file(sysfs_kobject, &both_coredumps_attr.attr);
 remove_dump_level_sysfs:
 	sysfs_remove_file(sysfs_kobject, &dump_level_attr.attr);
+remove_coredump_sysfs:
+	sysfs_remove_file(sysfs_kobject, &both_coredumps_attr.attr);
 remove_shutdown_sysfs:
 	sysfs_remove_file(sysfs_kobject, &shutdown_requested_attr.attr);
 remove_kobject:

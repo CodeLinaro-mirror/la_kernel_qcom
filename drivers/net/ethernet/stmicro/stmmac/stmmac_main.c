@@ -151,8 +151,8 @@ static irqreturn_t stmmac_interrupt(int irq, void *dev_id);
 /* For MSI interrupts handling */
 static irqreturn_t stmmac_mac_interrupt(int irq, void *dev_id);
 static irqreturn_t stmmac_safety_interrupt(int irq, void *dev_id);
-static irqreturn_t stmmac_msi_intr_tx(int irq, void *data);
-static irqreturn_t stmmac_msi_intr_rx(int irq, void *data);
+static irqreturn_t stmmac_dma_tx_interrupt(int irq, void *data);
+static irqreturn_t stmmac_dma_rx_interrupt(int irq, void *data);
 static void stmmac_tx_timer_arm(struct stmmac_priv *priv, u32 queue);
 static void stmmac_flush_tx_descriptors(struct stmmac_priv *priv, int queue);
 
@@ -526,6 +526,9 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 
 	/* Check if MAC core supports the EEE feature. */
 	if (!priv->dma_cap.eee)
+		return false;
+
+	if (priv->plat->phy_interface == PHY_INTERFACE_MODE_SGMII)
 		return false;
 
 	mutex_lock(&priv->lock);
@@ -1604,6 +1607,39 @@ static void stmmac_check_pcs_mode(struct stmmac_priv *priv)
 	}
 }
 
+static void __stmmac_phy_support_eee(struct stmmac_priv *priv)
+{
+	struct fwnode_handle *phy_fwnode;
+	struct fwnode_handle *fwnode;
+	struct phy_device *phydev;
+
+	fwnode = dev_fwnode(priv->device);
+
+	if (fwnode)
+		phy_fwnode = fwnode_get_phy_node(fwnode);
+	else
+		phy_fwnode = NULL;
+
+	if (!phy_fwnode || IS_ERR(phy_fwnode))
+		goto err_phy_support_eee;
+
+	phydev = fwnode_phy_find_device(phy_fwnode);
+	fwnode_handle_put(phy_fwnode);
+
+	if (!phydev)
+		goto err_phy_support_eee;
+
+	if (priv->dma_cap.eee)
+		phy_support_eee(phydev);
+	else
+		netdev_info(priv->dev, "EEE not supported by MAC");
+
+	return;
+
+err_phy_support_eee:
+	netdev_err(priv->dev, "failed to fetch phydev, EEE will be disabled");
+}
+
 /**
  * stmmac_init_phy - PHY initialization
  * @dev: net device structure
@@ -1622,8 +1658,10 @@ static int stmmac_init_phy(struct net_device *dev)
 
 	node = priv->plat->phylink_node;
 
-	if (node)
+	if (node) {
+		__stmmac_phy_support_eee(priv);
 		ret = phylink_of_phy_connect(priv->phylink, node, 0);
+	}
 
 	/* Some DT bindings do not set-up the PHY handle. Let's try to
 	 * manually parse it
@@ -3315,10 +3353,8 @@ static bool stmmac_safety_feat_interrupt(struct stmmac_priv *priv)
 	return false;
 }
 
-static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
+static void stmmac_napi_schedule(struct stmmac_priv *priv, u32 chan, int status)
 {
-	int status = stmmac_dma_interrupt_status(priv, priv->ioaddr,
-						 &priv->xstats, chan, dir);
 	struct stmmac_rx_queue *rx_q = &priv->rx_queue[chan];
 	struct stmmac_tx_queue *tx_q = &priv->tx_queue[chan];
 	struct stmmac_channel *ch = &priv->channel[chan];
@@ -3352,6 +3388,14 @@ static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
 	if (status == tx_hard_error)
 		if (priv->plat->handle_mac_err)
 			priv->plat->handle_mac_err(priv, FBE_ERR, chan);
+}
+
+static int stmmac_napi_check(struct stmmac_priv *priv, u32 chan, u32 dir)
+{
+	int status = stmmac_dma_interrupt_status(priv, priv->ioaddr,
+						 &priv->xstats, chan, dir);
+
+	stmmac_napi_schedule(priv, chan, status);
 
 	return status;
 }
@@ -4103,7 +4147,7 @@ static void stmmac_free_irq(struct net_device *dev,
 	}
 }
 
-static int stmmac_request_irq_multi_msi(struct net_device *dev)
+static int stmmac_request_irq_multi(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	enum request_irq_err irq_err;
@@ -4198,7 +4242,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		}
 	}
 
-	/* Request Rx MSI irq */
+	/* Request Rx irq */
 	for (i = 0; i < priv->plat->rx_queues_to_use; i++) {
 		if (priv->rx_irq[i] == 0)
 			continue;
@@ -4206,11 +4250,11 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		int_name = priv->int_name_rx_irq[i];
 		sprintf(int_name, "%s:%s-%d", dev->name, "rx", i);
 		ret = request_irq(priv->rx_irq[i],
-				  stmmac_msi_intr_rx,
+				  stmmac_dma_rx_interrupt,
 				  0, int_name, &priv->rx_queue[i]);
 		if (unlikely(ret < 0)) {
 			netdev_err(priv->dev,
-				   "%s: alloc rx-%d  MSI %d (error: %d)\n",
+				   "%s: alloc rx-%d dma_rx_irq %d (error: %d)\n",
 				   __func__, i, priv->rx_irq[i], ret);
 			irq_err = REQ_IRQ_ERR_RX;
 			irq_idx = i;
@@ -4218,9 +4262,11 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		}
 		irq_set_affinity_hint(priv->rx_irq[i],
 				      cpumask_of(i % num_online_cpus()));
+		if (priv->plat->rx_queues_cfg[i].skip_sw)
+			disable_irq(priv->rx_irq[i]);
 	}
 
-	/* Request Tx MSI irq */
+	/* Request Tx irq */
 	for (i = 0; i < priv->plat->tx_queues_to_use; i++) {
 		if (priv->tx_irq[i] == 0)
 			continue;
@@ -4228,11 +4274,11 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		int_name = priv->int_name_tx_irq[i];
 		sprintf(int_name, "%s:%s-%d", dev->name, "tx", i);
 		ret = request_irq(priv->tx_irq[i],
-				  stmmac_msi_intr_tx,
+				  stmmac_dma_tx_interrupt,
 				  0, int_name, &priv->tx_queue[i]);
 		if (unlikely(ret < 0)) {
 			netdev_err(priv->dev,
-				   "%s: alloc tx-%d  MSI %d (error: %d)\n",
+				   "%s: alloc tx-%d dma_tx_irq %d (error: %d)\n",
 				   __func__, i, priv->tx_irq[i], ret);
 			irq_err = REQ_IRQ_ERR_TX;
 			irq_idx = i;
@@ -4240,6 +4286,8 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		}
 		irq_set_affinity_hint(priv->tx_irq[i],
 				      cpumask_of(i % num_online_cpus()));
+		if (priv->plat->tx_queues_cfg[i].skip_sw)
+			disable_irq(priv->tx_irq[i]);
 	}
 
 	return 0;
@@ -4306,8 +4354,8 @@ static int stmmac_request_irq(struct net_device *dev)
 	int ret;
 
 	/* Request the IRQ lines */
-	if (priv->plat->multi_msi_en)
-		ret = stmmac_request_irq_multi_msi(dev);
+	if (priv->plat->flags & STMMAC_FLAG_MULTI_IRQ_EN)
+		ret = stmmac_request_irq_multi(dev);
 	else
 		ret = stmmac_request_irq_single(dev);
 
@@ -4836,6 +4884,9 @@ static int stmmac_open(struct net_device *dev)
 	int bfsize = 0;
 	u32 chan;
 	int ret;
+#if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
+	int res;
+#endif
 	u32 rx_channel_count = priv->plat->rx_queues_to_use;
 
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
@@ -5036,9 +5087,9 @@ init_phy_error:
 
 #if IS_ENABLED(CONFIG_ETHQOS_QCOM_VER4)
 	if (priv->plat->enable_power_saving) {
-		ret = priv->plat->enable_power_saving(priv->dev, true);
-		netdev_info(priv->dev, "%s enable power saving for error case, ret: %d", __func__,
-			    ret);
+		res = priv->plat->enable_power_saving(priv->dev, true);
+		netdev_info(priv->dev, "%s enable power saving for error case, res: %d", __func__,
+			    res);
 	}
 #endif
 
@@ -7162,6 +7213,8 @@ static irqreturn_t stmmac_mac_interrupt(int irq, void *dev_id)
 	/* To handle Common interrupts */
 	stmmac_common_interrupt(priv);
 
+	stmmac_dma_interrupt(priv);
+
 	return IRQ_HANDLED;
 }
 
@@ -7185,12 +7238,11 @@ static irqreturn_t stmmac_safety_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t stmmac_msi_intr_tx(int irq, void *data)
+static irqreturn_t stmmac_dma_tx_interrupt(int irq, void *data)
 {
 	struct stmmac_tx_queue *tx_q = (struct stmmac_tx_queue *)data;
 	int chan = tx_q->queue_index;
 	struct stmmac_priv *priv;
-	int status;
 
 	priv = container_of(tx_q, struct stmmac_priv, tx_queue[chan]);
 
@@ -7203,33 +7255,12 @@ static irqreturn_t stmmac_msi_intr_tx(int irq, void *data)
 	if (test_bit(STMMAC_DOWN, &priv->state))
 		return IRQ_HANDLED;
 
-	status = stmmac_napi_check(priv, chan, DMA_DIR_TX);
-
-	if (unlikely(status & tx_hard_error_bump_tc)) {
-		/* Try to bump up the dma threshold on this failure */
-		if (unlikely(priv->xstats.threshold != SF_DMA_MODE) &&
-		    tc <= 256) {
-			tc += 64;
-			if (priv->plat->force_thresh_dma_mode)
-				stmmac_set_dma_operation_mode(priv,
-							      tc,
-							      tc,
-							      chan);
-			else
-				stmmac_set_dma_operation_mode(priv,
-							      tc,
-							      SF_DMA_MODE,
-							      chan);
-			priv->xstats.threshold = tc;
-		}
-	} else if (unlikely(status == tx_hard_error)) {
-		stmmac_tx_err(priv, chan);
-	}
+	stmmac_napi_schedule(priv, chan, handle_tx);
 
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t stmmac_msi_intr_rx(int irq, void *data)
+static irqreturn_t stmmac_dma_rx_interrupt(int irq, void *data)
 {
 	struct stmmac_rx_queue *rx_q = (struct stmmac_rx_queue *)data;
 	int chan = rx_q->queue_index;
@@ -7246,7 +7277,7 @@ static irqreturn_t stmmac_msi_intr_rx(int irq, void *data)
 	if (test_bit(STMMAC_DOWN, &priv->state))
 		return IRQ_HANDLED;
 
-	stmmac_napi_check(priv, chan, DMA_DIR_RX);
+	stmmac_napi_schedule(priv, chan, handle_rx);
 
 	return IRQ_HANDLED;
 }
@@ -7264,12 +7295,12 @@ static void stmmac_poll_controller(struct net_device *dev)
 	if (test_bit(STMMAC_DOWN, &priv->state))
 		return;
 
-	if (priv->plat->multi_msi_en) {
+	if (priv->plat->multi_irq_en) {
 		for (i = 0; i < priv->plat->rx_queues_to_use; i++)
-			stmmac_msi_intr_rx(0, &priv->rx_queue[i]);
+			stmmac_dma_rx_interrupt(0, &priv->rx_queue[i]);
 
 		for (i = 0; i < priv->plat->tx_queues_to_use; i++)
-			stmmac_msi_intr_tx(0, &priv->tx_queue[i]);
+			stmmac_dma_tx_interrupt(0, &priv->tx_queue[i]);
 	} else {
 		disable_irq(dev->irq);
 		stmmac_interrupt(dev->irq, dev);
@@ -7437,7 +7468,7 @@ static u16 stmmac_tx_select_queue(struct net_device *dev,
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 
-	if (likely(priv->plat->tx_select_queue))
+	if (likely(priv->plat->tx_select_queue) && !priv->plat->rss_en)
 		return priv->plat->tx_select_queue(dev, skb, sb_dev);
 
 	return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
@@ -8521,8 +8552,7 @@ int stmmac_dvr_probe(struct device *device,
 	priv->plat = plat_dat;
 	priv->ioaddr = res->addr;
 	priv->dev->base_addr = (unsigned long)res->addr;
-	priv->plat->dma_cfg->multi_msi_en = priv->plat->multi_msi_en;
-
+	priv->plat->dma_cfg->multi_irq_en = (priv->plat->flags & STMMAC_FLAG_MULTI_IRQ_EN);
 	priv->dev->irq = res->irq;
 	priv->wol_irq = res->wol_irq;
 	priv->lpi_irq = res->lpi_irq;

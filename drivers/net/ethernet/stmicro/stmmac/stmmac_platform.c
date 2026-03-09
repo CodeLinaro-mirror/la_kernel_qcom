@@ -126,14 +126,16 @@ static struct stmmac_axi *stmmac_axi_setup(struct platform_device *pdev)
 	return axi;
 }
 
-static struct device_node *get_mtl_queue_config(struct device_node *node,
-						char *mtl_queue_str,
-						char *qoscfg_str,
-						bool *qos_config_found)
+static struct device_node *get_qos_mtl_queue_config(struct device_node *node,
+						    char *mtl_queue_str,
+						    char *qoscfg_str,
+						    bool *qos_config_found)
 {
 	const char *config_name;
-	u32 count = 0, i;
+	u32 count = 0;
+	int i;
 	int ret = 0;
+	struct device_node *qos_mtl_node = NULL;
 
 	count = of_property_count_elems_of_size(node, mtl_queue_str,
 						sizeof(u32)) - 1;
@@ -145,21 +147,55 @@ static struct device_node *get_mtl_queue_config(struct device_node *node,
 		return of_parse_phandle(node, mtl_queue_str, 0);
 
 	for (i = count; i >= 0; i--) {
-		node = of_parse_phandle(node, mtl_queue_str, i);
-		if (!node)
+		qos_mtl_node = of_parse_phandle(node, mtl_queue_str, i);
+		if (!qos_mtl_node)
 			return NULL;
 
-		ret = of_property_read_string(node, "qcom,config-name", &config_name);
+		ret = of_property_read_string(qos_mtl_node, "qcom,config-name", &config_name);
 		if (ret < 0)
 			continue;
 
 		if (!strcasecmp(config_name, qoscfg_str)) {
 			*qos_config_found = true;
-			return node;
+			return qos_mtl_node;
 		}
 	}
 
-	return node;
+	return qos_mtl_node;
+}
+
+static struct device_node *get_rss_mtl_queue_config(struct device_node *node,
+						    char *mtl_queue_str,
+						    char *rsscfg_str)
+{
+	const char *config_name;
+	u32 count = 0, i;
+	int ret = 0;
+	struct device_node *rss_mtl_node = NULL;
+
+	count = of_property_count_elems_of_size(node, mtl_queue_str,
+						sizeof(u32)) - 1;
+
+	if (count < 0)
+		return NULL;
+
+	if (count == 0)
+		return of_parse_phandle(node, mtl_queue_str, 0);
+
+	for (i = count; i >= 0; i--) {
+		rss_mtl_node = of_parse_phandle(node, mtl_queue_str, i);
+		if (!rss_mtl_node)
+			return NULL;
+
+		ret = of_property_read_string(rss_mtl_node, "qcom,config-name", &config_name);
+		if (ret < 0)
+			continue;
+
+		if (!strcasecmp(config_name, rsscfg_str))
+			return rss_mtl_node;
+	}
+
+	return rss_mtl_node;
 }
 
 /**
@@ -192,10 +228,14 @@ int stmmac_mtl_setup(struct platform_device *pdev,
 	plat->tx_queues_cfg[0].mode_to_use = MTL_QUEUE_DCB;
 
 	if (strlen(plat->qoscfg) != 0)
-		rx_node = get_mtl_queue_config(pdev->dev.of_node,
-					       "snps,mtl-rx-config",
-					       plat->qoscfg,
-					       &qos_config_found);
+		rx_node = get_qos_mtl_queue_config(pdev->dev.of_node,
+						   "snps,mtl-rx-config",
+						   plat->qoscfg,
+						   &qos_config_found);
+	else if (strlen(plat->rsscfg) != 0)
+		rx_node = get_rss_mtl_queue_config(pdev->dev.of_node,
+						   "snps,mtl-rx-config",
+						   plat->rsscfg);
 	else
 		rx_node = of_parse_phandle(pdev->dev.of_node,
 					   "snps,mtl-rx-config",
@@ -205,10 +245,14 @@ int stmmac_mtl_setup(struct platform_device *pdev,
 		return ret;
 
 	if (strlen(plat->qoscfg) != 0)
-		tx_node = get_mtl_queue_config(pdev->dev.of_node,
-					       "snps,mtl-tx-config",
-					       plat->qoscfg,
-					       &qos_config_found);
+		tx_node = get_qos_mtl_queue_config(pdev->dev.of_node,
+						   "snps,mtl-tx-config",
+						   plat->qoscfg,
+						   &qos_config_found);
+	else if (strlen(plat->rsscfg) != 0)
+		tx_node = get_rss_mtl_queue_config(pdev->dev.of_node,
+						   "snps,mtl-tx-config",
+						   plat->rsscfg);
 	else
 		tx_node = of_parse_phandle(pdev->dev.of_node,
 					   "snps,mtl-tx-config", 0);
@@ -788,6 +832,10 @@ EXPORT_SYMBOL_GPL(stmmac_mtl_setup);
 int stmmac_get_platform_resources(struct platform_device *pdev,
 				  struct stmmac_resources *stmmac_res)
 {
+	char irq_name[9];
+	int i;
+	int irq;
+
 	memset(stmmac_res, 0, sizeof(*stmmac_res));
 
 	/* Get IRQ information early to have an ability to ask for deferred
@@ -819,6 +867,30 @@ int stmmac_get_platform_resources(struct platform_device *pdev,
 		if (stmmac_res->lpi_irq == -EPROBE_DEFER)
 			return -EPROBE_DEFER;
 		dev_info(&pdev->dev, "IRQ eth_lpi not found\n");
+	}
+
+	/* For RX Channel */
+	for (i = 0; i < MTL_MAX_RX_QUEUES; i++) {
+		snprintf(irq_name, sizeof(irq_name), "dma_rx%i", i);
+		irq = platform_get_irq_byname_optional(pdev, irq_name);
+		if (irq == -EPROBE_DEFER)
+			return irq;
+		else if (irq < 0)
+			break;
+
+		stmmac_res->rx_irq[i] = irq;
+	}
+
+	/* For TX Channel */
+	for (i = 0; i < MTL_MAX_TX_QUEUES; i++) {
+		snprintf(irq_name, sizeof(irq_name), "dma_tx%i", i);
+		irq = platform_get_irq_byname_optional(pdev, irq_name);
+		if (irq == -EPROBE_DEFER)
+			return irq;
+		else if (irq < 0)
+			break;
+
+		stmmac_res->tx_irq[i] = irq;
 	}
 
 	stmmac_res->addr = devm_platform_ioremap_resource(pdev, 0);

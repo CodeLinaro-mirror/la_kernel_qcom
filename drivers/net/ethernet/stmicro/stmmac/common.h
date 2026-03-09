@@ -517,7 +517,7 @@ struct dma_features {
 
 /* Receive Side Scaling */
 #define STMMAC_RSS_HASH_KEY_SIZE	40
-#define STMMAC_RSS_MAX_TABLE_SIZE	256
+#define STMMAC_RSS_MAX_TABLE_SIZE	128
 
 /* VLAN */
 #define STMMAC_VLAN_NONE	0x0

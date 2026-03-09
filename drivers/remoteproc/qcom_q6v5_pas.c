@@ -87,6 +87,7 @@ struct adsp_data {
 	int region_assign_vmid;
 	bool dma_phys_below_32b;
 	bool check_status;
+	bool init_dump_level;
 };
 
 struct qcom_adsp {
@@ -1452,6 +1453,17 @@ static int adsp_probe(struct platform_device *pdev)
 		goto free_rproc;
 	adsp->proxy_pd_count = ret;
 
+	if (desc->init_dump_level) {
+		if (!qcom_smem_is_available()) {
+			ret = -EPROBE_DEFER;
+			goto detach_proxy_pds;
+		}
+
+		ret = qcom_dump_level_set_default();
+		if (ret)
+			dev_warn(&pdev->dev, "failed to initialize dump_level: %d\n", ret);
+	}
+
 	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem,
 			     desc->crash_reason_stack, desc->smem_host_id,
 			     desc->load_state, qcom_pas_handover);
@@ -1614,6 +1626,7 @@ static const struct adsp_data sdxpinn_mpss_resource = {
 	.region_assign_idx = 3,
 	.region_assign_count = 3,
 	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.init_dump_level = true,
 };
 
 static const struct adsp_data sdxpinn_mpss_resource_sub6 = {
@@ -1634,6 +1647,7 @@ static const struct adsp_data sdxpinn_mpss_resource_sub6 = {
 	.region_assign_idx = 3,
 	.region_assign_count = 2,
 	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.init_dump_level = true,
 };
 
 static const struct adsp_data sm6350_adsp_resource = {
