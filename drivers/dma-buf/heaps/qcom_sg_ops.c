@@ -591,8 +591,8 @@ static void qcom_sg_exit(struct qcom_sg_buffer *buffer)
 	struct mem_buf_vmperm *vmperm;
 
 	vmperm = buffer->vmperm;
-	mem_buf_vmperm_try_reclaim(vmperm, false);
 	msm_dma_buf_freed(buffer);
+	mem_buf_vmperm_try_reclaim(vmperm, false);
 
 	/*
 	 * Drop the initial reference from kref_init().
