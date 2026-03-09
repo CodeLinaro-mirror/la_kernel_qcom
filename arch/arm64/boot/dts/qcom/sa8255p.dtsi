@@ -411,8 +411,8 @@
 			no-map;
 		};
 
-		hyptz_reserved_mem: hyptz-reserved@beb00000 {
-			reg = <0x0 0xbeb00000 0x0 0x11500000>;
+		hyptz_reserved_mem: hyptz-reserved@bc900000 {
+			reg = <0x0 0xbc900000 0x0 0x13700000>;
 			no-map;
 		};
 
