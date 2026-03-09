@@ -165,6 +165,38 @@ struct arm_smmu_impl_ops {
 				bool leaf, u16 asid);
 };
 
+/*
+ * Describes resources required for on/off power operation.
+ * Separate reference count is provided for atomic/nonatomic
+ * operations.
+ * gdscs - on kernel 6.6, power domains are used instead. This
+ * field can be removed once no legacy targets using it remain.
+ */
+struct arm_smmu_power_resources {
+	struct device			*dev;
+
+	struct clk			**clocks;
+	int				num_clocks;
+
+	struct regulator_bulk_data	*gdscs;
+	int				num_gdscs;
+
+	struct icc_path			*icc_path;
+
+	/* Protects power_count */
+	struct mutex			power_lock;
+	int				power_count;
+
+	int (*resume)(struct arm_smmu_power_resources *pwr);
+	void (*suspend)(struct arm_smmu_power_resources *pwr);
+};
+
+int arm_smmu_power_on(struct arm_smmu_power_resources *pwr);
+void arm_smmu_power_off(struct arm_smmu_device *smmu,
+			struct arm_smmu_power_resources *pwr);
+struct arm_smmu_power_resources *arm_smmu_init_power_resources(
+			struct device *dev);
+
 /* An SMMUv3 instance */
 struct arm_smmu_device {
 	struct device			*dev;
@@ -213,6 +245,8 @@ struct arm_smmu_device {
 
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
+
+	struct arm_smmu_power_resources *pwr;
 };
 
 struct arm_smmu_stream {
