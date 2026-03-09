@@ -31,6 +31,16 @@ struct scmi_iio_priv {
 	s64 iio_buf[SCMI_IIO_NUM_OF_AXIS + 1];
 	struct notifier_block sensor_update_nb;
 	u32 *freq_avail;
+
+	/*
+	* HACK - virtio-scmi sensors work on the other (host) VM, and
+	* sample timestamps from these sensors looks like "timestamp
+	* from the future" for CTS tests. This hack fixes it by
+	* calculation of the timestamp delta from the first received
+	* sensor timestamp and applying this delta.
+	*/
+	bool first_sample;
+	long delta_time_ns;
 };
 
 static int scmi_iio_sensor_update_cb(struct notifier_block *nb,
@@ -73,6 +83,30 @@ static int scmi_iio_sensor_update_cb(struct notifier_block *nb,
 		} else {
 			time_ns = time * int_pow(10, tstamp_scale);
 		}
+
+		if (sensor->first_sample) {
+			struct timespec64 ts;
+			u64 boot_time_ns;
+			ktime_get_boottime_ts64(&ts);
+			boot_time_ns = (ts.tv_sec * NSEC_PER_SEC + ts.tv_nsec);
+
+			sensor->first_sample = false;
+			// HACK: this check assumes that the "host" system running SCMI
+			// sensor firmware is booted earlier-than the Android guest
+			// running this driver, and so sensor samples look as if they were
+			// coming from the future. If the Android guest is booted earlier,
+			// this check will fail to properly account for that, and - while the samples
+			// will not appear to be of suspicious time travel origin - they may
+			// be from too much in the past if no other adjustment is performed.
+			if (time_ns > boot_time_ns) {
+				sensor->delta_time_ns = time_ns - boot_time_ns + 100 * NSEC_PER_MSEC;
+				pr_info("sensor %s has time offset applied = %ld ns\n", sensor->sensor_info->name,
+					sensor->delta_time_ns);
+			}
+		}
+
+		time_ns -= sensor->delta_time_ns;
+
 	}
 
 	scmi_iio_dev = sensor->indio_dev;
@@ -584,6 +618,7 @@ scmi_alloc_iiodev(struct scmi_device *sdev,
 	sensor->sensor_ops = ops;
 	sensor->ph = ph;
 	sensor->sensor_info = sensor_info;
+	sensor->first_sample = true;
 	sensor->sensor_update_nb.notifier_call = scmi_iio_sensor_update_cb;
 	sensor->indio_dev = iiodev;
 
