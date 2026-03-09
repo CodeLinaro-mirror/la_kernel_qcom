@@ -8,7 +8,6 @@ build --flag_alias=socrepo=//build/kernel/kleaf:socrepo
 build --//build/kernel/kleaf:socrepo=true
 build --flag_alias=qtisocrepo=//build/qcom_build_extensions:qtisocrepo
 build --//build/qcom_build_extensions:qtisocrepo=true
-build --define CONFIG_WONDER_SUPPORT=y
 common --//build/kernel/kleaf:user_ddk_unsafe_headers=//soc-repo:unsafe_headers_qcom_group
 # Allocate default 80% heap for bazel
 startup --host_jvm_args=-XX:MaxRAMPercentage=80.0
