@@ -57,7 +57,7 @@ static inline unsigned long long msm_timer_get_sclk_ticks(void)
 {
 	return __arch_counter_get_cntpct();
 }
-#elif IS_ENABLED(CONFIG_MSM_BOOT_TIME_MARKER)
+#elif IS_ENABLED(CONFIG_QGKI_MSM_BOOT_TIME_MARKER)
 #include <soc/qcom/boot_stats.h>
 #else
 static inline unsigned long long msm_timer_get_sclk_ticks(void)
