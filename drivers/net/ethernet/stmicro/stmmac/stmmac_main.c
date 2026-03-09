@@ -4634,6 +4634,9 @@ static int STMMAC_handle_prv_ioctl_filter_ipv6(struct net_device *dev,
 		/* continue writing L3 mask */
 		value |= (GMAC_L3HDBM & ((filter->src_or_dest_addr_mask & 0x60) << 6));
 
+		/*write to GMAC_L3_L4_Control register*/
+		writel_relaxed(value, priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));
+
 		/* write L3 addr */
 		value = filter->src_or_dest_addr[0] << 24 |
 				filter->src_or_dest_addr[1] << 16 |
@@ -4658,10 +4661,10 @@ static int STMMAC_handle_prv_ioctl_filter_ipv6(struct net_device *dev,
 				filter->src_or_dest_addr[14] << 8 |
 				filter->src_or_dest_addr[15];
 		writel_relaxed(value, priv->ioaddr + GMAC_L3_ADDR0(cur_filter_num));
+	} else {
+		/*write to GMAC_L3_L4_Control register*/
+		writel_relaxed(value, priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));
 	}
-
-	/*write to GMAC_L3_L4_Control register*/
-	writel_relaxed(value, priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));
 
 	if (filter->l4_filter.l4_proto_number == IPPROTO_UDP)
 		udp = true;
