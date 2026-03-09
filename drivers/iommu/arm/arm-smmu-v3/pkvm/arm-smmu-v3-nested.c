@@ -14,7 +14,9 @@
 
 #include <linux/io-pgtable.h>
 #include <linux/io-pgtable-arm.h>
-#include "arm-smmu-v3-module.h"
+#include "qcom_smmu_dispatcher.h"
+
+static struct smmu_vendor_data data;
 
 #ifdef MODULE
 void *memset(void *dst, int c, size_t count)
@@ -35,8 +37,6 @@ bool __list_del_entry_valid_or_report(struct list_head *entry)
 	return CALL_FROM_OPS(list_del_entry_valid_or_report, entry);
 }
 #endif
-
-const struct pkvm_module_ops		*mod_ops;
 #endif
 
 size_t __ro_after_init kvm_hyp_arm_smmu_v3_count;
@@ -64,25 +64,22 @@ struct hyp_arm_smmu_v3_device *kvm_hyp_arm_smmu_v3_smmus;
  * Wait until @cond is true.
  * Return 0 on success, or -ETIMEDOUT
  */
-#define smmu_wait(use_wfe, _cond)				\
-({								\
-	int __ret = 0;						\
-	int __i = 0;						\
-								\
-	while (!(_cond)) {					\
-		if (use_wfe)					\
-			wfe();					\
-		if (++__i > ARM_SMMU_POLL_TIMEOUT_US) {		\
-			__ret = -ETIMEDOUT;			\
-			break;					\
-		}						\
-		pkvm_udelay(1);					\
-	}							\
-	__ret;							\
-})
+int smmu_wait(bool use_wfe, bool _cond)
+{
+	int __ret = 0;
+	int __i = 0;
 
-/* Protected by host_mmu.lock from core code. */
-static struct io_pgtable *idmap_pgtable;
+	while (!(_cond)) {
+		if (use_wfe)
+			wfe();
+		if (++__i > ARM_SMMU_POLL_TIMEOUT_US) {
+			__ret = -ETIMEDOUT;
+			break;
+		}
+		pkvm_udelay(1);
+	}
+	return __ret;
+}
 
 static bool is_cmdq_enabled(struct hyp_arm_smmu_v3_device *smmu)
 {
@@ -247,7 +244,7 @@ static int smmu_tlb_inv_range_smmu(struct hyp_arm_smmu_v3_device *smmu,
 				   unsigned long iova, size_t size, size_t granule)
 {
 	arm_smmu_tlb_inv_build(cmd, iova, size, granule,
-			       idmap_pgtable->cfg.pgsize_bitmap,
+			       data.vdomain->pgtable->cfg.pgsize_bitmap,
 			       smmu->features & ARM_SMMU_FEAT_RANGE_INV,
 			       smmu, __smmu_add_cmd, NULL);
 	return smmu_sync_cmd(smmu);
@@ -360,6 +357,7 @@ static int smmu_probe(struct hyp_arm_smmu_v3_device *smmu)
 
 	smmu->ias = 64;
 	smmu->ias = min(smmu->ias, smmu->oas);
+
 	return 0;
 }
 
@@ -398,7 +396,7 @@ static void smmu_attach_stage_2(struct arm_smmu_ste *ste)
 	unsigned long vttbr;
 	unsigned long ts, sl, ic, oc, sh, tg, ps;
 	unsigned long cfg;
-	struct io_pgtable_cfg *pgt_cfg =  &idmap_pgtable->cfg;
+	struct io_pgtable_cfg *pgt_cfg =  &data.vdomain->pgtable->cfg;
 
 	cfg = FIELD_GET(STRTAB_STE_0_CFG, ste->data[0]);
 	if (!FIELD_GET(STRTAB_STE_0_V, ste->data[0]) ||
@@ -602,10 +600,12 @@ static int smmu_init_device(struct hyp_arm_smmu_v3_device *smmu)
 		 */
 		WARN_ON(___pkvm_host_donate_hyp(pfn, 1, true));
 	}
+
 	smmu->base = hyp_phys_to_virt(smmu->mmio_addr);
 	ret = smmu_probe(smmu);
 	if (ret)
 		goto out_ret;
+
 	hyp_spin_lock_init(&smmu->lock);
 
 	ret = smmu_init_cmdq(smmu);
@@ -625,40 +625,6 @@ static int smmu_init_device(struct hyp_arm_smmu_v3_device *smmu)
 out_ret:
 	smmu_deinit_device(smmu);
 	return ret;
-}
-
-static int smmu_init_pgt(void)
-{
-	/* Default values overridden based on SMMUs common features. */
-	struct io_pgtable_cfg cfg = (struct io_pgtable_cfg) {
-		.fmt = ARM_64_LPAE_S2,
-		.tlb = &smmu_tlb_ops,
-		.pgsize_bitmap = -1,
-		.ias = 48,
-		.oas = 48,
-		.coherent_walk = true,
-	};
-	struct hyp_arm_smmu_v3_device *smmu;
-	int ret = 0;
-
-	for_each_smmu(smmu) {
-		cfg.ias = min(cfg.ias, smmu->ias);
-		cfg.oas = min(cfg.oas, smmu->oas);
-		cfg.pgsize_bitmap &= smmu->pgsize_bitmap;
-		cfg.coherent_walk &= !!(smmu->features & ARM_SMMU_FEAT_COHERENCY);
-	}
-
-	/* Avoid larger input size as this is identity mapped. */
-	cfg.ias = min(cfg.ias, cfg.oas);
-
-	/* At least PAGE_SIZE must be supported by all SMMUs*/
-	if ((cfg.pgsize_bitmap & PAGE_SIZE) == 0)
-		return -EINVAL;
-
-	idmap_pgtable = kvm_arm_io_pgtable_alloc(&cfg, NULL, &ret, true);
-	if (ret)
-		return ret;
-	return 0;
 }
 
 static int smmu_init(void)
@@ -682,14 +648,12 @@ static int smmu_init(void)
 
 	BUILD_BUG_ON(sizeof(hyp_spinlock_t) != sizeof(u32));
 
-	ret = smmu_init_pgt();
-	if (ret)
-		return ret;
-	return kvm_iommu_snapshot_host_stage2(NULL);
+	return 0;
 
 out_reclaim_smmu:
 	while (smmu != kvm_hyp_arm_smmu_v3_smmus)
 		smmu_deinit_device(--smmu);
+
 	smmu_reclaim_pages(hyp_virt_to_phys(kvm_hyp_arm_smmu_v3_smmus),
 			   smmu_arr_size);
 	return ret;
@@ -1005,102 +969,55 @@ static bool smmu_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 addr)
 		hyp_spin_unlock(&smmu->lock);
 		return ret;
 	}
+
 	return false;
 }
 
-static size_t smmu_pgsize_idmap(size_t size, u64 paddr, size_t pgsize_bitmap)
+void smmu_get_cfg(struct io_pgtable_cfg *cfg)
 {
-	size_t pgsizes;
+	struct hyp_arm_smmu_v3_device *smmu;
 
-	/* Remove page sizes that are larger than the current size */
-	pgsizes = pgsize_bitmap & GENMASK_ULL(__fls(size), 0);
-
-	/* Remove page sizes that the address is not aligned to. */
-	if (likely(paddr))
-		pgsizes &= GENMASK_ULL(__ffs(paddr), 0);
-
-	WARN_ON(!pgsizes);
-
-	/* Return the larget page size that fits. */
-	return BIT(__fls(pgsizes));
-}
-
-static void smmu_host_stage2_idmap(struct kvm_hyp_iommu_domain *domain, phys_addr_t start,
-				   phys_addr_t end, int prot)
-{
-	size_t size = end - start;
-	size_t pgsize, pgcount;
-	size_t mapped, unmapped;
-	int ret;
-	struct io_pgtable *pgtable = idmap_pgtable;
-	struct iommu_iotlb_gather gather;
-
-	end = min(end, BIT(pgtable->cfg.oas));
-	if (start >= end)
-		return;
-
-	if (prot) {
-		if (!(prot & IOMMU_MMIO))
-			prot |= IOMMU_CACHE;
-
-		while (size) {
-			mapped = 0;
-			pgsize = smmu_pgsize_idmap(size, start, pgtable->cfg.pgsize_bitmap);
-			pgcount = size / pgsize;
-			ret = pgtable->ops.map_pages(&pgtable->ops, start, start,
-						     pgsize, pgcount, prot, 0, &mapped);
-			size -= mapped;
-			start += mapped;
-			if (!mapped || ret)
-				return;
+	for_each_smmu(smmu) {
+		if (!cfg->ias) {
+			cfg->ias = smmu->ias;
+			cfg->oas = smmu->oas;
+			cfg->pgsize_bitmap = smmu->pgsize_bitmap;
+			cfg->coherent_walk = (smmu->features & ARM_SMMU_FEAT_COHERENCY);
 		}
-	} else {
-		while (size) {
-			pgsize = smmu_pgsize_idmap(size, start, pgtable->cfg.pgsize_bitmap);
-			pgcount = size / pgsize;
-			unmapped = pgtable->ops.unmap_pages(&pgtable->ops, start,
-							    pgsize, pgcount, &gather);
-			size -= unmapped;
-			start += unmapped;
-			if (!unmapped)
-				break;
-		}
-		/* Some memory were not unmapped. */
-		WARN_ON(size);
+
+		cfg->ias = min(cfg->ias, smmu->ias);
+		cfg->oas = min(cfg->oas, smmu->oas);
+		cfg->pgsize_bitmap &= smmu->pgsize_bitmap;
+		cfg->coherent_walk &= !!(smmu->features & ARM_SMMU_FEAT_COHERENCY);
 	}
+
+	/* Avoid larger input size as this is identity mapped. */
+	cfg->ias = min(cfg->ias, cfg->oas);
 }
 
-static int smmu_alloc_domain(struct kvm_hyp_iommu_domain *domain, int type)
-{
-	return 0;
-}
-
-static void smmu_free_domain(struct kvm_hyp_iommu_domain *domain)
-{
-}
-
-static struct kvm_hyp_iommu *smmu_id_to_iommu(pkvm_handle_t smmu_id)
-{
-	return 0;
-}
-
-#ifdef MODULE
-int smmu_init_hyp_module(const struct pkvm_module_ops *ops)
-{
-	if (!ops)
-		return -EINVAL;
-
-	mod_ops = ops;
-	return 0;
-}
-#endif
-
-/* Shared with the kernel driver in EL1 */
-struct kvm_iommu_ops smmu_ops = {
-	.init				= smmu_init,
-	.host_stage2_idmap		= smmu_host_stage2_idmap,
-	.alloc_domain			= smmu_alloc_domain,
-	.free_domain			= smmu_free_domain,
-	.get_iommu_by_id		= smmu_id_to_iommu,
-	.dabt_handler			= smmu_dabt_handler,
+const struct smmu_vendor_callbacks vcallbacks = {
+	.tlb_ops = &smmu_tlb_ops,
+	.get_cfg = smmu_get_cfg,
+	.dabt_hdl = smmu_dabt_handler,
+	.post_init = NULL,
 };
+
+static struct smmu_vendor_driver smmuv3_driver = {
+	.name = "smmuv3_nesting",
+	.callbacks = &vcallbacks,
+	.vdata = &data,
+};
+
+int smmuv3_hyp_nesting_init(void)
+{
+	int ret;
+
+	ret = smmu_init();
+	if (ret)
+		return ret;
+
+	/* Register this driver with the common vendor module */
+	ret = smmu_vendor_register_driver(&smmuv3_driver);
+
+	return ret;
+}

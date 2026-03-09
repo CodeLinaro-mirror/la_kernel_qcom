@@ -12,6 +12,7 @@
 #include <linux/of_platform.h>
 #include <linux/kvm_host.h>
 #include "smmuv2_nesting.h"
+#include "arm_smmu_v3_nested.h"
 
 #ifdef MODULE
 static unsigned long                   pkvm_module_token;
@@ -30,6 +31,7 @@ static int smmu_alloc_atomic_mc(struct kvm_hyp_memcache *atomic_mc)
 {
 	int ret;
 	int atomic_pages = 6000; /* arbitrary for now. */
+	int nr_smmus = 2; /* assumption for now */
 #ifndef MODULE
 	u64 i;
 	phys_addr_t start, end;
@@ -55,11 +57,34 @@ static int smmu_alloc_atomic_mc(struct kvm_hyp_memcache *atomic_mc)
 	ret = topup_hyp_memcache(atomic_mc, 1, 3);
 	if (ret)
 		return ret;
+
+	/* For STEs. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 10);
+		if (ret)
+			return ret;
+
+	/* For command queue. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 8);
+	if (ret)
+		return ret;
+
+	/* For PGD. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 3);
+	if (ret)
+		return ret;
+
+	/*For L2 ptrs */;
+	ret = topup_hyp_memcache(atomic_mc, 50, 2);
+	if (ret)
+		return ret;
+
 	ret = topup_hyp_memcache(atomic_mc, atomic_pages, 0);
 	if (ret)
 		return ret;
+
 	pr_info("smmuv3: Allocated %d MiB for atomic usage\n",
 		(atomic_pages << PAGE_SHIFT) / SZ_1M);
+
 	/* Topup hyp alloc so IOMMU driver can allocate domains. */
 	__pkvm_topup_hyp_alloc(1);
 
@@ -77,6 +102,14 @@ static int qcom_smmu_nesting_init(void)
 	if (ret)
 		return ret;
 
+	pr_info("alloc atomic suceeded\n");
+
+	ret = kvm_arm_smmu_v3_init_drv();
+	if (ret) {
+		pr_err("Failed to load SMMUv3 IOMMU EL1 module %d\n", ret);
+		return ret;
+	}
+
 	smmuv2_nesting_init();
 
 #ifdef MODULE
@@ -91,13 +124,21 @@ static int qcom_smmu_nesting_init(void)
 
 	ret = kvm_iommu_init_hyp(ksym_ref_addr_nvhe(qcom_smmu_hyp_nesting_ops),
 				 &atomic_mc);
+
 	if (ret) {
 		pr_err("Failed to init hyp iommu ops: %d\n", ret);
 		return ret;
 	}
+
 	ret = smmuv2_post_boot_init();
 	if (ret) {
 		pr_err("Failed to initialize SMMUv2 post boot: %d\n", ret);
+		return ret;
+	}
+
+	ret = kvm_arm_smmu_v3_post_init();
+	if (ret) {
+		pr_err("Failed to initialize SMMUv3 post boot: %d\n", ret);
 		return ret;
 	}
 
