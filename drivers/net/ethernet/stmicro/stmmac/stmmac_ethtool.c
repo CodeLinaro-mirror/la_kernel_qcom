@@ -689,6 +689,8 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 					     (*(u32 *)p);
 			}
 		}
+
+#if !IS_ENABLED(CONFIG_DWMAC_QCOM_ETHQOS)
 		if (priv->eee_enabled) {
 			if (!priv->plat->mac2mac_en) {
 				int val = phylink_get_eee_err(priv->phylink);
@@ -697,6 +699,7 @@ static void stmmac_get_ethtool_stats(struct net_device *dev,
 					priv->xstats.phy_eee_wakeup_error_n = val;
 			}
 		}
+#endif
 
 		if (priv->synopsys_id >= DWMAC_CORE_3_50)
 			stmmac_mac_debug(priv, priv->ioaddr,
