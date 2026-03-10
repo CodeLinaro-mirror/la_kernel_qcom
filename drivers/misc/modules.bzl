@@ -14,3 +14,13 @@ def register_modules(registry):
             "drivers/misc/qseecom_proxy.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/misc/bootmarker_proxy",
+        out = "bootmarker_proxy.ko",
+        config = "CONFIG_BOOTMARKER_PROXY",
+        srcs = [
+            # do not sort
+            "drivers/misc/bootmarker_proxy.c",
+        ],
+    )
