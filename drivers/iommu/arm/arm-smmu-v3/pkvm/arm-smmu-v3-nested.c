@@ -64,22 +64,21 @@ struct hyp_arm_smmu_v3_device *kvm_hyp_arm_smmu_v3_smmus;
  * Wait until @cond is true.
  * Return 0 on success, or -ETIMEDOUT
  */
-int smmu_wait(bool use_wfe, bool _cond)
-{
-	int __ret = 0;
-	int __i = 0;
-
-	while (!(_cond)) {
-		if (use_wfe)
-			wfe();
-		if (++__i > ARM_SMMU_POLL_TIMEOUT_US) {
-			__ret = -ETIMEDOUT;
-			break;
-		}
-		pkvm_udelay(1);
-	}
-	return __ret;
-}
+#define smmu_wait(use_wfe, _cond)                               \
+({                                                              \
+	int __ret = 0;                                          \
+	int __i = 0;                                            \
+	while (!(_cond)) {                                      \
+		if (use_wfe)                                    \
+			wfe();                                  \
+		if (++__i > ARM_SMMU_POLL_TIMEOUT_US) {         \
+			__ret = -ETIMEDOUT;                     \
+			break;                                  \
+		}                                               \
+		pkvm_udelay(1);                                 \
+	}                                                       \
+	__ret;                                                  \
+})
 
 static bool is_cmdq_enabled(struct hyp_arm_smmu_v3_device *smmu)
 {
