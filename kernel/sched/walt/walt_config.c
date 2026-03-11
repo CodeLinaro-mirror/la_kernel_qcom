@@ -115,6 +115,8 @@ void walt_config(void)
 
 	pipeline_swap_util_th = 0;
 
+	trailblazer_boost_thresh_ipc = TRAILBLAZER_BOOST_THRESH_IPC;
+
 	/* Initialize smart freq configurations */
 	smart_freq_init(name);
 	/* return if socinfo is not available */
