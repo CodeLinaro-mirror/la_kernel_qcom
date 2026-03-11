@@ -26,9 +26,15 @@ TRACE_EVENT(buses_log_info,
 
 	TP_fast_assign(
 		__assign_str(name);
-		WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg),
-				       MAX_MSG_LEN, vaf->fmt,
-				       *vaf->va) >= MAX_MSG_LEN);
+		if (strnlen(vaf->fmt, MAX_MSG_LEN + 1) > MAX_MSG_LEN) {
+			/* Suspicious format string */
+			WARN_ON_ONCE(1);
+		} else {
+			int len = vsnprintf(__get_dynamic_array(msg), MAX_MSG_LEN,
+								vaf->fmt, *vaf->va);
+			/* Handle error or truncation */
+			WARN_ON_ONCE(len < 0 || len >= MAX_MSG_LEN);
+		}
 	),
 
 	TP_printk("%s: %s", __get_str(name), __get_str(msg))

@@ -2683,6 +2683,47 @@ static const struct adsp_data canoe_soccp_resource = {
 	.auto_boot = true,
 };
 
+static const struct adsp_data ravelin_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.auto_boot = false,
+};
+
+static const struct adsp_data ravelin_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data ravelin_wpss_resource = {
+	.crash_reason_smem = 626,
+	.firmware_name = "wpss.mdt",
+	.pas_id = 6,
+	.minidump_id = 4,
+	.load_state = "wpss",
+	.uses_elf64 = true,
+	.ssr_name = "wpss",
+	.sysmon_name = "wpss",
+	.ssctl_id = 0x19,
+};
+
 static const struct adsp_data pineapple_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -3136,6 +3177,50 @@ static const struct adsp_data seraph_soccp_resource = {
 	.auto_boot = true,
 };
 
+static const struct adsp_data shikra_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
+};
+
+static const struct adsp_data shikra_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.dtb_pas_id = 0x26,
+	.minidump_id = 3,
+	.decrypt_shutdown = true,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.both_dumps = true,
+};
+
+static const struct adsp_data shikra_lpaicp_resource = {
+	.crash_reason_smem = 682,
+	.firmware_name = "lpaicp.mbn",
+	.dtb_firmware_name = "lpaicp_dtb.mbn",
+	.pas_id = 0x56,
+	.dtb_pas_id = 0x57,
+	.minidump_id = 0,//TODO
+	.ssr_name = "lpaicp",
+	.uses_elf64 = true,
+	.sysmon_name = "lpaicp",
+};
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -3236,6 +3321,12 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,bengal-adsp-pas", .data = &bengal_adsp_resource},
 	{ .compatible = "qcom,bengal-cdsp-pas", .data = &bengal_cdsp_resource},
 	{ .compatible = "qcom,bengal-modem-pas", .data = &bengal_mpss_resource},
+	{ .compatible = "qcom,shikra-cdsp-pas", .data = &shikra_cdsp_resource},
+	{ .compatible = "qcom,shikra-modem-pas", .data = &shikra_mpss_resource},
+	{ .compatible = "qcom,shikra-lpaicp-pas", .data = &shikra_lpaicp_resource},
+	{ .compatible = "qcom,ravelin-adsp-pas", .data = &ravelin_adsp_resource},
+	{ .compatible = "qcom,ravelin-modem-pas", .data = &ravelin_mpss_resource},
+	{ .compatible = "qcom,ravelin-wpss-pas", .data = &ravelin_wpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

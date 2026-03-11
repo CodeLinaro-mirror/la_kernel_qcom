@@ -28,6 +28,8 @@ gcc-alor.ko
 gcc-canoe.ko
 tcsrcc-chora.ko
 gcc-chora.ko
+gcc-sm4450.ko
+dispcc-sm4450.ko
 qcom-cpufreq-hw.ko
 gdsc-regulator.ko
 gpucc-canoe.ko

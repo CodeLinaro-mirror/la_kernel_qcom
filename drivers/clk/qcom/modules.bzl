@@ -1210,6 +1210,23 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/clk/qcom/debugcc-shikra",
+        out = "debugcc-shikra.ko",
+        config = "CONFIG_CLK_SHIKRA_DEBUGCC",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-debug.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/debugcc-shikra.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-dummy",
+            "drivers/clk/qcom/clk-qcom",
+        ],
+    )
+
+    registry.register(
         name = "drivers/clk/qcom/debugcc-sun",
         out = "debugcc-sun.ko",
         config = "CONFIG_SM_DEBUGCC_SUN",
@@ -3732,5 +3749,18 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/clk-spmi-pmic-div",
+        out = "clk-spmi-pmic-div.ko",
+        config = "CONFIG_SPMI_PMIC_CLKDIV",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-spmi-pmic-div.c",
+        ],
+        deps = [
+            # do not sort
         ],
     )
