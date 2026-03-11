@@ -257,10 +257,11 @@ static void msm_mpm_chip_unmask(struct irq_data *d)
 
 static int msm_mpm_chip_set_type(struct irq_data *d, unsigned int type)
 {
+	msm_mpm_set_type(d, type);
+
 	if (!d->parent_data)
 		return 0;
 
-	msm_mpm_set_type(d, type);
 	return irq_chip_set_type_parent(d, type);
 }
 
