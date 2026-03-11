@@ -102,11 +102,6 @@ static void msm_show_resume_irqs(void)
 	u32 gic_line_nr;
 	u32 typer;
 
-	if (unlikely(hibernation))
-		return;
-	if (unlikely(hibernation) || (pm_suspend_target_state == PM_SUSPEND_MEM))
-		gic_resume_ds(gic_data_glb, NULL);
-
 	if (!msm_show_resume_irq_mask)
 		return;
 
@@ -171,7 +166,6 @@ static struct syscore_ops gic_syscore_ops = {
 static int msm_show_resume_probe(struct platform_device *pdev)
 {
 	base = of_iomap(pdev->dev.of_node, 0);
-
 	if (IS_ERR(base)) {
 		pr_err("%pOF: error %d: unable to map GICD registers\n",
 				pdev->dev.of_node, PTR_ERR(base));
@@ -192,6 +186,9 @@ static int msm_show_resume_remove(struct platform_device *pdev)
 	unregister_trace_android_vh_cpuidle_psci_enter(gic_s2idle_enter, NULL);
 	unregister_trace_android_vh_cpuidle_psci_exit(gic_s2idle_exit, NULL);
 	unregister_syscore_ops(&gic_syscore_ops);
+	unregister_pm_notifier(&gic_notif_block);
+	unregister_trace_android_vh_gic_v3_suspend(gic_suspend_ds, NULL);
+	unregister_trace_android_vh_gic_resume(gic_resume_ds, NULL);
 	iounmap(base);
 	return 0;
 }
