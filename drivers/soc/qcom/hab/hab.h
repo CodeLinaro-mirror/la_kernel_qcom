@@ -469,6 +469,7 @@ struct hab_driver_ops {
 	int (*habhyp_virq_rx_unregister)(struct hvirq_dbl *dbl);
 	int (*habhyp_get_virq_num_id)(void **virqdev, int label);
 	int (*habhyp_init_virt_irq)(void);
+	unsigned long long (*timer_get_sclk_ticks)(void);
 };
 
 struct hab_driver {
@@ -879,6 +880,11 @@ static inline int habhyp_get_virq_num_id(void **virqdev, int label)
 static inline void hab_hypervisor_unregister(void)
 {
 	hab_driver.ops->hab_hypervisor_unregister();
+}
+
+static inline unsigned long long msm_timer_get_sclk_ticks(void)
+{
+	return hab_driver.ops->timer_get_sclk_ticks();
 }
 
 int hab_hypervisor_register_os(void);

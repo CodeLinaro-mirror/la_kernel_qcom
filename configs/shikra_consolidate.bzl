@@ -9,10 +9,12 @@ shikra_consolidate_config = {
     "CONFIG_DETECT_HUNG_TASK": "y",
     "CONFIG_LKDTM": "m",
     "CONFIG_LOCK_TORTURE_TEST": "m",
+    "CONFIG_MSM_GPI_DMA_DEBUG": "y",
     "CONFIG_MSM_RPM_SMD_DEBUG": "m",
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_PAGE_POISONING": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_TORTURE_TEST": "m",
+    "CONFIG_SCHED_WALT_DEBUG": "m",
 }

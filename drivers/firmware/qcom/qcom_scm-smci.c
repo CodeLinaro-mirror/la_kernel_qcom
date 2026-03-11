@@ -308,8 +308,10 @@ int32_t qcom_smci_init_smobject(dma_addr_t dma_addr, void *vaddr, size_t size,
 	struct smo_buffer_info *buf_info = NULL;
 	int ret = 0;
 
-	if (!vaddr || !smo)
+	if (!vaddr || !smo) {
+		pr_err("Invalid vaddr or smo\n");
 		return -EINVAL;
+	}
 
 	if (!smo_buffer_dev) {
 		pr_err("SMO buffer device not initialized\n");
@@ -332,12 +334,15 @@ int32_t qcom_smci_init_smobject(dma_addr_t dma_addr, void *vaddr, size_t size,
 	}
 
 	ret = dma_get_sgtable(smo_buffer_dev, buf_info->sgt, buf_info->vaddr, dma_addr, size);
-	if (ret)
+	if (ret) {
+		pr_err("Failed to get sgtable\n");
 		goto exit_free_sgt;
+	}
 
 	buf_info->object = init_si_mem_object_sg(buf_info->sgt, 0,
 			flags, qcom_smci_smo_release, buf_info);
 	if (buf_info->object == NULL_SI_OBJECT) {
+		pr_err("Failed to initialize memory object\n");
 		ret = -EINVAL;
 		goto exit_free_sgtable;
 	}
@@ -350,15 +355,17 @@ int32_t qcom_smci_init_smobject(dma_addr_t dma_addr, void *vaddr, size_t size,
 		 * access permissions, without requiring an explicit unmap beforehand.
 		 */
 		ret = early_map_memory_obj(buf_info->object);
-		if (ret)
-			goto exit_free_object;
+		if (ret) {
+			pr_err("Failed to perform early mapping of memory object\n");
+			put_si_object(buf_info->object);
+			buf_info = NULL;
+			return ret;
+		}
 	}
 
 	*smo = buf_info->object;
-	return ret;
+	return 0;
 
-exit_free_object:
-	put_si_object(buf_info->object);
 exit_free_sgtable:
 	sg_free_table(buf_info->sgt);
 exit_free_sgt:

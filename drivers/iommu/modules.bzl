@@ -1,9 +1,9 @@
 load(":drivers/iommu/arm/arm-smmu/modules.bzl", register_arm_arm_smmu = "register_modules")
-#load(":drivers/iommu/arm/arm-smmu-v3/modules.bzl", register_arm_arm_smmu_v3 = "register_modules")
+load(":drivers/iommu/arm/arm-smmu-v3/modules.bzl", register_arm_arm_smmu_v3 = "register_modules")
 
 def register_modules(registry):
     register_arm_arm_smmu(registry)
-    #    register_arm_arm_smmu_v3(registry)
+    register_arm_arm_smmu_v3(registry)
 
     registry.register(
         name = "drivers/iommu/iommu-logger",

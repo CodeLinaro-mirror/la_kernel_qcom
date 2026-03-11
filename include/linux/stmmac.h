@@ -253,6 +253,8 @@ struct plat_stmmacenet_data {
 	u32 tx_queues_to_use;
 	bool has_hdma;
 	bool has_virtio_mdio;
+	int phy_type;
+	int board_type;
 	bool insert_ts_pktid;
 	u8 rx_sched_algorithm;
 	u8 tx_sched_algorithm;
@@ -266,6 +268,8 @@ struct plat_stmmacenet_data {
 	void (*ptp_clk_freq_config)(struct stmmac_priv *priv);
 	int (*init)(struct platform_device *pdev, void *priv);
 	void (*exit)(struct platform_device *pdev, void *priv);
+	int (*suspend)(struct device *dev, void *priv);
+	int (*resume)(struct device *dev, void *priv);
 	void (*safety_irq)(struct stmmac_priv *priv, bool en);
 	void (*safety_pcs_stats)(struct stmmac_priv *priv, unsigned long *ptr);
 	struct mac_device_info *(*setup)(void *priv);

@@ -32,7 +32,9 @@
 		.out_bit = 1,                                         \
 		.intr_enable_bit = 0,                                 \
 		.intr_status_bit = 0,                                 \
-		.intr_target_bit = 5,                                 \
+		.intr_target_bit = 8,                                 \
+		.intr_wakeup_enable_bit = 7,	                      \
+		.intr_wakeup_present_bit = 6,	                      \
 		.intr_target_kpss_val = 3,                            \
 		.intr_raw_status_bit = 4,                             \
 		.intr_polarity_bit = 1,                               \
@@ -80,13 +82,13 @@
 		.intr_detection_width = -1,                          \
 	}
 
-#define UFS_RESET(pg_name, offset)                                   \
+#define UFS_RESET(pg_name, offset, io)                                   \
 	{                                                            \
 		.grp = PINCTRL_PINGROUP(#pg_name,                    \
 					pg_name##_pins,              \
 					ARRAY_SIZE(pg_name##_pins)), \
 		.ctl_reg = offset,                                   \
-		.io_reg = offset + 0x4,                              \
+		.io_reg = io,                              \
 		.intr_cfg_reg = 0,                                   \
 		.intr_status_reg = 0,                                \
 		.intr_target_reg = 0,                                \
@@ -229,6 +231,7 @@ static const struct pinctrl_pin_desc pikachu_pins[] = {
 	PINCTRL_PIN(114, "GPIO_114"),
 	PINCTRL_PIN(115, "GPIO_115"),
 	PINCTRL_PIN(116, "GPIO_116"),
+	PINCTRL_PIN(117, "UFS_RESET"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -350,6 +353,8 @@ DECLARE_MSM_GPIO_PINS(113);
 DECLARE_MSM_GPIO_PINS(114);
 DECLARE_MSM_GPIO_PINS(115);
 DECLARE_MSM_GPIO_PINS(116);
+
+static const unsigned int ufs_reset_pins[] = { 117 };
 
 enum pikachu_functions {
 	msm_mux_gpio,
@@ -1901,6 +1906,7 @@ static const struct msm_pingroup pikachu_groups[] = {
 	[116] = PINGROUP(116, qup0_se5_l3, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			egpio),
 
+	[117] = UFS_RESET(ufs_reset, 0x184004, 0x185000),
 };
 
 static const struct msm_gpio_wakeirq_map pikachu_pdc_map[] = {

@@ -182,6 +182,15 @@ static const char * const drv_names_chora[][MAX_DRV_NAMES] = {
 			"MODEM", "WLAN RF", "WPSS", ""},
 };
 
+static const char * const drv_names_seraph[][MAX_DRV_NAMES] = {
+	[CXPC_DRV_NAME] = {"TZ", "L3", "HLOS", "HYP", "RESERVED", "AUDIO", "AOP", "DEBUG",
+			"GPU", "DISPLAY", "COMPUTE_DSP", "TME_HW", "TME_SW", "RESERVED",
+			"WLAN RF", "WLAN BB", "WPSS", "PCIE0 CESTA", "PCIE1 CESTA", "SOCCP",
+			"DDR AUX", "ARC CPRF", ""},
+	[AOSS_DRV_NAME] = {"APPS", "RESERVED", "AUDIO", "AOP", "DEBUG", "GPU", "DISPLAY", "COMPUTE",
+			"TME", "RESERVED", "WLAN RF", "WLAN BB", "PCIE", "SOCCP", ""},
+};
+
 static ssize_t debug_time_ms_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -604,6 +613,8 @@ static const struct of_device_id drv_match_table[] = {
 	  .data = drv_names_x1e80100 },
 	{ .compatible = "qcom,sys-pm-chora",
 	  .data = drv_names_chora },
+	{ .compatible = "qcom,sys-pm-seraph",
+	  .data = drv_names_seraph },
 	{ }
 };
 

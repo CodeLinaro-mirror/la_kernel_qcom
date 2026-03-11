@@ -95,6 +95,10 @@
 #define BPM_CLR 0x80
 #define EXTEND_BIT 15
 
+#define BCL_INTR_CFG_EN_OFFSET 0x90
+#define BCL_VBAT_LVL0_EN 0x7
+#define BCL_VBAT_LVL0_DIS 0x6
+
 #define BCL_IPC(dev, msg, args...)      do { \
 			if ((dev) && (dev)->ipc_log) { \
 				ipc_log_string((dev)->ipc_log, \
@@ -878,6 +882,8 @@ static int bcl_get_devicetree_data(struct platform_device *pdev,
 		return -ENODEV;
 	}
 
+	bcl_perph->disable_vbat_lvl0_in_suspend = of_property_read_bool(dev_node,
+				"qcom,disable-vbat-level0-in-suspend");
 	bcl_perph->ibat_use_qg_adc =  of_property_read_bool(dev_node,
 				"qcom,ibat-use-qg-adc-5a");
 	bcl_perph->no_bit_shift =  of_property_read_bool(dev_node,
@@ -1304,9 +1310,31 @@ static int bcl_restore(struct device *dev)
 	return 0;
 }
 
+static int  __maybe_unused bcl_suspend(struct device *dev)
+{
+	struct bcl_device *bcl_perph = dev_get_drvdata(dev);
+
+	if (bcl_perph->disable_vbat_lvl0_in_suspend)
+		bcl_write_register(bcl_perph, BCL_INTR_CFG_EN_OFFSET, BCL_VBAT_LVL0_DIS);
+
+	return 0;
+}
+
+static int __maybe_unused bcl_resume(struct device *dev)
+{
+	struct bcl_device *bcl_perph = dev_get_drvdata(dev);
+
+	if (bcl_perph->disable_vbat_lvl0_in_suspend)
+		bcl_write_register(bcl_perph, BCL_INTR_CFG_EN_OFFSET, BCL_VBAT_LVL0_EN);
+
+	return 0;
+}
+
 static const struct dev_pm_ops bcl_pm_ops = {
 	.freeze = bcl_freeze,
 	.restore = bcl_restore,
+	.suspend = bcl_suspend,
+	.resume = bcl_resume,
 };
 
 static const struct bcl_desc pmih010x_data = {

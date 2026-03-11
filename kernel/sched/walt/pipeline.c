@@ -861,8 +861,12 @@ void pipeline_rearrange(struct walt_rq *wrq, int found_topapp)
 	raw_spin_lock(&heavy_lock);
 
 	if (single_cluster_pipeline) {
-		assign_single_cluster_pipeline_cpus();
-		goto out;
+		if (found_topapp == FIND_HEAVY_WAIT)
+			goto unlock;
+		else {
+			assign_single_cluster_pipeline_cpus();
+			goto out;
+		}
 	}
 
 	if (found_topapp == FIND_HEAVY_SUCCESS && !sysctl_single_thread_pipeline) {

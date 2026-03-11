@@ -1245,10 +1245,7 @@ static int qcom_geni_serial_startup(struct uart_port *uport)
 			return ret;
 	}
 
-	uart_port_lock_irq(uport);
 	qcom_geni_serial_start_rx(uport);
-	uart_port_unlock_irq(uport);
-
 	enable_irq(uport->irq);
 
 	return 0;
@@ -1728,6 +1725,19 @@ static int geni_serial_resources_on(struct uart_port *uport)
 	return ret;
 }
 
+static int geni_serial_power_state(struct uart_port *uport, bool power_on)
+{
+	int ret = 0;
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
+
+	if (!power_on)
+		ret = port->dev_data->geni_serial_set_rate(uport, 300);
+	if (ret)
+		dev_err(port->se.dev, "failed to set lowest opp ret=%d\n", ret);
+
+	return ret;
+}
+
 static int geni_serial_resource_state(struct uart_port *uport, bool power_on)
 {
 	return power_on ? geni_serial_resources_on(uport) : geni_serial_resources_off(uport);
@@ -2056,6 +2066,7 @@ static const struct qcom_geni_device_data sa8255p_qcom_geni_console_data = {
 	},
 	.geni_serial_pwr_rsc_init = geni_serial_pwr_init,
 	.geni_serial_set_rate = geni_serial_set_level,
+	.geni_serial_switch_power_state = geni_serial_power_state,
 };
 
 static const struct qcom_geni_device_data sa8255p_qcom_geni_uart_data = {
@@ -2068,6 +2079,7 @@ static const struct qcom_geni_device_data sa8255p_qcom_geni_uart_data = {
 	},
 	.geni_serial_pwr_rsc_init = geni_serial_pwr_init,
 	.geni_serial_set_rate = geni_serial_set_level,
+	.geni_serial_switch_power_state = geni_serial_power_state,
 };
 
 static const struct dev_pm_ops qcom_geni_serial_pm_ops = {

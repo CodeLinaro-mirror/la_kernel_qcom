@@ -1076,15 +1076,15 @@ void clk_huayra_2290_pll_configure(struct clk_alpha_pll *pll, struct regmap *reg
 {
 	u32 val;
 
-	clk_alpha_pll_write_config(pll, regmap, PLL_CONFIG_CTL(pll), config->config_ctl_val);
-	clk_alpha_pll_write_config(pll, regmap, PLL_CONFIG_CTL_U(pll), config->config_ctl_hi_val);
-	clk_alpha_pll_write_config(pll, regmap, PLL_CONFIG_CTL_U1(pll), config->config_ctl_hi1_val);
-	clk_alpha_pll_write_config(pll, regmap, PLL_TEST_CTL(pll), config->test_ctl_val);
-	clk_alpha_pll_write_config(pll, regmap, PLL_TEST_CTL_U(pll), config->test_ctl_hi_val);
-	clk_alpha_pll_write_config(pll, regmap, PLL_TEST_CTL_U1(pll), config->test_ctl_hi1_val);
-	clk_alpha_pll_write_config(pll, regmap, PLL_L_VAL(pll), config->l);
-	clk_alpha_pll_write_config(pll, regmap, PLL_ALPHA_VAL(pll), config->alpha);
-	clk_alpha_pll_write_config(pll, regmap, PLL_USER_CTL(pll), config->user_ctl_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_CONFIG_CTL, config->config_ctl_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_CONFIG_CTL_U, config->config_ctl_hi_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_CONFIG_CTL_U1, config->config_ctl_hi1_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_TEST_CTL, config->test_ctl_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_TEST_CTL_U, config->test_ctl_hi_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_TEST_CTL_U1, config->test_ctl_hi1_val);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_L_VAL, config->l);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_ALPHA_VAL, config->alpha);
+	clk_alpha_pll_write_config(pll, regmap, PLL_OFF_USER_CTL, config->user_ctl_val);
 
 	/* Set PLL_BYPASSNL */
 	regmap_update_bits(regmap, PLL_MODE(pll), PLL_BYPASSNL, PLL_BYPASSNL);
