@@ -3392,10 +3392,22 @@ static const struct adsp_data seraph_soccp_resource = {
 	.auto_boot = true,
 };
 
+static struct q6_subdev pikachu_adsp_subdev[] = {
+	{
+		.firmware_name = "lpaicp.mdt",
+		.dtb_firmware_name = "lpaicp_dtb.mdt",
+		.pas_id = 86,
+		.dtb_pas_id = 87,
+		.ssr_name = "lpaicp",
+	},
+};
+
 static const struct adsp_data pikachu_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
 	.dtb_firmware_name = "adsp_dtb.mdt",
+	.q6_subdev = pikachu_adsp_subdev,
+	.q6_subdev_count = ARRAY_SIZE(pikachu_adsp_subdev),
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
 	.minidump_id = 5,
