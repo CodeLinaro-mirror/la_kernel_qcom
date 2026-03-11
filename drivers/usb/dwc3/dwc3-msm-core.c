@@ -4240,7 +4240,8 @@ static void dwc3_msm_interrupt_enable(struct dwc3_msm *mdwc, bool enable)
 	}
 }
 
-static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
+static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
+		bool enable_wakeup)
 {
 	int ret;
 	struct dwc3 *dwc = NULL;
@@ -4363,7 +4364,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 	 * case of platforms with mpm interrupts and snps phy, enable
 	 * dpse hsphy irq and dmse hsphy irq as done for pdc interrupts.
 	 */
-	dwc3_msm_interrupt_enable(mdwc, true);
+	dwc3_msm_interrupt_enable(mdwc, enable_wakeup);
 
 	if (mdwc->use_pwr_event_for_wakeup &&
 			!(mdwc->lpm_flags & MDWC3_SS_PHY_SUSPEND))
@@ -6379,6 +6380,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret = 0, i;
 	u32 val;
+	bool disable_wakeup;
 
 	mdwc = devm_kzalloc(&pdev->dev, sizeof(*mdwc), GFP_KERNEL);
 	if (!mdwc)
@@ -6553,7 +6555,10 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	atomic_set(&mdwc->in_lpm, 1);
 	pm_runtime_set_autosuspend_delay(mdwc->dev, 1000);
 	pm_runtime_use_autosuspend(mdwc->dev);
-	device_init_wakeup(mdwc->dev, 1);
+
+	disable_wakeup =
+		device_property_read_bool(mdwc->dev, "qcom,disable-wakeup");
+	device_init_wakeup(mdwc->dev, !disable_wakeup);
 
 	ret = vbus_regulator_get(mdwc);
 	if (ret < 0)
@@ -7678,9 +7683,16 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 	 * Power collapse the core. Hence call dwc3_msm_suspend with
 	 * 'force_power_collapse' set to 'true'.
 	 */
-	ret = dwc3_msm_suspend(mdwc, true);
+	ret = dwc3_msm_suspend(mdwc, true, device_may_wakeup(dev));
 	if (!ret)
 		atomic_set(&mdwc->pm_suspended, 1);
+
+	/*
+	 * Disable IRQs if not wakeup capable. Wakeup IRQs may sometimes
+	 * be enabled as part of a runtime suspend.
+	 */
+	if (!device_may_wakeup(dev))
+		dwc3_msm_interrupt_enable(mdwc, false);
 
 	return ret;
 }
@@ -7835,7 +7847,7 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 	if (dwc)
 		device_init_wakeup(dwc->dev, false);
 
-	return dwc3_msm_suspend(mdwc, false);
+	return dwc3_msm_suspend(mdwc, false, true);
 }
 
 static int dwc3_msm_runtime_resume(struct device *dev)
