@@ -143,11 +143,16 @@ static void qrtr_genpool_set_state(struct qrtr_genpool_dev *qdev, u32 state)
 {
 	qdev->state = state;
 	*(u32 *)(qdev->base + LOCAL_STATE) = cpu_to_le32(qdev->state);
+
+	/* Ensure state write to shared physical memory is visible to remote processor */
+	wmb();
 }
 
 static void qrtr_genpool_signal(struct qrtr_genpool_dev *qdev,
 				struct mbox_chan *mbox_chan)
 {
+	/* Ensure all writes to the shared memory are visible to remote processor */
+	wmb();
 	mbox_send_message(mbox_chan, NULL);
 	mbox_client_txdone(mbox_chan, 0);
 }
@@ -181,20 +186,27 @@ static void qrtr_genpool_tx_write(struct qrtr_genpool_pipe *pipe, const void *da
 	if (head >= pipe->length)
 		head %= pipe->length;
 
-	/* Ensure ordering of fifo and head update */
-	smp_wmb();
+	/* Ensure proper ordering of fifo and head update */
+	wmb();
 
 	*pipe->head = cpu_to_le32(head);
+
+	/* Ensure head pointer write to physical memory is visible to remote processor */
+	wmb();
 }
 
 static void qrtr_genpool_clr_tx_notify(struct qrtr_genpool_dev *qdev)
 {
 	*qdev->tx_pipe.read_notify = 0;
+	/* Ensure write to physical memory is complete */
+	wmb();
 }
 
 static void qrtr_genpool_set_tx_notify(struct qrtr_genpool_dev *qdev)
 {
 	*qdev->tx_pipe.read_notify = cpu_to_le32(1);
+	/* Ensure write to physical memory is complete */
+	wmb();
 }
 
 static size_t qrtr_genpool_tx_avail(struct qrtr_genpool_pipe *pipe)
@@ -202,6 +214,9 @@ static size_t qrtr_genpool_tx_avail(struct qrtr_genpool_pipe *pipe)
 	u32 avail;
 	u32 head;
 	u32 tail;
+
+	/* Ensure we see the most recent values written by remote processor */
+	rmb();
 
 	head = le32_to_cpu(*pipe->head);
 	tail = le32_to_cpu(*pipe->tail);
@@ -293,6 +308,9 @@ static size_t qrtr_genpool_rx_avail(struct qrtr_genpool_pipe *pipe)
 	u32 head;
 	u32 tail;
 
+	/* Ensure we see the most recent values written by remote processor */
+	rmb();
+
 	head = le32_to_cpu(*pipe->head);
 	tail = le32_to_cpu(*pipe->tail);
 
@@ -317,6 +335,8 @@ static void qrtr_genpool_rx_advance(struct qrtr_genpool_pipe *pipe, size_t count
 		tail %= pipe->length;
 
 	*pipe->tail = cpu_to_le32(tail);
+	/* Ensure tail update to physical memory is complete */
+	wmb();
 }
 
 static void qrtr_genpool_rx_peak(struct qrtr_genpool_pipe *pipe, void *data,
@@ -340,6 +360,8 @@ static void qrtr_genpool_rx_peak(struct qrtr_genpool_pipe *pipe, void *data,
 
 static bool qrtr_genpool_get_read_notify(struct qrtr_genpool_dev *qdev)
 {
+	/* Ensure we see the most recent value written by remote processor */
+	rmb();
 	return le32_to_cpu(*qdev->rx_pipe.read_notify);
 }
 
@@ -565,6 +587,9 @@ static void qrtr_genpool_fifo_init(struct qrtr_genpool_dev *qdev)
 	/* Reset respective index */
 	*qdev->tx_pipe.head = 0;
 	*qdev->rx_pipe.tail = 0;
+
+	/* Ensure all FIFO initialization writes to physical memory are complete */
+	wmb();
 }
 
 static int qrtr_genpool_memory_init(struct qrtr_genpool_dev *qdev)
@@ -604,10 +629,10 @@ static void qrtr_genpool_setup_work(struct work_struct *work)
 		break;
 	case LOCAL_STATE_INIT:
 		state_next = LOCAL_STATE_START;
-		break;
+		goto state_change;
 	case LOCAL_STATE_START:
 		state_next = LOCAL_STATE_INIT;
-		goto state_change;
+		break;
 	case LOCAL_STATE_PREPARE_REBOOT:
 		qrtr_genpool_set_state(qdev, LOCAL_STATE_REBOOT);
 		spin_unlock_irqrestore(&qdev->lock, flags);
