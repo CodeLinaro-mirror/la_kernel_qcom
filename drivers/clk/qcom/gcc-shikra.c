@@ -4983,6 +4983,7 @@ static struct clk_regmap *gcc_shikra_clocks[] = {
 	[GPLL8] = &gpll8.clkr,
 	[GPLL8_OUT_MAIN] = &gpll8_out_main.clkr,
 	[GPLL9] = &gpll9.clkr,
+	[GPLL9_OUT_MAIN] = &gpll9_out_main.clkr,
 };
 
 static struct gdsc *gcc_shikra_gdscs[] = {
