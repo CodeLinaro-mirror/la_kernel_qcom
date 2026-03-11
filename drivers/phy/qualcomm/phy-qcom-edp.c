@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2017, 2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2021, Linaro Ltd.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -580,6 +581,9 @@ static const struct qcom_edp_phy_cfg sa8775p_dp_phy_cfg = {
 };
 
 static const struct qcom_edp_phy_cfg sc7280_dp_phy_cfg = {
+	.is_edp = false,
+	.ver = EDP_VER_5,
+	.swing_pre_emph_cfg = &dp_phy_swing_pre_emph_cfg,
 	.ver_ops = &qcom_edp_phy_ops_v4,
 };
 
