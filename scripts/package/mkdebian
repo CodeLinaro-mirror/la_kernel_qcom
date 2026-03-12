@@ -89,7 +89,7 @@ gen_source ()
 {
 	mkdir -p debian/source
 
-	echo "3.0 (quilt)" > debian/source/format
+	echo "3.0 (native)" > debian/source/format
 
 	{
 		echo "diff-ignore"
@@ -107,19 +107,20 @@ gen_source ()
 		diff -u /dev/null "${KCONFIG_CONFIG}" | tail -n +3
 	} > debian/patches/config.patch
 	echo config.patch > debian/patches/series
-
-	"${srctree}/scripts/package/gen-diff-patch" debian/patches/diff.patch
-	if [ -s debian/patches/diff.patch ]; then
-		sed -i "
-			1iSubject: Add local diff
-			1iAuthor: ${maintainer}
-			1i
-		" debian/patches/diff.patch
-
-		echo diff.patch >> debian/patches/series
-	else
-		rm -f debian/patches/diff.patch
-	fi
+	# use  native source package, dont need to generate diff
+	#
+	# "${srctree}/scripts/package/gen-diff-patch" debian/patches/diff.patch
+	# if [ -s debian/patches/diff.patch ]; then
+	# 	sed -i "
+	# 		1iSubject: Add local diff
+	# 		1iAuthor: ${maintainer}
+	# 		1i
+	# 	" debian/patches/diff.patch
+	#
+	# 	echo diff.patch >> debian/patches/series
+	# else
+	# 	rm -f debian/patches/diff.patch
+	# fi
 }
 
 rm -rf debian
@@ -218,11 +219,6 @@ Rules-Requires-Root: no
 Build-Depends: bc, debhelper, rsync, kmod, cpio, bison, flex $extra_build_depends
 Homepage: https://www.kernel.org/
 
-Package: $packagename-$version
-Architecture: $debarch
-Description: Linux kernel, version $version
- This package contains the Linux kernel, modules and corresponding other
- files, version: $version.
 EOF
 
 if [ "${SRCARCH}" != um ]; then
@@ -249,18 +245,6 @@ Description: Linux kernel headers for $version on $debarch
  This is useful for people who need to build external modules
 EOF
 fi
-fi
-
-if is_enabled CONFIG_DEBUG_INFO; then
-cat <<EOF >> debian/control
-
-Package: linux-image-$version-dbg
-Section: debug
-Architecture: $debarch
-Description: Linux kernel debugging symbols for $version
- This package will come in handy if you need to debug the kernel. It provides
- all the necessary debug symbols for the kernel and its modules.
-EOF
 fi
 
 cat <<EOF > debian/rules.vars

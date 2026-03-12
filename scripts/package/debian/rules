@@ -3,7 +3,15 @@
 
 include debian/rules.vars
 
-srctree ?= .
+export MAKE := /usr/bin/make
+export SRCARCH := arm64
+export KERNELRELEASE=`grep 'UTS_RELEASE' ./include/generated/utsrelease.h | cut -d'"' -f2`
+export KERNELVERSION=$(awk '/^VERSION =|^PATCHLEVEL =|^SUBLEVEL =/ {print $3}' "$MAKEFILE" | paste -sd '.' -)
+export KCONFIG_CONFIG=./arch/arm64/configs/defconfig
+export KBUILD_DEBARCH=arm64
+export ARCH=arm64
+
+export srctree = .
 
 ifneq (,$(filter-out parallel=1,$(filter parallel=%,$(DEB_BUILD_OPTIONS))))
     NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
@@ -14,20 +22,12 @@ endif
 binary: binary-arch binary-indep
 binary-indep: build-indep
 binary-arch: build-arch
-	$(MAKE) -f $(srctree)/Makefile ARCH=$(ARCH) \
-	KERNELRELEASE=$(KERNELRELEASE) \
-	run-command KBUILD_RUN_COMMAND=+$(srctree)/scripts/package/builddeb
+	$(srctree)/scripts/package/builddeb
 
 .PHONY: build build-indep build-arch
 build: build-arch build-indep
 build-indep:
 build-arch:
-	$(MAKE) -f $(srctree)/Makefile ARCH=$(ARCH) \
-	KERNELRELEASE=$(KERNELRELEASE) \
-	$(shell $(srctree)/scripts/package/deb-build-option) \
-	olddefconfig all
 
 .PHONY: clean
 clean:
-	rm -rf debian/files debian/linux-*
-	$(MAKE) -f $(srctree)/Makefile ARCH=$(ARCH) clean
