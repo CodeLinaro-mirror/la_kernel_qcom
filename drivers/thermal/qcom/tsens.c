@@ -1317,7 +1317,7 @@ static int tsens_nvmem_trip_update(struct thermal_zone_device *tz)
 	num_trips = thermal_zone_get_num_trips(tz);
 	/* First trip is for userspace, update all other trips. */
 	for (i = 1; i < num_trips; i++)
-		thermal_zone_device_exec(tz, tsens_thermal_zone_trip_update, i);
+		tsens_thermal_zone_trip_update(tz, i);
 
 	return 0;
 }
