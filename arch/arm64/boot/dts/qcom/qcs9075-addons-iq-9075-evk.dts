@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 /dts-v1/;
@@ -20,11 +19,10 @@
 		compatible = "qcom,qcs9100-sndcard";
 		model = "LEMANS-EVK";
 
-		pinctrl-0 = <&hs1_mi2s_data0>, <&mi2s_mclk>, <&hs0_mi2s_data0>,
-			    <&hs0_mi2s_sclk>, <&hs0_mi2s_data1>, <&hs0_mi2s_ws>,
-			    <&hs1_mi2s_sclk>, <&hs1_mi2s_data1>, <&hs1_mi2s_ws>,
-			    <&hs2_mi2s_data0>, <&hs2_mi2s_data1>, <&hs2_mi2s_sck>,
-			    <&hs2_mi2s_ws>;
+		pinctrl-0 = <&hs1_mi2s_data0>, <&hs0_mi2s_data0>, <&hs0_mi2s_sclk>,
+			    <&hs0_mi2s_data1>, <&hs0_mi2s_ws>, <&hs1_mi2s_sclk>,
+			    <&hs1_mi2s_data1>, <&hs1_mi2s_ws>, <&hs2_mi2s_data0>,
+			    <&hs2_mi2s_data1>, <&hs2_mi2s_sck>, <&hs2_mi2s_ws>;
 		pinctrl-names = "default";
 
 		hs0-mi2s-playback-dai-link {
@@ -436,22 +434,6 @@
 
 	hs2_mi2s_ws_sleep: hs2-mi2s-ws-sleep-state {
 		pins = "gpio123";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-down;
-		input-enable;
-	};
-
-	mi2s_mclk: mi2s-mclk-state {
-		pins = "gpio105";
-		function = "mi2s_mclk0";
-		drive-strength = <8>;
-		bias-disable;
-		output-high;
-	};
-
-	mi2s_mclk_sleep: mi2s-mclk-sleep-state {
-		pins = "gpio105";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-down;
