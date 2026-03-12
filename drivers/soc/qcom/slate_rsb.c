@@ -578,13 +578,12 @@ static int slate_rsb_probe(struct platform_device *pdev)
 
 }
 
-static int slate_rsb_remove(struct platform_device *pdev)
+static void slate_rsb_remove(struct platform_device *pdev)
 {
 	struct slatersb_priv *dev = platform_get_drvdata(pdev);
 
 	destroy_workqueue(dev->slatersb_wq);
 	wakeup_source_unregister(dev->slatersb_ws);
-	return 0;
 }
 
 static int slate_rsb_resume(struct device *pldev)
