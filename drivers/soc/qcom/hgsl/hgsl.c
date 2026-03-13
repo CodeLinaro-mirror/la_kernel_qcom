@@ -21,12 +21,16 @@
 #include <linux/delay.h>
 #include <trace/events/gpu_mem.h>
 #include <linux/suspend.h>
+#include <linux/uidgid.h>
 
 #include "hgsl.h"
 #include "hgsl_tcsr.h"
 #include "hgsl_memory.h"
 #include "hgsl_sysfs.h"
 #include "hgsl_debugfs.h"
+#define CREATE_TRACE_POINTS
+#include "hgsl_power_trace.h"
+EXPORT_TRACEPOINT_SYMBOL(gpu_work_period);
 
 #define HGSL_DEVICE_NAME "hgsl"
 #define HGSL_DEV_NUM 1
@@ -161,6 +165,8 @@ struct ctx_queue_header {
 	uint32_t unused1;
 };
 
+struct hgsl_fw_ib_desc;
+
 static void _signal_contexts(struct qcom_hgsl *hgsl, u32 dev_hnd);
 
 static int db_get_busy_state(void *dbq_base);
@@ -179,6 +185,49 @@ static int dbq_wait_free_ibdesc(struct qcom_hgsl *hgsl,
 
 static int hgsl_wait_timestamp(struct qcom_hgsl *hgsl,
 		struct hgsl_context *ctxt, struct hgsl_wait_ts_info *param);
+
+static void hgsl_work_period_update(struct qcom_hgsl *device,
+						struct gpu_work_period *period, u64 active);
+static struct gpu_work_period *hgsl_get_work_period(struct qcom_hgsl *device, uid_t uid);
+static void hgsl_put_work_period(struct gpu_work_period *wp);
+
+static int hgsl_ctxt_init_profiling(struct hgsl_hab_channel_t *hab_channel,
+				    struct hgsl_context *ctxt);
+static void hgsl_ctxt_destroy_profiling(struct hgsl_hab_channel_t *hab_channel,
+					struct hgsl_context *ctxt);
+
+/* Forward declarations for helpers used before their definitions */
+static bool hgsl_prof_layout(const struct hgsl_context *ctxt,
+				    size_t *ib_slot_size,
+				    size_t *ib_slot_count,
+				    size_t *data_region_base,
+				    size_t *data_slot_size,
+				    size_t *data_slot_count);
+
+static bool hgsl_get_profiling_ib(struct hgsl_context *ctxt,
+				  uint64_t user_profile_gpuaddr,
+				  uint32_t prof_offset_bytes,
+				  struct hgsl_fw_ib_desc *out_ib);
+
+static void hgsl_prof_drain_ctxt(struct qcom_hgsl *device,
+				 struct hgsl_context *ctxt);
+
+/*
+ * hgsl_get_alwayson_counter_ib - write always-on counter (LO) to memory
+ * (unchanged helper)
+ */
+static u32 hgsl_get_alwayson_counter_ib(u32 *ib, u64 dst_gpuaddr)
+{
+	u32 n = 0;
+
+	if (!ib || !dst_gpuaddr) {
+		LOGE("[%s] ib or address is null", __func__);
+		return 0;
+	}
+
+	n = Cp32BitRegToMem(ib, CP_ALWAYS_ON_COUNTER_LO, dst_gpuaddr);
+	return n;
+}
 
 static uint32_t hgsl_dbq_get_state_info(uint32_t *va_base, uint32_t command,
 				uint32_t ctxt_id, uint32_t offset)
@@ -440,6 +489,170 @@ static void tcsr_ring_global_db(struct qcom_hgsl *hgsl, uint32_t tcsr_idx,
 	if (tcsr_idx < HGSL_TCSR_NUM)
 		hgsl_tcsr_irq_trigger(hgsl->tcsr[tcsr_idx][HGSL_TCSR_ROLE_SENDER],
 						GLB_DB_SRC_ISSUEIB_IRQ_ID_0 + dbq_idx);
+}
+
+static inline void atomic_sub_clamp(atomic_t *v, int dec)
+{
+	int old, new;
+
+	do {
+		old = atomic_read(v);
+		if (old <= 0)
+			return;
+		new = old - dec;
+		if (new < 0)
+			new = 0;
+	} while (atomic_cmpxchg(v, old, new) != old);
+}
+
+/* Compute IB/data layout for the per-context profiling buffer */
+static inline bool hgsl_prof_layout(const struct hgsl_context *ctxt,
+				    size_t *ib_slot_size,
+				    size_t *ib_slot_count,
+				    size_t *data_region_base,
+				    size_t *data_slot_size,
+				    size_t *data_slot_count)
+{
+	const size_t ibsz = PROFILE_IB_DWORDS << 2;
+
+	if (!ctxt || !ctxt->cmdbatch_kernel_profiling.buf_size ||
+	    ctxt->cmdbatch_kernel_profiling.buf_size < (ibsz << 1))
+		return false;
+
+	const size_t first_half      = ctxt->cmdbatch_kernel_profiling.buf_size >> 1;
+	const size_t ib_region_size  = (first_half / ibsz) * ibsz;
+	const size_t ib_slots        = ib_region_size / ibsz;
+
+	const size_t data_base       = ib_region_size;
+	const size_t data_region_sz  = ctxt->cmdbatch_kernel_profiling.buf_size - ib_region_size;
+	const size_t datasz          = 8; /* head LO at 0, tail LO at 4 */
+	const size_t data_slots      = (data_region_sz >= datasz) ? (data_region_sz / datasz) : 0;
+
+	if (!ib_slots || !data_slots)
+		return false;
+
+	if (ib_slot_size)
+		*ib_slot_size = ibsz;
+	if (ib_slot_count)
+		*ib_slot_count = ib_slots;
+	if (data_region_base)
+		*data_region_base = data_base;
+	if (data_slot_size)
+		*data_slot_size = datasz;
+	if (data_slot_count)
+		*data_slot_count = data_slots;
+	return true;
+}
+
+/* Enqueue a profiling submission: record ts/slot and build head/tail IBs */
+static void hgsl_prof_enqueue(struct hgsl_context *ctxt,
+			      u32 submit_ts,
+			      struct hgsl_fw_ib_desc *out_head,
+			      struct hgsl_fw_ib_desc *out_tail,
+			      bool *has_head,
+			      bool *has_tail)
+{
+	size_t ib_slot_size, ib_slot_count, data_region_base, data_slot_size,
+		data_slot_count;
+
+	if (has_head)
+		*has_head = false;
+	if (has_tail)
+		*has_tail = false;
+
+	if (!ctxt || !out_head || !out_tail || !ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
+	    !ctxt->cmdbatch_kernel_profiling.buf_gpuaddr ||
+	    !ctxt->cmdbatch_kernel_profiling.buf_size)
+		return;
+
+	if (!hgsl_prof_layout(ctxt, &ib_slot_size, &ib_slot_count,
+			      &data_region_base, &data_slot_size,
+			      &data_slot_count))
+		return;
+
+	/* Optional sanity: ensure the buffer can sustain ring depth without reuse */
+	if (ib_slot_count < HGSL_PROF_RING_SIZE || data_slot_count < HGSL_PROF_RING_SIZE) {
+		static bool warned;
+
+		if (!warned) {
+			LOGW("Prof layout smaller than ring: ib_slots=%zu data_slots=%zu ring=%u",
+			     ib_slot_count, data_slot_count,
+			     (unsigned int)HGSL_PROF_RING_SIZE);
+			warned = true;
+		}
+	}
+	/* Reserve a ring slot without indefinite waiting; if ring is crowded,
+	 * proactively schedule retire worker and skip profiling for this submit.
+	 */
+	u16 slot_idx;
+	u16 wr_idx;
+	struct qcom_hgsl *device = ctxt->priv->dev;
+	u16 wr, rd, next, used, threshold;
+
+	spin_lock(&ctxt->cmdbatch_kernel_profiling.lock);
+	wr = ctxt->cmdbatch_kernel_profiling.writeIdx;
+	rd = ctxt->cmdbatch_kernel_profiling.readIdx;
+	next = (wr + 1) % HGSL_PROF_RING_SIZE;
+
+	/* Occupancy and threshold (60% of ring capacity) */
+	used = (u16)((wr + HGSL_PROF_RING_SIZE - rd) % HGSL_PROF_RING_SIZE);
+	threshold = (u16)((HGSL_PROF_RING_SIZE * 3) / 5);
+
+	/* If ring occupancy >= 60%, schedule retire worker */
+	if (used >= threshold && device && device->lockless_workqueue)
+		queue_work(device->lockless_workqueue, &device->prof_retire_ws);
+
+	/* If ring is full, drain retired entries for this context and retry */
+	if (next == rd) {
+		/* Unlock before draining, as drain updates ring pointers under its own lock */
+		spin_unlock(&ctxt->cmdbatch_kernel_profiling.lock);
+
+		/* Drain retired profiling entries for this context to free up slots */
+		hgsl_prof_drain_ctxt(device, ctxt);
+
+		/* Re-acquire lock and recompute ring pointers */
+		spin_lock(&ctxt->cmdbatch_kernel_profiling.lock);
+		wr = ctxt->cmdbatch_kernel_profiling.writeIdx;
+		rd = ctxt->cmdbatch_kernel_profiling.readIdx;
+		next = (wr + 1) % HGSL_PROF_RING_SIZE;
+
+		/* If still full after draining, skip profiling this submission */
+		if (next == rd) {
+			spin_unlock(&ctxt->cmdbatch_kernel_profiling.lock);
+			return;
+		}
+	}
+
+	/* Slot available; reserve and advance writeIdx */
+	wr_idx = wr; /* capture reserved write index for IB slot placement */
+	slot_idx = wr % (u16)data_slot_count;
+	ctxt->cmdbatch_kernel_profiling.ring[wr].ts = submit_ts;
+	ctxt->cmdbatch_kernel_profiling.ring[wr].slot_idx = slot_idx;
+	ctxt->cmdbatch_kernel_profiling.writeIdx = next;
+	spin_unlock(&ctxt->cmdbatch_kernel_profiling.lock);
+
+	/* IB slot offsets derived from reserved ring index to avoid collisions */
+	u32 ib_idx_head = wr_idx % (u16)ib_slot_count;
+	u32 ib_idx_tail = (u16)((ib_idx_head + 1) % (u16)ib_slot_count);
+	u32 head_ib_off = ib_idx_head * ib_slot_size;
+	u32 tail_ib_off = ib_idx_tail * ib_slot_size;
+
+	/* Data slot base (per-submission) */
+	u64 slot_base = ctxt->cmdbatch_kernel_profiling.buf_gpuaddr + data_region_base +
+			(u64)((slot_idx) * data_slot_size);
+	u64 data_head = slot_base + 0;
+	u64 data_tail = slot_base + 4;
+
+	/* Build head/tail profiling IBs */
+	if (hgsl_get_profiling_ib(ctxt, data_head, head_ib_off, out_head)) {
+		if (has_head)
+			*has_head = true;
+		if (hgsl_get_profiling_ib(ctxt, data_tail, tail_ib_off,
+					  out_tail)) {
+			if (has_tail)
+				*has_tail = true;
+		}
+	}
 }
 
 static uint32_t db_queue_freedwords(struct doorbell_queue *dbq)
@@ -1075,7 +1288,8 @@ static int hgsl_dbcq_issue_cmd(struct hgsl_priv  *priv,
 			uint32_t gmu_cmd_flags,
 			uint32_t *timestamp,
 			struct hgsl_fw_ib_desc ib_descs[],
-			uint64_t user_profile_gpuaddr)
+			uint64_t user_profile_gpuaddr,
+			bool update_queued_ts)
 {
 	int ret;
 	uint32_t msg_dwords;
@@ -1108,7 +1322,10 @@ static int hgsl_dbcq_issue_cmd(struct hgsl_priv  *priv,
 		goto out;
 	}
 
-	msg_dwords = MSG_ISSUE_INF_SZ() + MSG_ISSUE_IBS_SZ(num_ibs);
+	if (num_ibs > 0)
+		msg_dwords = MSG_ISSUE_INF_SZ() + MSG_ISSUE_IBS_SZ(num_ibs);
+	else
+		msg_dwords = MSG_ISSUE_INF_SZ();
 	msg_dwords_aligned = ALIGN(msg_dwords, 4);
 
 	// check if we need to do batch submission
@@ -1122,9 +1339,11 @@ static int hgsl_dbcq_issue_cmd(struct hgsl_priv  *priv,
 
 	msg_buf_sz = msg_dwords_aligned << 2;
 
-	ret = hgsl_db_next_timestamp(ctxt, timestamp);
-	if (ret)
-		goto out;
+	if (update_queued_ts) {
+		ret = hgsl_db_next_timestamp(ctxt, timestamp);
+		if (ret)
+			goto out;
+	}
 
 	cmds = hgsl_zalloc(msg_buf_sz);
 	if (cmds == NULL) {
@@ -1151,9 +1370,8 @@ static int hgsl_dbcq_issue_cmd(struct hgsl_priv  *priv,
 		cmds->ib_desc_gmuaddr = dbcq->indirect_ibs_gmuaddr;
 		cmds->cmd_flags |= CMDBATCH_INDIRECT;
 		memcpy(dbcq->indirect_ibs, ib_descs, sizeof(ib_descs[0]) * num_ibs);
-	} else {
+	} else if (num_ibs > 0)
 		memcpy(cmds->ib_descs, ib_descs, sizeof(ib_descs[0]) * num_ibs);
-	}
 
 	req.msg_has_response = 0;
 	req.msg_has_ret_packet = 0;
@@ -1173,7 +1391,8 @@ static int hgsl_dbcq_issue_cmd(struct hgsl_priv  *priv,
 	}
 
 	if (ret == 0) {
-		ctxt->queued_ts = *timestamp;
+		if (update_queued_ts)
+			ctxt->queued_ts = *timestamp;
 		if (!is_batch_ibdesc) {
 			/*
 			 * Check if we can release the indirect ib buffer.
@@ -1195,13 +1414,14 @@ static int hgsl_db_issue_cmd(struct hgsl_priv  *priv,
 			uint32_t gmu_cmd_flags,
 			uint32_t *timestamp,
 			struct hgsl_fw_ib_desc ib_descs[],
-			uint64_t user_profile_gpuaddr)
+			uint64_t user_profile_gpuaddr,
+			bool update_queued_ts)
 {
 	int ret = 0;
 	uint32_t msg_dwords;
 	uint32_t msg_buf_sz;
 	uint32_t msg_dwords_aligned;
-	struct hgsl_db_cmds *cmds;
+	struct hgsl_db_cmds *cmds = NULL;
 	struct db_msg_request req;
 	struct db_msg_response resp;
 	struct db_msg_id db_msg_id;
@@ -1211,7 +1431,8 @@ static int hgsl_db_issue_cmd(struct hgsl_priv  *priv,
 	uint8_t *dst;
 
 	ret = hgsl_dbcq_issue_cmd(priv, ctxt, num_ibs, gmu_cmd_flags,
-							timestamp, ib_descs, user_profile_gpuaddr);
+							timestamp, ib_descs, user_profile_gpuaddr,
+							update_queued_ts);
 	if (ret != -EPERM)
 		return ret;
 
@@ -1249,9 +1470,11 @@ static int hgsl_db_issue_cmd(struct hgsl_priv  *priv,
 
 	msg_buf_sz = msg_dwords_aligned << 2;
 
-	ret = hgsl_db_next_timestamp(ctxt, timestamp);
-	if (ret)
-		return ret;
+	if (update_queued_ts) {
+		ret = hgsl_db_next_timestamp(ctxt, timestamp);
+		if (ret)
+			goto err;
+	}
 
 	cmds = hgsl_zalloc(msg_buf_sz);
 	if (cmds == NULL)
@@ -1306,7 +1529,7 @@ static int hgsl_db_issue_cmd(struct hgsl_priv  *priv,
 		ret = 0;
 	}
 
-	if (ret == 0)
+	if (!ret && update_queued_ts)
 		ctxt->queued_ts = *timestamp;
 
 err:
@@ -1870,7 +2093,6 @@ out:
 	return ret;
 }
 
-
 static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 	struct hgsl_hab_channel_t *hab_channel,
 	struct hgsl_context *ctxt, uint32_t dbq_info, bool dbq_info_checked)
@@ -1921,11 +2143,80 @@ static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 	return 0;
 }
 
+/* Drain a single context's profiling ring and update work period */
+static void hgsl_prof_drain_ctxt(struct qcom_hgsl *device,
+				 struct hgsl_context *ctxt)
+{
+	if (!ctxt || !ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
+	    !ctxt->cmdbatch_kernel_profiling.buf_size)
+		return;
+
+	/* Precompute layout once per drain */
+	size_t ib_slot_size, ib_slot_count, data_region_base, data_slot_size,
+		data_slot_count;
+
+	if (!hgsl_prof_layout(ctxt, &ib_slot_size, &ib_slot_count,
+			      &data_region_base, &data_slot_size,
+			      &data_slot_count))
+		return;
+
+	/* Snapshot ring pointers once */
+	u16 rd, wr;
+
+	spin_lock(&ctxt->cmdbatch_kernel_profiling.lock);
+	rd = ctxt->cmdbatch_kernel_profiling.readIdx;
+	wr = ctxt->cmdbatch_kernel_profiling.writeIdx;
+	spin_unlock(&ctxt->cmdbatch_kernel_profiling.lock);
+
+	if (rd == wr)
+		return;
+
+	u16 consumed = 0;
+	u8 *base = (u8 *)ctxt->cmdbatch_kernel_profiling.buf_vaddr;
+
+	while (rd != wr) {
+		u32 ts       = READ_ONCE(ctxt->cmdbatch_kernel_profiling.ring[rd].ts);
+		u16 slot_idx = READ_ONCE(ctxt->cmdbatch_kernel_profiling.ring[rd].slot_idx);
+
+		/* Stop at first non-retired submission */
+		if (!_timestamp_retired(ctxt, ts))
+			break;
+
+		/* Read head/tail LO samples and update stats */
+		size_t slot_base = data_region_base + (size_t)slot_idx *
+			data_slot_size;
+		u32 start32 = READ_ONCE(*(u32 *)(base + slot_base + 0));
+		u32 end32 = READ_ONCE(*(u32 *)(base + slot_base + 4));
+
+		if (start32 && end32 && ctxt->priv && ctxt->priv->period) {
+			u32 delta32 = end32 - start32; /* wrap-aware */
+
+			hgsl_work_period_update(device, ctxt->priv->period,
+						delta32);
+		}
+
+		rd = (rd + 1) % HGSL_PROF_RING_SIZE;
+		consumed++;
+	}
+
+	/* Advance rptr once for all consumed entries */
+	if (consumed) {
+		spin_lock(&ctxt->cmdbatch_kernel_profiling.lock);
+		ctxt->cmdbatch_kernel_profiling.readIdx = rd;
+		spin_unlock(&ctxt->cmdbatch_kernel_profiling.lock);
+
+		if (ctxt->priv && ctxt->priv->period)
+			atomic_sub_clamp(&ctxt->priv->period->active_cmds,
+					 consumed);
+	}
+}
+
 static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 	struct hgsl_hab_channel_t *hab_channel,
 	u32 dev_hnd, uint32_t context_id,
 	uint32_t *rval, bool can_retry)
 {
+	struct qcom_hgsl *hgsl = priv->dev;
 	struct hgsl_context *ctxt = NULL;
 	int ret;
 	bool put_channel = false;
@@ -1980,7 +2271,14 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 		}
 		put_channel = true;
 	}
+	/* Drain any remaining retired profiling entries before freeing buffers */
+	hgsl_prof_drain_ctxt(hgsl, ctxt);
 
+	/* Cleanup per-context profiling buffer */
+	if (ctxt->cmdbatch_kernel_profiling.mem_node ||
+	    ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
+	    ctxt->cmdbatch_kernel_profiling.buf_gpuaddr)
+		hgsl_ctxt_destroy_profiling(hab_channel, ctxt);
 	if (!ctxt->is_fe_shadow)
 		_cleanup_shadow(hab_channel, ctxt);
 
@@ -2029,6 +2327,7 @@ static int hgsl_ioctl_ctxt_create(
 	uint32_t dbq_info = -1;
 	bool dbq_info_checked = false;
 	u32 dev_id = hgsl_hnd2id(params->devhandle);
+	struct gpu_work_period *wp;
 
 	if (dev_id >= HGSL_DEVICE_NUM) {
 		LOGE("Invalid dev handle %u", params->devhandle);
@@ -2047,6 +2346,9 @@ static int hgsl_ioctl_ctxt_create(
 		ret = -ENOMEM;
 		goto out;
 	}
+
+	wp = hgsl_get_work_period(hgsl, current_uid().val);
+	hgsl->gpu_period.begin = ktime_get_ns();
 
 	if (params->flags & GSL_CONTEXT_FLAG_CLIENT_GENERATED_TS)
 		params->flags |= GSL_CONTEXT_FLAG_USER_GENERATED_TS;
@@ -2078,6 +2380,15 @@ static int hgsl_ioctl_ctxt_create(
 	} else
 		dbq_info_checked = true;
 
+	/* Initialize per-context profiling buffer here */
+	if (hgsl_ctxt_init_profiling(hab_channel, ctxt)) {
+		LOGW("Profiling buffer init failed for ctxt=%u; profiling disabled",
+		     ctxt->context_id);
+	}
+	ctxt->cmdbatch_kernel_profiling.writeIdx = 0;
+	ctxt->cmdbatch_kernel_profiling.readIdx = 0;
+	spin_lock_init(&ctxt->cmdbatch_kernel_profiling.lock);
+	ctxt->priv->period = wp;
 	kref_init(&ctxt->kref);
 	init_waitqueue_head(&ctxt->wait_q);
 	mutex_init(&ctxt->lock);
@@ -2117,6 +2428,10 @@ out:
 			hgsl_ctxt_destroy(priv, hab_channel, params->devhandle,
 				params->ctxthandle, NULL, false);
 		else if (ctxt && (params->ctxthandle < HGSL_CONTEXT_NUM)) {
+			if (ctxt->cmdbatch_kernel_profiling.mem_node ||
+			    ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
+			    ctxt->cmdbatch_kernel_profiling.buf_gpuaddr)
+				hgsl_ctxt_destroy_profiling(hab_channel, ctxt);
 			if (!ctxt->is_fe_shadow)
 				_cleanup_shadow(hab_channel, ctxt);
 			hgsl_hyp_ctxt_destroy(hab_channel, ctxt->devhandle,
@@ -2142,6 +2457,11 @@ static int hgsl_ioctl_ctxt_destroy(
 	struct hgsl_ioctl_ctxt_destroy_params *params = data;
 	struct hgsl_hab_channel_t *hab_channel = NULL;
 	int ret;
+
+	/* Per-context destroy should not drop the device/list lifetime ref.
+	 * Just clear the pointer so future submissions stop using it.
+	 */
+	priv->period = NULL;
 
 	ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
 	if (ret) {
@@ -2718,6 +3038,165 @@ out:
 	return ret;
 }
 
+/* Init per-context profiling buffer (alloc + SMMU map + CPU vmap) */
+static int hgsl_ctxt_init_profiling(struct hgsl_hab_channel_t *hab_channel,
+				    struct hgsl_context *ctxt)
+{
+	struct qcom_hgsl *hgsl;
+	struct hgsl_mem_node *mem_node;
+	int ret;
+	size_t prof_size = PAGE_SIZE;
+
+	if (!ctxt || !ctxt->priv || !ctxt->priv->dev || !hab_channel)
+		return -EINVAL;
+
+	if (ctxt->cmdbatch_kernel_profiling.mem_node &&
+		 ctxt->cmdbatch_kernel_profiling.buf_vaddr &&
+		 ctxt->cmdbatch_kernel_profiling.buf_gpuaddr)
+		return 0;
+
+	hgsl = ctxt->priv->dev;
+
+	mem_node = hgsl_mem_node_zalloc(hgsl->cache_flags);
+	if (!mem_node)
+		return -ENOMEM;
+
+	mem_node->flags = GSL_MEMFLAGS_UNCACHED | GSL_MEMFLAGS_ALIGN4K;
+
+	ret = hgsl_sharedmem_alloc(hgsl->dev, prof_size, mem_node->flags, mem_node);
+	if (ret) {
+		LOGE("Failed to allocate per-ctxt profiling mem, ret=%d", ret);
+		goto err_free_node;
+	}
+
+	ret = hgsl_hyp_mem_map_smmu(hab_channel, mem_node->memdesc.size, 0, mem_node);
+	if (ret) {
+		LOGE("Per-ctxt profiling SMMU map failed, ret=%d", ret);
+		goto err_free_sharedmem;
+	}
+
+	dma_buf_begin_cpu_access(mem_node->dma_buf, DMA_BIDIRECTIONAL);
+	ret = dma_buf_vmap(mem_node->dma_buf, &ctxt->cmdbatch_kernel_profiling.map);
+	if (ret) {
+		LOGE("Per-ctxt profiling vmap failed, ret=%d", ret);
+		goto err_unmap_smmu;
+	}
+
+	ctxt->cmdbatch_kernel_profiling.mem_node     = mem_node;
+	ctxt->cmdbatch_kernel_profiling.buf_vaddr    = ctxt->cmdbatch_kernel_profiling.map.vaddr;
+	ctxt->cmdbatch_kernel_profiling.buf_gpuaddr  = mem_node->memdesc.gpuaddr;
+	ctxt->cmdbatch_kernel_profiling.buf_size     = mem_node->memdesc.size;
+
+	return 0;
+
+err_unmap_smmu:
+	(void)hgsl_hyp_mem_unmap_smmu(hab_channel, mem_node);
+	dma_buf_end_cpu_access(mem_node->dma_buf, DMA_BIDIRECTIONAL);
+err_free_sharedmem:
+	hgsl_sharedmem_free(mem_node);
+err_free_node:
+	hgsl_free(mem_node);
+	return ret;
+}
+
+/* Destroy per-context profiling buffer (unmap + free) */
+static void hgsl_ctxt_destroy_profiling(struct hgsl_hab_channel_t *hab_channel,
+					struct hgsl_context *ctxt)
+{
+	struct hgsl_mem_node *mem_node;
+
+	if (!ctxt || !ctxt->cmdbatch_kernel_profiling.mem_node)
+		return;
+
+	mem_node = ctxt->cmdbatch_kernel_profiling.mem_node;
+
+	if (hab_channel)
+		(void)hgsl_hyp_mem_unmap_smmu(hab_channel, mem_node);
+
+	if (mem_node->dma_buf) {
+		dma_buf_vunmap(mem_node->dma_buf, &ctxt->cmdbatch_kernel_profiling.map);
+		dma_buf_end_cpu_access(mem_node->dma_buf, DMA_BIDIRECTIONAL);
+	}
+
+	hgsl_sharedmem_free(mem_node);
+
+	ctxt->cmdbatch_kernel_profiling.mem_node    = NULL;
+	ctxt->cmdbatch_kernel_profiling.buf_vaddr   = NULL;
+	ctxt->cmdbatch_kernel_profiling.buf_gpuaddr = 0;
+	ctxt->cmdbatch_kernel_profiling.buf_size    = 0;
+	memset(&ctxt->cmdbatch_kernel_profiling.map, 0,
+	       sizeof(ctxt->cmdbatch_kernel_profiling.map));
+}
+
+/* Worker: iterate contexts and retire profiling entries */
+static void hgsl_prof_retire_worker(struct work_struct *work)
+{
+	struct qcom_hgsl *device = container_of(work, struct qcom_hgsl,
+					       prof_retire_ws);
+	int dev_id, i;
+
+	for (dev_id = 0; dev_id < HGSL_DEVICE_NUM; dev_id++) {
+		uint32_t dev_hnd = (dev_id == 0) ? GSL_HANDLE_DEV0 : GSL_HANDLE_DEV1;
+
+		for (i = 0; i < HGSL_CONTEXT_NUM; i++) {
+			struct hgsl_context *ctxt = hgsl_get_context(device,
+								     dev_hnd, i);
+
+			if (!ctxt)
+				continue;
+
+			/* Drain retired profiling entries for this context */
+			hgsl_prof_drain_ctxt(device, ctxt);
+			hgsl_put_context(ctxt);
+		}
+	}
+}
+
+/* Timer callback: schedule profiling retire worker periodically (e.g. 100ms) */
+static void hgsl_prof_retire_timer_fn(struct timer_list *t)
+{
+	struct qcom_hgsl *device = from_timer(device, t, prof_retire_timer);
+
+	queue_work(device->lockless_workqueue, &device->prof_retire_ws);
+	mod_timer(&device->prof_retire_timer, jiffies + msecs_to_jiffies(100));
+}
+
+/* Helper: build a single profiling IB descriptor at a ctxt-based offset. */
+static bool hgsl_get_profiling_ib(struct hgsl_context *ctxt,
+				  uint64_t user_profile_gpuaddr,
+				  uint32_t prof_offset_bytes,
+				  struct hgsl_fw_ib_desc *out_ib)
+{
+	if (!ctxt || !ctxt->priv || !ctxt->priv->dev || !user_profile_gpuaddr || !out_ib)
+		return false;
+
+	if (!ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
+	    !ctxt->cmdbatch_kernel_profiling.buf_gpuaddr ||
+	    !ctxt->cmdbatch_kernel_profiling.buf_size)
+		return false;
+
+	const size_t slot_size_bytes = PROFILE_IB_DWORDS << 2;
+
+	/* Ensure the requested offset is within the allocated profiling buffer */
+	if ((u64)prof_offset_bytes + slot_size_bytes > ctxt->cmdbatch_kernel_profiling.buf_size)
+		return false;
+
+	u32 *ib_host = (u32 *)((u8 *)ctxt->cmdbatch_kernel_profiling.buf_vaddr +
+			       prof_offset_bytes);
+	u64 ib_gpuaddr = ctxt->cmdbatch_kernel_profiling.buf_gpuaddr + prof_offset_bytes;
+	u32 dwords = hgsl_get_alwayson_counter_ib(ib_host, user_profile_gpuaddr);
+
+	if (!dwords || (dwords > PROFILE_IB_DWORDS)) {
+		LOGE("Profiling IB size invalid: %u dwords > %u", dwords, PROFILE_IB_DWORDS);
+		return false;
+	}
+
+	out_ib->addr = ib_gpuaddr;
+	out_ib->sz = dwords << 2;
+
+	return true;
+}
+
 static int hgsl_db_issueib_with_alloc_list(struct hgsl_priv *priv,
 	struct hgsl_ioctl_issueib_with_alloc_list_params *param,
 	struct hgsl_context *ctxt,
@@ -2732,22 +3211,47 @@ static int hgsl_db_issueib_with_alloc_list(struct hgsl_priv *priv,
 	uint32_t gmu_flags = CMDBATCH_NOTIFY;
 	uint32_t i;
 	uint64_t user_profile_gpuaddr = 0;
+	size_t n_ibs;
+	size_t base = 0;
+	struct hgsl_fw_ib_desc prof_ib_head, prof_ib_tail;
+	bool has_prof_ib_head = false;
+	bool has_prof_ib_tail = false;
 
 	if (!hgsl_ctxt_use_dbq(ctxt)) {
 		ret = -EPERM;
 		goto out;
 	}
 
-	ib_descs = hgsl_malloc(sizeof(*ib_descs) * param->num_ibs);
+	ib_descs = hgsl_malloc(sizeof(*ib_descs) * (param->num_ibs + 2));
 	if (ib_descs == NULL) {
 		LOGE("Out of memory");
 		ret = -ENOMEM;
 		goto out;
 	}
 
+	ret = hgsl_db_next_timestamp(ctxt, timestamp);
+	if (ret)
+		goto out;
+
+	hgsl_prof_enqueue(ctxt, *timestamp, &prof_ib_head, &prof_ib_tail,
+			  &has_prof_ib_head, &has_prof_ib_tail);
+
+	if (has_prof_ib_head) {
+		ib_descs[0] = prof_ib_head;
+		base = 1;
+	}
+
+	/* Fill in original IBs, starting after any prepended profiling IB */
 	for (i = 0; i < param->num_ibs; i++) {
-		ib_descs[i].addr = be_descs[i].gpuaddr + ib[i].offset + be_offsets[i];
-		ib_descs[i].sz = ib[i].sizedwords << 2;
+		ib_descs[base + i].addr = be_descs[i].gpuaddr + ib[i].offset + be_offsets[i];
+		ib_descs[base + i].sz = ib[i].sizedwords << 2;
+	}
+
+	/* Append trailing profiling IB (post), if prepared (uses different data slot) */
+	n_ibs = base + param->num_ibs;
+	if (has_prof_ib_tail) {
+		ib_descs[n_ibs] = prof_ib_tail;
+		n_ibs++;
 	}
 
 	for (i = 0; i < param->num_allocations; i++) {
@@ -2761,8 +3265,27 @@ static int hgsl_db_issueib_with_alloc_list(struct hgsl_priv *priv,
 		}
 	}
 
-	ret = hgsl_db_issue_cmd(priv, ctxt, param->num_ibs, gmu_flags,
-			timestamp, ib_descs, user_profile_gpuaddr);
+	ret = hgsl_db_issue_cmd(priv, ctxt, n_ibs, gmu_flags,
+			timestamp, ib_descs, user_profile_gpuaddr, false);
+	if (!ret) {
+		ctxt->queued_ts = *timestamp;
+
+		if (ctxt->priv && ctxt->priv->period) {
+			atomic_inc(&priv->period->active_cmds);
+			spin_lock(&priv->dev->work_period_lock);
+			if (!__test_and_set_bit(HGSL_WORK_PERIOD, &priv->dev->flags)) {
+				mod_timer(&priv->dev->work_period_timer,
+					  jiffies + msecs_to_jiffies(HGSL_WORK_PERIOD_MS));
+				priv->dev->gpu_period.begin = ktime_get_ns();
+			}
+
+			/* Take a refcount here and put it back in hgsl_work_period_timer() */
+			if (!__test_and_set_bit(HGSL_WORK_PERIOD, &priv->period->flags))
+				kref_get(&priv->period->refcount);
+
+			spin_unlock(&priv->dev->work_period_lock);
+		}
+	}
 out:
 	hgsl_free(ib_descs);
 	return ret;
@@ -2797,7 +3320,7 @@ static int hgsl_db_issueib(struct hgsl_priv *priv,
 	}
 
 	ret = hgsl_db_issue_cmd(priv, ctxt, param->num_ibs, gmu_flags,
-			timestamp, ib_descs, user_profile_gpuaddr);
+			timestamp, ib_descs, user_profile_gpuaddr, true);
 out:
 	hgsl_free(ib_descs);
 	return ret;
@@ -4137,6 +4660,153 @@ exit:
 	return ret;
 }
 
+static void hgsl_work_period_release(struct kref *kref)
+{
+	struct gpu_work_period *wp = container_of(kref,
+			struct gpu_work_period, refcount);
+
+	/* wp_list membership is managed under wp_list_lock in qcom_hgsl_remove.
+	 * Do not touch the list here to avoid races with _log_gpu_work_events.
+	 */
+	kfree(wp);
+}
+
+static void hgsl_put_work_period(struct gpu_work_period *wp)
+{
+	if (!IS_ERR_OR_NULL(wp))
+		kref_put(&wp->refcount, hgsl_work_period_release);
+}
+
+static void hgsl_work_period_timer(struct timer_list *t)
+{
+	struct qcom_hgsl *device = from_timer(device, t, work_period_timer);
+
+	queue_work(device->lockless_workqueue, &device->work_period_ws);
+}
+
+/* Deferred work item: put the work period refcount outside the timer worker */
+static void _defer_work_period_put(struct work_struct *work)
+{
+	struct gpu_work_period *wp =
+		container_of(work, struct gpu_work_period, defer_ws);
+
+	/* Drop the ref taken when starting a work period */
+	hgsl_put_work_period(wp);
+}
+
+static struct gpu_work_period *hgsl_get_work_period(struct qcom_hgsl *device, uid_t uid)
+{
+	struct gpu_work_period *wp;
+
+	spin_lock(&device->wp_list_lock);
+	list_for_each_entry(wp, &device->wp_list, list) {
+		if ((uid == wp->uid) && kref_get_unless_zero(&wp->refcount)) {
+			spin_unlock(&device->wp_list_lock);
+			return wp;
+		}
+	}
+
+	wp = kzalloc(sizeof(*wp), GFP_ATOMIC);
+	if (!wp) {
+		spin_unlock(&device->wp_list_lock);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	/* Initial kref is the device/list lifetime reference. */
+	kref_init(&wp->refcount);
+	wp->uid = uid;
+	INIT_WORK(&wp->defer_ws, _defer_work_period_put);
+	list_add(&wp->list, &device->wp_list);
+	spin_unlock(&device->wp_list_lock);
+
+	return wp;
+}
+
+static void hgsl_work_period_update(struct qcom_hgsl *device,
+				    struct gpu_work_period *period, u64 active)
+{
+	if (!device || !period)
+		return;
+
+	spin_lock(&device->work_period_lock);
+	if (test_bit(HGSL_WORK_PERIOD, &device->flags)) {
+		period->active += active;
+		period->cmds++;
+	}
+	spin_unlock(&device->work_period_lock);
+}
+
+#define HGSL_GPU_ID 1
+static void _log_gpu_work_events(struct work_struct *work)
+{
+	struct qcom_hgsl *device = container_of(work, struct qcom_hgsl,
+							work_period_ws);
+	struct gpu_work_period *wp;
+	u64 active_time;
+	bool restart = false;
+
+	spin_lock(&device->work_period_lock);
+	device->gpu_period.end = ktime_get_ns();
+
+	spin_lock(&device->wp_list_lock);
+	list_for_each_entry(wp, &device->wp_list, list) {
+		if (!test_bit(HGSL_WORK_PERIOD, &wp->flags))
+			continue;
+
+		/* Active time in XO cycles(19.2MHz), convert to nanoseconds */
+		active_time = wp->active * 10000;
+		do_div(active_time, 192);
+
+		/* Ensure active_time is within work period */
+		if ((device->gpu_period.end - device->gpu_period.begin) > 0) {
+			active_time = min_t(u64, active_time,
+				device->gpu_period.end - device->gpu_period.begin);
+
+		}
+		/*
+		 * Emit GPU work period events via a kernel tracepoint
+		 * to provide information to the Android OS about how
+		 * apps are using the GPU.
+		 */
+		if (active_time)
+			trace_gpu_work_period(HGSL_GPU_ID, wp->uid,
+					device->gpu_period.begin,
+					device->gpu_period.end,
+					active_time);
+		/* Reset gpu work period stats */
+		wp->active = 0;
+		wp->cmds = 0;
+		atomic_set(&wp->frames, 0);
+
+		/* make sure other CPUs see the update */
+		smp_wmb();
+
+		if (!atomic_read(&wp->active_cmds)) {
+			__clear_bit(HGSL_WORK_PERIOD, &wp->flags);
+			queue_work(device->lockless_workqueue, &wp->defer_ws);
+		} else {
+			restart = true;
+		}
+	}
+	spin_unlock(&device->wp_list_lock);
+
+	if (restart) {
+		/*
+		 * GPU work period duration (end time - begin time) must be at
+		 * most 1 second. The event for a period must be emitted within
+		 * 1 second of the end time of the period. Restart timer within
+		 * 1 second to emit gpu work period events.
+		 */
+		mod_timer(&device->work_period_timer,
+					jiffies + msecs_to_jiffies(HGSL_WORK_PERIOD_MS));
+		device->gpu_period.begin = device->gpu_period.end;
+	} else {
+		memset(&device->gpu_period, 0, sizeof(device->gpu_period));
+		__clear_bit(HGSL_WORK_PERIOD, &device->flags);
+	}
+	spin_unlock(&device->work_period_lock);
+}
+
 static int hgsl_suspend(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
@@ -4246,6 +4916,9 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&hgsl_dev->active_wait_list);
 	spin_lock_init(&hgsl_dev->active_wait_lock);
 
+	INIT_LIST_HEAD(&hgsl_dev->wp_list);
+	spin_lock_init(&hgsl_dev->wp_list_lock);
+
 	ret = hgsl_init_release_wq(hgsl_dev);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "hgsl_init_release_wq failed, ret %d\n",
@@ -4273,6 +4946,22 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 	hgsl_sysfs_init(pdev);
 	hgsl_debugfs_init(pdev);
 
+	if (!hgsl_dev->lockless_workqueue) {
+		hgsl_dev->lockless_workqueue = alloc_workqueue("hgsl-lockless-work",
+		WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
+		if (!hgsl_dev->lockless_workqueue) {
+			LOGE("hgsl: Failed to allocate lockless workqueue");
+			goto exit_dereg;
+		}
+	}
+	timer_setup(&hgsl_dev->work_period_timer, hgsl_work_period_timer, 0);
+	spin_lock_init(&hgsl_dev->work_period_lock);
+	INIT_WORK(&hgsl_dev->work_period_ws, _log_gpu_work_events);
+
+	INIT_WORK(&hgsl_dev->prof_retire_ws, hgsl_prof_retire_worker);
+	timer_setup(&hgsl_dev->prof_retire_timer, hgsl_prof_retire_timer_fn, 0);
+	mod_timer(&hgsl_dev->prof_retire_timer, jiffies + msecs_to_jiffies(100));
+
 	return 0;
 
 exit_dereg:
@@ -4285,6 +4974,7 @@ static int qcom_hgsl_remove(struct platform_device *pdev)
 	struct qcom_hgsl *hgsl = platform_get_drvdata(pdev);
 	struct hgsl_tcsr *tcsr_sender, *tcsr_receiver;
 	struct hgsl_gmugos *gmugos;
+	struct gpu_work_period *wp, *tmp;
 	int i, j;
 	hgsl_debugfs_release(pdev);
 	hgsl_sysfs_release(pdev);
@@ -4319,6 +5009,23 @@ static int qcom_hgsl_remove(struct platform_device *pdev)
 		destroy_workqueue(hgsl->wq);
 		hgsl->wq = NULL;
 	}
+	/* Stop periodic timers and destroy lockless workqueue */
+	del_timer_sync(&hgsl->work_period_timer);
+	del_timer_sync(&hgsl->prof_retire_timer);
+	if (hgsl->lockless_workqueue) {
+		flush_workqueue(hgsl->lockless_workqueue);
+		destroy_workqueue(hgsl->lockless_workqueue);
+		hgsl->lockless_workqueue = NULL;
+	}
+
+	/* After timers/workqueues are stopped, safely drop all gpu_work_period objects */
+	spin_lock(&hgsl->wp_list_lock);
+	list_for_each_entry_safe(wp, tmp, &hgsl->wp_list, list) {
+		list_del_init(&wp->list);
+		/* Drop the device/list lifetime ref */
+		kref_put(&wp->refcount, hgsl_work_period_release);
+	}
+	spin_unlock(&hgsl->wp_list_lock);
 
 	memset(hgsl->tcsr, 0, sizeof(hgsl->tcsr));
 
