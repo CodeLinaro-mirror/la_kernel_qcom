@@ -193,6 +193,8 @@ static void dwxgmac2_dma_rx_mode(void __iomem *ioaddr, int mode,
 			rfa = 0x04; /* Full-3K */
 			break;
 		case 14336:
+		case 19712: /* used as part of rss to reduce fifo overflow */
+		case 15360: /* used as part of rss to reduce fifo overflow */
 			rfd = 0x18; /* Full-13K */
 			rfa = 0x12; /* Full-10K */
 			break;
