@@ -1847,7 +1847,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	for (i = 1; i < plat_dat->tx_queues_to_use; i++)
 		plat_dat->tx_queues_cfg[i].tbs_en = 1;
 
-	return devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	ret =  devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	if (ret)
+		goto err_probe;
+
+	return ret;
+err_probe:
+	ethqos_disable_regulators(ethqos);
+	return ret;
 }
 
 static const struct of_device_id qcom_ethqos_match[] = {
