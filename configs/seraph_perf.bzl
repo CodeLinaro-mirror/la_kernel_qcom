@@ -191,6 +191,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_S2D_VENDOR_HOOK": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SECURE_BUFFER": "m",
+    "CONFIG_QCOM_SECURE_HIBERNATION": "m",
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
     "CONFIG_QCOM_SI_CORE": "m",
     "CONFIG_QCOM_SMEM": "m",
