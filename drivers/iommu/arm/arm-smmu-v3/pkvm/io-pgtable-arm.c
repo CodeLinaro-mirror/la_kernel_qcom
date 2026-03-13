@@ -105,9 +105,9 @@ struct io_pgtable *kvm_arm_io_pgtable_alloc(struct io_pgtable_cfg *cfg,
 	struct arm_lpae_io_pgtable *data;
 	int ret;
 
-	data = hyp_alloc(sizeof(*data));
+	data = kvm_iommu_donate_pages_atomic(0);
 	if (!data) {
-		*out_ret = hyp_alloc_errno();
+		*out_ret = -ENOMEM;
 		return NULL;
 	}
 
