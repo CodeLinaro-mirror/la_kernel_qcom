@@ -26,6 +26,7 @@ le_targets = [
     #"sun-allyes",
     "alor-le",
     "autogvm",
+    "bengal-le",
     "vienna-le",
 ]
 
