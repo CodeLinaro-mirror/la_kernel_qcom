@@ -4106,22 +4106,25 @@ static void stmmac_free_irq(struct net_device *dev,
 		irq_idx = priv->plat->tx_queues_to_use;
 		fallthrough;
 	case REQ_IRQ_ERR_TX:
-		for (j = irq_idx - 1; j >= 0; j--) {
-			if (priv->tx_irq[j] > 0) {
-				irq_set_affinity_hint(priv->tx_irq[j], NULL);
-				free_irq(priv->tx_irq[j], &priv->tx_queue[j]);
+		if (priv->plat->flags & STMMAC_FLAG_MULTI_IRQ_EN) {
+			for (j = irq_idx - 1; j >= 0; j--) {
+				if (priv->tx_irq[j] > 0) {
+					irq_set_affinity_hint(priv->tx_irq[j], NULL);
+					free_irq(priv->tx_irq[j], &priv->tx_queue[j]);
+				}
 			}
 		}
 		irq_idx = priv->plat->rx_queues_to_use;
 		fallthrough;
 	case REQ_IRQ_ERR_RX:
-		for (j = irq_idx - 1; j >= 0; j--) {
-			if (priv->rx_irq[j] > 0) {
-				irq_set_affinity_hint(priv->rx_irq[j], NULL);
-				free_irq(priv->rx_irq[j], &priv->rx_queue[j]);
+		if (priv->plat->flags & STMMAC_FLAG_MULTI_IRQ_EN) {
+			for (j = irq_idx - 1; j >= 0; j--) {
+				if (priv->rx_irq[j] > 0) {
+					irq_set_affinity_hint(priv->rx_irq[j], NULL);
+					free_irq(priv->rx_irq[j], &priv->rx_queue[j]);
+				}
 			}
 		}
-
 		if (priv->sfty_ue_irq > 0 && priv->sfty_ue_irq != dev->irq)
 			free_irq(priv->sfty_ue_irq, dev);
 		fallthrough;
