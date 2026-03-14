@@ -4050,16 +4050,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		}
 	}
 
-	host->parent_vreg = ufs_qcom_setup_vreg_to_enable(host);
-	if (host->parent_vreg) {
-		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
-		if (err) {
-			dev_err(dev, "%s: failed to enable %s err=%d\n",
-					__func__, host->parent_vreg->name, err);
-			goto out_disable_vddp;
-		}
-	}
-
 	list_for_each_entry(clki, &hba->clk_list_head, list) {
 		if (!strcmp(clki->name, "core_clk_unipro")) {
 			clki->keep_link_active = true;
@@ -4092,6 +4082,16 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_parse_broken_ahit_workaround_flag(host);
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
+
+	host->parent_vreg = ufs_qcom_setup_vreg_to_enable(host);
+	if (host->parent_vreg) {
+		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
+		if (err) {
+			dev_err(dev, "%s: failed to enable %s err=%d\n",
+					__func__, host->parent_vreg->name, err);
+			goto out_disable_vddp;
+		}
+	}
 
 	err = ufs_qcom_shared_ice_init(hba);
 	if (err)
