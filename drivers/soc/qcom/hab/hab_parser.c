@@ -132,7 +132,7 @@ static int hab_parse_dt(struct local_vmid *settings)
 	struct device_node *mmid_grp_node;
 	const char *role = NULL;
 	u32 vmids[HAB_VMIDS_MAX];
-	int vmids_num, count = 0;
+	int vmids_num;
 	u32 tmp;
 	int32_t grp_start_id, be;
 	int kernel_only;
@@ -156,32 +156,6 @@ static int hab_parse_dt(struct local_vmid *settings)
 
 	pr_debug("local vmid = %d\n", tmp);
 	settings->self = (int)tmp;
-
-	prop = of_find_property(hab_node, HAB_VIRQ_NODE, NULL);
-	if (prop != NULL) {
-		count = of_property_count_elems_of_size(hab_node, HAB_VIRQ_NODE,
-				sizeof(u32));
-		if (count == 0) {
-			pr_err("No virt-irq are specified for %s\n", HAB_VIRQ_NODE);
-		} else if (count > HAB_VIRTIRQ_MAX) {
-			pr_err("The number of virq exceed limitation set %d for %s\n",
-					HAB_VIRTIRQ_MAX, HAB_VIRQ_NODE);
-			count = 0;
-		} else {
-			result = of_property_read_u32_array(hab_node, HAB_VIRQ_NODE,
-					virqsettings.label, (size_t)count);
-			if (result != 0) {
-				pr_err("error %d getting virq resource for %s\n", result,
-						HAB_VIRQ_NODE);
-			}
-		}
-	}
-
-	virqsettings.cnt_virq = count;
-
-
-	for (i = 0 ; i < count ; i++)
-		pr_debug("virq-label is %d\n", virqsettings.label[i]);
 
 	prop = of_find_property(hab_node, "PCHAN_RX_PENDING_SZ_MAX", NULL);
 	if (prop != NULL) {
