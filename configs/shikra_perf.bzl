@@ -57,6 +57,7 @@ shikra_perf_config = {
     "CONFIG_MSM_GPI_DMA": "m",
     "CONFIG_MSM_HAB": "n",
     "CONFIG_MSM_PERFORMANCE": "m",
+    "CONFIG_MSM_QUSB_PHY": "m",
     "CONFIG_MSM_RPM_SMD": "m",
     "CONFIG_NL80211_TESTMODE": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
@@ -193,5 +194,6 @@ shikra_perf_config = {
     "CONFIG_USB_F_CDEV": "m",
     "CONFIG_USB_F_GSI": "m",
     "CONFIG_USB_F_QDSS": "m",
+    "CONFIG_USB_MSM_SSPHY_QMP": "m",
     "CONFIG_USB_QCOM_EMU_PHY": "m",
 }
