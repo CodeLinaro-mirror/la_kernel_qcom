@@ -84,5 +84,6 @@ camcc-x1e80100.ko
 debugcc-x1e80100.ko
 msm_geni_serial.ko
 i2c-msm-geni.ko
+wcd_usbss_i2c.ko
 msm_gpi.ko
 spi-msm-geni.ko
