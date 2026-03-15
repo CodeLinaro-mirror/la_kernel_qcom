@@ -81,3 +81,4 @@ qcom_logbuf_boot_log.ko
 debug_symbol.ko
 minidump.ko
 qcom-dload-mode.ko
+memory_dump_v2.ko
