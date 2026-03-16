@@ -5,6 +5,8 @@ glymur_perf_config = {
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
     "CONFIG_HWSPINLOCK_QCOM": "m",
+    "CONFIG_PINCTRL_GLYMUR": "m",
+    "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SMEM": "m",
