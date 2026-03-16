@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
 
 #include <linux/types.h>
 #include <linux/export.h>
@@ -520,8 +522,7 @@ static void nft_trigger_eval(const struct nft_expr *expr, struct nft_regs *regs,
 }
 
 static int nft_trigger_validate(const struct nft_ctx *ctx,
-				const struct nft_expr *expr,
-				const struct nft_data **data)
+				const struct nft_expr *expr)
 {
 	struct nft_trigger *priv = nft_expr_priv(expr);
 	int err;
