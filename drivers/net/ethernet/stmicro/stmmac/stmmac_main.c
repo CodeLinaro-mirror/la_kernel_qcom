@@ -5124,6 +5124,11 @@ static int stmmac_release(struct net_device *dev)
 
 	qcom_ethstate_update(priv->plat, EMAC_HW_DOWN);
 
+	/* Due to DMA reset, the filters installed in the HW will be reset
+	 * Ensure that the array tracking the HW state is in sync.
+	 */
+	memset(priv->hw->vlan_filter, 0, sizeof(priv->hw->vlan_filter));
+
 	/*Reset num filters so ndo_open can reinit everything*/
 	priv->app_l3_l4_filters = 0;
 
