@@ -119,7 +119,10 @@ enum slc_mon_function {
 	CACHE_READ_MISS_CONFIG,
 	CACHE_FE_MON_CONFIG,
 	CACHE_BE_MON_CONFIG,
+	CACHE_TOTAL_FE_MON_CONFIG,
+	CACHE_TOTAL_BE_MON_CONFIG,
 	CACHE_MON_STATS_READ,
+	CACHE_TOTAL_MON_STATS_READ,
 };
 
 struct slc_mon_config_val {
@@ -270,12 +273,15 @@ union qcom_slc_monitor_memory {
 	struct qcom_slc_mon_mem_v2 mem_v2;
 };
 
+#define MAX_TOTAL_MON_AVAILABLE	1
 /* slc Monitor capability */
 struct slc_mon_capability {
 	uint32_t read_miss_config_available;
 	uint32_t capacity_config_available;
 	uint32_t fe_mon_config_available;
 	uint32_t be_mon_config_available;
+	uint32_t total_fe_mon_config_avail;
+	uint32_t total_be_mon_config_avail;
 };
 
 struct slc_mon_configured {
@@ -283,6 +289,8 @@ struct slc_mon_configured {
 	uint32_t capacity_configured;
 	uint32_t fe_mon_configured;
 	uint32_t be_mon_configured;
+	uint32_t total_fe_mon_configured;
+	uint32_t total_be_mon_configured;
 	uint32_t mon_cfgd;
 };
 
