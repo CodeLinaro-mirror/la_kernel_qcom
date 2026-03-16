@@ -30,6 +30,7 @@ def define_gen3gvmcoqos():
         "drivers/net/wireless/virt_wifi.ko",
         "drivers/nvdimm/nd_virtio.ko",
         "drivers/nvdimm/virtio_pmem.ko",
+        "drivers/power/supply/wallpower_charger.ko",
         "drivers/regulator/scmi-regulator.ko",
         "drivers/reset/reset-scmi.ko",
         "drivers/soc/qcom/boot_stats.ko",
