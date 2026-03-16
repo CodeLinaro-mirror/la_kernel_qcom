@@ -82,3 +82,5 @@ debug_symbol.ko
 minidump.ko
 qcom-dload-mode.ko
 memory_dump_v2.ko
+dcc_v2.ko
+
