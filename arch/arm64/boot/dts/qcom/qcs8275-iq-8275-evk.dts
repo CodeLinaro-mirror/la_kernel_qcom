@@ -613,7 +613,7 @@
 &soc {
 	connector_usb1: connector-usb1 {
 		compatible = "gpio-usb-b-connector";
-		id-gpio = <&tlmm 8 GPIO_ACTIVE_HIGH>;
+		id-gpio = <&tlmm 13 GPIO_ACTIVE_HIGH>;
 		vbus-supply = <&vbus_supply_regulator_1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb1_id_det_default>;
@@ -830,7 +830,7 @@
 	};
 
 	usb1_id_det_default: usb1-id-det-default {
-		pins = "gpio8";
+		pins = "gpio13";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-up;
