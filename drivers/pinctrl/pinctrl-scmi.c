@@ -403,15 +403,6 @@ static int pinctrl_scmi_free(struct pinctrl_dev *pctldev, unsigned int offset)
 	return pinctrl_ops->pin_free(pmx->ph, offset);
 }
 
-static const struct pinmux_ops pinctrl_scmi_pinmux_ops = {
-	.request = pinctrl_scmi_request,
-	.free = pinctrl_scmi_free,
-	.get_functions_count = pinctrl_scmi_get_functions_count,
-	.get_function_name = pinctrl_scmi_get_function_name,
-	.get_function_groups = pinctrl_scmi_get_function_groups,
-	.set_mux = pinctrl_scmi_func_set_mux,
-};
-
 static int pinctrl_scmi_map_pinconf_type(enum pin_config_param param,
 					 enum scmi_pinctrl_conf_type *type)
 {
@@ -490,6 +481,51 @@ static int pinctrl_scmi_map_pinconf_type(enum pin_config_param param,
 
 	return 0;
 }
+
+static int pinctrl_scmi_set_direction(struct pinctrl_dev *pctldev, struct pinctrl_gpio_range *range,
+				      unsigned int offset, bool input)
+{
+	unsigned int pin;
+	unsigned long config;
+	u32 p_config_value;
+	enum pin_config_param param;
+	enum scmi_pinctrl_conf_type p_config_type;
+	int ret;
+
+	struct scmi_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
+
+	pin = range->pin_base + offset;
+
+	if (!input)
+		config = PIN_CONF_PACKED(PIN_CONFIG_OUTPUT_ENABLE, 1);
+	else
+		config = PIN_CONF_PACKED(PIN_CONFIG_INPUT_ENABLE, 1);
+
+	param = pinconf_to_config_param(config);
+	ret = pinctrl_scmi_map_pinconf_type(param, &p_config_type);
+	if (ret) {
+		dev_err(pmx->dev, "Error map pinconf_type %d\n", ret);
+		return ret;
+	}
+
+	p_config_value = pinconf_to_config_argument(config);
+	ret = pinctrl_ops->settings_conf(pmx->ph, pin, PIN_TYPE, 1,
+					&p_config_type,  &p_config_value);
+	if (ret)
+		dev_err(pmx->dev, "Error parsing config %d\n", ret);
+
+	return ret;
+}
+
+static const struct pinmux_ops pinctrl_scmi_pinmux_ops = {
+	.request = pinctrl_scmi_request,
+	.free = pinctrl_scmi_free,
+	.get_functions_count = pinctrl_scmi_get_functions_count,
+	.get_function_name = pinctrl_scmi_get_function_name,
+	.get_function_groups = pinctrl_scmi_get_function_groups,
+	.set_mux = pinctrl_scmi_func_set_mux,
+	.gpio_set_direction = pinctrl_scmi_set_direction,
+};
 
 static int pinctrl_scmi_pinconf_get(struct pinctrl_dev *pctldev,
 				    unsigned int pin, unsigned long *config)
