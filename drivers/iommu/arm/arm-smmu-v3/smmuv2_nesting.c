@@ -18,6 +18,7 @@ extern unsigned long kvm_nvhe_sym(smmu_v2_nested_count);
 extern struct smmu_v2_nested *kvm_nvhe_sym(smmu_v2_nested_base);
 #define smmu_v2_nested_base kvm_nvhe_sym(smmu_v2_nested_base)
 struct smmu_v2_nested *smmu_v2_host_nested_base; /* Host kernel's view of nested SMMU base */
+u32 host_s2_cb_idx;
 
 extern struct kvm_iommu_ops kvm_nvhe_sym(smmuv2_hyp_nesting_ops);
 
@@ -25,9 +26,18 @@ static const char * const compatible_devices[] = {
 		"qcom,qsmmu-v500"
 	};
 
+struct smmu_fault_info_t {
+	u64 base_pa;
+	u32 host_s2_cb_idx;
+	u64 host_cb_base;
+	u64 host_gr1_base;
+};
+
+struct smmu_fault_info_t *smmu_fault_info;
+
 static irqreturn_t smmuv2_cb_fault_handler(int irq, void *dev)
 {
-	struct smmu_v2_nested *smmu = (struct smmu_v2_nested *)dev;
+	struct smmu_fault_info_t *smmu = (struct smmu_fault_info_t *)dev;
 	u32 fsr, fsynr0, fsynr1, cbfrsynra;
 	u64 far, ipafar;
 	u32 sctlr, tcr;
@@ -142,22 +152,6 @@ int smmuv2_post_boot_init(void)
 					break;
 				}
 
-				/* Register the IRQ handler */
-				ret = request_irq(virq, smmuv2_cb_fault_handler,
-						  IRQF_SHARED,
-						  "smmuv2-cb-fault", smmu);
-				if (ret) {
-					pr_err("Failed to register IRQ handler for SMMU at 0x%llx, IRQ %d: %d\n",
-					       smmu->base_pa, virq, ret);
-					break;
-				}
-
-				pr_info("Registered CB fault IRQ handler for SMMU at 0x%llx: cb_irq=%d, virt_irq=%d, CB=%d, hwirq=%d\n",
-					smmu->base_pa, cb_irq, virq,
-					smmu->host_s2_cb_idx,
-					irq_get_irq_data(virq) ?
-					(int)irq_get_irq_data(virq)->hwirq : -1);
-
 				found = true;
 			}
 		}
@@ -196,6 +190,29 @@ int smmuv2_post_boot_init(void)
 		smmu->host_gr1_base = (u64)gr1_base;
 		pr_info("SMMU GR1 mapped: PA=0x%llx, VA=0x%llx, size=0x%x\n",
 			gr1_base_pa, (u64)gr1_base, cb_size);
+
+		/* fill smmu fault callback info */
+		smmu_fault_info[i].host_s2_cb_idx = smmu->host_s2_cb_idx;
+		smmu_fault_info[i].base_pa = smmu->base_pa;
+		smmu_fault_info[i].host_cb_base = smmu->host_cb_base;
+		smmu_fault_info[i].host_gr1_base = smmu->host_gr1_base;
+
+		/* Register the IRQ handler */
+		ret = request_irq(virq, smmuv2_cb_fault_handler,
+				  IRQF_SHARED,
+				  "smmuv2-cb-fault", &smmu_fault_info[i]);
+		if (ret) {
+			pr_err("Failed to register IRQ handler for SMMU at 0x%llx, IRQ %d: %d\n",
+			       smmu->base_pa, virq, ret);
+			break;
+		}
+
+		pr_info("Registered CB fault IRQ handler for SMMU at 0x%llx: cb_irq=%d, virt_irq=%d, CB=%d, hwirq=%d\n",
+			smmu->base_pa, cb_irq, virq,
+			smmu->host_s2_cb_idx,
+			irq_get_irq_data(virq) ?
+			(int)irq_get_irq_data(virq)->hwirq : -1);
+
 	}
 
 	/* Needed to let the EL1 drivers to bind later */
@@ -229,8 +246,10 @@ int smmuv2_describe_smmuv2(void)
 	/* Pre-allocate memory for the maximum number of SMMUs we'll handle */
 	smmu_order = get_order(total_smmus * sizeof(struct smmu_v2_nested));
 	smmu_v2_nested_base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, smmu_order);
+	smmu_order = get_order(total_smmus * sizeof(struct smmu_fault_info_t));
+	smmu_fault_info = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, smmu_order);
 
-	if (!smmu_v2_nested_base)
+	if (!smmu_v2_nested_base || !smmu_fault_info)
 		return -ENOMEM;
 
 	smmu_v2_host_nested_base = smmu_v2_nested_base;
