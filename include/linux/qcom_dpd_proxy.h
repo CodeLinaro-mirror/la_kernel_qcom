@@ -21,6 +21,7 @@ struct dpd_scatterlist {
 	atomic_t mapcount;
 	struct completion done;
 	struct rcu_head rcu;
+	int perms;
 };
 
 int dpd_svc_map(struct dpd_scatterlist *dpd_sg, u32 domain, u32 flags, u64 iova);
