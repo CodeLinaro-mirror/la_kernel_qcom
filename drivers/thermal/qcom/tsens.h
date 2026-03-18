@@ -539,6 +539,8 @@ struct tsens_features {
  * @hw_ids: Subset of sensors ids supported by platform, if not the first n
  * @feat: features of the IP
  * @fields: bitfield locations
+ * @tsens_disable_on_suspend : boolean flag to disable TSENS interrupt
+			during suspend when set
  */
 struct tsens_plat_data {
 	const u32		num_sensors;
@@ -546,6 +548,7 @@ struct tsens_plat_data {
 	unsigned int		*hw_ids;
 	struct tsens_features	*feat;
 	const struct reg_field		*fields;
+	bool	tsens_disable_on_suspend;
 };
 
 /**
@@ -566,6 +569,8 @@ struct tsens_context {
  * @srot_map: pointer to SROT register address space
  * @tm_offset: deal with old device trees that don't address TM and SROT
  *             address space separately
+ * @tsens_disable_on_suspend : boolean flag to disable TSENS interrupt
+			during suspend when set
  * @ul_lock: lock while processing upper/lower threshold interrupts
  * @crit_lock: lock while processing critical threshold interrupts
  * @rf: array of regmap_fields used to store value of the field
@@ -584,7 +589,7 @@ struct tsens_priv {
 	struct regmap			*srot_map;
 	u32				tm_offset;
 	bool				need_trip_update;
-
+	bool				tsens_disable_on_suspend;
 	/* lock for upper/lower threshold interrupts */
 	spinlock_t			ul_lock;
 
@@ -668,6 +673,6 @@ extern struct tsens_plat_data data_8226, data_8909, data_8916, data_8939, data_8
 extern struct tsens_plat_data data_tsens_v1, data_8976, data_8956;
 
 /* TSENS v2 targets */
-extern struct tsens_plat_data data_8996, data_ipq8074, data_tsens_v2;
+extern struct tsens_plat_data data_8996, data_ipq8074, data_tsens_v2, data_sa8775p;
 
 #endif /* __QCOM_TSENS_H__ */
