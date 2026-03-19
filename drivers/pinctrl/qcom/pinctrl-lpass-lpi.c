@@ -299,7 +299,7 @@ static const struct pinconf_ops lpi_gpio_pinconf_ops = {
 
 static int lpi_gpio_get_direction(struct gpio_chip *chip, unsigned int pin)
 {
-	unsigned long config = pinconf_to_config_packed(PIN_CONFIG_OUTPUT, 0);
+	unsigned long config = pinconf_to_config_packed(PIN_CONFIG_LEVEL, 0);
 	struct lpi_pinctrl *state = gpiochip_get_data(chip);
 	unsigned long arg;
 	int ret;
