@@ -50,9 +50,6 @@ sdhci-msm.ko
 qcom_ice.ko
 smp2p.ko
 qseecom_proxy.ko
-qcom_ice.ko
-cqhci.ko
-sdhci-msm.ko
 mdt_loader.ko
 socinfo.ko
 dispcc-shikra.ko
