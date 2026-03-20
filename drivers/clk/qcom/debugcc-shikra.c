@@ -249,12 +249,10 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_vcodec0_axi_clk",
 	"gcc_venus_ahb_clk",
 	"gcc_venus_ctl_axi_clk",
-	"gcc_video_ahb_clk",
 	"gcc_video_axi0_clk",
 	"gcc_video_throttle_core_clk",
 	"gcc_video_vcodec0_sys_clk",
 	"gcc_video_venus_ctl_clk",
-	"gcc_video_xo_clk",
 	"gpu_cc_debug_mux",
 	"mc_cc_debug_mux",
 	"measure_only_cnoc_clk",
@@ -269,6 +267,8 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"measure_only_gcc_disp_xo_clk",
 	"measure_only_gcc_gpu_cfg_ahb_clk",
 	"measure_only_gcc_sys_noc_cpuss_ahb_clk",
+	"measure_only_gcc_video_ahb_clk",
+	"measure_only_gcc_video_xo_clk",
 	"measure_only_hwkm_ahb_clk",
 	"measure_only_ipa_2x_clk",
 	"measure_only_pka_ahb_clk",
@@ -408,12 +408,10 @@ static int gcc_debug_mux_sels[] = {
 	0x168,		/* gcc_vcodec0_axi_clk */
 	0x169,		/* gcc_venus_ahb_clk */
 	0x167,		/* gcc_venus_ctl_axi_clk */
-	0x54,		/* gcc_video_ahb_clk */
 	0x5A,		/* gcc_video_axi0_clk */
 	0x68,		/* gcc_video_throttle_core_clk */
 	0x165,		/* gcc_video_vcodec0_sys_clk */
 	0x163,		/* gcc_video_venus_ctl_clk */
-	0x5C,		/* gcc_video_xo_clk */
 	0x11B,		/* gpu_cc_debug_mux */
 	0xC6,		/* mc_cc_debug_mux or ddrss_gcc_debug_clk */
 	0x33,		/* measure_only_cnoc_clk */
@@ -428,6 +426,8 @@ static int gcc_debug_mux_sels[] = {
 	0x5E,		/* measure_only_gcc_disp_xo_clk */
 	0x119,		/* measure_only_gcc_gpu_cfg_ahb_clk */
 	0x9,		/* measure_only_gcc_sys_noc_cpuss_ahb_clk */
+	0x54,		/* measure_only_gcc_video_ahb_clk */
+	0x5C,		/* measure_only_gcc_video_xo_clk */
 	0xD2,		/* measure_only_hwkm_ahb_clk */
 	0xF9,		/* measure_only_ipa_2x_clk */
 	0x1AF,		/* measure_only_pcie_pipe_clk */
@@ -537,10 +537,42 @@ static struct clk_dummy measure_only_apcs_gold_post_acd_clk = {
 	},
 };
 
+static struct clk_dummy measure_only_apcs_gold_pre_acd_clk = {
+	.rrate = 1000,
+	.hw.init = &(const struct clk_init_data){
+		.name = "measure_only_apcs_gold_pre_acd_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
+static struct clk_dummy measure_only_apcs_l3_post_acd_clk = {
+	.rrate = 1000,
+	.hw.init = &(const struct clk_init_data){
+		.name = "measure_only_apcs_l3_post_acd_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
+static struct clk_dummy measure_only_apcs_l3_pre_acd_clk = {
+	.rrate = 1000,
+	.hw.init = &(const struct clk_init_data){
+		.name = "measure_only_apcs_l3_pre_acd_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
 static struct clk_dummy measure_only_apcs_silver_post_acd_clk = {
 	.rrate = 1000,
 	.hw.init = &(const struct clk_init_data){
 		.name = "measure_only_apcs_silver_post_acd_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
+static struct clk_dummy measure_only_apcs_silver_pre_acd_clk = {
+	.rrate = 1000,
+	.hw.init = &(const struct clk_init_data){
+		.name = "measure_only_apcs_silver_pre_acd_clk",
 		.ops = &clk_dummy_ops,
 	},
 };
@@ -657,6 +689,22 @@ static struct clk_dummy measure_only_gcc_sys_noc_cpuss_ahb_clk = {
 	},
 };
 
+static struct clk_dummy measure_only_gcc_video_ahb_clk = {
+	.rrate = 1000,
+	.hw.init = &(const struct clk_init_data){
+		.name = "measure_only_gcc_video_ahb_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
+static struct clk_dummy measure_only_gcc_video_xo_clk = {
+	.rrate = 1000,
+	.hw.init = &(const struct clk_init_data){
+		.name = "measure_only_gcc_video_xo_clk",
+		.ops = &clk_dummy_ops,
+	},
+};
+
 static struct clk_dummy measure_only_gpu_cc_ahb_clk = {
 	.rrate = 1000,
 	.hw.init = &(const struct clk_init_data){
@@ -763,7 +811,11 @@ static struct clk_dummy measure_only_usb3_phy_wrapper_gcc_usb30_pipe_clk = {
 
 static struct clk_hw *debugcc_shikra_hws[] = {
 	&measure_only_apcs_gold_post_acd_clk.hw,
+	&measure_only_apcs_gold_pre_acd_clk.hw,
+	&measure_only_apcs_l3_post_acd_clk.hw,
+	&measure_only_apcs_l3_pre_acd_clk.hw,
 	&measure_only_apcs_silver_post_acd_clk.hw,
+	&measure_only_apcs_silver_pre_acd_clk.hw,
 	&measure_only_cnoc_clk.hw,
 	&measure_only_disp_cc_sleep_clk.hw,
 	&measure_only_disp_cc_xo_clk.hw,
@@ -778,6 +830,8 @@ static struct clk_hw *debugcc_shikra_hws[] = {
 	&measure_only_gcc_disp_xo_clk.hw,
 	&measure_only_gcc_gpu_cfg_ahb_clk.hw,
 	&measure_only_gcc_sys_noc_cpuss_ahb_clk.hw,
+	&measure_only_gcc_video_ahb_clk.hw,
+	&measure_only_gcc_video_xo_clk.hw,
 	&measure_only_gpu_cc_ahb_clk.hw,
 	&measure_only_gpu_cc_cxo_aon_clk.hw,
 	&measure_only_gpu_cc_gx_cxo_clk.hw,

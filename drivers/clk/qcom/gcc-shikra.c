@@ -4576,21 +4576,6 @@ static struct clk_branch gcc_venus_ctl_axi_clk = {
 	},
 };
 
-static struct clk_branch gcc_video_ahb_clk = {
-	.halt_reg = 0x17004,
-	.halt_check = BRANCH_HALT,
-	.hwcg_reg = 0x17004,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x17004,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_video_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gcc_video_axi0_clk = {
 	.halt_reg = 0x1701c,
 	.halt_check = BRANCH_HALT,
@@ -4654,19 +4639,6 @@ static struct clk_branch gcc_video_venus_ctl_clk = {
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_video_xo_clk = {
-	.halt_reg = 0x17024,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x17024,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_video_xo_clk",
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -4959,13 +4931,11 @@ static struct clk_regmap *gcc_shikra_clocks[] = {
 	[GCC_VCODEC0_AXI_CLK] = &gcc_vcodec0_axi_clk.clkr,
 	[GCC_VENUS_AHB_CLK] = &gcc_venus_ahb_clk.clkr,
 	[GCC_VENUS_CTL_AXI_CLK] = &gcc_venus_ctl_axi_clk.clkr,
-	[GCC_VIDEO_AHB_CLK] = &gcc_video_ahb_clk.clkr,
 	[GCC_VIDEO_AXI0_CLK] = &gcc_video_axi0_clk.clkr,
 	[GCC_VIDEO_THROTTLE_CORE_CLK] = &gcc_video_throttle_core_clk.clkr,
 	[GCC_VIDEO_VCODEC0_SYS_CLK] = &gcc_video_vcodec0_sys_clk.clkr,
 	[GCC_VIDEO_VENUS_CLK_SRC] = &gcc_video_venus_clk_src.clkr,
 	[GCC_VIDEO_VENUS_CTL_CLK] = &gcc_video_venus_ctl_clk.clkr,
-	[GCC_VIDEO_XO_CLK] = &gcc_video_xo_clk.clkr,
 	[GPLL0] = &gpll0.clkr,
 	[GPLL0_OUT_AUX2] = &gpll0_out_aux2.clkr,
 	[GPLL1] = &gpll1.clkr,
@@ -5090,6 +5060,8 @@ static int gcc_shikra_probe(struct platform_device *pdev)
 	 *	gcc_gpu_cfg_ahb_clk
 	 *	gcc_sys_noc_cpuss_ahb_clk
 	 *	gcc_gpu_iref_clk
+	 *	gcc_video_ahb_clk
+	 *	gcc_video_xo_clk
 	 */
 	regmap_update_bits(regmap, 0x17008, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x17028, BIT(0), BIT(0));
@@ -5098,6 +5070,8 @@ static int gcc_shikra_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x36004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x79004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x36100, BIT(0), BIT(0));
+	regmap_update_bits(regmap, 0x17004, BIT(0), BIT(0));
+	regmap_update_bits(regmap, 0x17024, BIT(0), BIT(0));
 
 	ret = qcom_cc_really_probe(&pdev->dev, &gcc_shikra_desc, regmap);
 	if (ret) {
