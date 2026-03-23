@@ -365,3 +365,13 @@ def register_modules(registry):
             "drivers/soc/qcom/qmi_helpers",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/cpu_voltage_cooling",
+        out = "cpu_voltage_cooling.ko",
+        config = "CONFIG_QTI_CPU_VOLTAGE_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/cpu_voltage_cooling.c",
+        ],
+    )
