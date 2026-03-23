@@ -9,4 +9,6 @@ qcom_tzmem.ko
 qcom_hwspinlock.ko
 pinctrl-msm.ko
 pinctrl-glymur.ko
+debug_symbol.ko
 qcom-dload-mode.ko
+qcom_cpu_vendor_hooks.ko
