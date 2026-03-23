@@ -9,3 +9,4 @@ qcom_tzmem.ko
 qcom_hwspinlock.ko
 pinctrl-msm.ko
 pinctrl-glymur.ko
+qcom-dload-mode.ko
