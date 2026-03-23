@@ -1204,7 +1204,8 @@ static void stmmac_check_pcs_mode(struct stmmac_priv *priv)
 		    (interface == PHY_INTERFACE_MODE_RGMII_TXID)) {
 			netdev_dbg(priv->dev, "PCS RGMII support enabled\n");
 			priv->hw->pcs = STMMAC_PCS_RGMII;
-		} else if (interface == PHY_INTERFACE_MODE_SGMII) {
+		} else if ((interface == PHY_INTERFACE_MODE_SGMII) ||
+			   (interface == PHY_INTERFACE_MODE_2500BASEX)) {
 			netdev_dbg(priv->dev, "PCS SGMII support enabled\n");
 			priv->hw->pcs = STMMAC_PCS_SGMII;
 		}
