@@ -415,7 +415,7 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 		mas->last_mode = spi_slv->mode;
 	}
 
-	return mas->dev_data->geni_spi_set_rate(mas->se.dev, spi_slv->max_speed_hz);
+	return 0;
 }
 
 static void
