@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
  * Copyright (c) 2019, 2020, Linaro Ltd.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/debugfs.h>
@@ -1228,10 +1229,9 @@ static int tsens_reinit(struct tsens_priv *priv)
 
 int tsens_resume_common(struct tsens_priv *priv)
 {
-	if (pm_suspend_target_state != PM_SUSPEND_MEM)
-		return 0;
 
-	tsens_reinit(priv);
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		tsens_reinit(priv);
 
 	if (priv->uplow_irq > 0) {
 		enable_irq(priv->uplow_irq);
@@ -1248,9 +1248,6 @@ int tsens_resume_common(struct tsens_priv *priv)
 
 int tsens_suspend_common(struct tsens_priv *priv)
 {
-	if (pm_suspend_target_state != PM_SUSPEND_MEM)
-		return 0;
-
 	if (priv->uplow_irq > 0) {
 		disable_irq_nosync(priv->uplow_irq);
 		disable_irq_wake(priv->uplow_irq);
