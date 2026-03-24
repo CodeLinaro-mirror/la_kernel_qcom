@@ -45,6 +45,13 @@
 /* Force suspend phy */
 #define PHY_FORCE_SUSPEND			2
 
+/* QSRAM registers*/
+#define QSRAM_BASE_OFFSET  0x000FC000
+
+struct qsram_xhci {
+	__le32 data[64];
+};
+
 enum dp_lane {
 	DP_NONE = 1,
 	DP_2_LANE = 2,
@@ -284,6 +291,7 @@ static inline void usb_gadget_autopm_put_no_suspend(struct usb_gadget *gadget)
 }
 
 #if IS_ENABLED(CONFIG_USB_DWC3_MSM)
+struct qsram_xhci __iomem *dwc3_msm_get_qsram(struct device *dev);
 void dwc3_msm_notify_event(struct dwc3 *dwc,
 		enum dwc3_notify_event event, unsigned int value);
 int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op);
@@ -335,6 +343,8 @@ int msm_ep_set_mode(struct usb_ep *ep, enum usb_hw_ep_mode mode)
 { return -ENODEV; }
 inline int dwc3_core_stop_hw_active_transfers(struct dwc3 *dwc)
 { return 0; }
+static inline struct qsram_xhci __iomem *dwc3_msm_get_qsram(struct device *dev)
+{ return NULL; }
 #endif
 
 #ifdef CONFIG_ARM64

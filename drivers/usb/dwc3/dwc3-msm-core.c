@@ -60,6 +60,7 @@
 #include "drivers/usb/dwc3/debug.h"
 #include "drivers/usb/host/xhci.h"
 #include "debug-ipc.h"
+#include <trace/hooks/usb.h>
 
 #define NUM_LOG_PAGES   12
 
@@ -529,6 +530,7 @@ struct dwc3_msm {
 	void __iomem *base;
 	void __iomem *tcsr_dyn_en_dis;
 	void __iomem *ahb2phy_base;
+	struct qsram_xhci __iomem *qsram;
 	phys_addr_t reg_phys;
 	struct platform_device	*dwc3;
 	struct dma_iommu_mapping *iommu_map;
@@ -6729,6 +6731,8 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 		goto err;
 	}
 
+	mdwc->qsram = (struct qsram_xhci __iomem *)(mdwc->base + QSRAM_BASE_OFFSET);
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "tcsr_dyn_en_dis");
 	if (res) {
 		mdwc->tcsr_dyn_en_dis = devm_ioremap(&pdev->dev, res->start,
@@ -7982,6 +7986,26 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 
 	return 0;
 }
+
+struct qsram_xhci __iomem *dwc3_msm_get_qsram(struct device *dev)
+{
+	struct platform_device *pdev;
+	struct dwc3_msm *mdwc;
+
+	if (!dev)
+		return NULL;
+
+	pdev = to_platform_device(dev);
+	if (!pdev)
+		return NULL;
+
+	mdwc = platform_get_drvdata(pdev);
+	if (!mdwc)
+		return NULL;
+
+	return mdwc->qsram;
+}
+EXPORT_SYMBOL_GPL(dwc3_msm_get_qsram);
 
 /**
  * dwc3_otg_sm_work - workqueue function.
