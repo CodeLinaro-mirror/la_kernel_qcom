@@ -102,13 +102,6 @@ do {									\
 #define CSR_ARADDR_EXT_VAL	0x104
 #define CSR_AWADDR_EXT_VAL	0x104
 
-#define CSR_ATID_REG_OFFSET(atid, atid_offset) \
-		((atid / 32) * 4 + atid_offset)
-
-#define CSR_ATID_REG_BIT(atid)	(atid % 32)
-#define CSR_MAX_ATID	128
-#define CSR_ATID_REG_SIZE	0xc
-
 #define CSR_NAME_PROP		"coresight-csr"
 #define DEV_NAME_PROP		"device-name"
 
