@@ -375,3 +375,24 @@ def register_modules(registry):
             "drivers/thermal/qcom/cpu_voltage_cooling.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/sdpm_clk",
+        out = "sdpm_clk.ko",
+        config = "CONFIG_QTI_SDPM_CLOCK_MONITOR",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/sdpm_clk.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/thermal/qcom/policy_engine",
+        out = "policy_engine.ko",
+        config = "CONFIG_QTI_POLICY_ENGINE_SENSOR",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/policy_engine.c",
+            "drivers/thermal/qcom/thermal_zone_internal.h",
+        ],
+    )
