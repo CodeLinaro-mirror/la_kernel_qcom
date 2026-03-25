@@ -115,9 +115,9 @@ static int qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 	}
 
 	do {
+		reinit_completion(&qdev->ringfull);
 		rc = __qcom_mhi_qrtr_send(ep, skb);
 		if (rc == -EAGAIN) {
-			reinit_completion(&qdev->ringfull);
 			if (READ_ONCE(qdev->abort_tx)) {
 				if (skb->sk)
 					sock_put(skb->sk);
