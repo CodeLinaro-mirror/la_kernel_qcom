@@ -7,4 +7,8 @@ def register_modules(registry):
             # do not sort
             "drivers/leds/rgb/leds-qcom-lpg.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom-pbs",
+        ],
     )

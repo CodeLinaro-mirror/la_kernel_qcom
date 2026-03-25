@@ -4,6 +4,7 @@ qcom-scm.ko
 qcom-pdc.ko
 pinctrl-msm.ko
 pinctrl-seraph.ko
+pinctrl-pikachu.ko
 qcom_hwspinlock.ko
 qrtr.ko
 smem.ko
@@ -12,6 +13,7 @@ cqhci.ko
 sdhci-msm.ko
 qcom_tzmem.ko
 qnoc-seraph.ko
+qnoc-pikachu.ko
 qnoc-qos.ko
 icc-debug.ko
 icc-bcm-voter.ko
@@ -95,3 +97,16 @@ minidump.ko
 gic_intr_routing.ko
 sched-walt.ko
 sched-walt-debug.ko
+llcc-qcom.ko
+gcc-pikachu.ko
+tcsrcc-pikachu.ko
+videocc-pikachu.ko
+evacc-pikachu.ko
+gpucc-pikachu.ko
+camcc-pikachu.ko
+debugcc-pikachu.ko
+qcom_hib.ko
+msm_show_resume_irq.ko
+trace-bus-prof.ko
+llcc_miss.ko
+llcc_occ.ko

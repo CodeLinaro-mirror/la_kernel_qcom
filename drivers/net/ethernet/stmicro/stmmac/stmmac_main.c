@@ -3434,11 +3434,20 @@ static void stmmac_mtl_configuration(struct stmmac_priv *priv)
 
 static void stmmac_safety_feat_configuration(struct stmmac_priv *priv)
 {
-	if (priv->dma_cap.asp) {
+	if (priv->dma_cap.asp && priv->sfty_irq > 0) {
 		netdev_info(priv->dev, "Enabling Safety Features\n");
 		stmmac_safety_feat_config(priv, priv->ioaddr, priv->dma_cap.asp,
 					  priv->plat->safety_feat_cfg);
 	} else {
+		if (priv->dma_cap.asp) {
+			/* Hardware has ASP capability but no IRQ configured.
+			 * Explicitly disable all safety features to prevent
+			 * unhandled interrupts, especially DPP which may be
+			 * enabled by hardware default (causes FC:157 errors).
+			 */
+			netdev_info(priv->dev, "Disable Safety Feature when no IRQ configured\n");
+			stmmac_safety_feat_disable(priv, priv->ioaddr);
+		}
 		netdev_info(priv->dev, "No Safety Features support found\n");
 	}
 }
@@ -4263,6 +4272,12 @@ static void stmmac_flush_tx_descriptors(struct stmmac_priv *priv, int queue)
 	 * all is coherent before granting the DMA engine.
 	 */
 	wmb();
+
+	/* Suspend and xmit are happening in parallel context */
+	if (unlikely(!netif_device_present(priv->dev))) {
+		WARN_ON(1);
+		return;
+	}
 
 	tx_q->tx_tail_addr = tx_q->dma_tx_phy + (tx_q->cur_tx * desc_size);
 	stmmac_set_tx_tail_ptr(priv, priv->ioaddr, tx_q->tx_tail_addr, queue);
@@ -6360,16 +6375,20 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 static u16 stmmac_select_queue(struct net_device *dev, struct sk_buff *skb,
 			       struct net_device *sb_dev)
 {
+	struct stmmac_priv *priv = netdev_priv(dev);
 	int gso = skb_shinfo(skb)->gso_type;
 
-	if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4)) {
-		/*
-		 * There is no way to determine the number of TSO/USO
-		 * capable Queues. Let's use always the Queue 0
-		 * because if TSO/USO is supported then at least this
-		 * one will be capable.
-		 */
-		return 0;
+	if (priv->tso) {
+		if ((gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6)) ||
+		    (priv->plat->has_gmac4 && (gso & SKB_GSO_UDP_L4))) {
+			/*
+			 * There is no way to determine the number of TSO/USO
+			 * capable Queues. Let's use always the Queue 0
+			 * because if TSO/USO is supported then at least this
+			 * one will be capable.
+			 */
+			return 0;
+		}
 	}
 
 	return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
@@ -8018,6 +8037,9 @@ int stmmac_suspend(struct device *dev)
 	if (priv->dma_cap.fpesel)
 		timer_shutdown_sync(&priv->fpe_cfg.verify_timer);
 
+	if (priv->plat->suspend)
+		return priv->plat->suspend(dev, priv->plat->bsp_priv);
+
 	priv->speed = SPEED_UNKNOWN;
 	return 0;
 }
@@ -8152,6 +8174,12 @@ int stmmac_resume(struct device *dev)
 	struct net_device *ndev = dev_get_drvdata(dev);
 	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret;
+
+	if (priv->plat->resume) {
+		ret = priv->plat->resume(dev, priv->plat->bsp_priv);
+		if (ret)
+			return ret;
+	}
 
 	if (!netif_running(ndev))
 		return 0;

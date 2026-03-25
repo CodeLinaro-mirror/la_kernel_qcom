@@ -78,10 +78,6 @@
 #define DWC3_GUCTL3_USB20_RETRY_DISABLE	BIT(16)
 #define DWC3_GUSB3PIPECTL_DISRXDETU3	BIT(22)
 
-#define DWC3_LLUCTL	0xd024
-/* Force Gen1 speed on Gen2 link */
-#define DWC3_LLUCTL_FORCE_GEN1	BIT(10)
-
 #define DWC31_LINK_GDBGLTSSM	0xd050
 #define DWC3_GDBGLTSSM_LINKSTATE_MASK	(0xF << 22)
 
@@ -646,7 +642,6 @@ struct dwc3_msm {
 	struct dwc3_trb		*ebc_desc_addr;
 	bool			dis_sending_cm_l1_quirk;
 	bool			use_eusb2_phy;
-	bool			force_gen1;
 	bool			cached_dis_u1_entry_quirk;
 	bool			cached_dis_u2_entry_quirk;
 	int			refcnt_dp_usb;
@@ -3747,15 +3742,6 @@ static void dwc3_dis_sleep_mode(struct dwc3_msm *mdwc)
 	dwc3_msm_write_reg(mdwc->base, DWC3_GUCTL1, reg);
 }
 
-/* Force Gen1 speed on Gen2 controller if required */
-static void dwc3_force_gen1(struct dwc3_msm *mdwc)
-{
-	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
-
-	if (mdwc->force_gen1 && DWC3_IP_IS(DWC31))
-		dwc3_msm_write_reg_field(mdwc->base, DWC3_LLUCTL, DWC3_LLUCTL_FORCE_GEN1, 1);
-}
-
 static int dwc3_msm_power_collapse_por(struct dwc3_msm *mdwc)
 {
 	struct dwc3 *dwc = NULL;
@@ -3804,7 +3790,6 @@ static int dwc3_msm_power_collapse_por(struct dwc3_msm *mdwc)
 			mdwc3_dis_sending_cm_l1(mdwc);
 	}
 
-	dwc3_force_gen1(mdwc);
 	return 0;
 }
 
@@ -6331,8 +6316,6 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 	val = dwc3_msm_read_reg(mdwc->base, DWC3_GSNPSID);
 	mdwc->ip = DWC3_GSNPS_ID(val);
 
-	dwc3_force_gen1(mdwc);
-
 	dwc3_msm_notify_event(dwc, DWC3_GSI_EVT_BUF_ALLOC, 0);
 	pm_runtime_set_autosuspend_delay(dwc->dev, 0);
 	pm_runtime_allow(dwc->dev);
@@ -6489,7 +6472,7 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 	}
 
 	for (i = 0; i < USB_MAX_IRQ; i++) {
-		mdwc->wakeup_irq[i].irq = platform_get_irq_byname(pdev,
+		mdwc->wakeup_irq[i].irq = platform_get_irq_byname_optional(pdev,
 					usb_irq_info[i].name);
 		if (mdwc->wakeup_irq[i].irq < 0) {
 			/* pwr_evnt_irq is only mandatory irq */
@@ -6658,8 +6641,6 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 		dev_dbg(dev, "setting pm-qos-latency to zero.\n");
 		mdwc->pm_qos_latency = 0;
 	}
-
-	mdwc->force_gen1 = of_property_read_bool(node, "qcom,force-gen1");
 
 	diag_node = of_find_compatible_node(NULL, NULL, "qcom,msm-imem-diag-dload");
 	if (!diag_node)
@@ -8135,6 +8116,7 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 	struct dwc3 *dwc = NULL;
+	struct generic_pm_domain *genpd;
 
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
@@ -8145,15 +8127,40 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 	if (dwc)
 		device_init_wakeup(dwc->dev, false);
 
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		/* Keep PHY GDSC ON during host mode bus suspend */
+		/* check if it was in host mode during runtime suspend */
+		if (mdwc->in_host_mode) {
+			genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
+			genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+			dev_dbg(dev, "GDSC flags ON\n");
+		}
+	}
+
 	return dwc3_msm_suspend(mdwc, false);
 }
 
 static int dwc3_msm_runtime_resume(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd;
 
 	dev_dbg(dev, "DWC3-msm runtime resume\n");
 	dbg_event(0xFF, "RT Res", 0);
+
+	if (dev->pm_domain) {
+		genpd = pd_to_genpd(dev->pm_domain);
+		/*
+		 * Reset the GDSC flags back, so that GDSC can be
+		 * turned off during cable disconnect.
+		 */
+		if (mdwc->in_host_mode) {
+			genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
+			genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+			dev_dbg(dev, "GDSC flags OFF\n");
+		}
+	}
 
 	return dwc3_msm_resume(mdwc);
 }

@@ -5,7 +5,7 @@
 
 ################################################################################
 ## Variant setup
-MSM_ARCH=pikachu
+MSM_ARCH=hamoa_la
 VARIANTS=(consolidate perf)
 [ -z "${VARIANT}" ] && VARIANT=consolidate
 

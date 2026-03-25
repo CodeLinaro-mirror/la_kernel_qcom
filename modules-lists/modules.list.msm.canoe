@@ -28,6 +28,8 @@ gcc-alor.ko
 gcc-canoe.ko
 tcsrcc-chora.ko
 gcc-chora.ko
+gcc-sm4450.ko
+dispcc-sm4450.ko
 qcom-cpufreq-hw.ko
 gdsc-regulator.ko
 gpucc-canoe.ko
@@ -57,6 +59,7 @@ regmap-spmi.ko
 qti-regmap-debugfs.ko
 qcom-spmi-pmic.ko
 nvmem_qcom-spmi-sdam.ko
+nvmem_qfprom.ko
 rtc-pm8xxx.ko
 pmic-pon-log.ko
 qcom-pdc.ko

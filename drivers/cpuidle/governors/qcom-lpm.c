@@ -100,7 +100,7 @@ static bool lpm_disallowed(int cpu)
 		return true;
 
 #if IS_ENABLED(CONFIG_SCHED_WALT)
-	if (!sched_lpm_disallowed_time(cpu, &bias_time)) {
+	if (!bias_disabled && !sched_lpm_disallowed_time(cpu, &bias_time)) {
 		cpu_gov->last_idx = 0;
 		cpu_gov->bias = bias_time;
 		return true;
