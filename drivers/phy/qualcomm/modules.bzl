@@ -218,6 +218,10 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v6_20.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v7.h",
         ],
+        deps = [
+            # do not sort
+            "drivers/eom/eom_driver",
+        ],
     )
 
     registry.register(
