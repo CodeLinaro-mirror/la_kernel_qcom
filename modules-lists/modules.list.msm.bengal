@@ -40,6 +40,7 @@ stub-regulator.ko
 clk-smd-rpm.ko
 gcc-khaje.ko
 gcc-sm6115.ko
+gcc-qcm2290.ko
 icc-rpm.ko
 qnoc-qos-rpm.ko
 qnoc-bengal.ko
