@@ -290,7 +290,8 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP") ||
+			!strcmp(name, "BOURTZI") || !strcmp(name, "BOURTZIP")) {
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
