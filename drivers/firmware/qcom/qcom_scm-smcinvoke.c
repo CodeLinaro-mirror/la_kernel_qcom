@@ -633,3 +633,15 @@ int qcom_scm_kgsl_init_regs(u32 gpu_req)
 	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
+
+int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
+{
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture);
+
+int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
+{
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_lpac_aperture);
