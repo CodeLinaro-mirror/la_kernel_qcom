@@ -1,6 +1,7 @@
 canoe_perf_config = {
     # keep sorted
     "CONFIG_ARCH_ALOR": "y",
+    "CONFIG_ARCH_BOURTZI": "y",
     "CONFIG_ARCH_CANOE": "y",
     "CONFIG_ARCH_CHORA": "y",
     "CONFIG_ARCH_RAVELIN": "y",
