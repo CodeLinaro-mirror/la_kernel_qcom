@@ -1487,12 +1487,8 @@ static int check_valid_request(struct qmi_uaudio_stream_req_msg_v01 *req_msg,
 	}
 
 	if (req_msg->enable && (*info_idx < 0)) {
-		if (subs->cur_audiofmt) {
-			uaudio_err("interface# %d already in use card# %d\n",
+		uaudio_err("interface# %d already in use card# %d\n",
 				subs->cur_audiofmt->iface, pcm_card_num);
-		} else {
-			uaudio_err("Invalid audio format for card# %d\n", pcm_card_num);
-		}
 		return -EBUSY;
 	}
 
