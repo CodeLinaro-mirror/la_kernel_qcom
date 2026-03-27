@@ -86,3 +86,4 @@ dcc_v2.ko
 msm-poweroff.ko
 phy-msm-ssusb-qmp.ko
 phy-msm-qusb.ko
+cqhci-crypto-qti.ko

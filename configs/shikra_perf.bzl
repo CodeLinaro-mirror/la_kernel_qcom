@@ -50,6 +50,7 @@ shikra_perf_config = {
     "CONFIG_MFD_SPMI_PMIC": "m",
     "CONFIG_MINIDUMP_MAX_ENTRIES": "200",
     "CONFIG_MMC_CQHCI": "m",
+    "CONFIG_MMC_CRYPTO_QTI": "m",
     "CONFIG_MMC_SDHCI_MSM": "m",
     "CONFIG_MPM_LEGACY": "m",
     "CONFIG_MSM_BAM_DMUX": "m",
