@@ -17,9 +17,9 @@
 #include <linux/scmi_protocol.h>
 #include <linux/configfs.h>
 #include <linux/qcom_scmi_vendor.h>
-#include <linux/smci_object.h>
-#include <linux/smci_clientenv.h>
 #include <linux/of_platform.h>
+#include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/firmware/qcom/si_object.h>
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include "bwprof_scmi.h"
@@ -100,28 +100,28 @@ static bool is_master_enable(u8 master, u32 *master_idx)
 
 static int license_check_init(void)
 {
-	struct smci_object bwprof_env = {NULL, NULL};
-	struct smci_object bwprof_profiler = {NULL, NULL};
+	struct si_object *bwprof_env, *bwprof_profiler = NULL;
+	struct si_object_invoke_ctx oic;
 	int ret = 0;
 
-	ret = smci_get_client_env_object(&bwprof_env);
+	ret = si_core_get_client_env(&oic, &bwprof_env);
 	if (ret) {
-		bwprof_env.invoke = NULL;
-		bwprof_env.context = NULL;
+		put_si_object(bwprof_env);
 		pr_err("bwprof_env: get client env object failed\n");
 		return -EIO;
 	}
 
-	ret = smci_clientenv_open(bwprof_env, SMCI_BWPROF_SERVICE_UID,
+	ret = si_core_client_env_open(&oic, bwprof_env, SMCI_BWPROF_SERVICE_UID,
 			&bwprof_profiler);
 	if (ret) {
-		bwprof_profiler.invoke = NULL;
-		bwprof_profiler.context = NULL;
-		pr_err("bwprof_profiler: smci client env open failed\n");
+		put_si_object(bwprof_profiler);
+		put_si_object(bwprof_env);
+		pr_err("bwprof_profiler: si core client env open failed\n");
 		return -EIO;
 	}
 
 	bwprof_data->bwprof_profiler = bwprof_profiler;
+	bwprof_data->oic = oic;
 
 	return ret;
 }
@@ -257,10 +257,12 @@ static ssize_t bwprof_set_config_store(struct config_item *item,
 	}
 	if (sampling_ms == SAMPLING_1MS) {
 		if (bwprof_data->is_hist_enable) {
-			ret = smci_bwprof_license_check(bwprof_data->bwprof_profiler,
+			ret = smci_bwprof_license_check(&bwprof_data->oic,
+					bwprof_data->bwprof_profiler,
 					BWMON_FEATURE_HIST, NULL, 0);
 		} else {
-			ret = smci_bwprof_license_check(bwprof_data->bwprof_profiler,
+			ret = smci_bwprof_license_check(&bwprof_data->oic,
+					bwprof_data->bwprof_profiler,
 					BWMON_FEATURE_1MS, NULL, 0);
 		}
 		if (ret) {
@@ -282,7 +284,8 @@ static ssize_t bwprof_set_config_store(struct config_item *item,
 	}
 
 	if (is_multimedia_enable) {
-		ret = smci_bwprof_license_check(bwprof_data->bwprof_profiler,
+		ret = smci_bwprof_license_check(&bwprof_data->oic,
+					bwprof_data->bwprof_profiler,
 					BWMON_FEATURE_MULTIMEDIA, NULL, 0);
 		if (ret) {
 			pr_err("smci_bwprof_license_check failed : %d\n", ret);
