@@ -8,6 +8,7 @@ seraph_consolidate_config = {
     "CONFIG_DEBUG_PAGEALLOC_ENABLE_DEFAULT": "y",
     "CONFIG_DEBUG_SPINLOCK": "y",
     "CONFIG_DETECT_HUNG_TASK": "y",
+    "CONFIG_EDAC_KRYO_ARM64_PANIC_ON_CE": "y",
     "CONFIG_LKDTM": "m",
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_MHI_BUS_DEBUG": "y",
