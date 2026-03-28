@@ -1362,6 +1362,24 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/sc_tcm",
+        out = "sc_tcm.ko",
+        config = "CONFIG_QCOM_SC_TCM_MEM",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/sc_tcm.c",
+            "drivers/soc/qcom/sc_tcm_internal.h",
+        ],
+        hdrs = [
+            "include/linux/soc/qcom/sc_tcm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/llcc-qcom",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/secure_buffer",
         out = "secure_buffer.ko",
         config = "CONFIG_QCOM_SECURE_BUFFER",
