@@ -2205,7 +2205,6 @@ response:
 		mutex_unlock(&chip->mutex);
 	}
 
-send_response:
 	resp.usb_token = req_msg->usb_token;
 	resp.usb_token_valid = 1;
 	resp.internal_status = ret;
