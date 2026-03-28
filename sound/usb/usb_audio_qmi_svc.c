@@ -37,6 +37,12 @@
 #include "sound/usb/power.h"
 #include "usb_audio_qmi_v01.h"
 #include <linux/usb/dwc3-msm.h>
+#include "../../../drivers/usb/host/xhci.h"
+#include <trace/hooks/usb.h>
+
+#define QSRAM_ADSP_READY_REG	7
+#define QSRAM_ADSP_READY_BIT	BIT(0)
+#define QSRAM_OFFLOAD_ACK_REG	8
 
 #define BUS_INTERVAL_FULL_SPEED 1000 /* in us */
 #define BUS_INTERVAL_HIGHSPEED_AND_ABOVE 125 /* in us */
@@ -149,6 +155,19 @@ struct uaudio_qmi_dev {
 	/* indicate event ring mapped or not */
 	bool er_mapped;
 	struct qsram_xhci __iomem *qsram;
+
+	/* Pseudo event ring - separate pool, independent lifecycle */
+	struct list_head pseudo_evt_ring_list;
+	size_t pseudo_evt_ring_iova_size;
+	unsigned long curr_pseudo_evt_ring_iova;
+	bool pseudo_evt_ring_mapped;
+	void *pseudo_evt_ring_buffer;
+	phys_addr_t pseudo_evt_ring_pa;
+	unsigned long pseudo_evt_ring_va;
+	struct usb_device *pseudo_evt_ring_udev;
+
+	struct work_struct offload_ready_work;
+	bool poll_active;
 };
 
 static struct uaudio_qmi_dev *uaudio_qdev;
@@ -158,7 +177,6 @@ struct uaudio_qmi_svc {
 	struct sockaddr_qrtr client_sq;
 	bool client_connected;
 	void *uaudio_ipc_log;
-	struct qsram_xhci __iomem *qsram;
 };
 
 static struct uaudio_qmi_svc *uaudio_svc;
@@ -2187,6 +2205,7 @@ response:
 		mutex_unlock(&chip->mutex);
 	}
 
+send_response:
 	resp.usb_token = req_msg->usb_token;
 	resp.usb_token_valid = 1;
 	resp.internal_status = ret;
@@ -2339,10 +2358,10 @@ static struct qsram_xhci __iomem *uaudio_get_qsram(struct device *dev)
 	qsram = dwc3_msm_get_qsram(&pdev->dev);
 	put_device(&pdev->dev);
 
-	if (qsram) {
+	if (!qsram) {
 		dev_err(dev, "dwc3-msm qsram not initialized\n");
 		return ERR_PTR(-EPROBE_DEFER);
-    }
+	}
 
 	return qsram;
 }
