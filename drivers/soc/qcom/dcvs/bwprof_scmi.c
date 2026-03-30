@@ -353,12 +353,10 @@ static ssize_t bwprof_available_config_show(struct config_item *item,
 	struct sampling_mode_info *mode;
 	u32 cnt = 0, j, i;
 	u8 k;
-	u32 samp_cnt;
 	const char *hw_name;
 
 	for (i = 0; i < bwprof_data->hw_cnt; i++) {
 		hw_node = bwprof_data->hw_node[i];
-		samp_cnt = hw_node->sampling_cnt;
 		if (hw_node->hw_type == BWPROF_DDR)
 			hw_name = "DDR";
 		else if (hw_node->hw_type == BWPROF_LLCC)
@@ -368,8 +366,10 @@ static ssize_t bwprof_available_config_show(struct config_item *item,
 
 		cnt += scnprintf(page + cnt, PAGE_SIZE - cnt, "\nhw_type: %s",
 				hw_name);
-		for (j = 0; j < samp_cnt; j++) {
+		for (j = 0; j < TOTAL_SAMPLING_MODE_TYPES; j++) {
 			mode = hw_node->default_mode_val[j];
+			if (!mode)
+				continue;
 			if (j == BWPROF_HIST)
 				cnt += scnprintf(page + cnt, PAGE_SIZE - cnt,
 					"\nsampling_ms: %dms hist masters :",
