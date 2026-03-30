@@ -75,7 +75,7 @@ config QCOM_KRYO_L2_ACCESSORS
 	depends on (ARCH_QCOM || COMPILE_TEST) && ARM64
 
 config QCOM_MDT_LOADER
-	tristate
+	tristate "Qualcomm MDT Loader"
 	select QCOM_SCM
 
 config QCOM_MEMORY_DUMP_V2
