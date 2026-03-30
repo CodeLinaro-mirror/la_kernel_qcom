@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2006-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __HGSL_TYPES_H
@@ -147,9 +147,6 @@ struct gsl_memdesc_t {
 		uintptr_t    priv;
 		uint64_t     priv64;
 	};
-
-	void                 *placed_addr;
-	int                  reserve_placed;
 };
 
 struct gsl_command_buffer_object_t {
