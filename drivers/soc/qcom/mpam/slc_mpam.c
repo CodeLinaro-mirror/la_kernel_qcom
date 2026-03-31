@@ -28,6 +28,10 @@ struct slc_mpam_item {
 	bool fe_mon_enabled;
 	bool be_mon_support;
 	bool be_mon_enabled;
+	bool total_fe_mon_support;
+	bool total_fe_mon_enabled;
+	bool total_be_mon_support;
+	bool total_be_mon_enabled;
 };
 
 static uint32_t slc_firmware_ver;
@@ -131,6 +135,12 @@ static ssize_t slc_mpam_monitor_schemata_show(struct config_item *item,
 	if (pm_item->be_mon_support)
 		len += scnprintf(page + len, PAGE_SIZE - len,
 			"be=%d,", pm_item->be_mon_enabled);
+	if (pm_item->total_fe_mon_support)
+		len += scnprintf(page + len, PAGE_SIZE - len,
+			"fe=%d,", pm_item->total_fe_mon_enabled);
+	if (pm_item->total_be_mon_support)
+		len += scnprintf(page + len, PAGE_SIZE - len,
+			"be=%d,", pm_item->total_be_mon_enabled);
 	if (len)
 		len += scnprintf(page + len - 1, PAGE_SIZE - len, "\n");
 
@@ -180,6 +190,16 @@ static ssize_t slc_mpam_monitor_schemata_store(struct config_item *item,
 			mon_cfg_val.slc_mon_function = CACHE_BE_MON_CONFIG;
 			mon_cfg_val.enable = input;
 			need_set = 1;
+		} else if (!strcmp("fe", param_name) && pm_item->total_fe_mon_support &&
+				(pm_item->total_fe_mon_enabled != input)) {
+			mon_cfg_val.slc_mon_function = CACHE_TOTAL_FE_MON_CONFIG;
+			mon_cfg_val.enable = input;
+			need_set = 1;
+		} else if (!strcmp("be", param_name) && pm_item->total_be_mon_support &&
+				(pm_item->total_be_mon_enabled != input)) {
+			mon_cfg_val.slc_mon_function = CACHE_TOTAL_BE_MON_CONFIG;
+			mon_cfg_val.enable = input;
+			need_set = 1;
 		}
 
 		if (need_set) {
@@ -198,6 +218,10 @@ static ssize_t slc_mpam_monitor_schemata_store(struct config_item *item,
 				pm_item->fe_mon_enabled = input;
 			else if (mon_cfg_val.slc_mon_function == CACHE_BE_MON_CONFIG)
 				pm_item->be_mon_enabled = input;
+			else if (mon_cfg_val.slc_mon_function == CACHE_TOTAL_FE_MON_CONFIG)
+				pm_item->total_fe_mon_enabled = input;
+			else if (mon_cfg_val.slc_mon_function == CACHE_TOTAL_BE_MON_CONFIG)
+				pm_item->total_be_mon_enabled = input;
 		}
 	}
 
@@ -216,8 +240,14 @@ static ssize_t slc_mpam_monitor_data_show(struct config_item *item,
 	set_msc_query(&query, pm_item);
 
 	if (!pm_item->cap_mon_enabled && !pm_item->miss_mon_enabled &&
-			!pm_item->fe_mon_enabled && !pm_item->be_mon_enabled)
+			!pm_item->fe_mon_enabled && !pm_item->be_mon_enabled &&
+			!pm_item->total_fe_mon_enabled && !pm_item->total_be_mon_enabled)
 		return 0;
+
+	if (pm_item->total_fe_mon_enabled || pm_item->total_be_mon_enabled)
+		mon_data.ref.slc_mon_function = CACHE_TOTAL_MON_STATS_READ;
+	else
+		mon_data.ref.slc_mon_function = CACHE_MON_STATS_READ;
 
 	msc_system_mon_stats_read(SLC, &query, &mon_data);
 
@@ -229,10 +259,10 @@ static ssize_t slc_mpam_monitor_data_show(struct config_item *item,
 	if (pm_item->miss_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
 			"miss_cnt=%llu,", mon_data.mon_stats.num_rd_misses);
-	if (pm_item->fe_mon_enabled)
+	if (pm_item->fe_mon_enabled || pm_item->total_fe_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
 			"fe_bytes=%llu,", mon_data.mon_stats.slc_fe_bytes);
-	if (pm_item->be_mon_enabled)
+	if (pm_item->be_mon_enabled || pm_item->total_be_mon_enabled)
 		len += scnprintf(page + len, PAGE_SIZE - len,
 			"be_bytes=%llu,", mon_data.mon_stats.slc_be_bytes);
 
@@ -324,6 +354,21 @@ static const struct config_item_type slc_mpam_client_monitor_type = {
 	.ct_owner	= THIS_MODULE,
 };
 
+static struct configfs_attribute *slc_mpam_total_attrs[] = {
+	&slc_mpam_attr_monitor_schemata,
+	&slc_mpam_attr_monitor_data,
+	NULL,
+};
+
+static const struct config_item_type slc_mpam_total_type = {
+	.ct_attrs	= slc_mpam_total_attrs,
+	.ct_owner	= THIS_MODULE,
+};
+
+static const struct config_item_type slc_mpam_empty_type = {
+	.ct_owner	= THIS_MODULE,
+};
+
 static struct slc_mpam_item *slc_mpam_make_group(
 		struct device *dev, const char *name,
 		const struct config_item_type *item_type)
@@ -349,7 +394,6 @@ static struct config_group *create_config_node(
 	int ret;
 	struct msc_query query;
 	struct slc_mpam_item *new_item;
-	struct device_node *np = dev->of_node;
 	union slc_partid_capability_def partid_cap = { 0 };
 
 	new_item = slc_mpam_make_group(dev, name, item_type);
@@ -360,30 +404,34 @@ static struct config_group *create_config_node(
 
 	new_item->client_id = client_id;
 	new_item->part_id = part_id;
-	if (slc_firmware_ver != SLC_MPAM_VERSION_0) {
-		if (part_id != NO_PARTID) {
-			set_msc_query(&query, new_item);
-			msc_system_get_device_capability(SLC, &query, &partid_cap);
-			if (partid_cap.v1_cap.mon_support & (1 << cap_mon_support))
-				new_item->cap_mon_support = true;
-			if (partid_cap.v1_cap.mon_support & (1 << read_miss_mon_support))
-				new_item->miss_mon_support = true;
-			if (partid_cap.v1_cap.mon_support & (1 << fe_mon_support))
-				new_item->fe_mon_support = true;
-			if (partid_cap.v1_cap.mon_support & (1 << be_mon_support))
-				new_item->be_mon_support = true;
+	if (item_type == &slc_mpam_total_type) {
+		new_item->total_fe_mon_support = true;
+		new_item->total_be_mon_support = true;
+	} else if (item_type != &slc_mpam_empty_type) {
+		if (slc_firmware_ver != SLC_MPAM_VERSION_0) {
+			if (part_id != NO_PARTID) {
+				set_msc_query(&query, new_item);
+				msc_system_get_device_capability(SLC, &query, &partid_cap);
+				if (partid_cap.v1_cap.mon_support & (1 << cap_mon_support))
+					new_item->cap_mon_support = true;
+				if (partid_cap.v1_cap.mon_support & (1 << read_miss_mon_support))
+					new_item->miss_mon_support = true;
+				if (partid_cap.v1_cap.mon_support & (1 << fe_mon_support))
+					new_item->fe_mon_support = true;
+				if (partid_cap.v1_cap.mon_support & (1 << be_mon_support))
+					new_item->be_mon_support = true;
+			}
+		} else {
+			new_item->cap_mon_support = true;
+			new_item->miss_mon_support = true;
 		}
-	} else {
-		new_item->cap_mon_support = true;
-		new_item->miss_mon_support = true;
-	}
 
-	if (client_id == 0 && of_property_read_bool(np, "qcom,client-level-mon")) {
-		if (part_id == NO_PARTID) {
+		if (item_type == &slc_mpam_client_monitor_type) {
 			new_item->part_id = 0;
 			new_item->fe_mon_support = true;
 			new_item->be_mon_support = true;
-		} else {
+		} else if (parent_group &&
+				parent_group->cg_item.ci_type == &slc_mpam_client_monitor_type) {
 			new_item->fe_mon_support = false;
 			new_item->be_mon_support = false;
 		}
@@ -435,7 +483,8 @@ static int slc_config_fs_register(struct  device *dev)
 		if (slc_client_cap->client_info.num_part_id > 1) {
 			sub_group = create_config_node(slc_client_cap->client_name,
 				dev, clientid, NO_PARTID, root_group,
-				&slc_mpam_client_monitor_type);
+				of_property_read_bool(np, "qcom,client-level-mon") ?
+					&slc_mpam_client_monitor_type : &slc_mpam_empty_type);
 			if (IS_ERR(sub_group))
 				break;
 			for (partid = 0; partid < slc_client_cap->client_info.num_part_id;
@@ -449,6 +498,9 @@ static int slc_config_fs_register(struct  device *dev)
 					clientid, 0, root_group, &slc_mpam_item_type);
 		}
 	}
+
+	if (slc_firmware_ver == SLC_MPAM_VERSION_1_0)
+		create_config_node("total", dev, 0, 0, root_group, &slc_mpam_total_type);
 
 	return 0;
 }
