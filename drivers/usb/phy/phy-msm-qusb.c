@@ -108,8 +108,8 @@
 #define QUSB2PHY_1P8_VOL_MAX           1800000 /* uV */
 #define QUSB2PHY_1P8_HPM_LOAD          30000   /* uA */
 
-#define QUSB2PHY_3P3_VOL_MIN		3075000 /* uV */
-#define QUSB2PHY_3P3_VOL_MAX		3200000 /* uV */
+#define QUSB2PHY_3P3_VOL_MIN		2950000 /* uV */
+#define QUSB2PHY_3P3_VOL_MAX		2960000 /* uV */
 #define QUSB2PHY_3P3_HPM_LOAD		30000	/* uA */
 
 #define QUSB2PHY_REFCLK_ENABLE		BIT(0)
