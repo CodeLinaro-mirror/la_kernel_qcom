@@ -342,3 +342,298 @@ int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t s
 	return qcom_scm_call(scm_dev, &desc, NULL);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_assign_dump_table_region);
+
+/**
+ * qcom_scm_kgsl_dcvs_tuning() - Tune KGSL DCVS parameters.
+ * @mingap:     Minimum time gap between two consecutive frequency requests.
+ * @penalty:    A penalty value applied to each frequency request to discourage
+ *              frequent changes.
+ * @numbusy:    The number of busy cycles to consider for performance evaluation.
+ *
+ * This function makes a secure call to adjust the tuning parameters for the
+ * KGSL DCVS algorithm. These parameters influence how the GPU frequency scales in
+ * response to load.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int qcom_scm_kgsl_dcvs_tuning(u32 mingap, u32 penalty, u32 numbusy)
+{
+	struct device *scm_dev = NULL;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_DCVS,
+		.cmd = QCOM_SCM_DCVS_TUNING,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = mingap,
+		.args[1] = penalty,
+		.args[2] = numbusy,
+		.arginfo = QCOM_SCM_ARGS(3),
+	};
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	return qcom_scm_call(scm_dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_dcvs_tuning);
+
+/**
+ * qcom_scm_dcvs_update_v2() - Update DCVS with new performance data.
+ * @level:      The DCVS level to update.
+ * @total_time: Total time elapsed for the measurement period in nanoseconds.
+ * @busy_time:  Time the resource was busy during the measurement period in ns.
+ *
+ * This function makes a secure call to update the DCVS service
+ * with new performance metrics.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int qcom_scm_dcvs_update_v2(int level, s64 total_time, s64 busy_time)
+{
+	struct device *scm_dev = NULL;
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_DCVS,
+		.cmd = QCOM_SCM_DCVS_UPDATE_V2,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = level,
+		.args[1] = total_time,
+		.args[2] = busy_time,
+		.arginfo = QCOM_SCM_ARGS(3),
+	};
+	struct qcom_scm_res res;
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	ret = qcom_scm_call(scm_dev, &desc, &res);
+
+	return ret ? : res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update_v2);
+
+/**
+ * qcom_scm_dcvs_update_ca_v2() - Update Context-Aware DCVS with new values.
+ * @level:          The DCVS level to update.
+ * @total_time:     Total time elapsed for the measurement period.
+ * @busy_time:      Time the resource was busy during the measurement period.
+ * @context_count:  The number of active contexts during the period.
+ *
+ * This function makes a secure call to update the Context-Aware DCVS
+ * service with new performance data, including the number of active
+ * contexts.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int qcom_scm_dcvs_update_ca_v2(int level, s64 total_time, s64 busy_time,
+			       int context_count)
+{
+	struct device *scm_dev = NULL;
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_DCVS,
+		.cmd = QCOM_SCM_DCVS_UPDATE_CA_V2,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = level,
+		.args[1] = total_time,
+		.args[2] = busy_time,
+		.args[3] = context_count,
+		.arginfo = QCOM_SCM_ARGS(4),
+	};
+	struct qcom_scm_res res;
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	ret = qcom_scm_call(scm_dev, &desc, &res);
+
+	return ret ? : res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update_ca_v2);
+
+/**
+ * qcom_scm_dcvs_reset()
+ */
+int qcom_scm_dcvs_reset(void)
+{
+	struct device *scm_dev = NULL;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_DCVS,
+		.cmd = QCOM_SCM_DCVS_RESET,
+		.owner = ARM_SMCCC_OWNER_SIP
+	};
+
+	scm_dev = qcom_scm_get_dev();
+
+	return qcom_scm_call(scm_dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_reset);
+
+/**
+ * qcom_scm_dcvs_init_ca_v2() - Initialize Context-Aware DCVS.
+ * @addr: Physical address of the buffer with context-aware tuning data.
+ * @size: Size of the context-aware data buffer.
+ *
+ * This function makes a secure call to initialize the context-aware
+ * feature of the DCVS service. It passes a buffer containing parameters
+ * like the target power level and busy penalty to the secure environment.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
+{
+	struct device *scm_dev = NULL;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_DCVS,
+		.cmd = QCOM_SCM_DCVS_INIT_CA_V2,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = addr,
+		.args[1] = size,
+		.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_RW, QCOM_SCM_VAL),
+	};
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	return qcom_scm_call(scm_dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_ca_v2);
+
+/**
+ * qcom_scm_dcvs_init_v2() - Initialize DCVS service.
+ * @addr:       Physical address of the buffer containing power level data.
+ * @size:       Size of the power level data buffer.
+ * @version:    Output pointer to store the DCVS version.
+ *
+ * This function makes a secure call to initialize the DCVS v2 service.
+ * It passes a table of power levels to the secure environment and gets
+ * back the supported DCVS interface version.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
+{
+	struct device *scm_dev = NULL;
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_DCVS,
+		.cmd = QCOM_SCM_DCVS_INIT_V2,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = addr,
+		.args[1] = size,
+		.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_RW, QCOM_SCM_VAL),
+	};
+	struct qcom_scm_res res;
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	ret = qcom_scm_call(scm_dev, &desc, &res);
+
+	if (ret >= 0)
+		*version = res.result[0];
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_v2);
+
+/**
+ * qcom_scm_dcvs_update() - Update DCVS with new values
+ * @level:      The DCVS level to update.
+ * @total_time: Total time elapsed for the measurement period.
+ * @busy_time:  Time the resource was busy during the measurement period.
+ *
+ * This function makes an atomic secure call to update the DCVS parameters.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int qcom_scm_dcvs_update(int level, s64 total_time, s64 busy_time)
+{
+	struct device *scm_dev = NULL;
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_DCVS,
+		.cmd = QCOM_SCM_DCVS_UPDATE,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = level,
+		.args[1] = total_time,
+		.args[2] = busy_time,
+		.arginfo = QCOM_SCM_ARGS(3),
+	};
+	struct qcom_scm_res res;
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	ret = qcom_scm_call_atomic(scm_dev, &desc, &res);
+
+	return ret ? : res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update);
+
+/**
+ * qcom_scm_kgsl_init_regs() - Initialize KGSL registers
+ * @gpu_req: The GPU request identifier.
+ *
+ * This function makes a secure call to initialize
+ * the KGSL registers for a specific GPU context.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+int qcom_scm_kgsl_init_regs(u32 gpu_req)
+{
+	struct device *scm_dev = NULL;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_GPU,
+		.cmd = QCOM_SCM_SVC_GPU_INIT_REGS,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = gpu_req,
+		.arginfo = QCOM_SCM_ARGS(1),
+	};
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	return qcom_scm_call(scm_dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
+
+/**
+ * qcom_scm_dcvs_core_available() - check if core DCVS operations are available
+ */
+bool qcom_scm_dcvs_core_available(void)
+{
+	struct device *dev = NULL;
+
+	dev = qcom_scm_get_dev();
+
+	return __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
+					    QCOM_SCM_DCVS_INIT) &&
+	       __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
+					    QCOM_SCM_DCVS_UPDATE) &&
+	       __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
+					    QCOM_SCM_DCVS_RESET);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_core_available);
+
+/**
+ * qcom_scm_dcvs_ca_available() - check if context aware DCVS operations are
+ * available
+ */
+bool qcom_scm_dcvs_ca_available(void)
+{
+	struct device *dev = NULL;
+
+	dev = qcom_scm_get_dev();
+
+	return __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
+					    QCOM_SCM_DCVS_INIT_CA_V2) &&
+	       __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
+					    QCOM_SCM_DCVS_UPDATE_CA_V2);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_ca_available);

@@ -371,7 +371,7 @@ int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
  * Sends a command to the SCM and waits for the command to finish processing.
  * This can be called in atomic context.
  */
-static int qcom_scm_call_atomic(struct device *dev,
+int qcom_scm_call_atomic(struct device *dev,
 				const struct qcom_scm_desc *desc,
 				struct qcom_scm_res *res)
 {
@@ -1631,7 +1631,7 @@ int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL(qcom_scm_kgsl_set_smmu_aperture);
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture);
 
 int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
 {
@@ -1650,37 +1650,7 @@ int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
-EXPORT_SYMBOL(qcom_scm_kgsl_set_smmu_lpac_aperture);
-
-int qcom_scm_kgsl_init_regs(u32 gpu_req)
-{
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_GPU,
-		.cmd = QCOM_SCM_SVC_GPU_INIT_REGS,
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = gpu_req,
-		.arginfo = QCOM_SCM_ARGS(1),
-	};
-
-	return qcom_scm_call(__scm->dev, &desc, NULL);
-}
-EXPORT_SYMBOL(qcom_scm_kgsl_init_regs);
-
-int qcom_scm_kgsl_dcvs_tuning(u32 mingap, u32 penalty, u32 numbusy)
-{
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_DCVS,
-		.cmd = QCOM_SCM_DCVS_TUNING,
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = mingap,
-		.args[1] = penalty,
-		.args[2] = numbusy,
-		.arginfo = QCOM_SCM_ARGS(3),
-	};
-
-	return qcom_scm_call(__scm->dev, &desc, NULL);
-}
-EXPORT_SYMBOL_GPL(qcom_scm_kgsl_dcvs_tuning);
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_lpac_aperture);
 
 int qcom_scm_enable_shm_bridge(void)
 {
@@ -1738,150 +1708,6 @@ int qcom_scm_create_shm_bridge(u64 pfn_and_ns_perm_flags,
 	return ret ? : res.result[0];
 }
 EXPORT_SYMBOL(qcom_scm_create_shm_bridge);
-
-/**
- * qcom_scm_dcvs_core_available() - check if core DCVS operations are available
- */
-bool qcom_scm_dcvs_core_available(void)
-{
-	struct device *dev = __scm ? __scm->dev : NULL;
-
-	return __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
-					    QCOM_SCM_DCVS_INIT) &&
-	       __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
-					    QCOM_SCM_DCVS_UPDATE) &&
-	       __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
-					    QCOM_SCM_DCVS_RESET);
-}
-EXPORT_SYMBOL(qcom_scm_dcvs_core_available);
-
-/**
- * qcom_scm_dcvs_ca_available() - check if context aware DCVS operations are
- * available
- */
-bool qcom_scm_dcvs_ca_available(void)
-{
-	struct device *dev = __scm ? __scm->dev : NULL;
-
-	return __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
-					    QCOM_SCM_DCVS_INIT_CA_V2) &&
-	       __qcom_scm_is_call_available(dev, QCOM_SCM_SVC_DCVS,
-					    QCOM_SCM_DCVS_UPDATE_CA_V2);
-}
-EXPORT_SYMBOL(qcom_scm_dcvs_ca_available);
-
-/**
- * qcom_scm_dcvs_reset()
- */
-int qcom_scm_dcvs_reset(void)
-{
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_DCVS,
-		.cmd = QCOM_SCM_DCVS_RESET,
-		.owner = ARM_SMCCC_OWNER_SIP
-	};
-
-	return qcom_scm_call(__scm ? __scm->dev : NULL, &desc, NULL);
-}
-EXPORT_SYMBOL(qcom_scm_dcvs_reset);
-
-int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_DCVS,
-		.cmd = QCOM_SCM_DCVS_INIT_V2,
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = addr,
-		.args[1] = size,
-		.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_RW, QCOM_SCM_VAL),
-	};
-	struct qcom_scm_res res;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-
-	if (ret >= 0)
-		*version = res.result[0];
-	return ret;
-}
-EXPORT_SYMBOL(qcom_scm_dcvs_init_v2);
-
-int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
-{
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_DCVS,
-		.cmd = QCOM_SCM_DCVS_INIT_CA_V2,
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = addr,
-		.args[1] = size,
-		.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_RW, QCOM_SCM_VAL),
-	};
-
-	return qcom_scm_call(__scm->dev, &desc, NULL);
-}
-EXPORT_SYMBOL(qcom_scm_dcvs_init_ca_v2);
-
-int qcom_scm_dcvs_update(int level, s64 total_time, s64 busy_time)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_DCVS,
-		.cmd = QCOM_SCM_DCVS_UPDATE,
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = level,
-		.args[1] = total_time,
-		.args[2] = busy_time,
-		.arginfo = QCOM_SCM_ARGS(3),
-	};
-	struct qcom_scm_res res;
-
-	ret = qcom_scm_call_atomic(__scm->dev, &desc, &res);
-
-	return ret ? : res.result[0];
-}
-EXPORT_SYMBOL(qcom_scm_dcvs_update);
-
-int qcom_scm_dcvs_update_v2(int level, s64 total_time, s64 busy_time)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_DCVS,
-		.cmd = QCOM_SCM_DCVS_UPDATE_V2,
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = level,
-		.args[1] = total_time,
-		.args[2] = busy_time,
-		.arginfo = QCOM_SCM_ARGS(3),
-	};
-	struct qcom_scm_res res;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-
-	return ret ? : res.result[0];
-}
-EXPORT_SYMBOL(qcom_scm_dcvs_update_v2);
-
-int qcom_scm_dcvs_update_ca_v2(int level, s64 total_time, s64 busy_time,
-			       int context_count)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_DCVS,
-		.cmd = QCOM_SCM_DCVS_UPDATE_CA_V2,
-		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = level,
-		.args[1] = total_time,
-		.args[2] = busy_time,
-		.args[3] = context_count,
-		.arginfo = QCOM_SCM_ARGS(4),
-	};
-	struct qcom_scm_res res;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-
-	return ret ? : res.result[0];
-}
-EXPORT_SYMBOL(qcom_scm_dcvs_update_ca_v2);
 
 /**
  * qcom_scm_ocmem_lock_available() - is OCMEM lock/unlock interface available
