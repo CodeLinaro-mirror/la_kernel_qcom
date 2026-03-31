@@ -6419,6 +6419,7 @@ net/ipv4/raw.c
 net/ipv4/route.c
 net/ipv4/sysctl_net_ipv4.c
 net/ipv4/tcp.c
+net/ipv4/tcp_bbr.c
 net/ipv4/tcp_bpf.c
 net/ipv4/tcp_cong.c
 net/ipv4/tcp_cubic.c
