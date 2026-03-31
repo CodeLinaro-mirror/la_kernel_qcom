@@ -391,6 +391,28 @@ static struct qcom_icc_node qxm_audio = {
 	.links = { SLAVE_ANOC_SNOC },
 };
 
+static struct qcom_icc_node xm_emac_0 = {
+	.name = "xm_emac_0",
+	.id = MASTER_EMAC_0,
+	.channels = 1,
+	.buswidth = 8,
+	.mas_rpm_id = -1,
+	.slv_rpm_id = -1,
+	.num_links = 1,
+	.links = { SLAVE_ANOC_SNOC },
+};
+
+static struct qcom_icc_node xm_emac_1 = {
+	.name = "xm_emac_1",
+	.id = MASTER_EMAC_1,
+	.channels = 1,
+	.buswidth = 8,
+	.mas_rpm_id = -1,
+	.slv_rpm_id = -1,
+	.num_links = 1,
+	.links = { SLAVE_ANOC_SNOC },
+};
+
 static struct qcom_icc_node xm_qdss_etr = {
 	.name = "xm_qdss_etr",
 	.id = MASTER_QDSS_ETR,
@@ -1266,6 +1288,8 @@ static struct qcom_icc_node *sys_noc_nodes[] = {
 	[MASTER_QPIC] = &qhm_qpic,
 	[MASTER_QUP_0] = &qhm_qup0,
 	[MASTER_AUDIO] = &qxm_audio,
+	[MASTER_EMAC_0] = &xm_emac_0,
+	[MASTER_EMAC_1] = &xm_emac_1,
 	[MASTER_QDSS_ETR] = &xm_qdss_etr,
 	[MASTER_SDCC_1] = &xm_sdc1,
 	[MASTER_SDCC_2] = &xm_sdc2,
@@ -1315,21 +1339,6 @@ qcom_icc_map(struct platform_device *pdev, const struct qcom_icc_desc *desc)
 	return devm_regmap_init_mmio(dev, base, &icc_regmap_config);
 }
 
-static void qcom_icc_stub_pre_aggregate(struct icc_node *node)
-{
-}
-
-static int qcom_icc_stub_aggregate(struct icc_node *node, u32 tag, u32 avg_bw,
-			u32 peak_bw, u32 *agg_avg, u32 *agg_peak)
-{
-	return 0;
-}
-
-static int qcom_icc_stub_set(struct icc_node *src, struct icc_node *dst)
-{
-	return 0;
-}
-
 static int qnoc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1374,9 +1383,9 @@ static int qnoc_probe(struct platform_device *pdev)
 
 	provider = &qp->provider;
 	provider->dev = dev;
-	provider->set = qcom_icc_stub_set;
-	provider->pre_aggregate = qcom_icc_stub_pre_aggregate;
-	provider->aggregate = qcom_icc_stub_aggregate;
+	provider->set = qcom_icc_rpm_set;
+	provider->pre_aggregate = qcom_icc_rpm_pre_aggregate;
+	provider->aggregate = qcom_icc_rpm_aggregate;
 	provider->get_bw = qcom_icc_get_bw_stub;
 	provider->xlate = of_icc_xlate_onecell;
 	INIT_LIST_HEAD(&provider->nodes);

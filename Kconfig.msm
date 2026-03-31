@@ -26,6 +26,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/dma/qcom/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/edac/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/extcon/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/firmware/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/gpu/drm/bridge/Kconfig"
@@ -43,6 +45,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/i2c/busses/Kconfig"
 source "$(KCONFIG_EXT_PREFIX)drivers/i3c/master/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/iio/adc/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/iio/dac/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/input/misc/Kconfig"
 

@@ -23,6 +23,15 @@ config QSEECOM_PROXY
 	 These callback functions can be used to start, shutdown and
 	 send commands to the trusted apps.
 
+config BOOTMARKER_PROXY
+	tristate "To enable Bootmarker proxy driver for kernel client"
+	help
+	  Bootmarker proxy driver serves the kernel clients by providing
+	  required ops via call back functions with a minimal framework.
+	  These callback functions can be used to access the place marker.
+	  To compile this driver as a module, choose M here.
+	  If unsure, say N.
+
 config LKDTM
 	tristate "Linux Kernel Dump Test Tool Module"
 	depends on DEBUG_FS
@@ -36,4 +45,14 @@ config LKDTM
 	Documentation on how to use the module can be found in
 	Documentation/fault-injection/provoke-crashes.rst
 
+config ISL97900_LED
+	tristate "ISL97900_I2C_Driver"
+	select REGMAP_I2C
+	depends on I2C
+	help
+	  Support for ISL97900 LED driver IC, using this driver,
+	  user can set different values to control the LED current
+	  using I2C.
+
+	  Say Y if you want to enable ISL97900 driver.
 endmenu

@@ -42,6 +42,9 @@ struct qcom_cluster_node {
 	struct kobject *kobj;
 	int state_idx;
 	struct kobj_attribute disable_attr;
+	struct kobj_attribute usage_attr[MAX_CLUSTER_STATES];
+	struct kobj_attribute idle_time_attr[MAX_CLUSTER_STATES];
+	struct kobj_attribute rejected_attr[MAX_CLUSTER_STATES];
 	struct attribute_group *attr_group;
 	struct attribute **attrs;
 };

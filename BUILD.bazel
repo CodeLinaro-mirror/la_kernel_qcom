@@ -21,6 +21,7 @@ load(
 )
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
+load(":kleaf-scripts/targets/hamoa_la.bzl", "define_hamoa_la")
 load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
 load(
     ":kleaf-scripts/targets/malabar.bzl",
@@ -30,7 +31,6 @@ load(
 )
 load(":kleaf-scripts/targets/malabar_vms.bzl", "define_malabar_vms")
 load(":kleaf-scripts/targets/monaco.bzl", "define_monaco")
-load(":kleaf-scripts/targets/pikachu.bzl", "define_pikachu")
 load(
     ":kleaf-scripts/targets/seraph.bzl",
     "define_seraph",
@@ -197,6 +197,15 @@ hermetic_genrule(
 filegroup(
     name = "unsafe_headers_qcom_group",
     srcs = [
+        "//common:arch/arm64/kvm/hyp/include/nvhe/alloc.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/alloc_mgt.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/gfp.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/mem_protect.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/memory.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/mm.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/pkvm.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/refcount.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/serial.h",
         "//common:drivers/android/binder_alloc.h",
         "//common:drivers/android/binder_internal.h",
         "//common:drivers/android/binder_trace.h",
@@ -340,8 +349,6 @@ define_canoe_oemvm()
 
 define_canoe_vms()
 
-define_pikachu()
-
 define_vienna()
 
 define_vienna_le()
@@ -349,6 +356,8 @@ define_vienna_le()
 define_lahaina()
 
 define_hamoa()
+
+define_hamoa_la()
 
 define_malabar()
 

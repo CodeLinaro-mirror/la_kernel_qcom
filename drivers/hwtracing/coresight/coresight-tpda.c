@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/amba/bus.h>
@@ -249,11 +249,10 @@ static int __tpda_enable(struct tpda_drvdata *drvdata, int port)
 		tpda_enable_pre_port(drvdata);
 
 	ret = tpda_enable_port(drvdata, port);
-	CS_LOCK(drvdata->base);
 
 	if (!drvdata->csdev->refcnt)
 		tpda_enable_post_port(drvdata);
-
+	CS_LOCK(drvdata->base);
 	return ret;
 }
 

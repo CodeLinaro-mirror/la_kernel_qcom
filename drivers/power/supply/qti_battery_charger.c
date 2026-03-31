@@ -37,6 +37,7 @@
 #define BC_SET_NOTIFY_REQ		0x04
 #define BC_DISABLE_NOTIFY_REQ		0x05
 #define BC_NOTIFY_IND			0x07
+#define BC_SHUTDOWN_NOTIFY_V2		0x22
 #define BC_BATTERY_STATUS_GET		0x30
 #define BC_BATTERY_STATUS_SET		0x31
 #define BC_USB_STATUS_GET(port_id)	(0x32 | (port_id) << 16)
@@ -257,6 +258,10 @@ struct psy_state {
 	u32			opcode_set;
 };
 
+struct battery_charger_config {
+	u32			opcode;
+};
+
 struct battery_chg_dev {
 	struct device			*dev;
 	struct class			battery_class;
@@ -308,6 +313,7 @@ struct battery_chg_dev {
 	bool				notify_en;
 	bool				error_prop;
 	bool				micro_usb;
+	const struct battery_charger_config	*config;
 #ifdef CONFIG_QTI_CHARGER_NFC_VREG
 	struct bharger_regulator	nfc_vreg;
 #endif
@@ -748,6 +754,7 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 	case BC_SET_NOTIFY_REQ:
 	case BC_DISABLE_NOTIFY_REQ:
 	case BC_SHUTDOWN_NOTIFY:
+	case BC_SHUTDOWN_NOTIFY_V2:
 	case BC_SHIP_MODE_REQ_SET:
 	case BC_CHG_CTRL_LIMIT_EN:
 		/* Always ACK response for notify or ship_mode request */
@@ -2622,7 +2629,7 @@ static int battery_chg_reboot_notify(struct notifier_block *nb, unsigned long co
 
 	msg_notify.hdr.owner = MSG_OWNER_BC;
 	msg_notify.hdr.type = MSG_TYPE_NOTIFY;
-	msg_notify.hdr.opcode = BC_SHUTDOWN_NOTIFY;
+	msg_notify.hdr.opcode = bcdev->config->opcode;
 
 	rc = battery_chg_write(bcdev, &msg_notify, sizeof(msg_notify), BC_WAIT_TIME_MS);
 	if (rc < 0)
@@ -2846,6 +2853,11 @@ static int battery_chg_probe(struct platform_device *pdev)
 	if (!bcdev)
 		return -ENOMEM;
 
+	bcdev->config = of_device_get_match_data(&pdev->dev);
+
+	if (!bcdev->config)
+		return -ENODEV;
+
 	bcdev->psy_list[PSY_TYPE_BATTERY].map = battery_prop_map;
 	bcdev->psy_list[PSY_TYPE_BATTERY].prop_count = BATT_PROP_MAX;
 	bcdev->psy_list[PSY_TYPE_BATTERY].opcode_get = BC_BATTERY_STATUS_GET;
@@ -3043,10 +3055,19 @@ static void battery_chg_remove(struct platform_device *pdev)
 		qti_typec_class_deinit(bcdev->typec_class);
 }
 
+static struct battery_charger_config default_config = {
+	.opcode = BC_SHUTDOWN_NOTIFY
+};
+
+static struct battery_charger_config canoe_config = {
+	.opcode = BC_SHUTDOWN_NOTIFY_V2
+};
+
 static const struct of_device_id battery_chg_match_table[] = {
-	{ .compatible = "qcom,battery-charger" },
-	{ .compatible = "qcom,pmw6100-battery-charger" },
-	{},
+	{ .compatible = "qcom,battery-charger", .data = (void *)&default_config},
+	{ .compatible = "qcom,pmw6100-battery-charger", .data = (void *)&default_config},
+	{ .compatible = "qcom,canoe-battery-charger", .data = (void *)&canoe_config},
+	{}
 };
 
 static struct platform_driver battery_chg_driver = {

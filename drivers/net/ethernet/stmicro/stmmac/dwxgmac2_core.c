@@ -965,6 +965,47 @@ dwxgmac3_safety_feat_config(void __iomem *ioaddr, unsigned int asp,
 	return 0;
 }
 
+static int dwxgmac3_safety_feat_disable(void __iomem *ioaddr)
+{
+	u32 value;
+
+	/* Disable MTL ECC Interrupts */
+	writel(0x0, ioaddr + XGMAC_MTL_ECC_INT_ENABLE);
+
+	/* Disable DMA ECC Interrupts */
+	writel(0x0, ioaddr + XGMAC_DMA_ECC_INT_ENABLE);
+
+	/* Disable FSM Parity and Timeout */
+	value = readl(ioaddr + XGMAC_MAC_FSM_CONTROL);
+	value &= ~(XGMAC_PRTYEN | XGMAC_TMOUTEN);
+	writel(value, ioaddr + XGMAC_MAC_FSM_CONTROL);
+
+	/* CRITICAL: Explicitly disable Data Path Parity
+	 * DPP may be enabled by hardware default, causing errors
+	 */
+	value = readl(ioaddr + XGMAC_MTL_DPP_CONTROL);
+	value |= XGMAC_DPP_DISABLE;
+	writel(value, ioaddr + XGMAC_MTL_DPP_CONTROL);
+
+	/* Disable ECC Control */
+	writel(0x0, ioaddr + XGMAC_MTL_ECC_CONTROL);
+
+	/* Clear any pending safety interrupts */
+	value = readl(ioaddr + XGMAC_MTL_SAFETY_INT_STATUS);
+	writel(value, ioaddr + XGMAC_MTL_SAFETY_INT_STATUS);
+
+	value = readl(ioaddr + XGMAC_DMA_SAFETY_INT_STATUS);
+	writel(value, ioaddr + XGMAC_DMA_SAFETY_INT_STATUS);
+
+	value = readl(ioaddr + XGMAC_DMA_ECC_INT_STATUS);
+	writel(value, ioaddr + XGMAC_DMA_ECC_INT_STATUS);
+
+	value = readl(ioaddr + XGMAC_DMA_DPP_INT_STATUS);
+	writel(value, ioaddr + XGMAC_DMA_DPP_INT_STATUS);
+
+	return 0;
+}
+
 static int dwxgmac3_safety_feat_irq_status(struct net_device *ndev,
 					   void __iomem *ioaddr,
 					   unsigned int asp,
@@ -1603,6 +1644,7 @@ const struct stmmac_ops dwxgmac210_ops = {
 	.debug = NULL,
 	.set_filter = dwxgmac2_set_filter,
 	.safety_feat_config = dwxgmac3_safety_feat_config,
+	.safety_feat_disable = dwxgmac3_safety_feat_disable,
 	.safety_feat_irq_status = dwxgmac3_safety_feat_irq_status,
 	.safety_feat_dump = dwxgmac3_safety_feat_dump,
 	.set_mac_loopback = dwxgmac2_set_mac_loopback,
@@ -1661,6 +1703,7 @@ const struct stmmac_ops dwxlgmac2_ops = {
 	.debug = NULL,
 	.set_filter = dwxgmac2_set_filter,
 	.safety_feat_config = dwxgmac3_safety_feat_config,
+	.safety_feat_disable = dwxgmac3_safety_feat_disable,
 	.safety_feat_irq_status = dwxgmac3_safety_feat_irq_status,
 	.safety_feat_dump = dwxgmac3_safety_feat_dump,
 	.set_mac_loopback = dwxgmac2_set_mac_loopback,

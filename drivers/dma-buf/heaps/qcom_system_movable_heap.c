@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * DMABUF System heap exporter
  */
@@ -75,7 +75,7 @@ static struct dma_buf *movable_heap_allocate(struct dma_heap *heap,
 	if (ret)
 		goto free_buffer;
 
-	buffer->vmperm = mem_buf_vmperm_alloc(&buffer->sg_table, qcom_sg_release, &buffer->kref);
+	buffer->vmperm = mem_buf_vmperm_alloc(&buffer->sg_table, qcom_sg_release, (void *)buffer);
 
 	if (IS_ERR(buffer->vmperm)) {
 		ret = PTR_ERR(buffer->vmperm);
