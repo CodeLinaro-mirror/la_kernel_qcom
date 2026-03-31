@@ -4004,7 +4004,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		goto out_variant_clear;
 
 	host->device_reset = devm_gpiod_get_optional(dev, "reset",
-						     GPIOD_ASIS);
+						     GPIOD_OUT_HIGH);
 	if (IS_ERR(host->device_reset)) {
 		err = dev_err_probe(dev, PTR_ERR(host->device_reset),
 				    "Failed to acquire device reset gpio\n");
