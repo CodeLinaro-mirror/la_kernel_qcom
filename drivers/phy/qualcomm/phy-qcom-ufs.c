@@ -553,7 +553,7 @@ static int ufs_qcom_phy_enable_ref_clk(struct ufs_qcom_phy *phy)
 	if (ret) {
 		dev_err(phy->dev, "%s: ref_clk_src enable failed %d\n",
 				__func__, ret);
-		goto out;
+		goto out_disable_ref_clk_pad;
 	}
 
 	/*
@@ -607,6 +607,10 @@ out_disable_parent:
 		clk_disable_unprepare(phy->ref_clk_parent);
 out_disable_src:
 	clk_disable_unprepare(phy->ref_clk_src);
+
+out_disable_ref_clk_pad:
+	if (phy->ref_clk_pad_en)
+		clk_disable_unprepare(phy->ref_clk_pad_en);
 out:
 	return ret;
 }
