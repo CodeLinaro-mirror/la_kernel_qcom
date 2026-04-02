@@ -13,11 +13,13 @@
 #include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/panic_notifier.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_wakeirq.h>
+#include <linux/reboot.h>
 #include <linux/soc/qcom/geni-se.h>
 #include <linux/serial.h>
 #include <linux/serial_core.h>
@@ -167,6 +169,8 @@ struct qcom_geni_serial_port {
 	struct qcom_geni_private_data private_data;
 	const struct qcom_geni_device_data *dev_data;
 	struct dev_pm_domain_list *pd_list;
+	struct notifier_block reboot_nb;
+	struct notifier_block panic_nb;
 };
 
 static const struct uart_ops qcom_geni_console_pops;
@@ -1806,6 +1810,45 @@ static int geni_serial_resource_init(struct uart_port *uport)
 
 	return 0;
 }
+
+static int qcom_geni_gvm_reboot_cb(struct notifier_block *nb,
+			unsigned long action, void *data)
+{
+	struct qcom_geni_serial_port *port = container_of(nb, struct qcom_geni_serial_port,
+							  reboot_nb);
+	struct uart_port *uport = &port->uport;
+
+	switch (action) {
+	case SYS_RESTART:
+	case SYS_POWER_OFF:
+	case SYS_HALT:
+		if (pm_runtime_status_suspended(uport->dev))
+			return NOTIFY_OK;
+
+		qcom_geni_serial_shutdown(uport);
+		break;
+	default:
+		dev_err(uport->dev, "GVM: Invalid request\n");
+	}
+
+	return NOTIFY_OK;
+}
+
+static int qcom_geni_gvm_panic_cb(struct notifier_block *nb,
+		       unsigned long event, void *ptr)
+{
+	struct qcom_geni_serial_port *port = container_of(nb, struct qcom_geni_serial_port,
+							  panic_nb);
+	struct uart_port *uport = &port->uport;
+
+	if (pm_runtime_status_suspended(uport->dev))
+		return NOTIFY_OK;
+
+	qcom_geni_serial_shutdown(uport);
+
+	return NOTIFY_OK;
+}
+
 static void qcom_geni_serial_pm(struct uart_port *uport,
 		unsigned int new_state, unsigned int old_state)
 {
@@ -1980,6 +2023,25 @@ static int qcom_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		goto error;
 
+	if (!uart_console(uport)) {
+		/* Register reboot notifier */
+		port->reboot_nb.notifier_call = qcom_geni_gvm_reboot_cb;
+		ret = register_reboot_notifier(&port->reboot_nb);
+		if (ret) {
+			dev_err(uport->dev, "Failed to register reboot notifier: %d\n", ret);
+			goto error;
+		}
+
+		/* Register panic notifier */
+		port->panic_nb.notifier_call = qcom_geni_gvm_panic_cb;
+		ret = atomic_notifier_chain_register(&panic_notifier_list, &port->panic_nb);
+		if (ret) {
+			dev_err(uport->dev, "Failed to register panic notifier: %d\n", ret);
+			unregister_reboot_notifier(&port->reboot_nb);
+			goto error;
+		}
+	}
+
 	return 0;
 
 error:
@@ -1992,6 +2054,15 @@ static void qcom_geni_serial_remove(struct platform_device *pdev)
 {
 	struct qcom_geni_serial_port *port = platform_get_drvdata(pdev);
 	struct uart_driver *drv = port->private_data.drv;
+	struct uart_port *uport = &port->uport;
+
+	if (!uart_console(uport)) {
+		/* Unregister panic notifier */
+		atomic_notifier_chain_unregister(&panic_notifier_list, &port->panic_nb);
+
+		/* Unregister reboot notifier */
+		unregister_reboot_notifier(&port->reboot_nb);
+	}
 
 	pm_runtime_disable(port->se.dev);
 	uart_remove_one_port(drv, &port->uport);
