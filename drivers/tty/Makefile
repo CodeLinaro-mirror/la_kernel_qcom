@@ -4,4 +4,5 @@
 # Subdirectories
 obj-y += hvc/
 obj-y += serial/
+obj-y += serial/pkvm-geni/
 
