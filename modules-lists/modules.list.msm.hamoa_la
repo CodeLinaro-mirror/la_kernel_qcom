@@ -34,6 +34,8 @@ gh_virt_wdt.ko
 nvmem_qfprom.ko
 debug_symbol.ko
 minidump.ko
+qcom_logbuf_vendor_hooks.ko
+qcom_logbuf_boot_log.ko
 qcom-dcvs.ko
 memory_dump_v2.ko
 dcc_v2.ko
