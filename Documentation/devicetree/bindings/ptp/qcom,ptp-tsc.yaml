@@ -16,7 +16,9 @@ description:
 
 properties:
   compatible:
-    const: "qcom,tsc"
+    enum:
+      - "qcom,tsc"
+      - "qcom,tsc-v1"
 
   reg:
     maxItems: 3
