@@ -32,6 +32,7 @@ shikra_perf_config = {
     "CONFIG_EDAC_KRYO_ARM64": "m",
     "CONFIG_EDAC_KRYO_ARM64_PANIC_ON_UE": "y",
     "CONFIG_EDAC_QCOM": "m",
+    "CONFIG_GENERIC_ADC_THERMAL": "m",
     "CONFIG_GH_ARM64_DRV": "m",
     "CONFIG_GH_CTRL": "m",
     "CONFIG_GH_DBL": "m",
