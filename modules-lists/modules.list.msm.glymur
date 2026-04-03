@@ -79,6 +79,10 @@ qcom_dpd_proxy.ko
 qcom_dpd_proxy_iommu.ko
 qcom_scm_smci.ko
 pkvm-secure-memory-manager.ko
+qcom-ipcc.ko
+msm_qmp.ko
+qcom_aoss.ko
+smp2p.ko
 rproc_qcom_common.ko
 mdt_loader.ko
 qmi_helpers.ko
