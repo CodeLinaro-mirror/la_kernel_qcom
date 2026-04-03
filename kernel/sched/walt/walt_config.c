@@ -298,6 +298,7 @@ void walt_config(void)
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 		sysctl_walt_features |= WALT_FEAT_TOPAPP_BASED_HISPEED;
+		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
 		soc_sched_lib_name_capacity = 4;
