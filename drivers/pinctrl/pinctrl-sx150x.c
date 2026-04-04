@@ -610,7 +610,7 @@ static int sx150x_pinconf_get(struct pinctrl_dev *pctldev, unsigned int pin,
 	if (sx150x_pin_is_oscio(pctl, pin)) {
 		switch (param) {
 		case PIN_CONFIG_DRIVE_PUSH_PULL:
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			ret = regmap_read(pctl->regmap,
 					  pctl->data->pri.x789.reg_clock,
 					  &data);
@@ -704,7 +704,7 @@ static int sx150x_pinconf_get(struct pinctrl_dev *pctldev, unsigned int pin,
 		}
 		break;
 
-	case PIN_CONFIG_OUTPUT:
+	case PIN_CONFIG_LEVEL:
 		ret = sx150x_gpio_get_direction(&pctl->gpio, pin);
 		if (ret < 0)
 			return ret;
@@ -743,7 +743,7 @@ static int sx150x_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 		arg = pinconf_to_config_argument(configs[i]);
 
 		if (sx150x_pin_is_oscio(pctl, pin)) {
-			if (param == PIN_CONFIG_OUTPUT) {
+			if (param == PIN_CONFIG_LEVEL) {
 				ret = sx150x_gpio_direction_output(&pctl->gpio,
 								   pin, arg);
 				if (ret < 0)
@@ -815,7 +815,7 @@ static int sx150x_pinconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 
 			break;
 
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			ret = sx150x_gpio_direction_output(&pctl->gpio,
 							   pin, arg);
 			if (ret < 0)
