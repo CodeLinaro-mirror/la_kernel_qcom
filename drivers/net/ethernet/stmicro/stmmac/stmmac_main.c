@@ -1204,7 +1204,8 @@ static void stmmac_check_pcs_mode(struct stmmac_priv *priv)
 		    (interface == PHY_INTERFACE_MODE_RGMII_TXID)) {
 			netdev_dbg(priv->dev, "PCS RGMII support enabled\n");
 			priv->hw->pcs = STMMAC_PCS_RGMII;
-		} else if (interface == PHY_INTERFACE_MODE_SGMII) {
+		} else if ((interface == PHY_INTERFACE_MODE_SGMII) ||
+			   (interface == PHY_INTERFACE_MODE_2500BASEX)) {
 			netdev_dbg(priv->dev, "PCS SGMII support enabled\n");
 			priv->hw->pcs = STMMAC_PCS_SGMII;
 		}
@@ -3434,11 +3435,20 @@ static void stmmac_mtl_configuration(struct stmmac_priv *priv)
 
 static void stmmac_safety_feat_configuration(struct stmmac_priv *priv)
 {
-	if (priv->dma_cap.asp) {
+	if (priv->dma_cap.asp && priv->sfty_irq > 0) {
 		netdev_info(priv->dev, "Enabling Safety Features\n");
 		stmmac_safety_feat_config(priv, priv->ioaddr, priv->dma_cap.asp,
 					  priv->plat->safety_feat_cfg);
 	} else {
+		if (priv->dma_cap.asp) {
+			/* Hardware has ASP capability but no IRQ configured.
+			 * Explicitly disable all safety features to prevent
+			 * unhandled interrupts, especially DPP which may be
+			 * enabled by hardware default (causes FC:157 errors).
+			 */
+			netdev_info(priv->dev, "Disable Safety Feature when no IRQ configured\n");
+			stmmac_safety_feat_disable(priv, priv->ioaddr);
+		}
 		netdev_info(priv->dev, "No Safety Features support found\n");
 	}
 }
@@ -6315,6 +6325,9 @@ static int stmmac_setup_tc_block_cb(enum tc_setup_type type, void *type_data,
 	struct stmmac_priv *priv = cb_priv;
 	int ret = -EOPNOTSUPP;
 
+	if (!netif_running(priv->dev))
+		return -EINVAL;
+
 	if (!tc_cls_can_offload_and_chain0(priv->dev, type_data))
 		return ret;
 
@@ -6366,16 +6379,20 @@ static int stmmac_setup_tc(struct net_device *ndev, enum tc_setup_type type,
 static u16 stmmac_select_queue(struct net_device *dev, struct sk_buff *skb,
 			       struct net_device *sb_dev)
 {
+	struct stmmac_priv *priv = netdev_priv(dev);
 	int gso = skb_shinfo(skb)->gso_type;
 
-	if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4)) {
-		/*
-		 * There is no way to determine the number of TSO/USO
-		 * capable Queues. Let's use always the Queue 0
-		 * because if TSO/USO is supported then at least this
-		 * one will be capable.
-		 */
-		return 0;
+	if (priv->tso) {
+		if ((gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6)) ||
+		    (priv->plat->has_gmac4 && (gso & SKB_GSO_UDP_L4))) {
+			/*
+			 * There is no way to determine the number of TSO/USO
+			 * capable Queues. Let's use always the Queue 0
+			 * because if TSO/USO is supported then at least this
+			 * one will be capable.
+			 */
+			return 0;
+		}
 	}
 
 	return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;

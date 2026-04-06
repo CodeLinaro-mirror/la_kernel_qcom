@@ -13,6 +13,7 @@ cqhci.ko
 sdhci-msm.ko
 qcom_tzmem.ko
 qnoc-seraph.ko
+qnoc-pikachu.ko
 qnoc-qos.ko
 icc-debug.ko
 icc-bcm-voter.ko
@@ -58,6 +59,7 @@ qcom-cpufreq-hw.ko
 mem-prot.ko
 mem_buf.ko
 mem_buf_dev.ko
+mem_buf_msgq.ko
 msm_dma_iommu_mapping.ko
 qcom_dma_heaps.ko
 gh_arm_drv.ko
@@ -97,3 +99,16 @@ gic_intr_routing.ko
 sched-walt.ko
 sched-walt-debug.ko
 llcc-qcom.ko
+gcc-pikachu.ko
+tcsrcc-pikachu.ko
+videocc-pikachu.ko
+evacc-pikachu.ko
+gpucc-pikachu.ko
+camcc-pikachu.ko
+debugcc-pikachu.ko
+qcom_hib.ko
+msm_show_resume_irq.ko
+trace-bus-prof.ko
+llcc_miss.ko
+llcc_occ.ko
+crm-v2.ko

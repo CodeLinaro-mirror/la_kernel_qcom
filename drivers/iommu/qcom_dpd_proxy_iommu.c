@@ -14,7 +14,10 @@
 #include <linux/iommu.h>
 #include <linux/qcom_dpd_proxy.h>
 #include <linux/pci.h>
+#include <linux/adreno-smmu-priv.h>
 #include "drivers/iommu/dma-iommu.h"
+#include "qcom_dpd_proxy_tee.h"
+#include "arm/arm-smmu/arm-smmu.h"
 
 #define MSI_IOVA_BASE                   0x8000000
 #define MSI_IOVA_LENGTH                 0x100000
@@ -41,8 +44,15 @@ struct dpd_smmu_domain {
 	struct device *dev;
 	/* Sharing domains across multiple devices is not supported */
 	u32 si_domain_id;
+	struct adreno_smmu_fault_info adreno_cfi;
 	struct iommu_domain domain;
 };
+
+struct dpd_smmu_cbo {
+	struct si_object si_cbo;
+	struct dpd_smmu *smmu;
+};
+static struct dpd_smmu_cbo *__cbo_priv;
 
 /*
  * Used primarily for iommu_iova_to_phys.
@@ -299,6 +309,58 @@ static void dpd_smmu_get_resv_regions(struct device *dev,
 	iommu_dma_get_resv_regions(dev, head);
 }
 
+static void adreno_set_fault_info(struct iommu_domain *domain, struct imm_fault_info *cfi)
+{
+	struct dpd_smmu_domain *smmu_domain;
+	struct adreno_smmu_fault_info *adreno_cfi;
+
+	if (!domain)
+		return;
+
+	smmu_domain = to_smmu_domain(domain);
+	adreno_cfi = &smmu_domain->adreno_cfi;
+	adreno_cfi->far = cfi->far;
+	adreno_cfi->ttbr0 = cfi->ttbr0;
+	/* TEE does not provide contextidr */
+	adreno_cfi->contextidr = U32_MAX;
+	adreno_cfi->fsr = cfi->fsr;
+	adreno_cfi->fsynr0 = cfi->fsynr0;
+	adreno_cfi->fsynr1 = cfi->fsynr1;
+	adreno_cfi->cbfrsynra = cfi->cbfrsynra;
+}
+
+static void adreno_get_fault_info(const void *cookie, struct adreno_smmu_fault_info *info)
+{
+	const struct dpd_smmu_domain *smmu_domain = cookie;
+
+	*info = smmu_domain->adreno_cfi;
+}
+
+static bool device_is_adreno(struct device *dev)
+{
+	const char *name = "gfx3d_secure";
+
+	if (!dev->of_node)
+		return false;
+
+	if (of_node_name_eq(dev->of_node, name))
+		return true;
+	return false;
+}
+
+static void setup_adreno_callbacks(struct dpd_smmu_domain *smmu_domain, struct device *dev)
+{
+	struct adreno_smmu_priv *p = dev_get_drvdata(dev);
+
+	if (!p || !device_is_adreno(dev))
+		return;
+
+	p->cookie = smmu_domain;
+	p->get_fault_info = adreno_get_fault_info;
+	dev_dbg(smmu_domain->smmu->dev, "%s: Setup of adreno_smmu_priv complete\n",
+		dev_name(dev));
+}
+
 static int dpd_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 {
 	struct dpd_smmu_domain *prev_domain =
@@ -317,6 +379,9 @@ static int dpd_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 	mutex_lock(&smmu_domain->mappings_lock);
 	ret = attach_mappings(smmu_domain);
 	mutex_unlock(&smmu_domain->mappings_lock);
+
+	setup_adreno_callbacks(smmu_domain, dev);
+
 	return ret;
 }
 
@@ -617,6 +682,165 @@ static const struct iommu_ops dpd_smmu_ops = {
 	}
 };
 
+static void si_cbo_release(struct si_object *object)
+{
+	WARN(true, "Should never be called because TEE does not support cbo unregister\n");
+}
+
+static int si_cbo_dispatch(unsigned int context_id, struct si_object *object,
+			unsigned long op, struct si_arg args[])
+{
+	struct dpd_smmu_cbo *cbo;
+	struct dpd_smmu *smmu;
+	struct imm_fault_info *cfi;
+	struct device *client;
+	struct iommu_domain *domain;
+	static DEFINE_RATELIMIT_STATE(_rs,
+				      DEFAULT_RATELIMIT_INTERVAL,
+				      DEFAULT_RATELIMIT_BURST);
+	int ret, flags;
+
+	cbo = container_of(object, struct dpd_smmu_cbo, si_cbo);
+	smmu = cbo->smmu;
+	if (SI_OBJECT_OP_METHOD_ID(op) != IMM_CBO_METHOD_NOTIFY_FAULT) {
+		dev_err(smmu->dev, "Unexpected method: %ld\n", op);
+		return -EINVAL;
+	}
+	if (args[0].type != SI_AT_IB) {
+		dev_err(smmu->dev, "Unexpected args[0] type: %d\n", args[0].type);
+		return -EINVAL;
+	}
+	if (args[0].b.size != sizeof(struct imm_fault_info)) {
+		dev_err(smmu->dev, "Unexpected args[0] size: %#lx\n", args[0].b.size);
+		return -EINVAL;
+	}
+	if (args[1].type != SI_AT_END) {
+		dev_err(smmu->dev, "Unexpected args[1] type: %d\n", args[1].type);
+		return -EINVAL;
+	}
+
+	cfi = (struct imm_fault_info *)args[0].b.addr;
+	flags = cfi->fsynr0 & ARM_SMMU_CB_FSYNR0_WNR ? IOMMU_FAULT_WRITE : IOMMU_FAULT_READ;
+
+	mutex_lock(&smmu->streams_lock);
+	client = xa_load(&smmu->streams, cfi->eVM);
+	mutex_unlock(&smmu->streams_lock);
+
+	ret = -ENOSYS;
+	if (client) {
+		domain = iommu_get_domain_for_dev(client);
+		if (domain) {
+			/*
+			 * Adreno device retrieve additional data via a get_fault_info callback
+			 * Ensure it is set before calling report_iommu_fault.
+			 */
+			if (device_is_adreno(client))
+				adreno_set_fault_info(domain, cfi);
+			ret = report_iommu_fault(domain, smmu->dev, cfi->far, flags);
+		}
+	}
+	/* Clients should return -ENOSYS for default fault handling */
+	if (ret != -ENOSYS || __ratelimit(&_rs))
+		return 0;
+
+	/* Ported from arm_smmu_print_context_fault_info */
+	dev_err(smmu->dev,
+		"Unhandled context fault: fsr=0x%x, iova=0x%08llx, fsynr=0x%x, fsynr1=0x%x, cbfrsynra=0x%x, client:%s, Vmid: %d\n",
+		cfi->fsr, cfi->far, cfi->fsynr0, cfi->fsynr1, cfi->cbfrsynra,
+		client ? dev_name(client) : "Unknown", cfi->eVM);
+
+	dev_err(smmu->dev, "FSR    = %08x [%s%sFormat=%u%s%s%s%s%s%s%s%s], SID=0x%x\n",
+		cfi->fsr,
+		(cfi->fsr & ARM_SMMU_CB_FSR_MULTI)  ? "MULTI " : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_SS)     ? "SS " : "",
+		(u32)FIELD_GET(ARM_SMMU_CB_FSR_FORMAT, cfi->fsr),
+		(cfi->fsr & ARM_SMMU_CB_FSR_UUT)    ? " UUT" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_ASF)    ? " ASF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_TLBLKF) ? " TLBLKF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_TLBMCF) ? " TLBMCF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_EF)     ? " EF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_PF)     ? " PF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_AFF)    ? " AFF" : "",
+		(cfi->fsr & ARM_SMMU_CB_FSR_TF)     ? " TF" : "",
+		cfi->cbfrsynra);
+
+	dev_err(smmu->dev, "FSYNR0 = %08x [%s%s%s%s%s%s PLVL=%u]\n",
+		cfi->fsynr0,
+		(cfi->fsynr0 & ARM_SMMU_CB_FSYNR0_AFR) ? " AFR" : "",
+		(cfi->fsynr0 & ARM_SMMU_CB_FSYNR0_PTWF) ? " PTWF" : "",
+		(cfi->fsynr0 & ARM_SMMU_CB_FSYNR0_NSATTR) ? " NSATTR" : "",
+		(cfi->fsynr0 & ARM_SMMU_CB_FSYNR0_IND) ? " IND" : "",
+		(cfi->fsynr0 & ARM_SMMU_CB_FSYNR0_PNU) ? " PNU" : "",
+		(cfi->fsynr0 & ARM_SMMU_CB_FSYNR0_WNR) ? " WNR" : "",
+		(u32)FIELD_GET(ARM_SMMU_CB_FSYNR0_PLVL, cfi->fsynr0));
+
+	if (domain) {
+		phys_addr_t phys = iommu_iova_to_phys(domain, cfi->far);
+
+		dev_err(smmu->dev, "SW table walk: %#llx -> %pa\n",
+			cfi->far, &phys);
+	}
+
+	return 0;
+}
+
+struct si_object_operations dpd_smmu_si_cbo_ops = {
+	.release = si_cbo_release,
+	.dispatch = si_cbo_dispatch,
+};
+
+/*
+ * TEE does not support unregistering this callback object.
+ * No lock; expect only single device.
+ */
+static struct dpd_smmu_cbo *dpd_smmu_setup_cbo(struct dpd_smmu *smmu)
+{
+	struct dpd_smmu_cbo *cbo;
+	int ret;
+
+	if (__cbo_priv) {
+		if (__cbo_priv->smmu) {
+			dev_err(smmu->dev, "cbo is already setup\n");
+			return NULL;
+		}
+		__cbo_priv->smmu = smmu;
+		return __cbo_priv;
+	}
+
+	cbo = kzalloc(sizeof(*cbo), GFP_KERNEL);
+	if (!cbo)
+		return NULL;
+
+	ret = init_si_object_user(&cbo->si_cbo, SI_OT_CB_OBJECT, &dpd_smmu_si_cbo_ops,
+				  "dpd_smmu_cbo");
+	if (ret) {
+		dev_err(smmu->dev, "init_si_object_user for cbo failed with %d\n", ret);
+		goto err_init_cbo;
+	}
+
+	cbo->smmu = smmu;
+	ret = dpd_svc_register_cbo(&cbo->si_cbo);
+	if (ret) {
+		dev_err(smmu->dev, "init_si_object_user for cbo failed with %d\n", ret);
+		goto err_register_cbo;
+	}
+
+	__cbo_priv = cbo;
+	return cbo;
+
+err_register_cbo:
+	put_si_object(&cbo->si_cbo);
+err_init_cbo:
+	kfree(cbo);
+	return NULL;
+}
+
+static void dpd_smmu_teardown_cbo(void)
+{
+	if (__cbo_priv)
+		__cbo_priv->smmu = NULL;
+}
+
 static int dpd_smmu_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -645,6 +869,9 @@ static int dpd_smmu_probe(struct platform_device *pdev)
 		goto err_service;
 	}
 
+	/* Temporarily optional for build compatibility */
+	dpd_smmu_setup_cbo(smmu);
+
 	/* Hardcoded values. Ideally could query these from the TEE service */
 	smmu->pgsize_bitmap = (1 << PAGE_SHIFT);
 	smmu->geometry = (struct iommu_domain_geometry) {
@@ -672,6 +899,7 @@ static int dpd_smmu_probe(struct platform_device *pdev)
 err_register:
 	iommu_device_sysfs_remove(&smmu->iommu);
 err_sysfs:
+	dpd_smmu_teardown_cbo();
 	put_si_object(smmu->service);
 err_service:
 	put_si_object(smmu->env);
@@ -686,6 +914,7 @@ static void dpd_smmu_remove(struct platform_device *pdev)
 	iommu_device_unregister(&smmu->iommu);
 	iommu_device_sysfs_remove(&smmu->iommu);
 
+	dpd_smmu_teardown_cbo();
 	put_si_object(smmu->service);
 	put_si_object(smmu->env);
 }

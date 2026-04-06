@@ -37,6 +37,7 @@
 #define BC_SET_NOTIFY_REQ		0x04
 #define BC_DISABLE_NOTIFY_REQ		0x05
 #define BC_NOTIFY_IND			0x07
+#define BC_SHUTDOWN_NOTIFY_V2		0x22
 #define BC_BATTERY_STATUS_GET		0x30
 #define BC_BATTERY_STATUS_SET		0x31
 #define BC_USB_STATUS_GET(port_id)	(0x32 | (port_id) << 16)
@@ -257,6 +258,10 @@ struct psy_state {
 	u32			opcode_set;
 };
 
+struct battery_charger_config {
+	u32			opcode;
+};
+
 struct battery_chg_dev {
 	struct device			*dev;
 	struct class			battery_class;
@@ -286,6 +291,7 @@ struct battery_chg_dev {
 	bool				ship_mode_en;
 	bool				ship_mode_immediate;
 	bool				debug_battery_detected;
+	bool				wls_not_supported;
 	bool				wls_fw_update_reqd;
 	u32				wls_fw_version;
 	u16				wls_fw_crc;
@@ -308,6 +314,7 @@ struct battery_chg_dev {
 	bool				notify_en;
 	bool				error_prop;
 	bool				micro_usb;
+	const struct battery_charger_config	*config;
 #ifdef CONFIG_QTI_CHARGER_NFC_VREG
 	struct bharger_regulator	nfc_vreg;
 #endif
@@ -748,6 +755,7 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data,
 	case BC_SET_NOTIFY_REQ:
 	case BC_DISABLE_NOTIFY_REQ:
 	case BC_SHUTDOWN_NOTIFY:
+	case BC_SHUTDOWN_NOTIFY_V2:
 	case BC_SHIP_MODE_REQ_SET:
 	case BC_CHG_CTRL_LIMIT_EN:
 		/* Always ACK response for notify or ship_mode request */
@@ -1702,13 +1710,18 @@ static int battery_chg_init_psy(struct battery_chg_dev *bcdev)
 		}
 	}
 
-	bcdev->psy_list[PSY_TYPE_WLS].psy =
-		devm_power_supply_register(bcdev->dev, &wls_psy_desc, &psy_cfg);
-	if (IS_ERR(bcdev->psy_list[PSY_TYPE_WLS].psy)) {
-		rc = PTR_ERR(bcdev->psy_list[PSY_TYPE_WLS].psy);
-		bcdev->psy_list[PSY_TYPE_WLS].psy = NULL;
-		pr_err("Failed to register wireless power supply, rc=%d\n", rc);
-		return rc;
+	if (bcdev->wls_not_supported) {
+		pr_debug("Wireless charging is not supported\n");
+	} else {
+		bcdev->psy_list[PSY_TYPE_WLS].psy =
+			devm_power_supply_register(bcdev->dev, &wls_psy_desc, &psy_cfg);
+
+		if (IS_ERR(bcdev->psy_list[PSY_TYPE_WLS].psy)) {
+			rc = PTR_ERR(bcdev->psy_list[PSY_TYPE_WLS].psy);
+			bcdev->psy_list[PSY_TYPE_WLS].psy = NULL;
+			pr_err("Failed to register wireless power supply, rc=%d\n", rc);
+			return rc;
+		}
 	}
 
 	bcdev->psy_list[PSY_TYPE_BATTERY].psy =
@@ -2414,6 +2427,7 @@ static ssize_t battery_chg_notify_store(const struct class *c,
 }
 static CLASS_ATTR_WO(battery_chg_notify);
 
+/* Battery classes with wireless */
 static struct attribute *battery_class_attrs[] = {
 	&class_attr_soh.attr,
 	&class_attr_resistance.attr,
@@ -2493,6 +2507,47 @@ static struct attribute *battery_class_usb_2_attrs[] = {
 };
 ATTRIBUTE_GROUPS(battery_class_usb_2);
 
+/* Battery classes without wireless */
+static struct attribute *battery_class_no_wls_attrs[] = {
+	&class_attr_soh.attr,
+	&class_attr_resistance.attr,
+	&class_attr_moisture_detection_status.attr,
+	&class_attr_moisture_detection_en.attr,
+	&class_attr_fake_soc.attr,
+	&class_attr_ship_mode_en.attr,
+	&class_attr_restrict_chg.attr,
+	&class_attr_restrict_cur.attr,
+	&class_attr_usb_num_ports.attr,
+	&class_attr_usb_real_type.attr,
+	&class_attr_usb_typec_compliant.attr,
+	&class_attr_charge_control_en.attr,
+	&class_attr_battery_parallel_cell_count.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(battery_class_no_wls);
+
+static struct attribute *battery_class_no_wls_usb_2_attrs[] = {
+	&class_attr_soh.attr,
+	&class_attr_resistance.attr,
+	&class_attr_moisture_detection_status.attr,
+	&class_attr_moisture_detection_usb_2_status.attr,
+	&class_attr_moisture_detection_en.attr,
+	&class_attr_moisture_detection_usb_2_en.attr,
+	&class_attr_fake_soc.attr,
+	&class_attr_ship_mode_en.attr,
+	&class_attr_restrict_chg.attr,
+	&class_attr_restrict_cur.attr,
+	&class_attr_usb_num_ports.attr,
+	&class_attr_usb_real_type.attr,
+	&class_attr_usb_2_real_type.attr,
+	&class_attr_usb_typec_compliant.attr,
+	&class_attr_usb_2_typec_compliant.attr,
+	&class_attr_charge_control_en.attr,
+	&class_attr_battery_parallel_cell_count.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(battery_class_no_wls_usb_2);
+
 #ifdef CONFIG_DEBUG_FS
 static void battery_chg_add_debugfs(struct battery_chg_dev *bcdev)
 {
@@ -2520,6 +2575,9 @@ static int battery_chg_parse_dt(struct battery_chg_dev *bcdev)
 	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
 	int i, rc, len;
 	u32 prev, val;
+
+	bcdev->wls_not_supported = of_property_read_bool(node,
+			"qcom,wireless-charging-not-supported");
 
 	of_property_read_string(node, "qcom,wireless-fw-name",
 				&bcdev->wls_fw_name);
@@ -2622,7 +2680,7 @@ static int battery_chg_reboot_notify(struct notifier_block *nb, unsigned long co
 
 	msg_notify.hdr.owner = MSG_OWNER_BC;
 	msg_notify.hdr.type = MSG_TYPE_NOTIFY;
-	msg_notify.hdr.opcode = BC_SHUTDOWN_NOTIFY;
+	msg_notify.hdr.opcode = bcdev->config->opcode;
 
 	rc = battery_chg_write(bcdev, &msg_notify, sizeof(msg_notify), BC_WAIT_TIME_MS);
 	if (rc < 0)
@@ -2846,6 +2904,11 @@ static int battery_chg_probe(struct platform_device *pdev)
 	if (!bcdev)
 		return -ENOMEM;
 
+	bcdev->config = of_device_get_match_data(&pdev->dev);
+
+	if (!bcdev->config)
+		return -ENODEV;
+
 	bcdev->psy_list[PSY_TYPE_BATTERY].map = battery_prop_map;
 	bcdev->psy_list[PSY_TYPE_BATTERY].prop_count = BATT_PROP_MAX;
 	bcdev->psy_list[PSY_TYPE_BATTERY].opcode_get = BC_BATTERY_STATUS_GET;
@@ -2937,12 +3000,20 @@ static int battery_chg_probe(struct platform_device *pdev)
 
 	bcdev->battery_class.name = "qcom-battery";
 
-	if (bcdev->num_usb_ports == 2)
-		bcdev->battery_class.class_groups = battery_class_usb_2_groups;
-	else if (of_device_is_compatible(dev->of_node, "qcom,pmw6100-battery-charger"))
+	if (of_device_is_compatible(dev->of_node, "qcom,pmw6100-battery-charger")) {
 		bcdev->battery_class.class_groups = battery_class_pmw6100_groups;
-	else
-		bcdev->battery_class.class_groups = battery_class_groups;
+
+	} else if (bcdev->wls_not_supported) {
+		if (bcdev->num_usb_ports == 2)
+			bcdev->battery_class.class_groups = battery_class_no_wls_usb_2_groups;
+		else
+			bcdev->battery_class.class_groups = battery_class_no_wls_groups;
+	} else {
+		if (bcdev->num_usb_ports == 2)
+			bcdev->battery_class.class_groups = battery_class_usb_2_groups;
+		else
+			bcdev->battery_class.class_groups = battery_class_groups;
+	}
 
 #ifdef CONFIG_QTI_CHARGER_NFC_VREG
 	rc = nfc_init_regulator(bcdev->dev, &bcdev->nfc_vreg);
@@ -3043,10 +3114,19 @@ static void battery_chg_remove(struct platform_device *pdev)
 		qti_typec_class_deinit(bcdev->typec_class);
 }
 
+static struct battery_charger_config default_config = {
+	.opcode = BC_SHUTDOWN_NOTIFY
+};
+
+static struct battery_charger_config canoe_config = {
+	.opcode = BC_SHUTDOWN_NOTIFY_V2
+};
+
 static const struct of_device_id battery_chg_match_table[] = {
-	{ .compatible = "qcom,battery-charger" },
-	{ .compatible = "qcom,pmw6100-battery-charger" },
-	{},
+	{ .compatible = "qcom,battery-charger", .data = (void *)&default_config},
+	{ .compatible = "qcom,pmw6100-battery-charger", .data = (void *)&default_config},
+	{ .compatible = "qcom,canoe-battery-charger", .data = (void *)&canoe_config},
+	{}
 };
 
 static struct platform_driver battery_chg_driver = {

@@ -459,6 +459,20 @@ def register_modules(registry):
             # do not sort
             "drivers/soc/qcom/llcc-qcom.c",
         ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/socinfo",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/llcc_perf_debug",
+        out = "llcc_perf_debug.ko",
+        config = "CONFIG_QCOM_LLCC_DEBUG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/llcc_perf_debug.c",
+        ],
     )
 
     registry.register(
@@ -1810,22 +1824,6 @@ def register_modules(registry):
     )
 
     registry.register(
-        name = "drivers/soc/qcom/qcom_dpd_proxy",
-        out = "qcom_dpd_proxy.ko",
-        config = "CONFIG_QCOM_DPD_PROXY",
-        srcs = [
-            # do not sort
-            "drivers/soc/qcom/qcom_dpd_proxy.c",
-        ],
-        deps = [
-            # do not sort
-            "drivers/firmware/qcom/qcom-scm",
-            "drivers/soc/qcom/secure_buffer",
-            "drivers/firmware/qcom/si_core/si_core_module",
-        ],
-    )
-
-    registry.register(
         name = "drivers/soc/qcom/qcom-pbs",
         out = "qcom-pbs.ko",
         config = "CONFIG_QCOM_PBS",
@@ -1835,5 +1833,27 @@ def register_modules(registry):
         ],
         deps = [
             # do not sort
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/bam_dmux",
+        out = "bam_dmux.ko",
+        config = "CONFIG_MSM_BAM_DMUX",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/bam_dmux.c",
+        ],
+        hdrs = [
+            "drivers/soc/qcom/bam_dmux_private.h",
+            "include/soc/qcom/bam_dmux.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/sps/sps_drv",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/remoteproc/rproc_qcom_common",
+            "kernel/trace/qcom_ipc_logging",
         ],
     )

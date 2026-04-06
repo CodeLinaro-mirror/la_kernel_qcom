@@ -812,6 +812,90 @@ int qcom_scm_get_sec_dump_state(u32 *dump_state)
 }
 EXPORT_SYMBOL(qcom_scm_get_sec_dump_state);
 
+int __qcom_scm_get_llcc_missrate(struct device *dev, phys_addr_t in_buf,
+		size_t in_buf_size, phys_addr_t out_buf, size_t out_buf_size)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_MISSRATE,
+		.cmd = QCOM_SCM_GET_LLCC_MISSRATE_STATS_ID,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL, QCOM_SCM_RW, QCOM_SCM_VAL),
+	};
+
+	desc.args[0] = in_buf;
+	desc.args[1] = in_buf_size;
+	desc.args[2] = out_buf;
+	desc.args[3] = out_buf_size;
+	ret = qcom_scm_call(dev, &desc, NULL);
+
+	return ret;
+}
+
+int qcom_scm_get_llcc_missrate(phys_addr_t in_buf,
+		size_t in_buf_size, phys_addr_t out_buf, size_t out_buf_size)
+{
+	return __qcom_scm_get_llcc_missrate(__scm ? __scm->dev : NULL, in_buf,
+			in_buf_size, out_buf, out_buf_size);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_get_llcc_missrate);
+
+int __qcom_scm_get_llcc_occupancy(struct device *dev, phys_addr_t in_buf,
+		size_t in_buf_size, phys_addr_t out_buf, size_t out_buf_size)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_LLCC_OCCUPANCY,
+		.cmd = QCOM_SCM_GET_LLCC_OCCUPANCY_STATS_ID,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL, QCOM_SCM_RW, QCOM_SCM_VAL),
+	};
+
+	desc.args[0] = in_buf;
+	desc.args[1] = in_buf_size;
+	desc.args[2] = out_buf;
+	desc.args[3] = out_buf_size;
+	ret = qcom_scm_call(dev, &desc, NULL);
+
+	return ret;
+}
+
+int qcom_scm_get_llcc_occupancy(phys_addr_t in_buf,
+		size_t in_buf_size, phys_addr_t out_buf, size_t out_buf_size)
+{
+	return __qcom_scm_get_llcc_occupancy(__scm ? __scm->dev : NULL, in_buf,
+			in_buf_size, out_buf, out_buf_size);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_get_llcc_occupancy);
+
+int __qcom_scm_memory_lat_profiler(struct device *dev, phys_addr_t in_buf,
+		size_t in_buf_size, phys_addr_t out_buf, size_t out_buf_size)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_MEM_LAT,
+		.cmd = QCOM_SCM_GET_MEM_LAT_STATS_ID,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL, QCOM_SCM_RW, QCOM_SCM_VAL),
+	};
+
+	desc.args[0] = in_buf;
+	desc.args[1] = in_buf_size;
+	desc.args[2] = out_buf;
+	desc.args[3] = out_buf_size;
+	ret = qcom_scm_call(dev, &desc, NULL);
+
+	return ret;
+}
+
+int qcom_scm_memory_lat_profiler(phys_addr_t in_buf,
+		size_t in_buf_size, phys_addr_t out_buf, size_t out_buf_size)
+{
+	return __qcom_scm_memory_lat_profiler(__scm ? __scm->dev : NULL, in_buf,
+			in_buf_size, out_buf, out_buf_size);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_memory_lat_profiler);
+
 int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val)
 {
 	struct qcom_scm_desc desc = {
@@ -3557,6 +3641,33 @@ static void qcom_scm_shutdown(struct platform_device *pdev)
 		qcom_scm_set_download_mode(QCOM_DOWNLOAD_NODUMP);
 }
 
+static int qcom_scm_pm_freeze(struct device *dev)
+{
+	qtee_shmbridge_pm_freeze();
+	qcom_tzmem_pm_freeze();
+	return 0;
+}
+
+static int qcom_scm_pm_restore(struct device *dev)
+{
+	qcom_tzmem_pm_restore();
+	qtee_shmbridge_pm_restore();
+	return 0;
+}
+
+static int qcom_scm_pm_thaw(struct device *dev)
+{
+	qcom_tzmem_pm_thaw();
+	qtee_shmbridge_pm_thaw();
+	return 0;
+}
+
+static const struct dev_pm_ops qcom_scm_pm_ops = {
+	.freeze = qcom_scm_pm_freeze,
+	.restore = qcom_scm_pm_restore,
+	.thaw = qcom_scm_pm_thaw,
+};
+
 static const struct of_device_id qcom_scm_dt_match[] = {
 	{ .compatible = "qcom,scm" },
 
@@ -3577,6 +3688,7 @@ static struct platform_driver qcom_scm_driver = {
 		.name = "qcom_scm",
 		.of_match_table = qcom_scm_dt_match,
 		.suppress_bind_attrs = true,
+		.pm = &qcom_scm_pm_ops,
 	},
 	.probe = qcom_scm_probe,
 	.shutdown = qcom_scm_shutdown,

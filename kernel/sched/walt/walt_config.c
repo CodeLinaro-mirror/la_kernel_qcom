@@ -115,6 +115,8 @@ void walt_config(void)
 
 	pipeline_swap_util_th = 0;
 
+	trailblazer_boost_thresh_ipc = TRAILBLAZER_BOOST_THRESH_IPC;
+
 	/* Initialize smart freq configurations */
 	smart_freq_init(name);
 	/* return if socinfo is not available */
@@ -330,11 +332,12 @@ void walt_config(void)
 		 * By default this SOC flag will be disabled. Enable this only
 		 * for X1E80100 platforms
 		 */
+		trailblazer_boost_thresh_ipc = 225;
 		trailblazer_floor_freq[0] = 2500000;
 		trailblazer_floor_freq[1] = 2500000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
-	} else if (!strcmp(name, "SERAPH")) {
+	} else if (!strcmp(name, "SERAPH") || !strcmp(name, "PIKACHU")) {
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);

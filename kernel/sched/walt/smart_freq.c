@@ -1055,7 +1055,29 @@ void smart_freq_init(const char *name)
 					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 			}
 		}
+	} else if (!strcmp(name, "X1E80100")) {
+		for_each_sched_cluster(cluster) {
+			/* Legacy */
+			/* Keeping the legacy freq reasons hyst default as canoe.
+			 * This will come into picture if user enables legacy based
+			 * smart freq via sysfs
+			 */
+			cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+				1000000000;
+			cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+				1000000000;
+			cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+				300000000;
+
+			/* All X1E80100 clusters share the same frequency points, and
+			 * cluster 1 and cluster 2 have the same capacity. we can keep
+			 * the current configuration and wait for the perf/power team
+			 * to tune an appropriate value
+			 */
+			cluster->smart_freq_info->min_cycles = 7004160;
+		}
 	}
+
 done:
 	smart_freq_init_done = true;
 	update_smart_freq_capacities();

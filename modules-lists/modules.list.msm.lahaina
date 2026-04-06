@@ -47,6 +47,7 @@ minidump.ko
 qcom-dload-mode.ko
 pinctrl-msm.ko
 pinctrl-yupik.ko
+pinctrl-lahaina.ko
 qcom_tsens.ko
 qcom-ipcc.ko
 qcom-reboot-reason.ko

@@ -2823,9 +2823,9 @@ static void msm_geni_uart_gsi_cancel_rx(struct work_struct *work)
 	}
 	if (msm_port->gsi->rx_c)
 		dmaengine_terminate_all(msm_port->gsi->rx_c);
-	complete(&msm_port->xfer);
 	atomic_set(&msm_port->gsi_rx_done, 0);
 	atomic_set(&msm_port->stop_rx_inprogress, 0);
+	complete(&msm_port->xfer);
 	UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 		     "%s: End\n", __func__);
 }
@@ -3400,6 +3400,15 @@ static void start_rx_sequencer(struct uart_port *uport)
 	geni_status = geni_read_reg(uport->membase, SE_GENI_STATUS);
 	UART_LOG_DBG(port->ipc_log_misc, uport->dev, "%s: geni_status 0x%x\n",
 		     __func__, geni_status);
+
+	if (port->xfer_mode == GENI_GPI_DMA && atomic_read(&port->stop_rx_inprogress)) {
+		if (!wait_for_completion_timeout(&port->xfer,
+						 msecs_to_jiffies(GSI_STOP_RX_TIMEOUT))) {
+			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+				     "%s: Timeout for start_rx\n", __func__);
+			return;
+		}
+	}
 
 	if ((geni_status & S_GENI_CMD_ACTIVE) && port->xfer_mode == GENI_GPI_DMA) {
 		return;

@@ -95,6 +95,10 @@
 #define BPM_CLR 0x80
 #define EXTEND_BIT 15
 
+#define BCL_INTR_CFG_EN_OFFSET 0x90
+#define BCL_VBAT_LVL0_EN 0x7
+#define BCL_VBAT_LVL0_DIS 0x6
+
 #define BCL_IPC(dev, msg, args...)      do { \
 			if ((dev) && (dev)->ipc_log) { \
 				ipc_log_string((dev)->ipc_log, \
@@ -259,14 +263,14 @@ static void convert_adc_to_vbat_val(int *val)
 	*val = (*val * BCL_VBAT_SCALING_UV) / 1000;
 }
 
-static void convert_vbat_to_vcmp_val(int vbat, int *val)
+static void convert_vbat_to_vcmp_val(const struct bcl_desc *desc, int vbat, int *val)
 {
-	if (vbat > BCL_VBAT_MAX_MV)
-		vbat = BCL_VBAT_MAX_MV;
-	else if (vbat < BCL_VBAT_THRESH_BASE)
-		vbat = BCL_VBAT_THRESH_BASE;
+	if (vbat > desc->vcmp_thresh_max)
+		vbat = desc->vcmp_thresh_max;
+	else if (vbat < desc->vcmp_thresh_base)
+		vbat = desc->vcmp_thresh_base;
 
-	*val = (vbat - BCL_VBAT_THRESH_BASE) / BCL_VBAT_INC_MV;
+	*val = (vbat - desc->vcmp_thresh_base) / BCL_VBAT_INC_MV;
 }
 
 static void convert_ibat_to_adc_val(struct bcl_device *bcl_perph, int *val, int scaling_factor)
@@ -471,6 +475,12 @@ static int bcl_read_vbat_tz(struct thermal_zone_device *tzd, int *adc_value)
 	unsigned int val = 0;
 	struct bcl_peripheral_data *bat_data =
 		(struct bcl_peripheral_data *)tzd->devdata;
+	struct bcl_device *bcl_perph = bat_data->dev;
+
+	if (bcl_perph->vph_dynamic_thresh) {
+		*adc_value = -1;
+		return ret;
+	}
 
 	*adc_value = val;
 	if (bat_data->dev->dig_major < BCL_GEN4_MAJOR_REV)
@@ -511,13 +521,13 @@ static int bcl_set_adc_value(struct bcl_device *bcl_perph,
 	int thresh = temp;
 
 	if (temp <= 0) {
-		pr_err("Invalid input temp\n");
+		pr_debug("Invalid input temp\n");
 		return -EINVAL;
-	} else if (temp < BCL_VBAT_THRESH_BASE) {
-		pr_err("input temp is %d, lower than MIN\n", temp);
+	} else if (temp < bcl_perph->desc->vcmp_thresh_base) {
+		pr_debug("input temp is %d, lower than MIN\n", temp);
 		return -EINVAL;
-	} else if (temp > BCL_VBAT_MAX_MV) {
-		pr_err("input temp is %d, higher than MAX\n", temp);
+	} else if (temp > bcl_perph->desc->vcmp_thresh_max) {
+		pr_debug("input temp is %d, higher than MAX\n", temp);
 		return -EINVAL;
 	}
 
@@ -527,7 +537,7 @@ static int bcl_set_adc_value(struct bcl_device *bcl_perph,
 		convert_vbat_thresh_val_to_adc(bcl_perph, &thresh);
 		*val = thresh;
 	} else {
-		convert_vbat_to_vcmp_val(temp, val);
+		convert_vbat_to_vcmp_val(bcl_perph->desc, temp, val);
 	}
 
 	ret = bcl_write_register(bcl_perph, addr, *val);
@@ -878,6 +888,8 @@ static int bcl_get_devicetree_data(struct platform_device *pdev,
 		return -ENODEV;
 	}
 
+	bcl_perph->disable_vbat_lvl0_in_suspend = of_property_read_bool(dev_node,
+				"qcom,disable-vbat-level0-in-suspend");
 	bcl_perph->ibat_use_qg_adc =  of_property_read_bool(dev_node,
 				"qcom,ibat-use-qg-adc-5a");
 	bcl_perph->no_bit_shift =  of_property_read_bool(dev_node,
@@ -886,6 +898,8 @@ static int bcl_get_devicetree_data(struct platform_device *pdev,
 						"qcom,ibat-ccm-hw-support");
 	bcl_perph->ibat_ccm_lando_enabled = of_property_read_bool(dev_node,
 						"qcom,ibat-ccm-lando-hw-support");
+	bcl_perph->vph_dynamic_thresh = of_property_read_bool(dev_node,
+						"qcom,vph-dynamic-threshold");
 	ret = bcl_get_ibat_ext_range_factor(pdev,
 					&bcl_perph->ibat_ext_range_factor);
 
@@ -944,6 +958,9 @@ static void bcl_vbat_init(struct platform_device *pdev,
 	vbat->irq_enabled = false;
 	vbat->tz_dev = NULL;
 
+	if (bcl_perph->vph_dynamic_thresh)
+		goto register_thermalzone;
+
 	/* If revision 4 or above && bcl support adc, then only enable vbat */
 	if (bcl_perph->dig_major >= BCL_GEN3_MAJOR_REV) {
 		if (!(bcl_perph->bcl_param_1 & BCL_PARAM_HAS_ADC))
@@ -954,6 +971,7 @@ static void bcl_vbat_init(struct platform_device *pdev,
 			return;
 	}
 
+register_thermalzone:
 	vbat->ops = vbat_tzd_ops;
 	vbat->tz_dev = devm_thermal_of_zone_register(&pdev->dev,
 				type, vbat, &vbat->ops);
@@ -1304,9 +1322,31 @@ static int bcl_restore(struct device *dev)
 	return 0;
 }
 
+static int  __maybe_unused bcl_suspend(struct device *dev)
+{
+	struct bcl_device *bcl_perph = dev_get_drvdata(dev);
+
+	if (bcl_perph->disable_vbat_lvl0_in_suspend)
+		bcl_write_register(bcl_perph, BCL_INTR_CFG_EN_OFFSET, BCL_VBAT_LVL0_DIS);
+
+	return 0;
+}
+
+static int __maybe_unused bcl_resume(struct device *dev)
+{
+	struct bcl_device *bcl_perph = dev_get_drvdata(dev);
+
+	if (bcl_perph->disable_vbat_lvl0_in_suspend)
+		bcl_write_register(bcl_perph, BCL_INTR_CFG_EN_OFFSET, BCL_VBAT_LVL0_EN);
+
+	return 0;
+}
+
 static const struct dev_pm_ops bcl_pm_ops = {
 	.freeze = bcl_freeze,
 	.restore = bcl_restore,
+	.suspend = bcl_suspend,
+	.resume = bcl_resume,
 };
 
 static const struct bcl_desc pmih010x_data = {

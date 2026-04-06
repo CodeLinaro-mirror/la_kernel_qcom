@@ -2085,7 +2085,7 @@ static int ufs_qcom_icc_set_bw(struct ufs_qcom_host *host, u32 mem_bw, u32 cfg_b
 	struct device *dev = host->hba->dev;
 	int ret;
 
-	ret = icc_set_bw(host->icc_ddr, 0, mem_bw);
+	ret = icc_set_bw(host->icc_ddr, mem_bw, 0);
 	if (ret < 0) {
 		dev_err(dev, "failed to set bandwidth request: %d\n", ret);
 		return ret;
@@ -2752,7 +2752,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 		break;
 	case POST_CHANGE:
 		if (!on) {
-			if (ufs_qcom_is_link_hibern8(hba)) {
+			if ((ufs_qcom_is_link_hibern8(hba)) || (ufs_qcom_is_link_off(hba))) {
 				ufs_qcom_phy_set_src_clk_h8_enter(phy);
 				/*
 				 * As XO is set to the source of lane clocks, hence
@@ -4050,16 +4050,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		}
 	}
 
-	host->parent_vreg = ufs_qcom_setup_vreg_to_enable(host);
-	if (host->parent_vreg) {
-		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
-		if (err) {
-			dev_err(dev, "%s: failed to enable %s err=%d\n",
-					__func__, host->parent_vreg->name, err);
-			goto out_disable_vddp;
-		}
-	}
-
 	list_for_each_entry(clki, &hba->clk_list_head, list) {
 		if (!strcmp(clki->name, "core_clk_unipro")) {
 			clki->keep_link_active = true;
@@ -4092,6 +4082,16 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	ufs_qcom_parse_broken_ahit_workaround_flag(host);
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
+
+	host->parent_vreg = ufs_qcom_setup_vreg_to_enable(host);
+	if (host->parent_vreg) {
+		err = ufs_qcom_enable_vreg(dev, host->parent_vreg);
+		if (err) {
+			dev_err(dev, "%s: failed to enable %s err=%d\n",
+					__func__, host->parent_vreg->name, err);
+			goto out_disable_vddp;
+		}
+	}
 
 	err = ufs_qcom_shared_ice_init(hba);
 	if (err)

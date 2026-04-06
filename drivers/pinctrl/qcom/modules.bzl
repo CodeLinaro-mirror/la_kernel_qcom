@@ -39,6 +39,21 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-scuba",
+        out = "pinctrl-scuba.ko",
+        config = "CONFIG_PINCTRL_SCUBA",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-scuba.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/pinctrl/qcom/pinctrl-spmi-gpio",
         out = "pinctrl-spmi-gpio.ko",
         config = "CONFIG_PINCTRL_QCOM_SPMI_PMIC",
