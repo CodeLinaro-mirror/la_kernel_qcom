@@ -152,7 +152,6 @@ struct io_pgtable *kvm_arm_io_pgtable_alloc(struct io_pgtable_cfg *cfg,
 	*out_ret = 0;
 	return &data->iop;
 out_free:
-	hyp_free(data);
 	*out_ret = ret;
 	return NULL;
 }
