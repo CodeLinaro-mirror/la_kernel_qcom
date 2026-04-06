@@ -93,6 +93,11 @@ struct bridge_list {
 struct bridge_list_entry {
 	struct list_head list;
 	phys_addr_t paddr;
+	uint64_t pfn_and_ns_perm;
+	uint64_t ipfn_and_s_perm;
+	uint64_t size_and_flags;
+	uint64_t vmid;
+	enum bridge_owner owner;
 	uint64_t handle;
 	int32_t ref_count;
 };
@@ -137,6 +142,11 @@ notsupp:
 }
 
 static int32_t qcom_tzmem_list_add_locked(phys_addr_t paddr,
+						uint64_t pfn_and_ns_perm,
+						uint64_t ipfn_and_s_perm,
+						uint64_t size_and_flags,
+						uint64_t vmid,
+						enum bridge_owner owner,
 						uint64_t handle)
 {
 	struct bridge_list_entry *entry;
@@ -146,6 +156,11 @@ static int32_t qcom_tzmem_list_add_locked(phys_addr_t paddr,
 		return -ENOMEM;
 	entry->handle = handle;
 	entry->paddr = paddr;
+	entry->pfn_and_ns_perm = pfn_and_ns_perm;
+	entry->ipfn_and_s_perm = ipfn_and_s_perm;
+	entry->size_and_flags = size_and_flags;
+	entry->vmid = vmid;
+	entry->owner = owner;
 	entry->ref_count = 0;
 
 	list_add_tail(&entry->list, &bridge_list_head.head);
@@ -244,6 +259,24 @@ static int32_t qcom_tzmem_list_inc_refcount_locked(phys_addr_t paddr, uint64_t *
 	return ret;
 }
 
+static void qcom_tzmem_restore_handles(void)
+{
+	mutex_lock(&bridge_list_head.lock);
+	struct bridge_list_entry *entry, *next;
+
+	list_for_each_entry_safe(entry, next, &bridge_list_head.head, list) {
+		if (entry->owner == SELF)
+			qcom_scm_shm_bridge_create(entry->pfn_and_ns_perm, entry->ipfn_and_s_perm,
+						entry->size_and_flags, entry->vmid,
+						&entry->handle);
+		else if (entry->owner == OTHERS) {
+			list_del(&entry->list);
+			kfree(entry);
+		}
+	}
+	mutex_unlock(&bridge_list_head.lock);
+}
+
 static int32_t qcom_tzmem_query_locked(phys_addr_t paddr)
 {
 	struct bridge_list_entry *entry;
@@ -281,6 +314,7 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_query);
  * @size: Size of the memory to share.
  * @handle: Handle to the SHM bridge.
  * @vmid: Register bridge with vmid passed as argument
+ * @owner: Owner of memory.
  *
  * On platforms that support SHM bridge, this function creates a SHM bridge
  * for the given memory region with QTEE. The handle returned by this function
@@ -288,7 +322,8 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_query);
  *
  * Return: On success, returns 0; on failure, returns < 0.
  */
-int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 vmid, u64 *handle)
+int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 vmid,
+					  enum bridge_owner owner, u64 *handle)
 {
 	u64 pfn_and_ns_perm, ipfn_and_s_perm, size_and_flags;
 	int ret;
@@ -334,7 +369,8 @@ int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 v
 		goto exit;
 	}
 
-	ret = qcom_tzmem_list_add_locked(paddr, *handle);
+	ret = qcom_tzmem_list_add_locked(paddr, pfn_and_ns_perm, ipfn_and_s_perm,
+					size_and_flags, vmid, owner, *handle);
 bridge_exist:
 	ret = qcom_tzmem_list_inc_refcount_locked(paddr, handle);
 exit:
@@ -356,7 +392,7 @@ exit:
  */
 int qcom_tzmem_shm_bridge_create(phys_addr_t paddr, size_t size, u64 *handle)
 {
-	return qcom_tzmem_shm_bridge_create_with_vmid(paddr, size, 0, handle);
+	return qcom_tzmem_shm_bridge_create_with_vmid(paddr, size, 0, SELF, handle);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_create);
 
@@ -410,6 +446,46 @@ static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
 
 	qcom_tzmem_shm_bridge_delete(*handle);
 	kfree(handle);
+}
+
+int qcom_tzmem_pm_freeze(void)
+{
+	qcom_tzmem_using_shm_bridge = false;
+	return 0;
+}
+
+int qcom_tzmem_pm_restore(void)
+{
+	const char *const *platform;
+	int ret;
+
+	for (platform = qcom_tzmem_blacklist; *platform; platform++) {
+		if (of_machine_is_compatible(*platform))
+			return 0;
+	}
+
+	ret = qcom_scm_shm_bridge_enable();
+	if (ret) {
+		if (ret == -EOPNOTSUPP)
+			return 0;
+		return ret;
+	}
+	qcom_tzmem_restore_handles();
+	qcom_tzmem_using_shm_bridge = true;
+	return 0;
+}
+
+int qcom_tzmem_pm_thaw(void)
+{
+	const char *const *platform;
+
+	for (platform = qcom_tzmem_blacklist; *platform; platform++) {
+		if (of_machine_is_compatible(*platform))
+			return 0;
+	}
+
+	qcom_tzmem_using_shm_bridge = true;
+	return 0;
 }
 
 #endif /* CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE */

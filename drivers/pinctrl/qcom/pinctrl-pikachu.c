@@ -232,6 +232,10 @@ static const struct pinctrl_pin_desc pikachu_pins[] = {
 	PINCTRL_PIN(115, "GPIO_115"),
 	PINCTRL_PIN(116, "GPIO_116"),
 	PINCTRL_PIN(117, "UFS_RESET"),
+	PINCTRL_PIN(118, "SDC1_RCLK"),
+	PINCTRL_PIN(119, "SDC1_CLK"),
+	PINCTRL_PIN(120, "SDC1_CMD"),
+	PINCTRL_PIN(121, "SDC1_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -355,6 +359,10 @@ DECLARE_MSM_GPIO_PINS(115);
 DECLARE_MSM_GPIO_PINS(116);
 
 static const unsigned int ufs_reset_pins[] = { 117 };
+static const unsigned int sdc1_rclk_pins[] = { 118 };
+static const unsigned int sdc1_clk_pins[] = { 119 };
+static const unsigned int sdc1_cmd_pins[] = { 120 };
+static const unsigned int sdc1_data_pins[] = { 121 };
 
 enum pikachu_functions {
 	msm_mux_gpio,
@@ -1905,8 +1913,11 @@ static const struct msm_pingroup pikachu_groups[] = {
 			egpio),
 	[116] = PINGROUP(116, qup0_se5_l3, NA, NA, NA, NA, NA, NA, NA, NA, NA,
 			egpio),
-
 	[117] = UFS_RESET(ufs_reset, 0x184004, 0x185000),
+	[118] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x17A000, 0, 0),
+	[119] = SDC_QDSD_PINGROUP(sdc1_clk, 0x179000, 13, 6),
+	[120] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x179000, 11, 3),
+	[121] = SDC_QDSD_PINGROUP(sdc1_data, 0x179000, 9, 0),
 };
 
 static const struct msm_gpio_wakeirq_map pikachu_pdc_map[] = {

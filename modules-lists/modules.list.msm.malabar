@@ -21,6 +21,7 @@ qcom_soc_wdt.ko
 debug-regulator.ko
 dispcc-malabar.ko
 gcc-malabar.ko
+qcom-cpufreq-hw.ko
 gdsc-regulator.ko
 smem.ko
 socinfo.ko
@@ -104,3 +105,4 @@ arm_smmu_pmu.ko
 deferred-free-helper.ko
 i2c-msm-geni.ko
 msm_gpi.ko
+crypto-qti.ko

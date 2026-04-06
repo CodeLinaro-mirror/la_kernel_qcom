@@ -35,6 +35,8 @@ static DEFINE_PER_CPU(u64, coloc_hyst_time);
 static DEFINE_PER_CPU(u64, util_hyst_time);
 static DEFINE_PER_CPU(u64, smart_freq_legacy_reason_hyst_ns);
 
+unsigned int trailblazer_boost_thresh_ipc;
+
 #define NR_THRESHOLD_PCT		40
 #define MAX_RTGB_TIME (sysctl_sched_coloc_busy_hyst_max_ms * NSEC_PER_MSEC)
 
@@ -99,7 +101,7 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 
 		trailblazer_boost_cpu |= (walt_trailblazer_tasks(cpu) &&
 				cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters-1]) &&
-				per_cpu(ipc_cnt, cpu) >= TRAILBLAZER_BOOST_THRESH_IPC &&
+				per_cpu(ipc_cnt, cpu) >= trailblazer_boost_thresh_ipc &&
 				!large_cpu_cap_low);
 
 		spin_lock_irqsave(&per_cpu(nr_lock, cpu), flags);

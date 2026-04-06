@@ -352,6 +352,28 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/interconnect/qcom/qnoc-scuba",
+        out = "qnoc-scuba.ko",
+        config = "CONFIG_INTERCONNECT_QCOM_SCUBA",
+        srcs = [
+            # do not sort
+            "drivers/interconnect/qcom/scuba.c",
+            "drivers/interconnect/qcom/icc-rpm.h",
+            "drivers/interconnect/qcom/rpm-ids.h",
+            "drivers/interconnect/qcom/qnoc-qos-rpm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/interconnect/qcom/qnoc-qos-rpm",
+            "drivers/interconnect/qcom/icc-rpm",
+            "drivers/soc/qcom/socinfo",
+            "drivers/interconnect/qcom/icc-debug",
+            "drivers/soc/qcom/smem",
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
         name = "drivers/interconnect/qcom/qnoc-monaco",
         out = "qnoc-monaco.ko",
         config = "CONFIG_INTERCONNECT_QCOM_MONACO",

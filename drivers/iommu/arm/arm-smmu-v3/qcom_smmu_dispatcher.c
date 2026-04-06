@@ -10,7 +10,9 @@
 #include <linux/moduleparam.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
+#include <linux/kvm_host.h>
 #include "smmuv2_nesting.h"
+#include "arm_smmu_v3_nested.h"
 
 #ifdef MODULE
 static unsigned long                   pkvm_module_token;
@@ -25,27 +27,85 @@ static unsigned long                   pkvm_module_token;
 int kvm_nvhe_sym(qcom_smmu_nesting_init_module)(const struct pkvm_module_ops *ops);
 extern struct kvm_iommu_ops kvm_nvhe_sym(qcom_smmu_hyp_nesting_ops);
 
+static int smmu_alloc_atomic_mc(struct kvm_hyp_memcache *atomic_mc)
+{
+	int ret;
+	int atomic_pages = 6000; /* arbitrary for now. */
+	int nr_smmus = 2; /* assumption for now */
+#ifndef MODULE
+	u64 i;
+	phys_addr_t start, end;
+
+	/*
+	 * Allocate pages to cover mapping with PAGE_SIZE for all memory
+	 * Then allocate extra for 1GB of MMIO.
+	 * Add 10 extra pages as we map the rest with first level blocks
+	 * for PAGE_SIZE = 4KB, that should cover 5TB of address space.
+	 */
+	for_each_mem_range(i, &start, &end) {
+		atomic_pages += __hyp_pgtable_max_pages((end - start) >> PAGE_SHIFT);
+	}
+
+	atomic_pages += __hyp_pgtable_max_pages(SZ_1G >> PAGE_SHIFT) + 10;
+#endif
+
+	/* Module didn't set that parameter. */
+	if (!atomic_pages)
+		return 0;
+
+	/* For PGD*/
+	ret = topup_hyp_memcache(atomic_mc, 1, 3);
+	if (ret)
+		return ret;
+
+	/* For STEs. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 10);
+		if (ret)
+			return ret;
+
+	/* For command queue. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 8);
+	if (ret)
+		return ret;
+
+	/* For PGD. */
+	ret = topup_hyp_memcache(atomic_mc, nr_smmus, 3);
+	if (ret)
+		return ret;
+
+	/*For L2 ptrs */;
+	ret = topup_hyp_memcache(atomic_mc, 50, 2);
+	if (ret)
+		return ret;
+
+	ret = topup_hyp_memcache(atomic_mc, atomic_pages, 0);
+	if (ret)
+		return ret;
+
+	pr_info("smmuv3: Allocated %d MiB for atomic usage\n",
+		(atomic_pages << PAGE_SHIFT) / SZ_1M);
+
+	return 0;
+}
+
 static int qcom_smmu_nesting_init(void)
 {
 	int ret = 0;
-	struct kvm_hyp_memcache atomic_mc = {};
-	int atomic_pages = 6000; /* arbitrary for now. */
-	int nr_pages = 0;
+	struct kvm_hyp_memcache atomic_mc;
 
-	/*For L2 ptrs */;
-	nr_pages += 50;
-	ret = topup_hyp_memcache(&atomic_mc, 50, 2);
+	init_hyp_memcache(&atomic_mc);
+
+	ret = smmu_alloc_atomic_mc(&atomic_mc);
 	if (ret)
 		return ret;
-	nr_pages += atomic_pages;
-	ret = topup_hyp_memcache(&atomic_mc, atomic_pages, 0);
-	if (ret)
-		return ret;
-	pr_info("smmu-dispactger: Allocated %d MiB for atomic usage\n",
-		(nr_pages + (1 << 3)) >> 8);
 
-	/* For io-pgtable struct*/
-	__pkvm_topup_hyp_alloc(1);
+	pr_info("alloc atomic suceeded\n");
+
+	ret = kvm_arm_smmu_v3_init_drv();
+	if (ret) {
+		pr_err("Failed to load SMMUv3 IOMMU EL1 module %d\n", ret);
+		return ret;
+	}
 
 	smmuv2_nesting_init();
 
@@ -58,17 +118,24 @@ static int qcom_smmu_nesting_init(void)
 		return ret;
 	}
 #endif
-	pr_info("nr_pages %lu\n", atomic_mc.nr_pages);
 
 	ret = kvm_iommu_init_hyp(ksym_ref_addr_nvhe(qcom_smmu_hyp_nesting_ops),
 				 &atomic_mc);
+
 	if (ret) {
 		pr_err("Failed to init hyp iommu ops: %d\n", ret);
 		return ret;
 	}
+
 	ret = smmuv2_post_boot_init();
 	if (ret) {
 		pr_err("Failed to initialize SMMUv2 post boot: %d\n", ret);
+		return ret;
+	}
+
+	ret = kvm_arm_smmu_v3_post_init();
+	if (ret) {
+		pr_err("Failed to initialize SMMUv3 post boot: %d\n", ret);
 		return ret;
 	}
 
@@ -101,10 +168,5 @@ static int qcom_smmu_nesting_register(void)
  * loads it before this point.
  * For builtin drivers we use core_initcall
  */
-#ifdef MODULE
-module_init(qcom_smmu_nesting_register);
-#else
-core_initcall(qcom_smmu_nesting_register);
-#endif
-
+subsys_initcall(qcom_smmu_nesting_register);
 MODULE_LICENSE("GPL");

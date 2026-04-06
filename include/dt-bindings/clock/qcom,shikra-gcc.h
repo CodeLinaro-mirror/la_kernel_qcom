@@ -220,6 +220,8 @@
 #define GCC_EMAC1_AXI_CLK_SRC					210
 #define GCC_EMAC1_AXI_SYS_NOC_CLK				211
 #define GCC_PCIE_TILE_AXI_SYS_NOC_CLK				212
+#define GCC_LPASS_CONFIG_CLK					213
+#define GCC_LPASS_CORE_AXIM_CLK					214
 
 /* GCC power domains */
 #define GCC_CAMSS_TOP_GDSC					0

@@ -28,7 +28,7 @@
 #include <dt-bindings/interconnect/qcom,icc.h>
 
 #define CREATE_TRACE_POINTS
-#include <trace/events/qup_buses_trace.h>
+#include <trace/events/qup_serial_trace.h>
 
 void serial_trace_log(struct device *dev, const char *fmt, ...)
 {
@@ -40,7 +40,7 @@ void serial_trace_log(struct device *dev, const char *fmt, ...)
 
 	va_start(args, fmt);
 	vaf.va = &args;
-	trace_buses_log_info(dev_name(dev), &vaf);
+	trace_serial_log_info(dev_name(dev), &vaf);
 	va_end(args);
 }
 
@@ -242,13 +242,14 @@ static void qcom_geni_serial_config_port(struct uart_port *uport, int cfg_flags)
 static unsigned int qcom_geni_serial_get_mctrl(struct uart_port *uport)
 {
 	unsigned int mctrl = TIOCM_DSR | TIOCM_CAR;
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
 	u32 geni_ios = 0;
 
 	if (uart_console(uport)) {
 		mctrl |= TIOCM_CTS;
 	} else {
 		geni_ios = readl(uport->membase + SE_GENI_IOS);
-		if (!(geni_ios & IO2_DATA_IN))
+		if (!(geni_ios & IO2_DATA_IN) || port->loopback)
 			mctrl |= TIOCM_CTS;
 	}
 
@@ -1239,6 +1240,15 @@ static int qcom_geni_serial_startup(struct uart_port *uport)
 	int ret;
 	struct qcom_geni_serial_port *port = to_dev_port(uport);
 
+	if (pm_runtime_status_suspended(uport->dev)) {
+		/* Set pm_state to OFF on failure */
+		if (uport->state)
+			uport->state->pm_state = UART_PM_STATE_OFF;
+
+		dev_err(uport->dev, "Device is suspended, please retry\n");
+		return -EAGAIN;
+	}
+
 	if (!port->setup) {
 		ret = qcom_geni_serial_port_setup(uport);
 		if (ret)
@@ -1810,6 +1820,10 @@ static void qcom_geni_serial_pm(struct uart_port *uport,
 			return;
 		}
 	} else if (new_state == UART_PM_STATE_OFF && old_state == UART_PM_STATE_ON) {
+		if (pm_runtime_status_suspended(uport->dev)) {
+			dev_err(uport->dev, "Device is already suspended\n");
+			return;
+		}
 		pm_runtime_put_sync(uport->dev);
 	}
 }

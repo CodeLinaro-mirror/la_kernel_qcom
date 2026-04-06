@@ -13,6 +13,7 @@
 
 #define REG_BASE 0x100000
 #define REG_SIZE 0x1000
+#define REG_DIRCONN 0x90000
 #define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, wake_off, bit)	\
 	{						\
 		.grp = PINCTRL_PINGROUP("gpio" #id,	\
@@ -39,6 +40,8 @@
 		.intr_polarity_bit = 1,		\
 		.intr_detection_bit = 2,	\
 		.intr_detection_width = 2,	\
+		.dir_conn_reg = REG_BASE + REG_DIRCONN,			\
+		.dir_conn_en_bit = 8,					\
 		.wake_reg = REG_BASE + wake_off,	\
 		.wake_bit = bit,		\
 		.funcs = (int[]){			\
@@ -1788,6 +1791,11 @@ static const struct msm_gpio_wakeirq_map malabar_mpm_map[] = {
 	{ 108, 73 }, { 110, 16 }, { 111, 74 }, { 113, 26 },
 };
 
+static struct msm_dir_conn malabar_dir_conn[] = {
+	{-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
+	{-1, 0}, {-1, 0}, {-1, 0},
+};
+
 static const struct msm_pinctrl_soc_data malabar_tlmm = {
 	.pins = malabar_pins,
 	.npins = ARRAY_SIZE(malabar_pins),
@@ -1801,6 +1809,7 @@ static const struct msm_pinctrl_soc_data malabar_tlmm = {
 	.wakeirq_map = malabar_mpm_map,
 	.nwakeirq_map = ARRAY_SIZE(malabar_mpm_map),
 	.egpio_func = 11,
+	.dir_conn = malabar_dir_conn,
 };
 
 static const struct msm_pinctrl_soc_data malabar_vm_tlmm = {
@@ -1812,6 +1821,7 @@ static const struct msm_pinctrl_soc_data malabar_vm_tlmm = {
 	.ngroups = ARRAY_SIZE(malabar_groups),
 	.ngpios = 115,
 	.egpio_func = 11,
+	.dir_conn = malabar_dir_conn,
 };
 
 static const struct of_device_id malabar_tlmm_of_match[] = {
@@ -1820,10 +1830,41 @@ static const struct of_device_id malabar_tlmm_of_match[] = {
 	{},
 };
 
+static int malabar_tlmm_dirconn_list_probe(struct platform_device *pdev)
+{
+	int ret, n, dirconn_list_count;
+	struct device_node *np = pdev->dev.of_node;
+
+	n = of_property_count_elems_of_size(np, "qcom,dirconn-list", sizeof(u32));
+
+	if (n <= 0 || n % 2 || n > ARRAY_SIZE(malabar_dir_conn) * 2)
+		return -EINVAL;
+
+	dirconn_list_count = n / 2;
+
+	for (int i = 0; i < dirconn_list_count; i++) {
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list", i * 2 + 0,
+						 &malabar_dir_conn[i].gpio);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
 static int malabar_tlmm_probe(struct platform_device *pdev)
 {
 	const struct msm_pinctrl_soc_data *pinctrl_data;
 	struct device *dev = &pdev->dev;
+	int ret;
+	int len;
+
+	if (of_find_property(pdev->dev.of_node, "qcom,dirconn-list", &len)) {
+		ret = malabar_tlmm_dirconn_list_probe(pdev);
+		if (ret) {
+			dev_err(&pdev->dev, "Unable to parse Direct Connect List\n");
+			return ret;
+		}
+	}
 
 	pinctrl_data = of_device_get_match_data(dev);
 	if (!pinctrl_data)

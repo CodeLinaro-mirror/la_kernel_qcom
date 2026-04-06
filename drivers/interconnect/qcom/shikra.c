@@ -391,6 +391,28 @@ static struct qcom_icc_node qxm_audio = {
 	.links = { SLAVE_ANOC_SNOC },
 };
 
+static struct qcom_icc_node xm_emac_0 = {
+	.name = "xm_emac_0",
+	.id = MASTER_EMAC_0,
+	.channels = 1,
+	.buswidth = 8,
+	.mas_rpm_id = -1,
+	.slv_rpm_id = -1,
+	.num_links = 1,
+	.links = { SLAVE_ANOC_SNOC },
+};
+
+static struct qcom_icc_node xm_emac_1 = {
+	.name = "xm_emac_1",
+	.id = MASTER_EMAC_1,
+	.channels = 1,
+	.buswidth = 8,
+	.mas_rpm_id = -1,
+	.slv_rpm_id = -1,
+	.num_links = 1,
+	.links = { SLAVE_ANOC_SNOC },
+};
+
 static struct qcom_icc_node xm_qdss_etr = {
 	.name = "xm_qdss_etr",
 	.id = MASTER_QDSS_ETR,
@@ -1266,6 +1288,8 @@ static struct qcom_icc_node *sys_noc_nodes[] = {
 	[MASTER_QPIC] = &qhm_qpic,
 	[MASTER_QUP_0] = &qhm_qup0,
 	[MASTER_AUDIO] = &qxm_audio,
+	[MASTER_EMAC_0] = &xm_emac_0,
+	[MASTER_EMAC_1] = &xm_emac_1,
 	[MASTER_QDSS_ETR] = &xm_qdss_etr,
 	[MASTER_SDCC_1] = &xm_sdc1,
 	[MASTER_SDCC_2] = &xm_sdc2,

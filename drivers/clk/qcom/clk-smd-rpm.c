@@ -1638,7 +1638,7 @@ static int rpm_smd_clk_probe(struct platform_device *pdev)
 	if (ret)
 		goto err;
 
-	if (is_holi || is_khaje || is_monaco || is_shikra || is_qcm2290) {
+	if (is_holi || is_khaje || is_monaco || is_shikra || is_qcm2290 || is_malabar) {
 		/*
 		 * Keep an active vote on CXO in case no other driver
 		 * votes for it.

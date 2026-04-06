@@ -14,3 +14,27 @@ def register_modules(registry):
             "drivers/misc/qseecom_proxy.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/misc/bootmarker_proxy",
+        out = "bootmarker_proxy.ko",
+        config = "CONFIG_BOOTMARKER_PROXY",
+        srcs = [
+            # do not sort
+            "drivers/misc/bootmarker_proxy.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/misc/fastrpc",
+        out = "frpc-adsprpc.ko",
+        config = "CONFIG_QTI_FASTRPC",
+        srcs = [
+            # do not sort
+            "drivers/misc/fastrpc.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
