@@ -31,8 +31,6 @@ socinfo.ko
 icc-bcm-voter.ko
 icc-clk.ko
 icc-debug.ko
-qcom_scmi_vendor.ko
-qcom_scmi_client.ko
 qcom-dcvs.ko
 qcom-pmu-lib.ko
 proxy-consumer.ko
@@ -92,7 +90,6 @@ gh_dbl.ko
 gh_msgq.ko
 gh_rm_drv.ko
 qcom_wdt_core.ko
-qcom_sdei.ko
 qcom_tzmem.ko
 deferred-free-helper.ko
 cqhci.ko
@@ -100,7 +97,6 @@ sdhci-msm.ko
 msm_sharedmem.ko
 nvmem_qfprom.ko
 qcom-cpufreq-hw.ko
-qseecom_proxy.ko
 rtc-pm8xxx.ko
 msm-poweroff.ko
 qcom-dload-mode.ko
