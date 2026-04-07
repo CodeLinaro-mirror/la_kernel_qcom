@@ -45,6 +45,7 @@ viospmi-pmic-arb.ko
 qcom-spmi-pmic.ko
 pinctrl-spmi-gpio.ko
 pinctrl-spmi-mpp.ko
+power_mode.ko
 qcom_wdt_core.ko
 smem.ko
 deferred-free-helper.ko

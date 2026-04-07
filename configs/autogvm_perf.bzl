@@ -115,6 +115,7 @@ autogvm_perf_config = {
     "CONFIG_QCOM_MINIDUMP_SMEM": "n",
     "CONFIG_QCOM_MINIDUMP_VIRTIO": "m",
     "CONFIG_QCOM_PDC": "m",
+    "CONFIG_QCOM_POWER_MODE": "m",
     "CONFIG_QCOM_QMI_HELPERS": "m",
     "CONFIG_QCOM_RAMDUMP": "m",
     "CONFIG_QCOM_RPROC_COMMON": "m",
