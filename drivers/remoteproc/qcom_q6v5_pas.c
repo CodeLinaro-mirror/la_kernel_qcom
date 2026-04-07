@@ -2891,6 +2891,20 @@ static const struct adsp_data yupik_wpss_resource = {
 	.ssctl_id = 0x19,
 };
 
+static const struct adsp_data lahaina_slpi_resource = {
+	.crash_reason_smem = 424,
+	.firmware_name = "slpi.mdt",
+	.pas_id = 12,
+	.load_state = "slpi",
+	.ssr_name = "dsps",
+	.uses_elf64 = true,
+	.sysmon_name = "slpi",
+	.ssctl_id = 0x16,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+	.auto_boot = true,
+};
+
 static const struct adsp_data alor_wpss_resource = {
 	.crash_reason_smem = 626,
 	.firmware_name = "wpss.mdt",
@@ -3413,6 +3427,10 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,ravelin-wpss-pas", .data = &ravelin_wpss_resource},
 	{ .compatible = "qcom,scuba-adsp-pas", .data = &scuba_adsp_resource},
 	{ .compatible = "qcom,scuba-modem-pas", .data = &scuba_mpss_resource},
+	{ .compatible = "qcom,lahaina-adsp-pas", .data = &yupik_adsp_resource},
+	{ .compatible = "qcom,lahaina-cdsp-pas", .data = &yupik_cdsp_resource},
+	{ .compatible = "qcom,lahaina-modem-pas", .data = &yupik_mpss_resource},
+	{ .compatible = "qcom,lahaina-slpi-pas", .data = &lahaina_slpi_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
