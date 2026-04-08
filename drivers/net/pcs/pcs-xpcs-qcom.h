@@ -184,6 +184,8 @@
 #define DW_VR_MII_EEE_RX_QUIET_EN		BIT(3)  /* Rx Quiet Enable */
 #define DW_VR_MII_EEE_TX_EN_CTRL		BIT(4)  /* Tx Control Enable */
 #define DW_VR_MII_EEE_RX_EN_CTRL		BIT(7)  /* Rx Control Enable */
+#define DW_VR_MII_EEE_CLKSTOP_SHIFT             12
+#define DW_VR_MII_EEE_CLKSTOP                   8
 
 #define DW_VR_MII_EEE_MULT_FACT_100NS_SHIFT	8
 #define DW_VR_MII_EEE_MULT_FACT_100NS		GENMASK(11, 8)
