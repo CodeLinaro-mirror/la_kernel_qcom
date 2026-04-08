@@ -55,6 +55,11 @@ deferred-free-helper.ko
 qcom_cpucp.ko
 rproc_qcom_common.ko
 mdt_loader.ko
+qcom_scmi_vendor.ko
+qcom_scmi_client.ko
+qseecom_proxy.ko
+si_core_module.ko
+mem_object.ko
 spmi-pmic-arb.ko
 clk-dummy.ko
 clk-qcom.ko
