@@ -396,6 +396,11 @@
 			no-map;
 		};
 
+		mm_dspq: mm_dspq_region@abbfe000 {
+			reg = <0x0 0xabbfe000 0x0 0x200000>;
+			no-map;
+		};
+
 		audio_config: audio-config-region@ac600000 {
 			reg = <0x0 0xac600000 0x0 0x0a00000>;
 			no-map;
