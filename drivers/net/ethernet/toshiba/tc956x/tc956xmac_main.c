@@ -192,6 +192,8 @@
  *  VERSION     : 06-00-01
  *  03 Apr 2026 : 1. TC command support enabled only for Kernel versions 5.4, 6.1 and 6.6
  *  VERSION     : 06-00-02
+ *  08 Apr 2026 : 1. Support for PHY connection without MDIO (SFP+)
+ *  VERSION     : 06-00-03
  */
 
 #include <linux/clk.h>
@@ -4549,16 +4551,16 @@ static void tc956xmac_defer_phy_isr_work(struct work_struct *work)
 
 	DBGPR_FUNC(priv->device, "Entry: tc956xmac_defer_phy_isr_work\n");
 
-	if (priv->dma_cap.sma_mdio == 1)
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT)
 		phydev = mdiobus_get_phy(priv->mii, addr);
 
 	if (!phydev) {
-		netdev_err(priv->dev, "no phy at addr %d\n", addr);
+		netdev_err(priv->dev, "%s - no phy at addr %d\n", __func__, addr);
 		return;
 	}
 
 	if (!phydev->drv) {
-		netdev_err(priv->dev, "no phy driver\n");
+		netdev_err(priv->dev, "%s - no phy driver\n", __func__);
 		return;
 	}
 
@@ -4592,49 +4594,65 @@ static int tc956xmac_init_phy(struct net_device *dev)
 {
 	struct tc956xmac_priv *priv = netdev_priv(dev);
 	struct device_node *node;
-	int ret;
+	int ret = -ENODEV;
 	struct phy_device *phydev = NULL;
 	int addr = priv->plat->phy_addr;
 	struct ethtool_eee edata;
 
-	node = priv->plat->phylink_node;
+	node = priv->plat->phylink_node; /* phylink_node should be updated with DT information in platform specific code */
 
-	if (priv->dma_cap.sma_mdio == 1)
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT)
 		phydev = mdiobus_get_phy(priv->mii, addr);
 
-	if (!phydev) {
-		netdev_err(priv->dev, "%s no phy at addr %d, exit init phy\n", __func__, addr);
-		return -ENODEV;
+	/* Return error/skip phy connect only for MDIO based phy absence; for PHY without MDIO, continue connecting PHYLINK */
+	if (priv->dma_cap.sma_mdio != TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT) {
+		if (!phydev) {
+			netdev_err(priv->dev, "%s no phy at addr %d, exit init phy\n", __func__, addr);
+			return -ENODEV;
+		}
 	}
-	if (phydev->drv != NULL) {
-		if (true == priv->plat->phy_interrupt_mode && (phydev->drv->config_intr)) {
+	if(phydev) {
+		if (phydev->drv != NULL) {
+			if (true == priv->plat->phy_interrupt_mode && (phydev->drv->config_intr)) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
-			phydev->irq = PHY_MAC_INTERRUPT;
+				phydev->irq = PHY_MAC_INTERRUPT;
 #else
-			phydev->irq = PHY_IGNORE_INTERRUPT;
+				phydev->irq = PHY_IGNORE_INTERRUPT;
 #endif
-			KPRINT_INFO("PHY configured in interrupt mode\n");
-			DBGPR_FUNC(priv->device, "%s PHY configured in interrupt mode\n", __func__);
+				KPRINT_INFO("PHY configured in interrupt mode\n");
+				DBGPR_FUNC(priv->device, "%s PHY configured in interrupt mode\n", __func__);
 
-			INIT_WORK(&priv->emac_phy_work, tc956xmac_defer_phy_isr_work);
+				INIT_WORK(&priv->emac_phy_work, tc956xmac_defer_phy_isr_work);
+			} else {
+				phydev->irq = PHY_POLL;
+				DBGPR_FUNC(priv->device, "%s [1] PHY configured in polling mode\n", __func__);
+			}
 		} else {
 			phydev->irq = PHY_POLL;
-			DBGPR_FUNC(priv->device, "%s [1] PHY configured in polling mode\n", __func__);
+			phydev->interrupts =  PHY_INTERRUPT_DISABLED;
+			DBGPR_FUNC(priv->device, "%s [2] PHY configured in polling mode\n", __func__);
 		}
-	} else {
-		phydev->irq = PHY_POLL;
-		phydev->interrupts =  PHY_INTERRUPT_DISABLED;
-		DBGPR_FUNC(priv->device, "%s [2] PHY configured in polling mode\n", __func__);
 	}
-	if (node)
+	/* For DT bindings, this "node" should have valid value */
+	if (node) {
+		DBGPR_FUNC(priv->device, "%s calling phylink_of_phy_connect\n", __func__);
 		ret = phylink_of_phy_connect(priv->phylink, node, 0);
+	}
 
 	/* Some DT bindings do not set-up the PHY handle. Let's try to
 	 * manually parse it
 	 */
+	/* Below flow should be for PHY configured for non DT. Not required for SFP without MDIO using DT bindings */
 	if (!node || ret) {
+		DBGPR_FUNC(priv->device, "%s inside not node or of_phy_connect error\n", __func__);
+		if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT) {
+			DBGPR_FUNC(priv->device, "%s DT config not found or error in phylink_of_phy_connect ret:%x\n", __func__, ret);			
+			return ret; /* Hard exit as below configurations are required only for PHY connected through MDIO */
+		}
+
 		if (!phydev || (!phydev->phy_id && !phydev->is_c45)) {
 			/* Try C45 */
+			DBGPR_FUNC(priv->device, "%s get_phy_device\n", __func__);
 			phydev = get_phy_device(priv->mii, addr, true);
 			if (phydev && !IS_ERR(phydev)) {
 				ret = phy_device_register(phydev);
@@ -4648,14 +4666,21 @@ static int tc956xmac_init_phy(struct net_device *dev)
 		}
 
 		if (!phydev) {
-			netdev_err(priv->dev, "no phy at addr %d\n", addr);
+			netdev_err(priv->dev, "%s - no phy at addr %d\n", __func__, addr);
 			return -ENODEV;
 		}
+		DBGPR_FUNC(priv->device, "%s  calling phylink_connect_phy\n", __func__);	
 
 		ret = phylink_connect_phy(priv->phylink, phydev);
 
 		phy_attached_info(phydev);
 	}
+
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT) {
+		DBGPR_FUNC(priv->device, "%s DT config found and connected phylink ret:%x\n", __func__, ret);
+		return ret; /* success case: return from here for DT based without MDIO case */
+	}
+
 
 	if (phydev->drv != NULL) {
 		if (true == priv->plat->phy_interrupt_mode && (phydev->drv->config_intr))
@@ -7415,7 +7440,7 @@ static int tc956xmac_open(struct net_device *dev)
 
 	NMSGPR_INFO(priv->device, "---> light weight = %d %s : Port %d interface %s", priv->link_down_rst, __func__, priv->port_num, dev->name);
 
-	if (priv->dma_cap.sma_mdio == 1)
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT)
 		phydev = mdiobus_get_phy(priv->mii, addr);
 	KPRINT_INFO("Open priv->link_down_rst = %d priv->tc956x_port_pm_suspend = %d\n", priv->link_down_rst, priv->tc956x_port_pm_suspend);
 #ifdef TC956X_SRIOV_PF
@@ -7437,9 +7462,9 @@ static int tc956xmac_open(struct net_device *dev)
 #endif
 
 	if (!phydev) {
-		netdev_err(priv->dev, "no phy at addr %d\n", addr);
+		netdev_err(priv->dev, "%s - no phy at addr %d\n", __func__, addr);
 
-		if (priv->dma_cap.sma_mdio == 1)
+		if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT)
 			return -ENODEV;
 
 		KPRINT_INFO("%s Without MDIO/PHY configuration selected for Port %d %s", __func__, priv->port_num, dev->name);
@@ -7457,8 +7482,13 @@ static int tc956xmac_open(struct net_device *dev)
 					   __func__, ret);
 				KPRINT_INFO("<--- %s(1) : Port %d %s", __func__, priv->port_num, dev->name);
 
-				if (priv->dma_cap.sma_mdio == 1)
-					return ret;
+				if ((priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT) ||
+					(priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT)) /* For PHY without MDIO case, init phy should return without error. Otherwise returning error from here */
+#ifdef TEST_TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT
+				KPRINT_INFO("For testing purpose (without DT), dont return from here for Port %d %s", priv->port_num, dev->name);
+#else
+				return ret;
+#endif
 
 				KPRINT_INFO("Since user selected without mdio/phy configuration, ignore error and continue to configure DMA/MTL/MAC for Port %d %s", priv->port_num, dev->name);
 			}
@@ -7674,7 +7704,9 @@ static int tc956xmac_open(struct net_device *dev)
 
 
 #ifndef TC956X_SRIOV_VF
-	if (priv->dma_cap.sma_mdio == 1) {
+
+	if ((priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT) ||
+		(priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT)) {
 		if (priv->link_down_rst == false) {
 			if (priv->phylink)
 				phylink_start(priv->phylink);
@@ -8013,7 +8045,7 @@ static int tc956xmac_release(struct net_device *dev)
 
 #if defined(TC956X_AUTOMOTIVE_CONFIG) || defined(TC956X_ENABLE_MAC2MAC_BRIDGE) || defined(TC956X_CPE_CONFIG)
 
-	if (priv->dma_cap.sma_mdio == 1)
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT)
 		phydev = mdiobus_get_phy(priv->mii, addr);
 
 	if (phydev) {
@@ -10333,7 +10365,8 @@ int tc956xmac_rx_parser_configuration(struct tc956xmac_priv *priv)
 				KPRINT_INFO("Error in init_eee\n\r");
 
 			ret_val = phylink_ethtool_set_eee(priv->phylink, &edata);
-			ret_val |= phy_ethtool_set_eee_2p5(priv->dev->phydev, &edata);
+			if (priv->dev->phydev)
+				ret_val |= phy_ethtool_set_eee_2p5(priv->dev->phydev, &edata);
 			if (ret_val)
 				KPRINT_INFO("Phylink EEE config error\n\r");
 
@@ -14139,7 +14172,7 @@ static int tc956xmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 #endif
 	struct mii_ioctl_data *data = if_mii(rq);
 
-	if (priv->dma_cap.sma_mdio == 1) {
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT) {
 		if (!netif_running(dev))
 #ifndef TC956X_SRIOV_VF
 			return tc956xmac_phy_fw_flash_mdio_ioctl(dev, rq, cmd);
@@ -14151,7 +14184,8 @@ static int tc956xmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	}
 	switch (cmd) {
 	case SIOCGMIIPHY:
-		if (priv->dma_cap.sma_mdio == 0)
+		if ((priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT) ||
+			(priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT))
 			return 0;
 #ifndef TC956X_SRIOV_VF
 		data->phy_id = priv->plat->phy_addr;
@@ -14187,7 +14221,8 @@ static int tc956xmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 #ifndef TC956X_SRIOV_VF
 	case SIOCGMIIREG:
 	case SIOCSMIIREG:
-		if (priv->dma_cap.sma_mdio == 0)
+		if ((priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT) ||
+			(priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT))
 			return 0;
 
 		ret = phylink_mii_ioctl(priv->phylink, rq, cmd);
@@ -16218,7 +16253,7 @@ int tc956xmac_vf_dvr_probe(struct device *device,
 		priv->hw->pcs != TC956XMAC_PCS_RTBI) {
 
 		/* MDIO bus Registration */
-		if (priv->dma_cap.sma_mdio == 1) {
+		if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT) {
 			ret = tc956xmac_mdio_register(ndev);
 			if (ret < 0) {
 				/* tc956xmac_mdio_register() will return -ENODEV when No PHY is found */
@@ -16232,12 +16267,14 @@ int tc956xmac_vf_dvr_probe(struct device *device,
 					goto error_mdio_register;
 				}
 			}
+		} else if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT) {
+			dev_info(priv->device, "Port%d Bus id %x is selected for without MDIO configuration but with PHY, continue to register for ethernet interface without MDIO", priv->port_num, priv->plat->bus_id);
 		} else {
 			dev_info(priv->device, "Port%d Bus id %x is selected for without MDIO/PHY configuration, continue to register for ethernet interface without PHY/MDIO", priv->port_num, priv->plat->bus_id);
 		}
 	}
 
-	if (priv->dma_cap.sma_mdio == 1) {
+	if ((priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT) || (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT)) {
 		ret = tc956xmac_phy_setup(priv);
 		if (ret) {
 			netdev_err(ndev, "failed to setup phy (%d)\n", ret);
@@ -16274,7 +16311,7 @@ error_netdev_register:
 	if (priv->phylink)
 		phylink_destroy(priv->phylink);
 error_phy_setup:
-	if (priv->dma_cap.sma_mdio == 1) {
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT) {
 		if (priv->hw->pcs != TC956XMAC_PCS_RGMII &&
 			priv->hw->pcs != TC956XMAC_PCS_TBI &&
 			priv->hw->pcs != TC956XMAC_PCS_RTBI)
@@ -16360,7 +16397,7 @@ int tc956xmac_vf_dvr_remove(struct device *dev)
 	struct phy_device *phydev = NULL;
 	int addr = priv->plat->phy_addr;
 
-	if (priv->dma_cap.sma_mdio == 1)
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT)
 		phydev = mdiobus_get_phy(priv->mii, addr);
 
 #endif
@@ -16404,7 +16441,7 @@ int tc956xmac_vf_dvr_remove(struct device *dev)
 	clk_disable_unprepare(priv->plat->pclk);
 	clk_disable_unprepare(priv->plat->tc956xmac_clk);
 
-	if (priv->dma_cap.sma_mdio == 1) {
+	if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT) {
 		if (priv->hw->pcs != TC956XMAC_PCS_RGMII &&
 			priv->hw->pcs != TC956XMAC_PCS_TBI &&
 			priv->hw->pcs != TC956XMAC_PCS_RTBI)
@@ -16480,7 +16517,7 @@ int tc956xmac_vf_suspend(struct device *dev)
 		DBGPR_FUNC(priv->device, "%s Error : No phy at Addr %d or MDIO Unavailable\n",
 			__func__, addr);
 
-		if (priv->dma_cap.sma_mdio == 1)
+		if (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT)
 			return 0;
 
 	}
@@ -16662,7 +16699,7 @@ clean_exit:
 
 #ifndef TC956X_SRIOV_VF
 	/*  Reset eMAC when Port unavailable */
-	if (((priv->plat->phy_addr == -1) || (priv->mii == NULL)) && (priv->dma_cap.sma_mdio == 1)) {
+	if (((priv->plat->phy_addr == -1) || (priv->mii == NULL)) && (priv->dma_cap.sma_mdio == TC956X_MDIO_CONN_PRESENT)) {
 		KPRINT_ERR("%s : Port %d %s : Invalid PHY Address (%d)\n", __func__, priv->port_num, priv->dev->name,
 			priv->plat->phy_addr);
 		/* Set Clocks same as before suspend */

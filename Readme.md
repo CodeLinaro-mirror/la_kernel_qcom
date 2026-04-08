@@ -1,7 +1,7 @@
 # Toshiba Electronic Devices & Storage Corporation TC956X PCIe Ethernet Host Driver
-Release Date: 03 Apr 2026
+Release Date: 08 Apr 2026
 
-Release Version: V_06-00-02
+Release Version: V_06-00-03
 
 TC956X PCIe EMAC driver is based on "Fedora 30, kernel-5.4.19", "Fedora 36, kernel-6.1.18" and "Fedora 39, kernel-6.6.1"
 
@@ -114,7 +114,7 @@ TC956X PCIe EMAC driver is based on "Fedora 30, kernel-5.4.19", "Fedora 36, kern
 
 	   e. macX_no_mdio_no_phy: Array of PHY and MDIO configuration in order according to the BDFs provided in module parameter 'tc956x_eth_ports_bdf'
 	   PHY and MDIO configuration - default is 0 (PHY ON and MDIO ON) for both Port0 and Port1
-	   Supported values: [0: PHY ON and MDIO ON, 1: PHY ON and MDIO OFF*, 2: PHY OFF and MDIO ON*, 3: PHY OFF and MDIO OFF]
+	   Supported values: [0: PHY ON and MDIO ON, 1: PHY ON and MDIO OFF, 2: PHY OFF and MDIO ON*, 3: PHY OFF and MDIO OFF]
 	   (*) These values are not supported currently.
 	4. In this release only above mentioned module parameters are supported in array format to associate with individual TC956x device in cascade setup.
 	   All other module parameters remains same as that of previous release.
@@ -329,7 +329,7 @@ TC956X PCIe EMAC driver is based on "Fedora 30, kernel-5.4.19", "Fedora 36, kern
 19. To disable MDIO and remove PHY dependency in the driver, use module parameter "macX_no_mdio_no_phy".
 	Supported options are as follows.
 	0: PHY_ON_MDIO_ON   /* PHY and MDIO available */ /* Default */
-	1: PHY_ON_MDIO_OFF  /* PHY available and MDIO not available */ /* Not supported currently */
+	1: PHY_ON_MDIO_OFF  /* PHY available and MDIO not available */
 	2: PHY_OFF_MDIO_ON  /* PHY not available and MDIO available */ /* Not supported currrently */
 	3: PHY_OFF_MDIO_OFF /* PHY not available and MDIO not available */
 
@@ -693,3 +693,6 @@ TC956X PCIe EMAC driver is based on "Fedora 30, kernel-5.4.19", "Fedora 36, kern
 
 ## TC956X_Linux_Host_Driver_20260403_V_06-00-02
 1. TC command support enabled only for Kernel versions 5.4, 6.1 and 6.6
+
+## TC956X_Linux_Host_Driver_20260408_V_06-00-03
+1. Support for PHY connection without MDIO (SFP+)

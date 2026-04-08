@@ -4,7 +4,7 @@
  * dwxgmac2_dma.c
  *
  * Copyright (C) 2018 Synopsys, Inc. and/or its affiliates.
- * Copyright (C) 2025 Toshiba Electronic Devices & Storage Corporation
+ * Copyright (C) 2026 Toshiba Electronic Devices & Storage Corporation
  *
  * This file has been derived from the STMicro and Synopsys Linux driver,
  * and developed or modified for TC956X.
@@ -58,6 +58,8 @@
  *                2. Support for w/o MDIO and w/o PHY configuration in cascade network using BDF based module parameter
  *                3. Update for correct DMA address width in case of 64-bit Host bus addressing
  *  VERSION     : 05-00-01
+ *  08 Apr 2026 : 1. Support for PHY connection without MDIO (SFP+)
+ *  VERSION     : 06-00-03
  */
 
 #include <linux/iopoll.h>
@@ -567,7 +569,7 @@ static void dwxgmac2_get_hw_feature(struct tc956xmac_priv *priv,
 	dma_cap->pmt_magic_frame = (hw_cap & XGMAC_HWFEAT_MGKSEL) >> 7;
 	dma_cap->pmt_remote_wake_up = (hw_cap & XGMAC_HWFEAT_RWKSEL) >> 6;
 
-	dma_cap->sma_mdio = (hw_cap & XGMAC_HWFEAT_SMASEL) >> 5;
+	dma_cap->sma_mdio = (hw_cap & XGMAC_HWFEAT_SMASEL) >> 5; /* By default sma_mdio will be 1 i.e TC956X_MDIO_CONN_PRESENT */
 	dma_cap->vlhash = (hw_cap & XGMAC_HWFEAT_VLHASH) >> 4;
 	dma_cap->mbps_1000 = (hw_cap & XGMAC_HWFEAT_GMIISEL) >> 1;
 
@@ -658,8 +660,11 @@ static void dwxgmac2_get_hw_feature(struct tc956xmac_priv *priv,
 
 	/* Overwrite the MDIO DMA capabilities when user selects without MDIO and without PHY cofiguration for the particular interface */
 	if (priv->plat->mac_no_mdio_no_phy == PHY_OFF_MDIO_OFF) {
-		DBGPR_FUNC(priv->device, "%s Disabling MDIO for BDF:0x%x\n", __func__, priv->pci_bdf);
-		dma_cap->sma_mdio = 0;
+		DBGPR_FUNC(priv->device, "%s Disabling MDIO and PHY for BDF:0x%x\n", __func__, priv->pci_bdf);
+		dma_cap->sma_mdio = TC956X_MDIO_CONN_ABSENT;
+	} else if (priv->plat->mac_no_mdio_no_phy == PHY_ON_MDIO_OFF) { /* PHY is there but MDIO not available */
+		DBGPR_FUNC(priv->device, "%s Disabling only MDIO for BDF:0x%x\n", __func__, priv->pci_bdf);
+		dma_cap->sma_mdio = TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT;
 	}
 }
 

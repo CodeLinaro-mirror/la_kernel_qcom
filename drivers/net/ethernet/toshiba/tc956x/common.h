@@ -4,7 +4,7 @@
  * common.h - Common Header File
  *
  * Copyright (C) 2007-2009 STMicroelectronics Ltd
- * Copyright (C) 2025 Toshiba Electronic Devices & Storage Corporation
+ * Copyright (C) 2026 Toshiba Electronic Devices & Storage Corporation
  *
  * This file has been derived from the STMicro Linux driver,
  * and developed or modified for TC956X.
@@ -94,6 +94,8 @@
  *  VERSION     : 05-02-00
  *  31 Mar 2025 : 1. Support for 3MA/3DB environment
  *  VERSION     : 06-00-00
+ *  08 Apr 2026 : 1. Support for PHY connection without MDIO (SFP+)
+ *  VERSION     : 06-00-03
 */
 
 #ifndef __COMMON_H__
@@ -147,10 +149,14 @@ enum TC956X_PORT_LINK_CHANGE_STATE {
 /* PHY/MDIO configurations */
 enum TC956X_PHY_MDIO_AVAILABILITY {
 	PHY_ON_MDIO_ON = 0, /* PHY and MDIO available */
-	PHY_ON_MDIO_OFF,    /* PHY available and MDIO not available */ /* Not supported currently */
+	PHY_ON_MDIO_OFF,    /* PHY available and MDIO not available */
 	PHY_OFF_MDIO_ON,    /* PHY not available and MDIO available */ /* Not supported currrently */
 	PHY_OFF_MDIO_OFF    /* PHY not available and MDIO not available */
 };
+
+#define TC956X_MDIO_CONN_ABSENT 					0
+#define TC956X_MDIO_CONN_PRESENT 					1
+#define TC956X_MDIO_CONN_ABSENT_PHYLINK_PRESENT 	2
 
 #if defined(TC956X_SRIOV_PF)
 //#define TC956X_PCIE_LINK_STATE_LATENCY_CTRL

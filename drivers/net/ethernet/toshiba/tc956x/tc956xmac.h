@@ -211,6 +211,8 @@
  *  VERSION     : 06-00-01
  *  03 Apr 2026 : 1. Version update
  *  VERSION     : 06-00-02
+ *  08 Apr 2026 : 1. Version update
+ *  VERSION     : 06-00-03
  */
 
 #ifndef __TC956XMAC_H__
@@ -285,7 +287,7 @@
 #define IRQ_DEV_NAME(x)		(((x) == RM_PF0_ID) ? ("eth0") : ("eth1"))
 #define WOL_IRQ_DEV_NAME(x)	(((x) == RM_PF0_ID) ? ("eth0_wol") : ("eth1_wol"))
 
-#define DRV_MODULE_VERSION	"V_06-00-02"
+#define DRV_MODULE_VERSION	"V_06-00-03"
 #define TC956X_FW_MAX_SIZE	(64*1024)
 #elif (defined TC956X_SRIOV_VF)
 #define TC956X_RESOURCE_NAME	"tc956x_vf_pci-eth"
