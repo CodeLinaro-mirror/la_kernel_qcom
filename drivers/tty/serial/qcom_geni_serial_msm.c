@@ -277,7 +277,21 @@ static void qcom_geni_serial_set_mctrl(struct uart_port *uport,
 	if (!(mctrl & TIOCM_RTS) && !uport->suspended)
 		uart_manual_rfr = UART_MANUAL_RFR_EN | UART_RFR_NOT_READY;
 	writel(uart_manual_rfr, uport->membase + SE_UART_MANUAL_RFR);
-	serial_trace_log(uport->dev, "%s: uart_manual_rfr: %0x%x\n", __func__, uart_manual_rfr);
+	if (port->loopback) {
+		u32 val;
+
+		if (uart_manual_rfr & UART_MANUAL_RFR_EN) {
+			/* RTS deasserted — wait for CTS HIGH */
+			readl_poll_timeout_atomic(uport->membase + SE_GENI_IOS,
+					val, (val & IO2_DATA_IN), 2, 50);
+		} else {
+			/* RTS asserted — wait for CTS LOW */
+			readl_poll_timeout_atomic(uport->membase + SE_GENI_IOS,
+					val, !(val & IO2_DATA_IN), 2, 50);
+		}
+	}
+	serial_trace_log(uport->dev, "%s: uart_manual_rfr: 0x%x loopback:%d\n", __func__,
+			 uart_manual_rfr, port->loopback);
 }
 
 static const char *qcom_geni_serial_get_type(struct uart_port *uport)
@@ -881,6 +895,9 @@ static void qcom_geni_serial_start_rx_dma(struct uart_port *uport)
 	trace_serial_info(uport->dev, __func__, "start");
 	if (qcom_geni_serial_secondary_active(uport))
 		qcom_geni_serial_stop_rx_dma(uport);
+
+	/* Clear manual RFR control to allow hardware flow control */
+	writel(0, uport->membase + SE_UART_MANUAL_RFR);
 
 	geni_se_setup_s_cmd(&port->se, UART_START_READ, UART_PARAM_RFR_OPEN);
 
