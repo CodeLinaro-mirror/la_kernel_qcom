@@ -24,6 +24,7 @@ struct gh_msgq_cap_table;
 
 struct gh_msgq_desc {
 	int label;
+	bool oneshot;
 	struct gh_msgq_cap_table *cap_table;
 };
 
@@ -186,7 +187,7 @@ static int gh_msgq_recv_state(void *msgq_client_desc,
 	}
 
 	if ((cap_table_entry->rx_cap_id == GH_CAPID_INVAL) &&
-		(flags & GH_MSGQ_NONBLOCK)) {
+		(client_desc->oneshot || (flags & GH_MSGQ_NONBLOCK))) {
 		pr_err_ratelimited(
 			"%s: Recv info for label %d not yet initialized\n",
 			__func__, client_desc->label);
@@ -360,7 +361,7 @@ int gh_msgq_send(void *msgq_client_desc,
 	}
 
 	if ((cap_table_entry->tx_cap_id == GH_CAPID_INVAL) &&
-		(flags & GH_MSGQ_NONBLOCK)) {
+		(client_desc->oneshot || (flags & GH_MSGQ_NONBLOCK))) {
 		pr_err_ratelimited(
 			"%s: Send info for label %d not yet initialized\n",
 			__func__, client_desc->label);
@@ -460,11 +461,13 @@ void *gh_msgq_register(int label)
 
 	client_desc->label = label;
 	client_desc->cap_table = cap_table_entry;
+	client_desc->oneshot = (label == GH_MSGQ_LABEL_SMMU_PROXY);
 
 	cap_table_entry->client_desc = client_desc;
 	spin_unlock(&cap_table_entry->cap_entry_lock);
 
-	pr_info("gh_msgq: Registered client for label: %d\n", label);
+	pr_info("gh_msgq: Registered client for label: %d oneshot:%d\n",
+				label, client_desc->oneshot);
 
 	return client_desc;
 }
