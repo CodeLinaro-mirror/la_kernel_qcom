@@ -137,7 +137,7 @@ uvc_video_encode_isoc_sg(struct usb_request *req, struct uvc_video *video,
 	unsigned int pending = buf->bytesused - video->queue.buf_used;
 	struct uvc_request *ureq = req->context;
 	struct scatterlist *sg, *iter;
-	unsigned int len = video->req_size;
+	unsigned int len = buf->req_payload_size;
 	unsigned int sg_left, part = 0;
 	unsigned int i;
 	int header_len;
@@ -147,15 +147,15 @@ uvc_video_encode_isoc_sg(struct usb_request *req, struct uvc_video *video,
 
 	/* Init the header. */
 	header_len = uvc_video_encode_header(video, buf, ureq->header,
-				      video->req_size);
+					     buf->req_payload_size);
 	sg_set_buf(sg, ureq->header, header_len);
 	len -= header_len;
 
 	if (pending <= len)
 		len = pending;
 
-	req->length = (len == pending) ?
-		len + header_len : video->req_size;
+	req->length = (len == pending) ? len + header_len :
+		buf->req_payload_size;
 
 	/* Init the pending sgs with payload */
 	sg = sg_next(sg);
@@ -203,7 +203,7 @@ uvc_video_encode_isoc(struct usb_request *req, struct uvc_video *video,
 {
 	void *mem = req->buf;
 	struct uvc_request *ureq = req->context;
-	int len = video->req_size;
+	int len = buf->req_payload_size;
 	int ret;
 
 	/* Add the header. */
@@ -215,7 +215,7 @@ uvc_video_encode_isoc(struct usb_request *req, struct uvc_video *video,
 	ret = uvc_video_encode_data(video, buf, mem, len);
 	len -= ret;
 
-	req->length = video->req_size - len;
+	req->length = buf->req_payload_size - len;
 
 	if (buf->bytesused == video->queue.buf_used ||
 			video->queue.flags & UVC_QUEUE_DROP_INCOMPLETE) {
@@ -498,24 +498,25 @@ uvc_video_prep_requests(struct uvc_video *video)
 {
 	struct uvc_device *uvc = container_of(video, struct uvc_device, video);
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
-	unsigned int interval_duration = video->ep->desc->bInterval * 1250;
+	unsigned int interval_duration;
 	unsigned int max_req_size, req_size, header_size;
 	unsigned int nreq;
 
-	max_req_size = video->ep->maxpacket
-		 * max_t(unsigned int, video->ep->maxburst, 1)
-		 * (video->ep->mult);
+	max_req_size = video->max_req_size;
 
 	if (!usb_endpoint_xfer_isoc(video->ep->desc)) {
 		video->req_size = max_req_size;
-		video->uvc_num_requests =
+		video->reqs_per_frame = video->uvc_num_requests =
 			DIV_ROUND_UP(video->imagesize, max_req_size);
 
 		return;
 	}
 
+	interval_duration = 2 << (video->ep->desc->bInterval - 1);
 	if (cdev->gadget->speed < USB_SPEED_HIGH)
-		interval_duration = video->ep->desc->bInterval * 10000;
+		interval_duration *= 10000;
+	else
+		interval_duration *= 1250;
 
 	nreq = DIV_ROUND_UP(video->interval, interval_duration);
 
@@ -539,6 +540,7 @@ uvc_video_prep_requests(struct uvc_video *video)
 	 * able to fully encode one frame.
 	 */
 	video->uvc_num_requests = nreq + UVCG_REQ_MAX_ZERO_COUNT;
+	video->reqs_per_frame = nreq;
 }
 
 static int
@@ -835,7 +837,6 @@ int uvcg_video_init(struct uvc_video *video, struct uvc_device *uvc)
 	video->interval = 666666;
 
 	/* Initialize the video buffers queue. */
-	uvcg_queue_init(&video->queue, uvc->v4l2_dev.dev->parent,
+	return uvcg_queue_init(&video->queue, uvc->v4l2_dev.dev->parent,
 			V4L2_BUF_TYPE_VIDEO_OUTPUT, &video->mutex);
-	return 0;
 }
