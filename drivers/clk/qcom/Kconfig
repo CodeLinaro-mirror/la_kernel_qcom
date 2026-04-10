@@ -1200,4 +1200,14 @@ config CLK_GLYMUR_TCSRCC
 	  Say Y if you want to use peripheral devices such as USB/PCIe/EDP.
 	  This controller manages clocks used by various on-chip peripherals.
 
+config CLK_GLYMUR_GCC
+	tristate "GLYMUR Global Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  Glymur devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI,
+	  I2C, USB, UFS, SDCC, etc.
+
 endif
