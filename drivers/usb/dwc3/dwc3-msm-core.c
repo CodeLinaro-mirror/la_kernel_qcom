@@ -5583,7 +5583,8 @@ static int dwc3_msm_set_role(struct dwc3_msm *mdwc, enum usb_role role)
 
 	case USB_ROLE_NONE:
 		if (mdwc->dp_state != DP_NONE) {
-			mdwc->refcnt_dp_usb--;
+			if (mdwc->refcnt_dp_usb)
+				mdwc->refcnt_dp_usb--;
 			dbg_log_string("DP (%d)session active, refcnt:%d\n",
 					mdwc->dp_state, mdwc->refcnt_dp_usb);
 			mutex_unlock(&mdwc->role_switch_mutex);
@@ -6061,7 +6062,8 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes, int o
 		 * This is because, dwc3_gadget_init() will set the max speed
 		 * for the USB gadget driver.
 		 */
-		mdwc->refcnt_dp_usb--;
+		if (mdwc->refcnt_dp_usb)
+			mdwc->refcnt_dp_usb--;
 		mdwc->dp_state = DP_NONE;
 		if (mdwc->drd_state == DRD_STATE_HOST) {
 			ret = dwc3_msm_altmode_enable_usb(mdwc);
