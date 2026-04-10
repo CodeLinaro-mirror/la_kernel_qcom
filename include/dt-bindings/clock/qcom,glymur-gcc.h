@@ -451,6 +451,8 @@
 #define GCC_VIDEO_AXI0C_CLK					441
 #define GCC_VIDEO_AXI1_CLK					442
 #define GCC_VIDEO_XO_CLK					443
+#define GCC_USB30_PRIM_ATB_CLK					444
+#define GCC_HLOS1_VOTE_MMU_TCU_CLK				445
 
 /* GCC power domains */
 #define GCC_PCIE_0_TUNNEL_GDSC					0
@@ -480,6 +482,7 @@
 #define GCC_USB_0_PHY_GDSC					24
 #define GCC_USB_1_PHY_GDSC					25
 #define GCC_USB_2_PHY_GDSC					26
+#define GCC_HLOS1_VOTE_MMU_TCU_GDS				27
 
 /* GCC resets */
 #define GCC_AV1E_BCR						0
@@ -575,5 +578,8 @@
 #define GCC_VIDEO_AXI1_CLK_ARES					90
 #define GCC_VIDEO_BCR						91
 #define GCC_VIDEO_AXI0C_CLK_ARES				92
+#define GCC_EVA_AXI0_CLK_ARES					93
+#define GCC_EVA_AXI0C_CLK_ARES					94
+#define GCC_VIDEO_XO_CLK_ARES					95
 
 #endif
