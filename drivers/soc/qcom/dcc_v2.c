@@ -2332,7 +2332,7 @@ out:
 #ifdef CONFIG_DEEPSLEEP
 static int dcc_v2_suspend(struct device *dev)
 {
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return dcc_state_store(dev);
 
 	return 0;
@@ -2340,7 +2340,7 @@ static int dcc_v2_suspend(struct device *dev)
 
 static int dcc_v2_resume(struct device *dev)
 {
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return dcc_state_restore(dev);
 
 	return 0;

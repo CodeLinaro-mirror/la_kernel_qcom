@@ -28,7 +28,7 @@
 #include <dt-bindings/interconnect/qcom,icc.h>
 
 #define CREATE_TRACE_POINTS
-#include <trace/events/qup_buses_trace.h>
+#include <trace/events/qup_serial_trace.h>
 
 void serial_trace_log(struct device *dev, const char *fmt, ...)
 {
@@ -40,7 +40,7 @@ void serial_trace_log(struct device *dev, const char *fmt, ...)
 
 	va_start(args, fmt);
 	vaf.va = &args;
-	trace_buses_log_info(dev_name(dev), &vaf);
+	trace_serial_log_info(dev_name(dev), &vaf);
 	va_end(args);
 }
 
@@ -242,13 +242,14 @@ static void qcom_geni_serial_config_port(struct uart_port *uport, int cfg_flags)
 static unsigned int qcom_geni_serial_get_mctrl(struct uart_port *uport)
 {
 	unsigned int mctrl = TIOCM_DSR | TIOCM_CAR;
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
 	u32 geni_ios = 0;
 
 	if (uart_console(uport)) {
 		mctrl |= TIOCM_CTS;
 	} else {
 		geni_ios = readl(uport->membase + SE_GENI_IOS);
-		if (!(geni_ios & IO2_DATA_IN))
+		if (!(geni_ios & IO2_DATA_IN) || port->loopback)
 			mctrl |= TIOCM_CTS;
 	}
 
@@ -1254,7 +1255,6 @@ static int qcom_geni_serial_startup(struct uart_port *uport)
 			return ret;
 	}
 
-	qcom_geni_serial_start_rx(uport);
 	enable_irq(uport->irq);
 
 	return 0;
@@ -1440,6 +1440,7 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 	u32 stop_bit_len;
 	int ret = 0;
 
+	qcom_geni_serial_stop_rx(uport);
 	/* baud rate */
 	baud = uart_get_baud_rate(uport, termios, old, 300, 4000000);
 
@@ -1448,7 +1449,7 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 		dev_err(port->se.dev,
 			"%s: Failed to set  baud: %u  ret: %d\n",
 			__func__, baud, ret);
-		return;
+		goto out_restart_rx;
 	}
 
 	/* parity */
@@ -1518,6 +1519,8 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 	writel(bits_per_char, uport->membase + SE_UART_TX_WORD_LEN);
 	writel(bits_per_char, uport->membase + SE_UART_RX_WORD_LEN);
 	writel(stop_bit_len, uport->membase + SE_UART_TX_STOP_BIT_LEN);
+out_restart_rx:
+	qcom_geni_serial_start_rx(uport);
 }
 
 #ifdef CONFIG_SERIAL_QCOM_GENI_CONSOLE

@@ -2488,7 +2488,7 @@ static void gpi_process_xfer_compl_event(struct gpii_chan *gpii_chan,
 {
 	struct gpii *gpii = gpii_chan->gpii;
 	struct gpi_ring *ch_ring = gpii_chan->ch_ring;
-	void *ev_rp = to_virtual(ch_ring, compl_event->ptr);
+	void *ev_rp;
 	struct virt_dma_desc *vd;
 	struct msm_gpi_dma_async_tx_cb_param *tx_cb_param;
 	struct gpi_desc *gpi_desc;
@@ -2505,6 +2505,29 @@ static void gpi_process_xfer_compl_event(struct gpii_chan *gpii_chan,
 				      __LINE__);
 		return;
 	}
+
+	/* Validate TRE address belongs to this channel before converting to virtual */
+	if (compl_event->ptr < ch_ring->phys_addr ||
+	    compl_event->ptr >= ch_ring->phys_addr + ch_ring->len) {
+		struct gpi_ere *gpi_ere;
+
+		GPII_ERR(gpii, gpii_chan->chid,
+			 "TRE address 0x%llx not in channel ring! ring:[0x%llx-0x%llx]\n",
+			 compl_event->ptr, ch_ring->phys_addr,
+			 ch_ring->phys_addr + ch_ring->len);
+		gpi_ere = (struct gpi_ere *)compl_event;
+		GPII_ERR(gpii, gpii_chan->chid, "Event: %08x %08x %08x %08x\n",
+			 gpi_ere->dword[0], gpi_ere->dword[1],
+			 gpi_ere->dword[2], gpi_ere->dword[3]);
+
+		/* Don't update ring pointers with invalid TRE address */
+		gpi_generate_cb_event(gpii_chan, MSM_GPI_QUP_EOT_DESC_MISMATCH,
+				      __LINE__);
+		return;
+	}
+
+	/* Safe to convert: TRE address validated */
+	ev_rp = to_virtual(ch_ring, compl_event->ptr);
 
 	spin_lock_irqsave(&gpii_chan->vc.lock, flags);
 	vd = vchan_next_desc(&gpii_chan->vc);

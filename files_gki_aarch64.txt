@@ -3601,6 +3601,7 @@ include/linux/page_pinner.h
 include/linux/page_ref.h
 include/linux/page_reporting.h
 include/linux/page_size_compat.h
+include/linux/page_size_compat_defs.h
 include/linux/page_table_check.h
 include/linux/pageblock-flags.h
 include/linux/pagemap.h
@@ -6414,6 +6415,7 @@ net/ipv4/raw.c
 net/ipv4/route.c
 net/ipv4/sysctl_net_ipv4.c
 net/ipv4/tcp.c
+net/ipv4/tcp_bbr.c
 net/ipv4/tcp_bpf.c
 net/ipv4/tcp_cong.c
 net/ipv4/tcp_cubic.c

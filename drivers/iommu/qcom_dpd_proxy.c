@@ -13,6 +13,7 @@
 #include <linux/of.h>
 #include <soc/qcom/secure_buffer.h>
 #include <asm/kvm_pkvm.h>
+#include "qcom_dpd_proxy_tee.h"
 
 struct dpd_proxy {
 	struct device *dev;
@@ -109,6 +110,32 @@ int dpd_svc_map(struct dpd_scatterlist *dpd_sg, u32 domain_id, u32 flags, u64 io
 	return 0;
 }
 EXPORT_SYMBOL_GPL(dpd_svc_map);
+
+int dpd_svc_register_cbo(struct si_object *si)
+{
+	struct si_arg args[2] = { 0 };
+	int result, ret;
+	struct si_object_invoke_ctx oic;
+
+	/* si_object_do_invoke takes away 1 refcount */
+	get_si_object(si);
+	args[0].o = si;
+	args[0].type = SI_AT_IO;
+	args[1].type = SI_AT_END;
+
+	ret = si_object_do_invoke(&oic, __dpd_priv->service, IMM_SVC_REGISTER_CBO, args, &result);
+	if (ret) {
+		pr_err("Invoke failed with %d\n", ret);
+		return ret;
+	}
+	if (result) {
+		pr_err("Register cbo service call failed with %d\n", result);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dpd_svc_register_cbo);
 
 /*
  * This driver is intended to be backwards compatible with the APIs for

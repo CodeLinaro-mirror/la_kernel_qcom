@@ -322,6 +322,8 @@
 #define QCOM_ID_CANOEPSG		743
 #define QCOM_ID_SHIKRA			756
 #define QCOM_ID_MALABARP                757
+#define QCOM_ID_BOURTZI			776
+#define QCOM_ID_BOURTZIP		777
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and
