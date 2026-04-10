@@ -1204,7 +1204,8 @@ static void stmmac_check_pcs_mode(struct stmmac_priv *priv)
 		    (interface == PHY_INTERFACE_MODE_RGMII_TXID)) {
 			netdev_dbg(priv->dev, "PCS RGMII support enabled\n");
 			priv->hw->pcs = STMMAC_PCS_RGMII;
-		} else if (interface == PHY_INTERFACE_MODE_SGMII) {
+		} else if ((interface == PHY_INTERFACE_MODE_SGMII) ||
+			   (interface == PHY_INTERFACE_MODE_2500BASEX)) {
 			netdev_dbg(priv->dev, "PCS SGMII support enabled\n");
 			priv->hw->pcs = STMMAC_PCS_SGMII;
 		}
@@ -6323,6 +6324,9 @@ static int stmmac_setup_tc_block_cb(enum tc_setup_type type, void *type_data,
 {
 	struct stmmac_priv *priv = cb_priv;
 	int ret = -EOPNOTSUPP;
+
+	if (!netif_running(priv->dev))
+		return -EINVAL;
 
 	if (!tc_cls_can_offload_and_chain0(priv->dev, type_data))
 		return ret;

@@ -41,6 +41,15 @@ gcc-shikra.ko
 dwc3-msm.ko
 phy-generic.ko
 phy-qcom-emu.ko
+mem-prot.ko
+gh_arm_drv.ko
+gh_dbl.ko
+gh_mem_notifier.ko
+gh_msgq.ko
+gh_vcpu_mgr.ko
+gh_rm_drv.ko
+gh_rm_heap_manager.ko
+gunyah_loader.ko
 usb_f_ccid.ko
 usb_f_cdev.ko
 usb_f_gsi.ko
@@ -81,3 +90,8 @@ qcom_logbuf_boot_log.ko
 debug_symbol.ko
 minidump.ko
 qcom-dload-mode.ko
+memory_dump_v2.ko
+dcc_v2.ko
+msm-poweroff.ko
+phy-msm-ssusb-qmp.ko
+phy-msm-qusb.ko

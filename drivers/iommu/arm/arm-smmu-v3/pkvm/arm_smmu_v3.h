@@ -47,5 +47,6 @@ enum kvm_arm_smmu_domain_type {
 	KVM_ARM_SMMU_DOMAIN_S2,
 	KVM_ARM_SMMU_DOMAIN_MAX,
 };
+int smmuv3_hyp_nesting_init(void);
 
 #endif /* __KVM_ARM_SMMU_V3_H */

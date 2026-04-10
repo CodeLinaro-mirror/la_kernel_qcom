@@ -10,6 +10,10 @@
 int qtee_shmbridge_driver_init(void);
 void qtee_shmbridge_driver_exit(void);
 
+int qtee_shmbridge_pm_freeze(void);
+int qtee_shmbridge_pm_restore(void);
+int qtee_shmbridge_pm_thaw(void);
+
 #else
 static inline int qtee_shmbridge_driver_init(void)
 {
@@ -17,6 +21,21 @@ static inline int qtee_shmbridge_driver_init(void)
 }
 
 static inline void qtee_shmbridge_driver_exit(void) {}
+
+static inline int qtee_shmbridge_pm_freeze(void)
+{
+	return 0;
+}
+
+static inline int qtee_shmbridge_pm_restore(void)
+{
+	return 0;
+}
+
+static inline int qtee_shmbridge_pm_thaw(void)
+{
+	return 0;
+}
 #endif
 
 #define SCM_SVC_RTIC                                0x19

@@ -2686,8 +2686,20 @@ static const struct msm_pinctrl_soc_data shikra_tlmm = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data shikra_vm_tlmm = {
+	.pins = shikra_pins,
+	.npins = ARRAY_SIZE(shikra_pins),
+	.functions = shikra_functions,
+	.nfunctions = ARRAY_SIZE(shikra_functions),
+	.groups = shikra_groups,
+	.ngroups = ARRAY_SIZE(shikra_groups),
+	.ngpios = 166,
+	.egpio_func = 11,
+};
+
 static const struct of_device_id shikra_tlmm_of_match[] = {
 	{ .compatible = "qcom,shikra-tlmm", .data = &shikra_tlmm },
+	{ .compatible = "qcom,shikra-vm-tlmm", .data = &shikra_vm_tlmm },
 	{},
 };
 

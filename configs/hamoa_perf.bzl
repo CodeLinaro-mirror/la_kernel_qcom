@@ -235,6 +235,7 @@ hamoa_perf_config = {
     "CONFIG_QTI_DYNPF_SCMI": "n",
     "CONFIG_QTI_FCTL_SCMI": "n",
     "CONFIG_QTI_GLINK_ADC": "m",
+    "CONFIG_QTI_IOMMU_SUPPORT": "m",
     "CONFIG_QTI_MPAM": "n",
     "CONFIG_QTI_PMIC_GLINK": "m",
     "CONFIG_QTI_PMIC_GLINK_DEBUG": "m",

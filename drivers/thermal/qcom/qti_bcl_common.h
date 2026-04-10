@@ -95,6 +95,7 @@ struct bcl_device {
 	bool				ibat_ccm_lando_enabled;
 	bool				ibat_use_qg_adc;
 	bool				no_bit_shift;
+	bool				vph_dynamic_thresh;
 	uint32_t			ibat_ext_range_factor;
 	struct mutex			stats_lock;
 	struct bcl_bpm_stats		bpm_stats;

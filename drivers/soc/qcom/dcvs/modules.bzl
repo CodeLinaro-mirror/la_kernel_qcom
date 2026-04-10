@@ -229,3 +229,24 @@ def register_modules(registry):
             "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/bwprof_scmi",
+        out = "bwprof_scmi.ko",
+        config = "CONFIG_QCOM_BWPROF_SCMI",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/bwprof_scmi.c",
+            "drivers/soc/qcom/dcvs/bwprof_scmi.h",
+            "drivers/soc/qcom/dcvs/smci_bwprof.h",
+            "drivers/soc/qcom/dcvs/trace-dcvs.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+            "drivers/firmware/qcom/qcom-scm",
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/firmware/qcom/si_core/si_core_module",
+            "drivers/soc/qcom/dcvs/qcom-dcvs",
+        ],
+    )

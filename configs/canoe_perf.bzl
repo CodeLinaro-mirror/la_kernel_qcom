@@ -1,6 +1,7 @@
 canoe_perf_config = {
     # keep sorted
     "CONFIG_ARCH_ALOR": "y",
+    "CONFIG_ARCH_BOURTZI": "y",
     "CONFIG_ARCH_CANOE": "y",
     "CONFIG_ARCH_CHORA": "y",
     "CONFIG_ARCH_RAVELIN": "y",
@@ -98,6 +99,7 @@ canoe_perf_config = {
     "CONFIG_IPC_LOGGING_CDEV": "n",
     "CONFIG_IPC_LOG_MINIDUMP_BUFFERS": "16",
     "CONFIG_MEM_PROT": "m",
+    "CONFIG_LEDS_AW2016": "m",
     "CONFIG_LEDS_QCOM_FLASH": "m",
     "CONFIG_LEDS_QCOM_LPG": "m",
     "CONFIG_LEDS_QPNP_VIBRATOR_LDO": "m",
@@ -146,6 +148,7 @@ canoe_perf_config = {
     "CONFIG_PHY_QCOM_UFS_QRBTC_SDM845": "m",
     "CONFIG_PHY_QCOM_UFS_V4_CANOE": "m",
     "CONFIG_PHY_QCOM_UFS_V4_CROW": "m",
+    "CONFIG_PHY_QCOM_UFS_V4_WAIPIO": "m",
     "CONFIG_PINCTRL_ALOR": "m",
     "CONFIG_PINCTRL_CANOE": "m",
     "CONFIG_PINCTRL_CHORA": "m",
@@ -249,6 +252,7 @@ canoe_perf_config = {
     "CONFIG_QCOM_POWER_TELEMETRY_DATA_SHARE": "m",
     "CONFIG_QCOM_POWER_TELEMETRY_FRAMEWORK": "m",
     "CONFIG_QCOM_POWER_TELEMETRY_HW": "m",
+    "CONFIG_QCOM_QFPROM_SYS": "m",
     "CONFIG_QCOM_Q6V5_ADSP": "n",
     "CONFIG_QCOM_Q6V5_COMMON": "m",
     "CONFIG_QCOM_Q6V5_MSS": "n",
