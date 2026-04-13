@@ -57,7 +57,6 @@
 #include "drivers/usb/dwc3/debug.h"
 #include "drivers/usb/host/xhci.h"
 #include "debug-ipc.h"
-#include <trace/hooks/usb.h>
 
 #define NUM_LOG_PAGES   12
 
