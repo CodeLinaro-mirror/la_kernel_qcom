@@ -1134,42 +1134,6 @@ static int setup_pseudo_event_ring(int card_num,
 	return ret;
 }
 
-/**
- * uaudio_add_endpoint - Safely add endpoint to xHCI sideband
- * @card_num: PCM card number
- * @ep: USB host endpoint to add
- *
- * This wrapper safely retrieves the sideband pointer and adds the endpoint.
- * It handles the case where sideband might change or become invalid.
- *
- * Returns: 0 on success, negative error code on failure
- */
-static int uaudio_add_endpoint(int card_num,
-					struct usb_host_endpoint *ep)
-{
-	struct xhci_sideband *sb;
-	int ret;
-
-	if (card_num >= SNDRV_CARDS) {
-		uaudio_err("invalid card number %d\n", card_num);
-		return -EINVAL;
-	}
-
-	sb = uadev[card_num].sb;
-	if (!sb) {
-		dev_err(uaudio_qdev->dev,
-			"sideband not available for card %d\n", card_num);
-		return -ENODEV;
-	}
-
-	ret = xhci_sideband_add_endpoint(sb, ep);
-	if (ret < 0) {
-		dev_err(uaudio_qdev->dev,
-			"failed to add endpoint (ret=%d)\n", ret);
-		return ret;
-	}
-	return 0;
-}
 
 static int prepare_qmi_response(struct snd_usb_substream *subs,
 		struct qmi_uaudio_stream_req_msg_v01 *req_msg,
@@ -1278,7 +1242,7 @@ skip_sync_ep:
 
 	/* Setup XHCI interrupter */
 	ret = setup_xhci_interrupter(card_num, subs, resp);
-	if (ret == -ENODEV || ret == -ENOMEM)
+	if (ret < 0)
 		goto drop_sync_ep;
 
 	sgt = xhci_sideband_get_event_buffer(uadev[card_num].sb);

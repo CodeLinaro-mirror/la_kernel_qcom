@@ -404,6 +404,7 @@ static int entry_inc_deq(struct kretprobe_instance *ri,
 	if (!xhci) {
 		data->xi0 = -EINVAL;
 		data->dwc = NULL;
+		pr_err("UGMI: inc_deq xhci NULL");
 		return 0;
 	}
 
