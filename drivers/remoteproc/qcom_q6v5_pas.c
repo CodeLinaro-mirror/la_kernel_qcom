@@ -3316,6 +3316,17 @@ static const struct adsp_data scuba_mpss_resource = {
 	.both_dumps = true,
 };
 
+static const struct adsp_data bourtzi_wpss_resource = {
+	.crash_reason_smem = 626,
+	.firmware_name = "wpss.mdt",
+	.pas_id = 6,
+	.minidump_id = 4,
+	.load_state = "wpss",
+	.uses_elf64 = true,
+	.ssr_name = "wpss",
+	.sysmon_name = "wpss",
+	.ssctl_id = 0x19,
+};
 
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
@@ -3432,6 +3443,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,lahaina-cdsp-pas", .data = &yupik_cdsp_resource},
 	{ .compatible = "qcom,lahaina-modem-pas", .data = &yupik_mpss_resource},
 	{ .compatible = "qcom,lahaina-slpi-pas", .data = &lahaina_slpi_resource},
+	{ .compatible = "qcom,bourtzi-wpss-pas", .data = &bourtzi_wpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
