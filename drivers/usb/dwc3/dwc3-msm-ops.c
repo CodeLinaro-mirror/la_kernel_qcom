@@ -17,6 +17,7 @@
 #include "drivers/usb/dwc3/core.h"
 #include "debug-ipc.h"
 #include "drivers/usb/dwc3/gadget.h"
+#include "drivers/usb/host/xhci.h"
 
 /* USB2 phy configuration quirk control bit */
 #define USB2PHYCFG_SUSPHY	BIT(0)
@@ -381,6 +382,51 @@ static int exit_dwc3_host_exit(struct kretprobe_instance *ri,
 	return 0;
 }
 
+static int entry_xhci_ring_alloc(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	enum xhci_ring_type type = (enum xhci_ring_type)regs->regs[2];
+
+	if (type == TYPE_EVENT)
+		regs->regs[1] = 1;
+	return 0;
+}
+
+static int entry_inc_deq(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	struct xhci_hcd *xhci = (struct xhci_hcd *)regs->regs[0];
+	struct xhci_ring *ring = (struct xhci_ring *)regs->regs[1];
+	union kprobe_data *data = (union kprobe_data *)ri->data;
+
+	data->xi0 = -EINVAL;
+
+	if (!xhci) {
+		data->xi0 = -EINVAL;
+		data->dwc = NULL;
+		return 0;
+	}
+
+	data->dwc = dev_get_drvdata(xhci->main_hcd->self.controller->parent);
+
+	if (ring->type == TYPE_EVENT)
+		data->xi0 = (int)ring->cycle_state;
+
+	return 0;
+}
+
+static int exit_inc_deq(struct kretprobe_instance *ri,
+			    struct pt_regs *regs)
+{
+	union kprobe_data *data = (union kprobe_data *)ri->data;
+	struct dwc3 *dwc = data->dwc;
+	int cycle = data->xi0;
+
+	if (cycle != -EINVAL && dwc)
+		dwc3_msm_notify_event(dwc, DWC3_QSRAM_WRITE, (u32)cycle);
+
+	return 0;
+}
 
 #define ENTRY_EXIT(name) {\
 	.handler = exit_##name,\
@@ -402,11 +448,13 @@ static struct kretprobe dwc3_msm_probes[] = {
 	ENTRY(dwc3_send_gadget_ep_cmd),
 	ENTRY(dwc3_gadget_reset_interrupt),
 	ENTRY(__dwc3_gadget_ep_enable),
+	ENTRY(xhci_ring_alloc),
 	ENTRY_EXIT(dwc3_host_exit),
 	ENTRY_EXIT(dwc3_gadget_pullup),
 	ENTRY_EXIT(android_work),
 	ENTRY_EXIT(usb_ep_set_maxpacket_limit),
 	ENTRY_EXIT(dwc3_suspend_common),
+	ENTRY_EXIT(inc_deq),
 	ENTRY(trace_event_raw_event_dwc3_log_request),
 	ENTRY(trace_event_raw_event_dwc3_log_gadget_ep_cmd),
 	ENTRY(trace_event_raw_event_dwc3_log_trb),
