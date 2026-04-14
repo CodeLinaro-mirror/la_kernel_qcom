@@ -4106,22 +4106,25 @@ static void stmmac_free_irq(struct net_device *dev,
 		irq_idx = priv->plat->tx_queues_to_use;
 		fallthrough;
 	case REQ_IRQ_ERR_TX:
-		for (j = irq_idx - 1; j >= 0; j--) {
-			if (priv->tx_irq[j] > 0) {
-				irq_set_affinity_hint(priv->tx_irq[j], NULL);
-				free_irq(priv->tx_irq[j], &priv->tx_queue[j]);
+		if (priv->plat->flags & STMMAC_FLAG_MULTI_IRQ_EN) {
+			for (j = irq_idx - 1; j >= 0; j--) {
+				if (priv->tx_irq[j] > 0) {
+					irq_set_affinity_hint(priv->tx_irq[j], NULL);
+					free_irq(priv->tx_irq[j], &priv->tx_queue[j]);
+				}
 			}
 		}
 		irq_idx = priv->plat->rx_queues_to_use;
 		fallthrough;
 	case REQ_IRQ_ERR_RX:
-		for (j = irq_idx - 1; j >= 0; j--) {
-			if (priv->rx_irq[j] > 0) {
-				irq_set_affinity_hint(priv->rx_irq[j], NULL);
-				free_irq(priv->rx_irq[j], &priv->rx_queue[j]);
+		if (priv->plat->flags & STMMAC_FLAG_MULTI_IRQ_EN) {
+			for (j = irq_idx - 1; j >= 0; j--) {
+				if (priv->rx_irq[j] > 0) {
+					irq_set_affinity_hint(priv->rx_irq[j], NULL);
+					free_irq(priv->rx_irq[j], &priv->rx_queue[j]);
+				}
 			}
 		}
-
 		if (priv->sfty_ue_irq > 0 && priv->sfty_ue_irq != dev->irq)
 			free_irq(priv->sfty_ue_irq, dev);
 		fallthrough;
@@ -4661,6 +4664,9 @@ static int STMMAC_handle_prv_ioctl_filter_ipv6(struct net_device *dev,
 				filter->src_or_dest_addr[14] << 8 |
 				filter->src_or_dest_addr[15];
 		writel_relaxed(value, priv->ioaddr + GMAC_L3_ADDR0(cur_filter_num));
+	} else {
+		/*write to GMAC_L3_L4_Control register*/
+		writel_relaxed(value, priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));
 	}
 
 	if (filter->l4_filter.l4_proto_number == IPPROTO_UDP)
@@ -5120,6 +5126,11 @@ static int stmmac_release(struct net_device *dev)
 	u32 chan;
 
 	qcom_ethstate_update(priv->plat, EMAC_HW_DOWN);
+
+	/* Due to DMA reset, the filters installed in the HW will be reset
+	 * Ensure that the array tracking the HW state is in sync.
+	 */
+	memset(priv->hw->vlan_filter, 0, sizeof(priv->hw->vlan_filter));
 
 	/*Reset num filters so ndo_open can reinit everything*/
 	priv->app_l3_l4_filters = 0;
