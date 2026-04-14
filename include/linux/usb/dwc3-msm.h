@@ -42,6 +42,9 @@
 /* EBC TRB parameters */
 #define EBC_TRB_SIZE			16384
 
+/* Force suspend phy */
+#define PHY_FORCE_SUSPEND			2
+
 enum dp_lane {
 	DP_NONE = 1,
 	DP_2_LANE = 2,
