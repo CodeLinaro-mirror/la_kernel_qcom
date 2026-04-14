@@ -31,6 +31,7 @@ blocklist mt2266
 blocklist mxl301rf
 blocklist net_failover
 blocklist pkvm-geni
+blocklist pkvm-secure-memory-manager
 blocklist pkvm-smc-filter
 blocklist qca_cld3_kiwi
 blocklist qcom_smmu_v2_v3_dispatcher
