@@ -103,7 +103,6 @@ enum dwc3_notify_event {
 	DWC3_GSI_EVT_BUF_FREE,
 	DWC3_CONTROLLER_NOTIFY_CLEAR_DB,
 	DWC3_IMEM_UPDATE_PID,
-	DWC3_QSRAM_WRITE
 };
 
 /*
@@ -293,7 +292,6 @@ static inline void usb_gadget_autopm_put_no_suspend(struct usb_gadget *gadget)
 
 #if IS_ENABLED(CONFIG_USB_DWC3_MSM)
 struct qsram_xhci __iomem *dwc3_msm_get_qsram(struct device *dev);
-
 void dwc3_msm_notify_event(struct dwc3 *dwc,
 		enum dwc3_notify_event event, unsigned int value);
 int usb_gsi_ep_op(struct usb_ep *ep, void *op_data, enum gsi_ep_op op);
