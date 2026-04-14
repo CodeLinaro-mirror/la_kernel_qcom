@@ -820,7 +820,7 @@ void smart_freq_init(const char *name)
 				cluster->smart_freq_info->min_cycles = 7004160;
 			}
 		}
-	} else if (!strcmp(name, "MALABAR")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
