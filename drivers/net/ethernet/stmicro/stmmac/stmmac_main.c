@@ -5373,6 +5373,8 @@ read_again:
 		if (unlikely(status & dma_own))
 			break;
 
+		dma_rmb();
+
 		/* Prefetch the next RX descriptor */
 		rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
 						priv->dma_conf.dma_rx_size);
