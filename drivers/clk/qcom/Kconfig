@@ -1238,4 +1238,14 @@ config CLK_GLYMUR_CAMCC
 	  Say Y if you want to support camera devices and functionality such as
 	  capturing pictures.
 
+config CLK_GLYMUR_DISPCC
+	tristate "GLYMUR Display Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_GLYMUR_GCC
+	help
+	  Support for the display clock controllers on Qualcomm
+	  Technologies, Inc. GLYMUR devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
 endif
