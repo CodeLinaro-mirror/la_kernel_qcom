@@ -1190,4 +1190,14 @@ config QCM_DEBUGCC_2290
 	 Say Y if you want to support the debug clocks such as
 	 clock measurement functionality.
 
+config CLK_GLYMUR_TCSRCC
+	tristate "GLYMUR TCSR Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the TCSR clock controller on Qualcomm Technologies, Inc
+	  Glymur devices.
+	  Say Y if you want to use peripheral devices such as USB/PCIe/EDP.
+	  This controller manages clocks used by various on-chip peripherals.
+
 endif
