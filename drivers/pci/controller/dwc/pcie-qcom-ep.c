@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Qualcomm PCIe Endpoint controller driver
  *
