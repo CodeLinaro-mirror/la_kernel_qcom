@@ -717,7 +717,7 @@ EXPORT_SYMBOL_GPL(devm_stmmac_probe_config_dt);
 int stmmac_get_platform_resources(struct platform_device *pdev,
 				  struct stmmac_resources *stmmac_res)
 {
-	char irq_name[9];
+	char irq_name[16];
 	int i;
 	int irq;
 
@@ -760,6 +760,18 @@ int stmmac_get_platform_resources(struct platform_device *pdev,
 		if (stmmac_res->sfty_irq == -EPROBE_DEFER)
 			return -EPROBE_DEFER;
 		dev_info(&pdev->dev, "IRQ sfty not found\n");
+	}
+
+	/* For RX and TX Channel */
+	for (i = 0; i < STMMAC_CH_MAX; i++) {
+		snprintf(irq_name, sizeof(irq_name), "dma_tx_rx%i", i);
+		irq = platform_get_irq_byname_optional(pdev, irq_name);
+		if (irq == -EPROBE_DEFER)
+			return irq;
+		else if (irq < 0)
+			continue;
+
+		stmmac_res->tx_rx_irq[i] = irq;
 	}
 
 	/* For RX Channel */
