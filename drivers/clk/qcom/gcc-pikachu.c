@@ -1943,21 +1943,6 @@ static struct clk_branch gcc_disp_0_hf_axi_clk = {
 	},
 };
 
-static struct clk_branch gcc_disp_sf_axi_clk = {
-	.halt_reg = 0x27024,
-	.halt_check = BRANCH_HALT_SKIP,
-	.hwcg_reg = 0x27024,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x27024,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_disp_sf_axi_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gcc_disp_tsctr_clk = {
 	.halt_reg = 0x27034,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -3697,7 +3682,6 @@ static struct clk_regmap *gcc_pikachu_clocks[] = {
 	[GCC_CNOC_PCIE_SF_AXI_CLK] = &gcc_cnoc_pcie_sf_axi_clk.clkr,
 	[GCC_DDRSS_PCIE_SF_QTB_CLK] = &gcc_ddrss_pcie_sf_qtb_clk.clkr,
 	[GCC_DISP_0_HF_AXI_CLK] = &gcc_disp_0_hf_axi_clk.clkr,
-	[GCC_DISP_SF_AXI_CLK] = &gcc_disp_sf_axi_clk.clkr,
 	[GCC_DISP_TSCTR_CLK] = &gcc_disp_tsctr_clk.clkr,
 	[GCC_EVA_AXI0_CLK] = &gcc_eva_axi0_clk.clkr,
 	[GCC_EVA_AXI0C_CLK] = &gcc_eva_axi0c_clk.clkr,
