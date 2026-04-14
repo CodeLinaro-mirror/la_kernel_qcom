@@ -517,8 +517,6 @@ struct extcon_nb {
 #define PM_QOS_PERF_SAMPLE_MS	2000
 #define PM_QOS_PERF_SAMPLE_THRESHOLD	400
 
-#define UTXR				0 /* USB Trasnfer */
-#define UCORE				1 /* USB Core */
 #define MIN_PD				2
 
 struct dwc3_msm {
@@ -3157,11 +3155,11 @@ static int dwc3_msm_modeled_d3_to_d0(struct dwc3_msm *mdwc)
 {
 	int ret;
 
-	ret = pm_runtime_resume_and_get(mdwc->pd_devs[UTXR]);
+	ret = pm_runtime_resume_and_get(mdwc->pd_devs[0]);
 	if (ret)
 		return ret;
 
-	ret = pm_runtime_resume_and_get(mdwc->pd_devs[UCORE]);
+	ret = pm_runtime_resume_and_get(mdwc->pd_devs[1]);
 	if (ret)
 		return ret;
 
@@ -3173,10 +3171,10 @@ static int dwc3_msm_modeled_d0_to_d3(struct dwc3_msm *mdwc)
 {
 	int ret;
 
-	ret = pm_runtime_put_sync(mdwc->pd_devs[UTXR]);
+	ret = pm_runtime_put_sync(mdwc->pd_devs[0]);
 	if (ret)
 		return ret;
-	ret = pm_runtime_put_sync(mdwc->pd_devs[UCORE]);
+	ret = pm_runtime_put_sync(mdwc->pd_devs[1]);
 	if (ret)
 		return ret;
 
@@ -3186,13 +3184,13 @@ static int dwc3_msm_modeled_d0_to_d3(struct dwc3_msm *mdwc)
 /* d1_to_d0 transition by turning on the 'usb_tranfer' supplier */
 static int dwc3_msm_modeled_d1_to_d0(struct dwc3_msm *mdwc)
 {
-	return pm_runtime_resume_and_get(mdwc->pd_devs[UTXR]);
+	return pm_runtime_resume_and_get(mdwc->pd_devs[0]);
 }
 
 /* d0_to_d1 transition by turning off the 'usb_tranfer' supplier */
 static int dwc3_msm_modeled_d0_to_d1(struct dwc3_msm *mdwc)
 {
-	return pm_runtime_put_sync(mdwc->pd_devs[UTXR]);
+	return pm_runtime_put_sync(mdwc->pd_devs[0]);
 }
 
 static void dwc3_resume_work(struct work_struct *w);
@@ -7151,13 +7149,6 @@ static void dwc3_msm_shutdown(struct platform_device *pdev)
 	dwc3_msm_set_role(mdwc, USB_ROLE_NONE);
 	mdwc->dis_role_switch = true;
 	flush_workqueue(mdwc->sm_usb_wq);
-	if (mdwc->fw_managed_pwr) {
-		pm_runtime_force_suspend(mdwc->pd_devs[UTXR]);
-		pm_runtime_force_suspend(mdwc->pd_devs[UCORE]);
-		usb_phy_set_suspend(mdwc->hs_phy, PHY_FORCE_SUSPEND);
-		usb_phy_set_suspend(mdwc->ss_phy, PHY_FORCE_SUSPEND);
-	}
-
 }
 
 static int dwc3_msm_host_ss_powerdown(struct dwc3_msm *mdwc)
