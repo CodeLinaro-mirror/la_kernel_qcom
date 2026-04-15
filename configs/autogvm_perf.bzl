@@ -13,6 +13,7 @@ autogvm_perf_config = {
     "CONFIG_ARM_SMMU_SELFTEST": "n",
     "CONFIG_ARM_SMMU_V3": "m",
     "CONFIG_ARM_SMMU_V3_QCOM_VIRTIO": "y",
+    "CONFIG_BOOTMARKER_PROXY": "m",
     "CONFIG_CFG80211": "m",
     "CONFIG_COMMON_CLK_QCOM": "m",
     "CONFIG_CRYPTO_DEV_QCOM_RNG": "m",
