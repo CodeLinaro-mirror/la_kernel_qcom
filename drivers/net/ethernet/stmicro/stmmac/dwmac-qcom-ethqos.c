@@ -28,6 +28,7 @@
 #define EMAC_WRAPPER_USXGMII_MUX_SEL 0x1D0
 #define RGMII_IO_MACRO_SCRATCH_2		0x44
 #define EMAC_WRAPPER_SGMII_PHY_CNTRL1_V4 0x174
+#define MACSEC_CTRL0_OFFSET			0x0
 
 /* RGMII_IO_MACRO_CONFIG fields */
 #define RGMII_CONFIG_FUNC_CLK_EN		BIT(30)
@@ -109,6 +110,9 @@
 #define RGMII_SCRATCH2_MAX_SPD_PRG_5		GENMASK(9, 6)
 #define RGMII_SCRATCH2_MAX_SPD_PRG_6		GENMASK(13, 10)
 
+/* MACSEC WRAPPER bits */
+#define MACSEC_BIT_DATA_BYPASS		BIT(2)
+
 #define SGMII_10M_RX_CLK_DVDR			0x31
 
 struct ethqos_emac_por {
@@ -129,11 +133,13 @@ struct ethqos_emac_driver_data {
 	struct dwmac4_addrs dwmac4_addrs;
 	bool needs_sgmii_loopback;
 	bool has_hdma;
+	bool has_macsec;
 	bool has_io_macro_ge_4;
 };
 
 struct qcom_ethqos {
 	struct platform_device *pdev;
+	void __iomem *macsec_base;
 	void __iomem *rgmii_base;
 	void __iomem *mac_base;
 	int (*configure_func)(struct qcom_ethqos *ethqos);
@@ -150,6 +156,7 @@ struct qcom_ethqos {
 	bool has_io_macro_ge_4;
 	bool rgmii_config_loopback_en;
 	bool has_emac_ge_3;
+	bool has_macsec;
 	bool needs_sgmii_loopback;
 	bool needs_rx_prog_swap;
 };
@@ -349,6 +356,16 @@ static const struct ethqos_emac_por emac_v6_6_0_por[] = {
 	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
 };
 
+static const struct ethqos_emac_por emac_v6_6_1_por[] = {
+	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0xC04D03 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
+	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040800 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
+	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
+	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x222060},
+	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
+};
+
 static const struct ethqos_emac_driver_data emac_v4_0_0_data = {
 	.por = emac_v4_0_0_por,
 	.num_por = ARRAY_SIZE(emac_v4_0_0_por),
@@ -384,6 +401,33 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.link_clk_name = "phyaux",
 	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
 	.has_hdma = true,
+	.needs_sgmii_loopback = true,
+	.has_io_macro_ge_4 = true,
+	.axi_clk_rate = 380000000,
+	.dwxgmac_addrs = {
+		.dma_even_chan_base  = 0x00008500,
+		.dma_odd_chan_base = 0x00008580,
+		.dma_chan_offset = 0x00001000,
+		.mtl_chan_base = 0x00008000,
+		.mtl_chan_offset =  0x00001000,
+		.timestamp_base = 0x00007000,
+		.pps_base = 0x00007080,
+		.pps_offset = 0x10,
+	},
+};
+
+/* emac_v6_6_1 is added because of the addition of new MACSEC
+ * block and the flags associated with it.
+ */
+static const struct ethqos_emac_driver_data emac_v6_6_1_data = {
+	.por = emac_v6_6_1_por,
+	.num_por = ARRAY_SIZE(emac_v6_6_1_por),
+	.rgmii_config_loopback_en = false,
+	.dma_addr_width = 40,
+	.link_clk_name = "phyaux",
+	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
+	.has_hdma = true,
+	.has_macsec = true,
 	.needs_sgmii_loopback = true,
 	.has_io_macro_ge_4 = true,
 	.axi_clk_rate = 380000000,
@@ -704,6 +748,21 @@ static int ethqos_configure_rgmii(struct qcom_ethqos *ethqos)
 	return 0;
 }
 
+static void ethqos_force_macsec_bypass(struct qcom_ethqos *ethqos)
+{
+	void __iomem *macsec_base = ethqos->macsec_base;
+	u32 val;
+
+	if (!macsec_base)
+		return;
+
+	val = readl_relaxed(macsec_base + MACSEC_CTRL0_OFFSET);
+
+	val |= MACSEC_BIT_DATA_BYPASS;
+
+	writel_relaxed(val, macsec_base + MACSEC_CTRL0_OFFSET);
+}
+
 /* On interface toggle MAC registers gets reset.
  * Configure MAC block for SGMII on ethernet phy link up
  */
@@ -889,6 +948,10 @@ static int ethqos_configure_usxgmii(struct qcom_ethqos *ethqos)
 			"Invalid speed %d\n", ethqos->speed);
 		return -EINVAL;
 	}
+
+	if (ethqos->has_macsec)
+		ethqos_force_macsec_bypass(ethqos);
+
 	return 0;
 }
 
@@ -1190,8 +1253,17 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	if (data->has_macsec) {
+		ethqos->macsec_base = devm_platform_ioremap_resource_byname(pdev, "macsec");
+		if (IS_ERR(ethqos->macsec_base)) {
+			return dev_err_probe(dev, PTR_ERR(ethqos->macsec_base),
+					"Failed to map macsec resource\n");
+		}
+	}
+
 	ethqos->por = data->por;
 	ethqos->num_por = data->num_por;
+	ethqos->has_macsec = data->has_macsec;
 	ethqos->has_io_macro_ge_4 = data->has_io_macro_ge_4;
 	ethqos->rgmii_config_loopback_en = data->rgmii_config_loopback_en;
 	ethqos->has_emac_ge_3 = data->has_emac_ge_3;
@@ -1282,6 +1354,7 @@ static const struct of_device_id qcom_ethqos_match[] = {
 	{ .compatible = "qcom,sm8150-ethqos", .data = &emac_v2_1_0_data},
 	{ .compatible = "qcom,sa8620p-ethqos", .data = &emac_v4_0_0_data},
 	{ .compatible = "qcom,sa8797p-ethqos", .data = &emac_v6_6_0_data},
+	{ .compatible = "qcom,sa8787p-ethqos", .data = &emac_v6_6_1_data},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_ethqos_match);
