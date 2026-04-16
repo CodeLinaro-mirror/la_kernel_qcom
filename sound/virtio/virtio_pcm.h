@@ -25,12 +25,12 @@ struct virtio_pcm_msg;
  * @pcm_indirect: Kernel indirect pcm structure.
  * @hw: Kernel ALSA substream hardware descriptor.
  * @elapsed_period: Kernel work to handle the elapsed period state.
+ * @xrun_work: Kernel work to handle data underflow/overflow state.
  * @lock: Spinlock that protects fields shared by interrupt handlers and
  *        substream operators.
  * @buffer_bytes: Current buffer size in bytes.
  * @hw_ptr: Substream hardware pointer value in bytes [0 ... buffer_bytes).
  * @xfer_enabled: Data transfer state (0 - off, 1 - on).
- * @xfer_xrun: Data underflow/overflow state (0 - no xrun, 1 - xrun).
  * @stopped: True if the substream is stopped and must be released on the device
  *           side.
  * @suspended: True if the substream is suspended and must be reconfigured on
@@ -51,6 +51,7 @@ struct virtio_pcm_substream {
 	struct snd_pcm_indirect pcm_indirect;
 	struct snd_pcm_hardware hw;
 	struct work_struct elapsed_period;
+	struct work_struct xrun_work;
 	spinlock_t lock;
 	size_t buffer_bytes;
 	size_t hw_ptr;

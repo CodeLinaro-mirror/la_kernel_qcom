@@ -324,7 +324,6 @@ static void virtsnd_pcm_msg_complete(struct virtio_pcm_msg *msg,
 
 	msg->length = 0;
 
-	vss->xfer_xrun = false;
 	vss->msg_count--;
 
 	if (vss->xfer_enabled) {

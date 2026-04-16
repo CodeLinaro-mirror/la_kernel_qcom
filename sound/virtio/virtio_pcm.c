@@ -314,6 +314,24 @@ static void virtsnd_pcm_period_elapsed(struct work_struct *work)
 }
 
 /**
+ * virtsnd_pcm_xrun() - Kernel work function to handle xrun state.
+ * @work: Elapsed period work.
+ *
+ * The main purpose of this function is to call snd_pcm_stop_xrun() when
+ * VIRTIO_SND_EVT_PCM_XRUN event is sent by device.
+ *
+ * Context: Process context.
+ */
+static void virtsnd_pcm_xrun(struct work_struct *work)
+
+{
+	struct virtio_pcm_substream *vss =
+		container_of(work, struct virtio_pcm_substream, xrun_work);
+
+	snd_pcm_stop_xrun(vss->substream);
+}
+
+/**
  * virtsnd_pcm_parse_cfg() - Parse the stream configuration.
  * @snd: VirtIO sound device.
  *
@@ -355,6 +373,7 @@ int virtsnd_pcm_parse_cfg(struct virtio_snd *snd)
 		vss->snd = snd;
 		vss->sid = i;
 		INIT_WORK(&vss->elapsed_period, virtsnd_pcm_period_elapsed);
+		INIT_WORK(&vss->xrun_work, virtsnd_pcm_xrun);
 		init_waitqueue_head(&vss->msg_empty);
 		spin_lock_init(&vss->lock);
 
@@ -506,10 +525,7 @@ void virtsnd_pcm_event(struct virtio_snd *snd, struct virtio_snd_event *event)
 		/* TODO: deal with shmem elapsed period */
 		break;
 	case VIRTIO_SND_EVT_PCM_XRUN:
-		spin_lock(&vss->lock);
-		if (vss->xfer_enabled)
-			vss->xfer_xrun = true;
-		spin_unlock(&vss->lock);
+		schedule_work(&vss->xrun_work);
 		break;
 	}
 }

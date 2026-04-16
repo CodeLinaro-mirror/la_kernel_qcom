@@ -295,7 +295,6 @@ static int virtsnd_pcm_prepare(struct snd_pcm_substream *substream)
 			return rc;
 	}
 
-	vss->xfer_xrun = false;
 	vss->suspended = false;
 	vss->msg_count = 0;
 
