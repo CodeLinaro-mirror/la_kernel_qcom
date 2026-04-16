@@ -8511,6 +8511,14 @@
 				};
 			};
 
+			/* CCI async input GPIOs */
+			cci_async_default: cci-async-state {
+				pins = "gpio68", "gpio69";
+				function = "cci_async";
+				drive-strength = <2>;
+				bias-disable;
+			};
+
 			cci0_0_default: cci0-0-default-state {
 				sda-pins {
 					pins = "gpio60";
@@ -11708,5 +11716,32 @@
 		#phy-cells = <0>;
 
 		status = "disabled";
+	};
+
+	tsc@1c80000 {
+		compatible = "qcom,tsc-v1";
+		reg = <0x0 0x01c80000 0x0 0x2000>,
+		      <0x0 0x01c90000 0x0 0x10000>;
+
+		clocks = <&gcc GCC_TSCSS_AHB_CLK>,
+			 <&gcc GCC_TSCSS_GLOBAL_CNTR_CLK>,
+			 <&gcc GCC_TSCSS_ETU_CLK>;
+		clock-names = "cfg_ahb", "cntr", "etu";
+
+		assigned-clocks = <&gcc GCC_TSCSS_GLOBAL_CNTR_CLK>,
+				  <&gcc GCC_TSCSS_ETU_CLK>;
+		assigned-clock-rates = <15625000>, <15625000>;
+
+		qcom,tsc-nsec-update;
+
+		interrupts = <GIC_SPI 766 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "etu_summary_irq";
+
+		qcom,etu-slice = <10 11>;
+		qcom,etu-event-sel = <10 11>;
+		qcom,etu-event-names = "gps_pps", "tod_pps";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&cci_async_default>;
 	};
 };
