@@ -1219,4 +1219,14 @@ config CLK_GLYMUR_VIDEOCC
 	  Say Y if you want to support video devices and functionality such as
 	  video encode and decode.
 
+config CLK_GLYMUR_CAMCC
+	tristate "Glymur Camera Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_GLYMUR_GCC
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  Glymur devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 endif
