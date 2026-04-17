@@ -377,7 +377,7 @@ static void dwxgmac2_flow_ctrl(struct mac_device_info *hw, unsigned int duplex,
 	if (fc & FLOW_RX)
 		writel(XGMAC_RFE, ioaddr + XGMAC_RX_FLOW_CTRL);
 	if (fc & FLOW_TX) {
-		for (i = 0; i < tx_cnt; i++) {
+		for (i = 0; i < min(tx_cnt, XGMAC_MAX_TC); i++) {
 			u32 value = XGMAC_TFE;
 
 			if (duplex)
