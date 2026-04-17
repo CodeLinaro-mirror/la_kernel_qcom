@@ -1,7 +1,6 @@
 hamoa_la_perf_config = {
     # keep sorted
     "CONFIG_ARCH_X1E80100": "y",
-    "CONFIG_ARCH_X1P42100": "y",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
     "CONFIG_ARM_SMMU_QCOM": "m",
