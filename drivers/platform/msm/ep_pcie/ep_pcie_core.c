@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 /*
  * MSM PCIe endpoint core driver.
@@ -152,6 +152,8 @@ static const struct ep_pcie_irq_info_t ep_pcie_irq_info[EP_PCIE_MAX_IRQ] = {
 
 static int ep_pcie_core_wakeup_host_internal(enum ep_pcie_event event);
 static void ep_pcie_config_inbound_iatu(struct ep_pcie_dev_t *dev, bool is_vf);
+static void ep_pcie_poll_l1ss_exit(void);
+static int ep_pcie_core_send_ltr_msg(bool req_bit, u32 ltr_us);
 
 /*
  * ep_pcie_clk_dump - Clock CBCR reg info will be dumped in Dmesg logs.
@@ -3810,15 +3812,114 @@ int ep_pcie_core_trigger_msix(u32 idx, u32 vf_id)
 	return 0;
 }
 
+static int ep_pcie_core_send_ltr_msg(bool req_bit, u32 ltr_us)
+{
+	u64 ltr_val = 0;
+	bool requirement, scale_found = false;
+	u32 ltr_scale = 0, ltr_status, ltr_unit, ltr_msg, scale;
+	static const u32 ltr_units_scale[] = {0, 5, 10, 15, 20, 25};
+	/*
+	 * LTR scale unit shift amounts corresponding to:
+	 * scale 0: 1 ns   (shift 0)
+	 * scale 1: 32 ns  (shift 5)
+	 * scale 2: 1024 ns (shift 10)
+	 * scale 3: 32768 ns (shift 15)
+	 * scale 4: 1048576 ns (shift 20)
+	 * scale 5: 33554432 ns (shift 25)
+	 */
+
+	if (ep_pcie_dev.link_status == EP_PCIE_LINK_DISABLED) {
+		EP_PCIE_ERR(&ep_pcie_dev, "PCIe V%d: PCIe link is disabled\n", ep_pcie_dev.rev);
+		return EP_PCIE_ERROR;
+	}
+
+	ltr_status = readl_relaxed(ep_pcie_dev.dm_core + PCIE20_DEVICE_CONTROL2_STATUS2);
+	ltr_status &= PCIE_CAP_LTR_EN;
+
+	if (!ltr_status) {
+		EP_PCIE_ERR(&ep_pcie_dev, "PCIe V%d: LTR is not enabled\n", ep_pcie_dev.rev);
+		return EP_PCIE_ERROR;
+	}
+
+	if (ltr_us) {
+		/*
+		 * Select the minimum scale such that the LTR value fits
+		 * in the 10-bit field (max 0x3FF). ltr_us is in microseconds;
+		 * convert to nanoseconds, then shift by ltr_unit bits.
+		 */
+		for (scale = 0; scale <= 5; scale++) {
+			ltr_unit = ltr_units_scale[scale];
+			ltr_scale = scale;
+			ltr_val = (((u64)ltr_us * 1000ULL + ((1 << ltr_unit) - 1)) >> ltr_unit);
+			if (!(ltr_val & ~0x3FF)) {
+				scale_found = true;
+				break;
+			}
+		}
+		if (!scale_found) {
+			EP_PCIE_ERR(&ep_pcie_dev,
+				"PCIe V%d: LTR val too large to fit in msg: %llu us\n",
+				ep_pcie_dev.rev, ltr_val);
+			/* Sending max possible value instead */
+			ltr_val = 0x3FF;
+			ltr_scale = 5;
+		}
+	}
+	/* else: ltr_us == 0 -> ltr_val = 0, ltr_scale = 0 */
+
+	EP_PCIE_DBG(&ep_pcie_dev, "PCIE V%d: LTR ltr_us=%d us, scale=%d, encoded_val=0x%llx\n",
+			ep_pcie_dev.rev, ltr_us, ltr_scale, ltr_val);
+
+	/*
+	 * LTR latency register of Synopsys core, as follows
+	 * [9:0] Snoop latency value
+	 * [12:10] Snoop latency scale
+	 * [14:13] Reserved
+	 * [15] Snoop latency requirement
+	 * [25:16] No snoop latency value
+	 * [28:26] No snoop latency scale
+	 * [30:29] Reserved
+	 * [31] No snoop latency requirement
+	 */
+
+	/* latency value calculation: val | scale | req */
+	requirement = req_bit ? 1 : 0;
+	ltr_val = ((ltr_val & 0x3FF) | (ltr_scale << 10) | (requirement << 15));
+	ltr_msg = (((u32)(ltr_val << 16)) | ltr_val);
+
+	EP_PCIE_DBG(&ep_pcie_dev, "PCIe V%d: LTR msg_gen: %x\n", ep_pcie_dev.rev, ltr_msg);
+
+	/* write the latency value to generate LTR MSG */
+	ep_pcie_write_reg(ep_pcie_dev.parf, PCIE20_PARF_LTR_MSG_GEN, ltr_msg);
+
+	/* exit L1ss to make sure LTR MSG is sent */
+	ep_pcie_poll_l1ss_exit();
+
+	return 0;
+}
+
+static void ep_pcie_poll_l1ss_exit(void)
+{
+	u32 status;
+	int max_poll = MSI_EXIT_L1SS_WAIT_MAX_COUNT;
+
+	status = readl_relaxed(ep_pcie_dev.parf + PCIE20_PARF_LTR_MSI_EXIT_L1SS);
+	while ((status & PCIE20_MSI_EXIT_L1SS) && (max_poll-- > 0)) {
+		udelay(MSI_EXIT_L1SS_WAIT);
+		status = readl_relaxed(ep_pcie_dev.parf + PCIE20_PARF_LTR_MSI_EXIT_L1SS);
+	}
+
+	EP_PCIE_DBG(&ep_pcie_dev, "PCIe V%d: MSI_EXIT_L1SS is %s cleared\n",
+			ep_pcie_dev.rev, max_poll ? "" : "not");
+}
+
 int ep_pcie_core_trigger_msi(u32 idx, u32 vf_id)
 {
 	u32 addr, data, ctrl_reg;
-	u32 status;
 	void __iomem *dbi = ep_pcie_dev.dm_core;
 	void __iomem *msi = ep_pcie_dev.msi;
 	u32 n = 0;
 	u32 msix_cap = ep_pcie_dev.msix_cap;
-	int max_poll = MSI_EXIT_L1SS_WAIT_MAX_COUNT;
 
 	if (ep_pcie_dev.link_status == EP_PCIE_LINK_DISABLED) {
 		EP_PCIE_ERR(&ep_pcie_dev,
@@ -3887,22 +3988,7 @@ int ep_pcie_core_trigger_msi(u32 idx, u32 vf_id)
 					ep_pcie_dev.rev);
 				ep_pcie_write_reg(ep_pcie_dev.parf,
 					PCIE20_PARF_MSI_GEN, idx);
-				status = readl_relaxed(ep_pcie_dev.parf +
-					PCIE20_PARF_LTR_MSI_EXIT_L1SS);
-				while ((status & BIT(1)) && (max_poll-- > 0)) {
-					udelay(MSI_EXIT_L1SS_WAIT);
-					status = readl_relaxed(ep_pcie_dev.parf
-						+
-						PCIE20_PARF_LTR_MSI_EXIT_L1SS);
-				}
-				if (max_poll == 0)
-					EP_PCIE_DBG2(&ep_pcie_dev,
-						"PCIe V%d: MSI_EXIT_L1SS is not cleared yet\n",
-						ep_pcie_dev.rev);
-				else
-					EP_PCIE_DBG2(&ep_pcie_dev,
-						"PCIe V%d: MSI_EXIT_L1SS has been cleared\n",
-						ep_pcie_dev.rev);
+				ep_pcie_poll_l1ss_exit();
 			}
 		} else {
 			ep_pcie_write_reg(msi + (vf_id * 0x8), addr & 0xfff, data
@@ -4102,6 +4188,7 @@ struct ep_pcie_hw hw_drv = {
 	.config_outbound_iatu = ep_pcie_core_config_outbound_iatu,
 	.get_msi_config = ep_pcie_core_get_msi_config,
 	.trigger_msi = ep_pcie_core_trigger_msi,
+	.send_ltr_msg = ep_pcie_core_send_ltr_msg,
 	.wakeup_host = ep_pcie_core_wakeup_host,
 	.config_db_routing = ep_pcie_core_config_db_routing,
 	.enable_endpoint = ep_pcie_core_enable_endpoint,

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef __EP_PCIE_COM_H
 #define __EP_PCIE_COM_H
@@ -225,6 +225,9 @@
 #define XMLH_LINK_UP                          0x400
 #define PARF_PM_LINKST_IN_L2                  0x00000020
 #define PARF_XMLH_LINK_UP                     0x40000000
+#define PCIE20_PARF_LTR_MSG_GEN		      0x184
+#define PCIE20_MSI_EXIT_L1SS		      BIT(1)
+#define PCIE_CAP_LTR_EN			      BIT(10)
 
 #define MAX_PROP_SIZE 32
 #define MAX_MSG_LEN 80
