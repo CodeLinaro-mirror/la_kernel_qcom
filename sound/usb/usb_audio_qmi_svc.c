@@ -1134,6 +1134,42 @@ static int setup_pseudo_event_ring(int card_num,
 	return ret;
 }
 
+/**
+ * uaudio_add_endpoint - Safely add endpoint to xHCI sideband
+ * @card_num: PCM card number
+ * @ep: USB host endpoint to add
+ *
+ * This wrapper safely retrieves the sideband pointer and adds the endpoint.
+ * It handles the case where sideband might change or become invalid.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+static int uaudio_add_endpoint(int card_num,
+					struct usb_host_endpoint *ep)
+{
+	struct xhci_sideband *sb;
+	int ret;
+
+	if (card_num >= SNDRV_CARDS) {
+		uaudio_err("invalid card number %d\n", card_num);
+		return -EINVAL;
+	}
+
+	sb = uadev[card_num].sb;
+	if (!sb) {
+		dev_err(uaudio_qdev->dev,
+			"sideband not available for card %d\n", card_num);
+		return -ENODEV;
+	}
+
+	ret = xhci_sideband_add_endpoint(sb, ep);
+	if (ret < 0) {
+		dev_err(uaudio_qdev->dev,
+			"failed to add endpoint (ret=%d)\n", ret);
+		return ret;
+	}
+	return 0;
+}
 
 static int prepare_qmi_response(struct snd_usb_substream *subs,
 		struct qmi_uaudio_stream_req_msg_v01 *req_msg,
@@ -1153,7 +1189,6 @@ static int prepare_qmi_response(struct snd_usb_substream *subs,
 	struct page *pg;
 	bool dma_coherent;
 	struct snd_usb_audio *chip;
-	struct xhci_sideband *sb;
 
 	iface = usb_ifnum_to_if(subs->dev, subs->cur_audiofmt->iface);
 	if (!iface) {
@@ -1181,19 +1216,9 @@ static int prepare_qmi_response(struct snd_usb_substream *subs,
 	memcpy(&resp->std_as_data_ep_desc, &ep->desc, sizeof(ep->desc));
 	resp->std_as_data_ep_desc_valid = 1;
 
-	/* keeping local copy of sb */
-	sb = uadev[card_num].sb;
-	if (!sb) {
-		dev_err(uaudio_qdev->dev, "sideband not available\n");
-		ret = -ENODEV;
+	ret = uaudio_add_endpoint(card_num, ep);
+	if (ret < 0)
 		goto err;
-	}
-	ret = xhci_sideband_add_endpoint(sb, ep);
-	if (ret < 0) {
-		dev_err(uaudio_qdev->dev, "failed to get data ep ring address\n");
-		ret = -ENODEV;
-		goto err;
-	}
 
 	sgt = xhci_sideband_get_endpoint_buffer(uadev[card_num].sb, ep);
 	if (!sgt) {
@@ -1217,7 +1242,7 @@ static int prepare_qmi_response(struct snd_usb_substream *subs,
 		memcpy(&resp->std_as_sync_ep_desc, &ep->desc, sizeof(ep->desc));
 		resp->std_as_sync_ep_desc_valid = 1;
 
-		ret = xhci_sideband_add_endpoint(sb, ep);
+		ret = uaudio_add_endpoint(card_num, ep);
 		if (ret < 0) {
 			dev_err(uaudio_qdev->dev,
 				"failed to get sync ep ring address\n");
@@ -1225,7 +1250,7 @@ static int prepare_qmi_response(struct snd_usb_substream *subs,
 			goto drop_data_ep;
 		}
 
-		sgt = xhci_sideband_get_endpoint_buffer(sb, ep);
+		sgt = xhci_sideband_get_endpoint_buffer(uadev[card_num].sb, ep);
 		if (!sgt) {
 			dev_err(uaudio_qdev->dev, "failed to get sync ep ring address\n");
 			ret = -ENODEV;
@@ -1256,7 +1281,7 @@ skip_sync_ep:
 	if (ret < 0)
 		goto drop_sync_ep;
 
-	sgt = xhci_sideband_get_event_buffer(sb);
+	sgt = xhci_sideband_get_event_buffer(uadev[card_num].sb);
 	if (!sgt) {
 		dev_err(uaudio_qdev->dev, "failed to get event ring address\n");
 		ret = -ENODEV;
@@ -2312,6 +2337,7 @@ static void uaudio_qmi_disconnect(void)
 static void cleanup_pseudo_event_ring(void)
 {
 	int idx = 0;
+	struct audio_offload_data *data;
 
 	uaudio_dbg("Starting pseudo event ring and SW ring cleanup\n");
 
@@ -2332,22 +2358,17 @@ static void cleanup_pseudo_event_ring(void)
 		uaudio_qdev->pseudo_evt_ring_buffer = NULL;
 
 		for (idx = 0; idx < SNDRV_CARDS; idx++) {
-			if (uadev[idx].offload_data.sw_event_ring &&
-				uadev[idx].offload_data.
-				sw_event_ring->first_seg) {
-					uaudio_dbg(
-					"Freeing SW event ring for card %d\n", idx);
-					kfree(uadev[idx].offload_data.
-						sw_event_ring->first_seg);
-					kfree(uadev[idx].offload_data.
-							sw_event_ring);
-					uadev[idx].offload_data.
-						sw_event_ring = NULL;
-					uadev[idx].offload_data.
-						sw_enqueue = NULL;
-					uadev[idx].offload_data.
-						sw_dequeue = NULL;
-					uadev[idx].xhci = NULL;
+			data = &uadev[idx].offload_data;
+			if (data->sw_event_ring &&
+			    data->sw_event_ring->first_seg) {
+				uaudio_dbg("Freeing SW ring for card %d\n",
+					idx);
+				kfree(data->sw_event_ring->first_seg);
+				kfree(data->sw_event_ring);
+				data->sw_event_ring = NULL;
+				data->sw_enqueue = NULL;
+				data->sw_dequeue = NULL;
+				uadev[idx].xhci = NULL;
 			}
 		}
 	}
