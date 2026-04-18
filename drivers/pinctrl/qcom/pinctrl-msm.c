@@ -970,13 +970,44 @@ static void msm_gpio_update_dual_edge_pos(struct msm_pinctrl *pctrl,
 		val, val2);
 }
 
+static bool is_gpio_tlmm_dc(struct irq_data *d, u32 *offset,
+				irq_hw_number_t *irq)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct msm_dir_conn *dc;
+	int i;
+
+	for (i = pctrl->n_dir_conns; i > 0; i--) {
+		dc = &pctrl->soc->dir_conn[i];
+		*offset = pctrl->n_dir_conns - i;
+		*irq = dc->irq;
+
+		if (dc->gpio == d->hwirq)
+			return true;
+	}
+
+	return false;
+}
+
 static void msm_gpio_irq_mask(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
 	const struct msm_pingroup *g;
 	unsigned long flags;
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
+	u32 offset = 0;
 	u32 val;
+
+	if (is_gpio_tlmm_dc(d, &offset, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		dir_conn_data->chip->irq_mask(dir_conn_data);
+	}
 
 	if (d->parent_data)
 		irq_chip_mask_parent(d);
@@ -1026,7 +1057,18 @@ static void msm_gpio_irq_unmask(struct irq_data *d)
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
 	const struct msm_pingroup *g;
 	unsigned long flags;
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
+	u32 offset = 0;
 	u32 val;
+
+	if (is_gpio_tlmm_dc(d, &offset, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
+	}
 
 	if (d->parent_data)
 		irq_chip_unmask_parent(d);
@@ -1099,30 +1141,21 @@ static void enable_tlmm_dc(irq_hw_number_t irq)
 	dir_conn_data->chip->irq_unmask(dir_conn_data);
 }
 
-static bool is_gpio_tlmm_dc(struct irq_data *d, u32 *offset,
-				irq_hw_number_t *irq)
-{
-	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
-	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
-	struct msm_dir_conn *dc;
-	int i;
-
-	for (i = pctrl->n_dir_conns; i > 0; i--) {
-		dc = &pctrl->soc->dir_conn[i];
-		*offset = pctrl->n_dir_conns - i;
-		*irq = dc->irq;
-
-		if (dc->gpio == d->hwirq)
-			return true;
-	}
-
-	return false;
-}
-
 static void msm_gpio_irq_enable(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
+	u32 offset = 0;
+
+	if (is_gpio_tlmm_dc(d, &offset, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
+	}
 
 	gpiochip_enable_irq(gc, d->hwirq);
 
@@ -1137,6 +1170,17 @@ static void msm_gpio_irq_disable(struct irq_data *d)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
+	u32 offset = 0;
+
+	if (is_gpio_tlmm_dc(d, &offset, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		dir_conn_data->chip->irq_mask(dir_conn_data);
+	}
 
 	if (d->parent_data)
 		irq_chip_disable_parent(d);
@@ -1258,6 +1302,25 @@ static void msm_dirconn_cfg_reg(struct irq_data *d, u32 offset)
 
 	msm_writel_intr_cfg(val, pctrl, g);
 	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
+}
+
+static void msm_gpio_irq_init_valid_mask(struct gpio_chip *gc,
+					 unsigned long *valid_mask,
+					 unsigned int ngpios)
+{
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	const struct msm_pingroup *g;
+	int i;
+
+	bitmap_fill(valid_mask, ngpios);
+
+	for (i = 0; i < ngpios; i++) {
+		g = &pctrl->soc->groups[i];
+
+		if (g->intr_detection_width != 1 &&
+		    g->intr_detection_width != 2)
+			clear_bit(i, valid_mask);
+	}
 }
 
 static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
@@ -1712,6 +1775,7 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	girq->default_type = IRQ_TYPE_NONE;
 	girq->handler = handle_bad_irq;
 	girq->parents[0] = pctrl->irq;
+	girq->init_valid_mask = msm_gpio_irq_init_valid_mask;
 
 	ret = gpiochip_add_data(&pctrl->chip, pctrl);
 	if (ret) {
