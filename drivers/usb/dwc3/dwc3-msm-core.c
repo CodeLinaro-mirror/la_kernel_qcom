@@ -4573,6 +4573,10 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 			configure_nonpdc_usb_interrupt(mdwc, uirq, true);
 			uirq = &mdwc->wakeup_irq[SS_PHY_IRQ];
 			configure_nonpdc_usb_interrupt(mdwc, uirq, true);
+			uirq = &mdwc->wakeup_irq[DM_HS_PHY_IRQ];
+			configure_nonpdc_usb_interrupt(mdwc, uirq, true);
+			uirq = &mdwc->wakeup_irq[DP_HS_PHY_IRQ];
+			configure_nonpdc_usb_interrupt(mdwc, uirq, true);
 		}
 		mdwc->lpm_flags |= MDWC3_ASYNC_IRQ_WAKE_CAPABILITY;
 	}
@@ -4799,6 +4803,10 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 			uirq = &mdwc->wakeup_irq[HS_PHY_IRQ];
 			configure_nonpdc_usb_interrupt(mdwc, uirq, false);
 			uirq = &mdwc->wakeup_irq[SS_PHY_IRQ];
+			configure_nonpdc_usb_interrupt(mdwc, uirq, false);
+			uirq = &mdwc->wakeup_irq[DM_HS_PHY_IRQ];
+			configure_nonpdc_usb_interrupt(mdwc, uirq, false);
+			uirq = &mdwc->wakeup_irq[DP_HS_PHY_IRQ];
 			configure_nonpdc_usb_interrupt(mdwc, uirq, false);
 		}
 		mdwc->lpm_flags &= ~MDWC3_ASYNC_IRQ_WAKE_CAPABILITY;
