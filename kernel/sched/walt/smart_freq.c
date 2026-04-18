@@ -746,7 +746,8 @@ void smart_freq_init(const char *name)
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "WHALE")
 			|| !strcmp(name, "ALORP")
 			|| !strcmp(name, "WHALEP") || !strcmp(name, "CANOEPSG")
-			|| !strcmp(name, "ALOR") || !strcmp(name, "CANOEP")) {
+			|| !strcmp(name, "ALOR") || !strcmp(name, "CANOEP")
+			|| !strcmp(name, "QCS8845")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
@@ -820,7 +821,7 @@ void smart_freq_init(const char *name)
 				cluster->smart_freq_info->min_cycles = 7004160;
 			}
 		}
-	} else if (!strcmp(name, "MALABAR")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
