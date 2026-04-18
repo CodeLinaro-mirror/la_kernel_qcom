@@ -273,7 +273,7 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "CHORA")) {
+	} else if (!strcmp(name, "CHORA")  || !strcmp(name, "CHORAP")) {
 		soc_sched_lib_name_capacity = 4;
 		/*
 		 * Trailblazer settings

@@ -1011,7 +1011,7 @@ void smart_freq_init(const char *name)
 					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 			}
 		}
-	} else if (!strcmp(name, "CHORA")) {
+	} else if (!strcmp(name, "CHORA") || !strcmp(name, "CHORAP")) {
 
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
