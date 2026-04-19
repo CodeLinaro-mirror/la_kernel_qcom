@@ -3719,9 +3719,8 @@ static void msm_pcie_iatu_setup_ecam_blocker(struct msm_pcie_dev_t *dev)
 	msm_pcie_write_reg(dev->parf, PCIE20_PARF_BLOCK_SLV_AXI_RD_LIMIT_HI,
 			upper_32_bits(block_end));
 
-	/* Enable ECAM blocker */
-	msm_pcie_write_reg(dev->parf, PCIE20_PARF_SYS_CTRL,
-			PCIE_ECAM_BLOCKER_EN);
+	/* Enable ECAM blocker and - preserve other bits */
+	msm_pcie_write_mask(dev->parf + PCIE20_PARF_SYS_CTRL, 0, PCIE_ECAM_BLOCKER_EN);
 }
 
 static int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
