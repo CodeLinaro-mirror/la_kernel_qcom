@@ -309,6 +309,7 @@
 #define QCOM_ID_QCS8845			764
 #define QCOM_ID_CANOEP			661
 #define QCOM_ID_SERAPH			672
+#define QCOM_ID_QCS_KALAMAP_N		668
 #define QCOM_ID_VIENNA			669
 #define QCOM_ID_VIENNAP			670
 #define QCOM_ID_ALOR			685
