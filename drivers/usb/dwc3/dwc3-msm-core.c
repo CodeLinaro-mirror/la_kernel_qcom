@@ -7066,7 +7066,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	 */
 	mdwc->lpm_flags = MDWC3_POWER_COLLAPSE | MDWC3_SS_PHY_SUSPEND;
 	atomic_set(&mdwc->in_lpm, 1);
-	pm_runtime_set_autosuspend_delay(mdwc->dev, 1000);
+	pm_runtime_set_autosuspend_delay(mdwc->dev, 2000);
 	pm_runtime_use_autosuspend(mdwc->dev);
 	device_init_wakeup(mdwc->dev, 1);
 
