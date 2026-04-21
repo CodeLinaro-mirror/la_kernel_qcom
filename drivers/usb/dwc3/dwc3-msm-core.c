@@ -8236,6 +8236,7 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 	int ret = 0;
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 	struct dwc3 *dwc = NULL;
+	struct generic_pm_domain *genpd;
 
 	if (mdwc->dwc3) {
 		dwc = platform_get_drvdata(mdwc->dwc3);
@@ -8266,6 +8267,16 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 		dwc3_msm_clear_usbphy_flags(mdwc->hs_phy, PHY_HOST_MODE);
 		usb_phy_notify_disconnect(mdwc->ss_phy, USB_SPEED_SUPER);
 		dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, PHY_HOST_MODE);
+
+		if (dev->pm_domain) {
+			genpd = pd_to_genpd(dev->pm_domain);
+			/* Keep PHY GDSC ON during host mode bus suspend */
+			if (mdwc->force_suspend) {
+				genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
+				genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+				dev_dbg(dev, "GDSC flags ON\n");
+			}
+		}
 	}
 
 	/*
@@ -8282,6 +8293,7 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 static int dwc3_msm_pm_resume(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd;
 
 	dev_dbg(dev, "dwc3-msm PM resume\n");
 	dbg_event(0xFF, "PM Res", 0);
@@ -8300,6 +8312,19 @@ static int dwc3_msm_pm_resume(struct device *dev)
 			dwc3_msm_set_usbphy_flags(mdwc->ss_phy, PHY_HOST_MODE);
 			usb_phy_notify_connect(mdwc->ss_phy,
 						USB_SPEED_SUPER);
+		}
+
+		if (dev->pm_domain) {
+			genpd = pd_to_genpd(dev->pm_domain);
+			/*
+			 * Reset the GDSC flags back, so that GDSC can be
+			 * turned off during cable disconnect.
+			 */
+			if (mdwc->force_suspend) {
+				genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
+				genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+				dev_dbg(dev, "GDSC flags OFF\n");
+			}
 		}
 	}
 
