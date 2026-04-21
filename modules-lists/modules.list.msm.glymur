@@ -109,3 +109,6 @@ thermal_pause.ko
 qcom-cpufreq-thermal.ko
 msm_kgsl.ko
 qti_qmi_cdev.ko
+slim-qcom-ngd-ctrl.ko
+slimbus.ko
+bam_dma.ko
