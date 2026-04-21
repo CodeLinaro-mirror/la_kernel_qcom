@@ -317,6 +317,7 @@
 #define QCOM_ID_WHALE			722
 #define QCOM_ID_WHALEP			723
 #define QCOM_ID_CHORA			724
+#define QCOM_ID_CHORAP			744
 #define QCOM_ID_MALABAR			733
 #define QCOM_ID_PIKACHU			736
 #define QCOM_ID_CANOEPSG		743
