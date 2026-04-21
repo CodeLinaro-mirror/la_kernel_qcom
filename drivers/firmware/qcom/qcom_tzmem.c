@@ -874,14 +874,14 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_to_phys);
 /* cache clean operation for buffer sub-allocated from pool */
 void qcom_tzmem_flush_shm_buf(phys_addr_t paddr, size_t size)
 {
-	dma_sync_single_for_cpu(qcom_tzmem_dev, paddr, size, DMA_FROM_DEVICE);
+	dma_sync_single_for_device(qcom_tzmem_dev, paddr, size, DMA_TO_DEVICE);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_flush_shm_buf);
 
 /* cache invalidation operation for buffer sub-allocated from pool */
 void qcom_tzmem_inv_shm_buf(phys_addr_t paddr, size_t size)
 {
-	dma_sync_single_for_device(qcom_tzmem_dev, paddr, size, DMA_TO_DEVICE);
+	dma_sync_single_for_cpu(qcom_tzmem_dev, paddr, size, DMA_FROM_DEVICE);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_inv_shm_buf);
 
