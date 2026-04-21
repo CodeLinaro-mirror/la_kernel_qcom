@@ -301,7 +301,7 @@ static u32 arm_check_and_set_num_cont(struct arm_lpae_io_pgtable *data, size_t s
 }
 static bool arm_pte_is_contiguous_range(struct arm_lpae_io_pgtable *data,
 					     unsigned long size,
-					     unsigned long block_size,
+					     int lvl,
 					     u32 *arm_lpae_num_cont)
 {
 	return false;
@@ -1047,7 +1047,7 @@ static void arm_lpae_cont_unmap(struct arm_lpae_io_pgtable *data,
 	}
 
 	if (!cfg->coherent_walk)
-		__arm_lpae_sync_pte(ptep, num_entries, cfg);
+		__arm_lpae_sync_pte(cont_ptep_start, num_entries, cfg);
 }
 #else
 static void arm_lpae_cont_unmap(struct arm_lpae_io_pgtable *data,
