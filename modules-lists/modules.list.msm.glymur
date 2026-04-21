@@ -94,3 +94,8 @@ sched-walt-debug.ko
 cpu_phys_log_map.ko
 qcom_scmi_vendor.ko
 qcom_scmi_client.ko
+qcom_ipc_logging.ko
+qcom_glink_smem.ko
+qcom_glink.ko
+qrtr.ko
+qrtr-smd.ko
