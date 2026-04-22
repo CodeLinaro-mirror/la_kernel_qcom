@@ -396,3 +396,13 @@ def register_modules(registry):
             "drivers/thermal/qcom/thermal_zone_internal.h",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/thermal-generic-adc",
+        out = "thermal-generic-adc.ko",
+        config = "CONFIG_GENERIC_ADC_THERMAL",
+        srcs = [
+            # do not sort
+            "drivers/thermal/thermal-generic-adc.c",
+        ],
+    )
