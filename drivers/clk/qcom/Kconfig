@@ -1200,6 +1200,15 @@ config CLK_GLYMUR_TCSRCC
 	  Say Y if you want to use peripheral devices such as USB/PCIe/EDP.
 	  This controller manages clocks used by various on-chip peripherals.
 
+config CLK_GLYMUR_EVACC
+	tristate "Glymur EVA Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_GLYMUR_GCC
+	help
+	  Support for the Enhanced Video Analytics clock controller on Glymur devices.
+	  Say Y if you want to support EVA(Enhanced Video Analytics) and functionality
+	  such as vision processing.
+
 config CLK_GLYMUR_GCC
 	tristate "GLYMUR Global Clock Controller"
 	depends on ARM64 || COMPILE_TEST
