@@ -1012,7 +1012,7 @@ static ssize_t slc_mon_stats_print_data_v1(void *buf, struct qcom_slc_capability
 	struct slc_client_capability *slc_client_cap;
 
 	slc_client_cap = slc_capability->slc_client_cap;
-	len = scnprintf(buf, PAGE_SIZE, "timestamp=%llu\n", last_capture_time);
+	len = scnprintf(buf, SZ_4K, "timestamp=%llu\n", last_capture_time);
 	for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++) {
 		switch (slc_client_cap->client_info.num_part_id) {
 		case 1:
@@ -1021,27 +1021,27 @@ static ssize_t slc_mon_stats_print_data_v1(void *buf, struct qcom_slc_capability
 				break;
 			}
 
-			len += scnprintf(buf + len, PAGE_SIZE - len, "%s:\n",
+			len += scnprintf(buf + len, SZ_4K - len, "%s:\n",
 					slc_client_cap->client_name);
 
 			if (data_v1->mon_enabled & (1 << cap_mon_support))
-				len += scnprintf(buf + len, PAGE_SIZE - len, "cap_cnt=%d,",
+				len += scnprintf(buf + len, SZ_4K - len, "cap_cnt=%d,",
 						data_v1->num_cache_lines);
 
 			if (data_v1->mon_enabled & (1 << read_miss_mon_support))
-				len += scnprintf(buf + len, PAGE_SIZE - len,
+				len += scnprintf(buf + len, SZ_4K - len,
 						"miss_cnt=%llu,", data_v1->rd_misses);
 
 			if (data_v1->mon_enabled & (1 << fe_mon_support))
-				len += scnprintf(buf + len, PAGE_SIZE - len, "fe_bytes=%llu,",
+				len += scnprintf(buf + len, SZ_4K - len, "fe_bytes=%llu,",
 						data_v1->fe_rd_bytes + data_v1->fe_wr_bytes);
 
 			if (data_v1->mon_enabled & (1 << be_mon_support))
-				len += scnprintf(buf + len, PAGE_SIZE - len, "be_bytes=%llu,",
+				len += scnprintf(buf + len, SZ_4K - len, "be_bytes=%llu,",
 						data_v1->be_rd_bytes + data_v1->be_wr_bytes);
 
 			len -= 1;
-			len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+			len += scnprintf(buf + len, SZ_4K - len, "\n");
 			data_v1++;
 			break;
 
@@ -1061,43 +1061,43 @@ static ssize_t slc_mon_stats_print_data_v1(void *buf, struct qcom_slc_capability
 				if (!part_idx) {
 					if (data_v1->mon_enabled & ((1 << fe_mon_support) |
 							(1 << be_mon_support)))
-						len += scnprintf(buf + len, PAGE_SIZE - len,
+						len += scnprintf(buf + len, SZ_4K - len,
 								"%s:\n",
 								slc_client_cap->client_name);
 
 					if (data_v1->mon_enabled & (1 << fe_mon_support))
-						len += scnprintf(buf + len, PAGE_SIZE - len,
+						len += scnprintf(buf + len, SZ_4K - len,
 							"fe_bytes=%llu,",
 							data_v1->fe_rd_bytes +
 							data_v1->fe_wr_bytes);
 
 					if (data_v1->mon_enabled & (1 << be_mon_support))
-						len += scnprintf(buf + len, PAGE_SIZE - len,
+						len += scnprintf(buf + len, SZ_4K - len,
 							"be_bytes=%llu,",
 							data_v1->be_rd_bytes +
 							data_v1->be_wr_bytes);
 
 					len -= 1;
-					len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+					len += scnprintf(buf + len, SZ_4K - len, "\n");
 				}
 
 				if (data_v1->mon_enabled & ((1 << cap_mon_support) |
 							(1 << read_miss_mon_support)))
-					len += scnprintf(buf + len, PAGE_SIZE - len,
+					len += scnprintf(buf + len, SZ_4K - len,
 							"%s part %d:\n",
 							slc_client_cap->client_name,
 							part_idx);
 
 				if (data_v1->mon_enabled & (1 << cap_mon_support))
-					len += scnprintf(buf + len, PAGE_SIZE - len, "cap_cnt=%d,",
+					len += scnprintf(buf + len, SZ_4K - len, "cap_cnt=%d,",
 							data_v1->num_cache_lines);
 
 				if (data_v1->mon_enabled & (1 << read_miss_mon_support))
-					len += scnprintf(buf + len, PAGE_SIZE - len,
+					len += scnprintf(buf + len, SZ_4K - len,
 							"miss_cnt=%llu,", data_v1->rd_misses);
 
 				len -= 1;
-				len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+				len += scnprintf(buf + len, SZ_4K - len, "\n");
 				data_v1++;
 			}
 			break;
@@ -1108,20 +1108,20 @@ static ssize_t slc_mon_stats_print_data_v1(void *buf, struct qcom_slc_capability
 	/* check total fe/be enabled then print then print total traffic. */
 	if ((data_v1->mon_enabled & (1 << fe_mon_support)) ||
 			(data_v1->mon_enabled & (1 << be_mon_support)))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "total:\n");
+		len += scnprintf(buf + len, SZ_4K - len, "total:\n");
 
 	if (data_v1->mon_enabled & (1 << fe_mon_support))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "fe_bytes=%llu,",
+		len += scnprintf(buf + len, SZ_4K - len, "fe_bytes=%llu,",
 							data_v1->fe_rd_bytes +
 							data_v1->fe_wr_bytes);
 
 	if (data_v1->mon_enabled & (1 << be_mon_support))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "be_bytes=%llu,",
+		len += scnprintf(buf + len, SZ_4K - len, "be_bytes=%llu,",
 							data_v1->be_rd_bytes +
 							data_v1->be_wr_bytes);
 
 	len -= 1;
-	len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+	len += scnprintf(buf + len, SZ_4K - len, "\n");
 
 
 	return len;
@@ -1135,7 +1135,7 @@ static ssize_t slc_mon_stats_print_data_v2(void *buf, struct qcom_slc_capability
 	struct slc_client_capability *slc_client_cap;
 
 	slc_client_cap = slc_capability->slc_client_cap;
-	len = scnprintf(buf, PAGE_SIZE, "timestamp=%llu\n", last_capture_time);
+	len = scnprintf(buf, SZ_4K, "timestamp=%llu\n", last_capture_time);
 	for (client_idx = 0; client_idx < slc_capability->num_clients; client_idx++) {
 		for (part_idx = 0; part_idx < slc_client_cap->client_info.num_part_id; part_idx++) {
 			if (slc_client_cap->slc_partid_cap[part_idx].v1_cap.mon_support == 0)
@@ -1147,31 +1147,31 @@ static ssize_t slc_mon_stats_print_data_v2(void *buf, struct qcom_slc_capability
 			}
 
 			if (slc_client_cap->client_info.num_part_id == 1) {
-				len += scnprintf(buf + len, PAGE_SIZE - len, "%s:\n",
+				len += scnprintf(buf + len, SZ_4K - len, "%s:\n",
 						slc_client_cap->client_name);
 			} else {
-				len += scnprintf(buf + len, PAGE_SIZE - len, "%s part %d:\n",
+				len += scnprintf(buf + len, SZ_4K - len, "%s part %d:\n",
 						slc_client_cap->client_name, part_idx);
 			}
 
 			if (data_v2->mon_enabled & (1 << cap_mon_support))
-				len += scnprintf(buf + len, PAGE_SIZE - len, "cap_cnt=%d,",
+				len += scnprintf(buf + len, SZ_4K - len, "cap_cnt=%d,",
 						data_v2->num_cache_lines);
 
 			if (data_v2->mon_enabled & (1 << read_miss_mon_support))
-				len += scnprintf(buf + len, PAGE_SIZE - len,
+				len += scnprintf(buf + len, SZ_4K - len,
 						"miss_cnt=%llu,", data_v2->rd_misses);
 
 			if (data_v2->mon_enabled & (1 << fe_mon_support))
-				len += scnprintf(buf + len, PAGE_SIZE - len, "fe_bytes=%llu,",
+				len += scnprintf(buf + len, SZ_4K - len, "fe_bytes=%llu,",
 						data_v2->fe_bytes);
 
 			if (data_v2->mon_enabled & (1 << be_mon_support))
-				len += scnprintf(buf + len, PAGE_SIZE - len, "be_bytes=%llu,",
+				len += scnprintf(buf + len, SZ_4K - len, "be_bytes=%llu,",
 						data_v2->be_bytes);
 
 			len -= 1;
-			len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+			len += scnprintf(buf + len, SZ_4K - len, "\n");
 			data_v2++;
 
 		}
@@ -1183,18 +1183,18 @@ static ssize_t slc_mon_stats_print_data_v2(void *buf, struct qcom_slc_capability
 	data_v2++;
 	if ((data_v2->mon_enabled & (1 << fe_mon_support)) ||
 			(data_v2->mon_enabled & (1 << be_mon_support)))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "total:\n");
+		len += scnprintf(buf + len, SZ_4K - len, "total:\n");
 
 	if (data_v2->mon_enabled & (1 << fe_mon_support))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "fe_bytes=%llu,",
+		len += scnprintf(buf + len, SZ_4K - len, "fe_bytes=%llu,",
 							data_v2->fe_bytes);
 
 	if (data_v2->mon_enabled & (1 << be_mon_support))
-		len += scnprintf(buf + len, PAGE_SIZE - len, "be_bytes=%llu,",
+		len += scnprintf(buf + len, SZ_4K - len, "be_bytes=%llu,",
 							data_v2->be_bytes);
 
 	len -= 1;
-	len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+	len += scnprintf(buf + len, SZ_4K - len, "\n");
 
 	return len;
 }
@@ -1209,7 +1209,7 @@ static ssize_t slc_mon_stats_print_data(void *buf, struct qcom_slc_capability *s
 	volatile struct slc_read_miss_cntr *rd_miss_stats;
 
 	slc_client_cap = slc_capability->slc_client_cap;
-	len = scnprintf(buf, PAGE_SIZE, "timestamp=%llu\n", last_capture_time);
+	len = scnprintf(buf, SZ_4K, "timestamp=%llu\n", last_capture_time);
 	for (client_idx = 0; client_idx < slc_capability->num_clients;
 			client_idx++) {
 		switch (slc_client_cap->client_info.num_part_id) {
@@ -1222,20 +1222,20 @@ static ssize_t slc_mon_stats_print_data(void *buf, struct qcom_slc_capability *s
 				break;
 			}
 
-			len += scnprintf(buf + len, PAGE_SIZE - len, "%s:\n",
+			len += scnprintf(buf + len, SZ_4K - len, "%s:\n",
 					slc_client_cap->client_name);
 
 			if (cap_stats->cap_enabled)
-				len += scnprintf(buf + len, PAGE_SIZE - len, "cap_cnt=%d,",
+				len += scnprintf(buf + len, SZ_4K - len, "cap_cnt=%d,",
 						cap_stats->num_cache_lines);
 
 
 			if (rd_miss_stats->miss_enabled)
-				len += scnprintf(buf + len, PAGE_SIZE - len, "miss_cnt=%llu,",
+				len += scnprintf(buf + len, SZ_4K - len, "miss_cnt=%llu,",
 						rd_miss_stats->rd_misses);
 
 			len -= 1;
-			len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+			len += scnprintf(buf + len, SZ_4K - len, "\n");
 			data++;
 			break;
 		default:
@@ -1250,23 +1250,23 @@ static ssize_t slc_mon_stats_print_data(void *buf, struct qcom_slc_capability *s
 					continue;
 				}
 
-				len += scnprintf(buf + len, PAGE_SIZE - len,
+				len += scnprintf(buf + len, SZ_4K - len,
 						"%s part %d:\n",
 						slc_client_cap->client_name,
 						part_idx);
 
 				if (cap_stats->cap_enabled)
-					len += scnprintf(buf + len, PAGE_SIZE - len,
+					len += scnprintf(buf + len, SZ_4K - len,
 							"cap_cnt=%d,",
 							cap_stats->num_cache_lines);
 
 				if (rd_miss_stats->miss_enabled)
-					len += scnprintf(buf + len, PAGE_SIZE - len,
+					len += scnprintf(buf + len, SZ_4K - len,
 							"miss_cnt=%llu,",
 							rd_miss_stats->rd_misses);
 
 				len -= 1;
-				len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
+				len += scnprintf(buf + len, SZ_4K - len, "\n");
 				data++;
 			}
 
