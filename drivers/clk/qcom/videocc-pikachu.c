@@ -684,6 +684,12 @@ static int video_cc_pikachu_probe(struct platform_device *pdev)
 	clk_taycan_eko_t_pll_configure(&video_cc_pll2, regmap, &video_cc_pll2_config);
 
 	/*
+	 * Update VIDEO_CC_SPARE1 to have same clk_on for video_cc_mvs0_clk,
+	 * video_cc_mvs0_vpp0_clk, video_cc_mvs0_vpp1_clk during core reset by default.
+	 */
+	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
+
+	/*
 	 *	Maximize ctl data download delay and enable memory redundancy:
 	 *	MVS0 CFG3
 	 *	MVS0 VPP0 CFG3
