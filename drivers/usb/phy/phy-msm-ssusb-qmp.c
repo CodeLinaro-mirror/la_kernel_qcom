@@ -20,6 +20,9 @@
 #include <linux/extcon.h>
 #include <linux/reset.h>
 
+#undef dev_dbg
+#define dev_dbg dev_err
+
 enum core_ldo_levels {
 	CORE_LEVEL_NONE = 0,
 	CORE_LEVEL_MIN,
@@ -515,6 +518,21 @@ static int configure_phy_regs(struct usb_phy *uphy,
 		return -EINVAL;
 	}
 
+	if (of_property_read_bool(phy->phy.dev->of_node,
+				  "qcom,qmp-static-concurrent-mode")) {
+		dev_err(phy->phy.dev, "%s phy flags:0x%x\n", __func__, phy->phy.flags);
+		/* power up USB3 and DP common logic block */
+		writel_relaxed(0x01,
+			phy->base + phy->phy_reg[USB3_DP_COM_POWER_DOWN_CTRL]);
+		writel_relaxed(0x01,
+			phy->base + phy->phy_reg[USB3_PHY_POWER_DOWN_CONTROL]);
+		writel_relaxed(0x03,
+			phy->base + phy->phy_reg[USB3_DP_COM_PHY_MODE_CTRL]);
+		writel_relaxed(0x02,
+			phy->base + phy->phy_reg[USB3_DP_COM_TYPEC_CTRL]);
+	}
+
+
 	for (i = 0; i < phy->init_seq_len/2; i++) {
 		writel_relaxed(reg->val, phy->base + reg->offset);
 		reg++;
@@ -543,6 +561,10 @@ static void usb_qmp_update_portselect_phymode(struct msm_ssphy_qmp *phy)
 		val = SW_PORTSELECT_MX;
 	else if (phy->phy.flags & PHY_LANE_B)
 		val = SW_PORTSELECT | SW_PORTSELECT_MX;
+
+	dev_err(phy->phy.dev, "%s phy flags:0x%x\n", __func__, phy->phy.flags);
+	/* use lane b as default */
+	val = SW_PORTSELECT | SW_PORTSELECT_MX;
 
 	/* PHY must be powered up before updating portselect and phymode. */
 	usb_qmp_powerup_phy(phy);
@@ -1197,6 +1219,36 @@ static int msm_ssphy_qmp_get_resets(struct msm_ssphy_qmp *phy, struct device *de
 	return ret;
 }
 
+static unsigned int dump_size = 0;
+module_param(dump_size, uint, 0644);
+MODULE_PARM_DESC(dump_size, "Size (in bytes) to dump from register base");
+
+#define MSM_SSUSB_QMP_REG_SIZE    0x3000
+
+static ssize_t qmp_regdump_show(struct device *dev,
+			 struct device_attribute *attr, char *buf)
+{
+	struct msm_ssphy_qmp *phy = dev_get_drvdata(dev);
+	size_t i, len = 0;
+	u8 val;
+	size_t max_size = MSM_SSUSB_QMP_REG_SIZE;
+	size_t size_to_dump = dump_size ? min_t(size_t, dump_size, max_size) : max_size;
+
+	for (i = 0; i < size_to_dump; i += 4) {
+		val = readb_relaxed(phy->base + i);
+		len += scnprintf(buf + len, PAGE_SIZE - len,
+				 "0x%08zx: 0x%02x\n", i, val);
+
+		if (len >= PAGE_SIZE)
+			break;
+	}
+
+	return len;
+}
+
+static DEVICE_ATTR_RO(qmp_regdump);
+
+
 static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 {
 	struct msm_ssphy_qmp *phy;
@@ -1375,6 +1427,15 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 	phy->force_usb3 = of_property_read_bool(dev->of_node,
 						"qcom,force-usb3");
 
+	if (of_property_read_bool(dev->of_node, "qcom,qmp-static-concurrent-mode"))
+		phy->phy.flags |= PHY_USB_DP_CONCURRENT_MODE;
+
+	dev_err(dev, "%s phy flags:0x%x\n", __func__, phy->phy.flags);
+	platform_set_drvdata(pdev, phy);
+	ret = device_create_file(&pdev->dev, &dev_attr_qmp_regdump);
+	dev_err(dev, "%s registered sysfs for regdump:%d\n", __func__, ret);
+
+
 	phy->phy.init			= msm_ssphy_qmp_init;
 	phy->phy.set_suspend		= msm_ssphy_qmp_set_suspend;
 	phy->phy.notify_connect		= msm_ssphy_qmp_notify_connect;
@@ -1401,6 +1462,7 @@ static int msm_ssphy_qmp_remove(struct platform_device *pdev)
 	if (!phy)
 		return 0;
 
+	device_remove_file(&pdev->dev, &dev_attr_qmp_regdump);
 	usb_remove_phy(&phy->phy);
 	if (phy->fw_managed_pwr) {
 		msm_ssphy_modeled_d0_to_d3(phy);
