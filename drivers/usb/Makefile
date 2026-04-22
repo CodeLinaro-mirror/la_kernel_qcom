@@ -9,5 +9,6 @@ obj-y += pd/
 obj-y += phy/
 obj-y += redriver/
 obj-y += repeater/
+obj-y += typec/mux/
 obj-y += typec/ucsi/
 
