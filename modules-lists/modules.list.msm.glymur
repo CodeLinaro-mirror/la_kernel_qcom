@@ -39,3 +39,4 @@ phy-qcom-m31-eusb2.ko
 phy-qcom-qmp-usb.ko
 phy-qcom-qmp-combo.ko
 dwc3-msm.ko
+pci-msm-drv.ko
