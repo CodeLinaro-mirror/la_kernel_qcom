@@ -234,10 +234,12 @@ static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, 
 	if (offset == ARM_SMMU_GR0_ID0) {
 		*buf = (*buf & ~ARM_SMMU_ID0_NUMSMRG) | (smmu->num_smr & ARM_SMMU_ID0_NUMSMRG);
 		*buf = (*buf & ~ARM_SMMU_ID0_S2TS);
+		*buf = (*buf & ~ARM_SMMU_ID0_NTS);
 		smmu_v2_debug_print("smmu_v2_id0_read, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
 	} else if (offset == ARM_SMMU_GR0_ID1) {
 		*buf = (*buf & ~ARM_SMMU_ID1_NUMCB) | (smmu->num_cb & ARM_SMMU_ID1_NUMCB);
+		*buf = (*buf & ~ARM_SMMU_ID1_NUMS2CB);
 		smmu_v2_debug_print("smmu_v2_id1_read, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
 	} else if (offset >= ARM_SMMU_GR0_SMR(0) &&
