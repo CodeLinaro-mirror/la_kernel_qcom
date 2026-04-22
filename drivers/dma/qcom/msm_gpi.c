@@ -3374,22 +3374,27 @@ int gpi_terminate_all(struct dma_chan *chan)
 		gpi_dump_debug_reg(gpii);
 		gpii->reg_table_dump = true;
 	}
-	ch_state = gpi_read_ch_state(gpii_chan);
-	GPII_ERR(gpii, gpii_chan->chid, "CH state state:%s\n", TO_GPI_CH_STATE_STR(ch_state));
 	for (i = schid; i < echid; i++) {
 		gpii_chan = &gpii->gpii_chan[i];
-		ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
-		if (ret) {
-			GPII_ERR(gpii, gpii_chan->chid, "Error resetting channel: %d\n", ret);
-			gpi_dump_debug_reg(gpii);
-			goto terminate_exit;
-		}
+		ch_state = gpi_read_ch_state(gpii_chan);
+		GPII_ERR(gpii, gpii_chan->chid, "CH state state:%s\n",
+			 TO_GPI_CH_STATE_STR(ch_state));
+		if (ch_state != CH_STATE_STOPPED) {
+			ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
+			if (ret) {
+				GPII_ERR(gpii, gpii_chan->chid, "Error resetting channel: %d\n",
+					 ret);
+				gpi_dump_debug_reg(gpii);
+				goto terminate_exit;
+			}
 
-		/* reprogram channel CNTXT */
-		ret = gpi_alloc_chan(gpii_chan, false);
-		if (ret) {
-			GPII_ERR(gpii, gpii_chan->chid, "Error allocating channel: %d\n", ret);
-			goto terminate_exit;
+			/* reprogram channel CNTXT */
+			ret = gpi_alloc_chan(gpii_chan, false);
+			if (ret) {
+				GPII_ERR(gpii, gpii_chan->chid, "Error allocating channel: %d\n",
+					 ret);
+				goto terminate_exit;
+			}
 		}
 	}
 
