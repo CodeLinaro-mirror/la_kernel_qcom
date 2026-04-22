@@ -155,6 +155,9 @@ def register_modules(registry):
             "drivers/usb/gadget/function/u_rmnet.h",
             "drivers/usb/gadget/function/u_data_ipa.h",
             "drivers/usb/gadget/function/f_qdss.h",
-            "drivers/soc/qcom/bam_dmux_private.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/bam_dmux",
         ],
     )
