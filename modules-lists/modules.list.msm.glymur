@@ -40,3 +40,4 @@ phy-qcom-qmp-usb.ko
 phy-qcom-qmp-combo.ko
 dwc3-msm.ko
 pci-msm-drv.ko
+spmi-pmic-arb.ko
