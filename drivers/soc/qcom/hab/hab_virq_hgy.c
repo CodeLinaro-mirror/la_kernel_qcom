@@ -44,12 +44,14 @@ int hgy_get_virq_num_id(void **virqdev, int label)
 
 	spin_lock_init(&dbl->dbl_lock);
 	kref_init(&dbl->refcount);
-	for (i = 0 ; i < ARRAY_SIZE(virqid); i++) {
+	for (i = 0 ; i < (int)ARRAY_SIZE(virqid); i++) {
 		if (label == virqid[i].virq_label) {
-			dbl->id =  virqid[i].id;
+			dbl->id = (int)virqid[i].id;
 			dbl->virtirq_num = virqid[i].virq_num;
 			*virqdev = dbl;
 			return 0;
+		} else {
+			/* continue searching */
 		}
 	}
 	hab_virq_put(dbl);
@@ -60,24 +62,27 @@ int hgy_get_virq_num_id(void **virqdev, int label)
 /* callback function for receiving doorball */
 static void gh_dbl_recv_cb(int irq, void *data)
 {
-	int ret = 0;
+	int ret;
 	gh_dbl_flags_t dbl_mask = 0x1;
 	struct hvirq_dbl *dbl;
 
 	dbl = (struct hvirq_dbl *)data;
 
 	ret = gh_dbl_read_and_clean(dbl->rx_dbl, &dbl_mask, GH_DBL_NONBLOCK);
-	if (ret)
+	if (ret != 0) {
 		pr_err("dbl read failure id %d lbl %d ret %d\n", dbl->id,
 				dbl->virtirq_label, ret);
-	else
+	} else {
 		pr_debug("read successful for id %d lbl %d\n", dbl->id,
 				dbl->virtirq_label);
+	}
 
 	spin_lock_irq(&dbl->dbl_lock);
 	if (dbl->efd != NULL) {
 		pr_info("fd is %d for id %d lbl %d\n", dbl->fd, dbl->id, dbl->virtirq_label);
 		eventfd_signal(dbl->efd);
+	} else {
+		/* no eventfd registered */
 	}
 	dbl->virq_recv++;
 	spin_unlock_irq(&dbl->dbl_lock);
@@ -85,43 +90,51 @@ static void gh_dbl_recv_cb(int irq, void *data)
 	/* Eventually call the client cb function */
 	if ((dbl->client_cb != NULL) && (dbl->client_pdata != NULL)) {
 		ret = dbl->client_cb(irq, dbl->client_pdata, dbl->flags);
-		if (ret)
+		if (ret != 0) {
 			pr_err("cb fail for id %d lbl %d ret: %d\n", dbl->id,
 					dbl->virtirq_label, ret);
-	} else
+		} else {
+			/* callback succeeded */
+		}
+	} else {
 		pr_err("client cb not registered for id %d lbl %d ret: %d\n", dbl->id,
 				dbl->virtirq_label, ret);
+	}
 }
 
 int hgy_virq_tx_register(struct hvirq_dbl *dbl, int dbl_label)
 {
-	int ret = 0;
+	int ret;
 
 	dbl->tx_dbl = gh_dbl_tx_register(dbl_label);
 	if (IS_ERR_OR_NULL(dbl->tx_dbl)) {
 		ret = PTR_ERR(dbl->tx_dbl);
 		pr_err("tx reg failed for lbl %d\n", dbl_label);
 		return ret;
+	} else {
+		/* registered successfully */
 	}
 	return 0;
 }
 
 int hgy_virq_rx_register(struct hvirq_dbl *dbl, int dbl_label)
 {
-	int ret = 0;
+	int ret;
 
 	dbl->rx_dbl = gh_dbl_rx_register(dbl_label, gh_dbl_recv_cb, dbl);
 	if (IS_ERR_OR_NULL(dbl->rx_dbl)) {
 		ret = PTR_ERR(dbl->rx_dbl);
 		pr_err("rx reg failed for lbl %d\n", dbl_label);
 		return ret;
+	} else {
+		/* registered successfully */
 	}
 	return 0;
 }
 
 int hgy_virq_send(struct hvirq_dbl *dbl)
 {
-	int ret = 0;
+	int ret;
 	gh_dbl_flags_t dbl_mask = DDUMP_DBL_MASK;
 
 	ret = gh_dbl_send(dbl->tx_dbl, &dbl_mask, 0);
