@@ -2050,8 +2050,7 @@ static int mhi_hwc_chcmd(struct mhi_dev *mhi, uint chid,
 		}
 
 		if ((chid-(mhi->mhi_chan_hw_base)) >= NUM_HW_CHANNELS) {
-			mhi_log(mhi->vf_id, MHI_MSG_ERROR,
-				"Invalid HW ch_id:%d\n", chid);
+			mhi_log(mhi->vf_id, MHI_MSG_ERROR, "Invalid HW ch_id:%d\n", chid);
 			return -EINVAL;
 		}
 
@@ -2061,9 +2060,8 @@ static int mhi_hwc_chcmd(struct mhi_dev *mhi, uint chid,
 				&connect_params,
 				&mhi->dma_clnt_hndl[chid-(mhi->mhi_chan_hw_base)]);
 		if (rc)
-			mhi_log(mhi->vf_id, MHI_MSG_ERROR,
-				"HW ch_id:%d start failed : %d\n",
-							chid, rc);
+			mhi_log(mhi->vf_id, MHI_MSG_ERROR, "HW ch_id:%d start failed : %d\n",
+					chid, rc);
 		break;
 	case MHI_DEV_RING_EL_INVALID:
 	default:
@@ -2350,6 +2348,51 @@ int mhi_dev_trigger_hw_acc_wakeup(struct mhi_dev *mhi)
 	return mhi_dev_notify_sm_event(mhi, MHI_DEV_EVENT_HW_ACC_WAKEUP);
 }
 EXPORT_SYMBOL_GPL(mhi_dev_trigger_hw_acc_wakeup);
+
+/**
+ * mhi_dev_configure_ltr - Configure LTR (Latency Tolerance Reporting) message
+ * @client: MHI device client handle
+ * @req_bit: Request bit for LTR configuration
+ * @ltr_val: LTR value to be configured
+ *
+ * This function configures LTR message by calling into the EP PCIe layer.
+ * It serves as a bridge between MHI UCI layer and EP PCIe layer.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int mhi_dev_configure_ltr(struct mhi_dev_client *client, bool req_bit, u32 ltr_val)
+{
+	struct mhi_dev *mhi;
+	int rc;
+
+	if (!client || !client->channel) {
+		mhi_log(MHI_DEFAULT_ERROR_LOG_ID, MHI_MSG_ERROR,
+			"Invalid client or channel for LTR configuration\n");
+		return -EINVAL;
+	}
+
+	mhi = client->channel->ring->mhi_dev;
+	if (!mhi || !mhi->mhi_hw_ctx || !mhi->mhi_hw_ctx->phandle) {
+		mhi_log(client->vf_id, MHI_MSG_ERROR,
+			"Invalid MHI context or PCIe handle for LTR configuration\n");
+		return -EINVAL;
+	}
+
+	mhi_log(client->vf_id, MHI_MSG_INFO,
+		"Configuring LTR: req_bit=%d, ltr_val=0x%x\n", req_bit, ltr_val);
+
+	rc = ep_pcie_send_ltr_msg(mhi->mhi_hw_ctx->phandle, req_bit, ltr_val);
+	if (rc) {
+		mhi_log(client->vf_id, MHI_MSG_ERROR,
+			"Failed to configure LTR message: rc=%d\n", rc);
+		return rc;
+	}
+
+	mhi_log(client->vf_id, MHI_MSG_VERBOSE, "LTR configuration successful\n");
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mhi_dev_configure_ltr);
 
 static int mhi_dev_send_cmd_comp_event(struct mhi_dev *mhi,
 				enum mhi_dev_cmd_completion_code code)
