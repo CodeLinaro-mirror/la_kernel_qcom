@@ -180,15 +180,6 @@ void ufs_qcom_phy_qmp_v4_power_control(struct ufs_qcom_phy *phy,
 	}
 }
 
-static inline
-void ufs_qcom_phy_qmp_v4_set_tx_lane_enable(struct ufs_qcom_phy *phy, u32 val)
-{
-	/*
-	 * v4 PHY does not have TX_LANE_ENABLE register.
-	 * Implement this function so as not to propagate error to caller.
-	 */
-}
-
 static
 void ufs_qcom_phy_qmp_v4_ctrl_rx_linecfg(struct ufs_qcom_phy *phy, bool ctrl)
 {
@@ -220,18 +211,15 @@ static inline void ufs_qcom_phy_qmp_v4_start_serdes(struct ufs_qcom_phy *phy)
 
 static int ufs_qcom_phy_qmp_v4_is_pcs_ready(struct ufs_qcom_phy *phy_common)
 {
-	int err = 0;
+	int err;
 	u32 val;
 
 	err = readl_poll_timeout(phy_common->mmio + UFS_PHY_PCS_READY_STATUS,
 		val, (val & MASK_PCS_READY), 10, 1000000);
-	if (err) {
+	if (err)
 		dev_err(phy_common->dev, "%s: poll for pcs failed err = %d\n",
 			__func__, err);
-		goto out;
-	}
 
-out:
 	return err;
 }
 
@@ -286,7 +274,6 @@ static const struct phy_ops ufs_qcom_phy_qmp_v4_phy_ops = {
 static struct ufs_qcom_phy_specific_ops phy_v4_ops = {
 	.start_serdes		= ufs_qcom_phy_qmp_v4_start_serdes,
 	.is_physical_coding_sublayer_ready = ufs_qcom_phy_qmp_v4_is_pcs_ready,
-	.set_tx_lane_enable	= ufs_qcom_phy_qmp_v4_set_tx_lane_enable,
 	.ctrl_rx_linecfg	= ufs_qcom_phy_qmp_v4_ctrl_rx_linecfg,
 	.power_control		= ufs_qcom_phy_qmp_v4_power_control,
 	.dbg_register_dump	= ufs_qcom_phy_qmp_v4_dbg_register_dump,
@@ -308,7 +295,6 @@ static int ufs_qcom_phy_qmp_v4_probe(struct platform_device *pdev)
 
 	generic_phy = ufs_qcom_phy_generic_probe(pdev, &phy->common_cfg,
 				&ufs_qcom_phy_qmp_v4_phy_ops, &phy_v4_ops);
-
 	if (!generic_phy) {
 		dev_err(dev, "%s: ufs_qcom_phy_generic_probe() failed\n",
 			__func__);
@@ -318,8 +304,7 @@ static int ufs_qcom_phy_qmp_v4_probe(struct platform_device *pdev)
 
 	phy_set_drvdata(generic_phy, phy);
 
-	strscpy(phy->common_cfg.name, UFS_PHY_NAME,
-		sizeof(phy->common_cfg.name));
+	strscpy(phy->common_cfg.name, UFS_PHY_NAME, sizeof(phy->common_cfg.name));
 
 out:
 	return err;

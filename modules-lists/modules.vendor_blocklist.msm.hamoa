@@ -30,7 +30,10 @@ blocklist mt2131
 blocklist mt2266
 blocklist mxl301rf
 blocklist net_failover
+blocklist pkvm-geni
+blocklist pkvm-smc-filter
 blocklist qca_cld3_kiwi
+blocklist qcom_smmu_v2_v3_dispatcher
 blocklist qm1d1b0004
 blocklist qm1d1c0042
 blocklist qt1010

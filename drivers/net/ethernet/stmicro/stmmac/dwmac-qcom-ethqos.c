@@ -183,6 +183,51 @@ struct qcom_ethqos {
 	struct dev_pm_domain_list *pd_list;
 };
 
+static int phytype = BOARD_UNKNOWN;
+static int boardtype = PHY_UNKNOWN;
+
+#ifdef MODULE
+static char *board;
+module_param(board, charp, 0640);
+MODULE_PARM_DESC(board, "board type of the device");
+
+static char *enet;
+module_param(enet, charp, 0640);
+MODULE_PARM_DESC(enet, "enet value for the phy connection");
+#endif
+
+static int set_board_type(char *board_params)
+{
+	pr_info("qcom-ethqos: %s Board Param in command line: %s\n", __func__, board_params);
+	if (!strcmp(board_params, "Air"))
+		boardtype = AIR_BOARD;
+	else if (!strcmp(board_params, "Star"))
+		boardtype = STAR_BOARD;
+	else
+		return -EINVAL;
+	return 0;
+}
+
+static int set_phy_type(char *enet_params)
+{
+	pr_info("qcom-ethqos: %s Enet Param in command line: %s\n", __func__, enet_params);
+	if (!strcmp(enet_params, "1") || !strcmp(enet_params, "2"))
+		phytype = PHY_1G;
+	else if (!strcmp(enet_params, "3") || !strcmp(enet_params, "6"))
+		phytype = PHY_25G;
+	else if (!strcmp(enet_params, "4") || !strcmp(enet_params, "5"))
+		phytype = SWITCH;
+	else
+		return -EINVAL;
+	return 0;
+}
+
+#ifndef MODULE
+__setup("dwmac_qcom_eth.board=", set_board_type);
+
+__setup("dwmac_qcom_eth.enet=", set_phy_type);
+#endif
+
 static int rgmii_readl(struct qcom_ethqos *ethqos, unsigned int offset)
 {
 	return readl(ethqos->rgmii_base + offset);
@@ -1560,6 +1605,125 @@ static void ethqos_xpcs_safety_stats(struct stmmac_priv *priv, unsigned long *pt
 		qcom_xpcs_get_err_stats(priv->hw->phylink_pcs, ptr);
 }
 
+static int qcom_ethqos_update_dt_string(struct device_node *node, const char *name,
+					const char *value)
+{
+	struct property *prop;
+	int ret = 0;
+
+	prop = kzalloc(sizeof(*prop), GFP_KERNEL);
+	if (!prop)
+		return -ENOMEM;
+
+	prop->name = kstrdup(name, GFP_KERNEL);
+	if (!prop->name) {
+		ret = -ENOMEM;
+		goto err_name;
+	}
+
+	prop->value = kstrdup(value, GFP_KERNEL);
+	if (!prop->value) {
+		ret = -ENOMEM;
+		goto err_value;
+	}
+
+	prop->length = strlen(value) + 1;
+
+	if (of_update_property(node, prop)) {
+		ret = -ENOMEM;
+		goto err_update;
+	}
+
+	return ret;
+err_update:
+	kfree(prop->value);
+err_value:
+	kfree(prop->name);
+err_name:
+	kfree(prop);
+	return ret;
+}
+
+static int qcom_ethqos_set_fixed_link(struct platform_device *pdev,
+				      struct plat_stmmacenet_data *plat)
+{
+	struct device_node *fixed_link_node;
+	struct device *dev = &pdev->dev;
+	int ret = 0;
+
+	fixed_link_node = of_get_child_by_name(dev->of_node, "fixed-link");
+	if (!fixed_link_node)
+		return 0;
+
+	ret = qcom_ethqos_update_dt_string(fixed_link_node, "status", "okay");
+	if (ret == 0) {
+		dev_info(dev, "qcom-ethqos: %s Fixed-link forced to 'okay'\n", __func__);
+
+		/*
+		 * As we are using fixed-link there is no need of MDIO bus data.
+		 * must use devm_kfree because it was allocated with devm_kzalloc.
+		 */
+		if (plat->mdio_bus_data) {
+			devm_kfree(dev, plat->mdio_bus_data);
+			plat->mdio_bus_data = NULL;
+			dev_info(dev, "qcom-ethqos: %s mdio_bus_data freed\n", __func__);
+		}
+	} else {
+		dev_err(dev, "qcom-ethqos: Failed to update fixed-link status\n");
+	}
+
+	of_node_put(fixed_link_node);
+	return ret;
+}
+
+static int qcom_ethqos_check_mdio_and_fix_link(struct platform_device *pdev,
+					       struct plat_stmmacenet_data *plat)
+{
+	struct device *dev = &pdev->dev;
+	struct device_node *fixed_link_node;
+
+	plat->board_type = boardtype;
+	plat->phy_type = phytype;
+	plat->mdio_node = NULL;
+
+	if (phytype == SWITCH) {
+		dev_info(dev, "Switch detected, Enabling fixed-link\n");
+		return qcom_ethqos_set_fixed_link(pdev, plat);
+	}
+
+	fixed_link_node = of_get_child_by_name(dev->of_node, "fixed-link");
+	if (fixed_link_node) {
+		if (of_device_is_available(fixed_link_node)) {
+			dev_info(dev, "Fixed link already enabled, not using MDIO\n");
+
+			if (plat->mdio_bus_data) {
+				devm_kfree(dev, plat->mdio_bus_data);
+				plat->mdio_bus_data = NULL;
+			}
+			of_node_put(fixed_link_node);
+			return 0;
+		}
+
+		of_node_put(fixed_link_node);
+	}
+
+	/*
+	 * If we are here, we are in a PHY or UNKNOWN case without a fixed-link.
+	 * Ensure mdio_bus_data is allocated for MDIO bus registration.
+	 */
+	if (!plat->mdio_bus_data) {
+		plat->mdio_bus_data = devm_kzalloc(dev,
+						   sizeof(*plat->mdio_bus_data),
+						   GFP_KERNEL);
+		if (!plat->mdio_bus_data)
+			return -ENOMEM;
+
+		plat->mdio_bus_data->needs_reset = true;
+	}
+
+	return 0;
+}
+
 static int qcom_ethqos_hib_restore(struct device *dev)
 {
 	struct net_device *ndev = NULL;
@@ -1704,6 +1868,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	struct qcom_ethqos *ethqos;
 	int ret, i;
 
+#ifdef MODULE
+	if (enet)
+		ret = set_phy_type(enet);
+
+	if (board)
+		ret = set_board_type(board);
+#endif
+
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return dev_err_probe(dev, ret,
@@ -1752,6 +1924,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ethqos->pdev = pdev;
 	ethqos->speed = SPEED_1000;
+
+	qcom_ethqos_check_mdio_and_fix_link(pdev, plat_dat);
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
 	if (IS_ERR(ethqos->rgmii_base))
@@ -1881,7 +2055,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	for (i = 1; i < plat_dat->tx_queues_to_use; i++)
 		plat_dat->tx_queues_cfg[i].tbs_en = 1;
 
-	return devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	ret =  devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	if (ret)
+		goto err_probe;
+
+	return ret;
+err_probe:
+	ethqos_disable_regulators(ethqos);
+	return ret;
 }
 
 static const struct of_device_id qcom_ethqos_match[] = {

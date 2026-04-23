@@ -4396,7 +4396,6 @@ static int geni_i3c_read_dt_properties(struct geni_i3c_dev *gi3c, struct platfor
 		}
 	}
 
-	gi3c->pm_ctrl_client = false;
 	I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev,
 		    "Client controls the I3C PM, pm_ctrl_client:%d\n",
 		    gi3c->pm_ctrl_client);

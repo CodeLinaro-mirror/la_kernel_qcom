@@ -197,6 +197,15 @@ hermetic_genrule(
 filegroup(
     name = "unsafe_headers_qcom_group",
     srcs = [
+        "//common:arch/arm64/kvm/hyp/include/nvhe/alloc.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/alloc_mgt.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/gfp.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/mem_protect.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/memory.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/mm.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/pkvm.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/refcount.h",
+        "//common:arch/arm64/kvm/hyp/include/nvhe/serial.h",
         "//common:drivers/android/binder_alloc.h",
         "//common:drivers/android/binder_internal.h",
         "//common:drivers/android/binder_trace.h",

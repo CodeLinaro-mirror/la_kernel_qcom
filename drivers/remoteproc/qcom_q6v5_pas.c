@@ -2272,13 +2272,15 @@ static const struct adsp_data x1e80100_adsp_resource = {
 	.dtb_firmware_name = "adsp_dtb.mdt",
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
-	.lite_pas_id = 0x1f,
 	.minidump_id = 5,
 	.auto_boot = true,
 	.load_state = "adsp",
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
 };
 
 static const struct adsp_data x1e80100_cdsp_resource = {
@@ -2293,6 +2295,9 @@ static const struct adsp_data x1e80100_cdsp_resource = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
 };
 
 static const struct adsp_data sm8350_cdsp_resource = {
@@ -2886,6 +2891,20 @@ static const struct adsp_data yupik_wpss_resource = {
 	.ssctl_id = 0x19,
 };
 
+static const struct adsp_data lahaina_slpi_resource = {
+	.crash_reason_smem = 424,
+	.firmware_name = "slpi.mdt",
+	.pas_id = 12,
+	.load_state = "slpi",
+	.ssr_name = "dsps",
+	.uses_elf64 = true,
+	.sysmon_name = "slpi",
+	.ssctl_id = 0x16,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+	.auto_boot = true,
+};
+
 static const struct adsp_data alor_wpss_resource = {
 	.crash_reason_smem = 626,
 	.firmware_name = "wpss.mdt",
@@ -3146,6 +3165,8 @@ static const struct adsp_data seraph_adsp_resource = {
 	.sysmon_name = "adsp",
 	.load_state = "adsp",
 	.ssctl_id = 0x14,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
 };
 
 static const struct adsp_data seraph_cdsp_resource = {
@@ -3161,6 +3182,8 @@ static const struct adsp_data seraph_cdsp_resource = {
 	.sysmon_name = "cdsp",
 	.load_state = "cdsp",
 	.ssctl_id = 0x17,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
 };
 
 static const struct adsp_data seraph_soccp_resource = {
@@ -3264,6 +3287,34 @@ static const struct adsp_data shikra_lpaicp_resource = {
 	.uses_elf64 = true,
 	.sysmon_name = "lpaicp",
 };
+
+
+static const struct adsp_data scuba_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = false,
+};
+
+static const struct adsp_data scuba_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
 
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
@@ -3374,6 +3425,12 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,ravelin-adsp-pas", .data = &ravelin_adsp_resource},
 	{ .compatible = "qcom,ravelin-modem-pas", .data = &ravelin_mpss_resource},
 	{ .compatible = "qcom,ravelin-wpss-pas", .data = &ravelin_wpss_resource},
+	{ .compatible = "qcom,scuba-adsp-pas", .data = &scuba_adsp_resource},
+	{ .compatible = "qcom,scuba-modem-pas", .data = &scuba_mpss_resource},
+	{ .compatible = "qcom,lahaina-adsp-pas", .data = &yupik_adsp_resource},
+	{ .compatible = "qcom,lahaina-cdsp-pas", .data = &yupik_cdsp_resource},
+	{ .compatible = "qcom,lahaina-modem-pas", .data = &yupik_mpss_resource},
+	{ .compatible = "qcom,lahaina-slpi-pas", .data = &lahaina_slpi_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

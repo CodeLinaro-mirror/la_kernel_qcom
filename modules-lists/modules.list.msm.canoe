@@ -71,6 +71,7 @@ qcom_logbuf_vendor_hooks.ko
 qcom_logbuf_boot_log.ko
 pinctrl-msm.ko
 pinctrl-alor.ko
+pinctrl-bourtzi.ko
 pinctrl-canoe.ko
 pinctrl-chora.ko
 pinctrl-ravelin.ko
@@ -107,6 +108,7 @@ ufs-qcom.ko
 phy-qcom-ufs-qrbtc-sdm845.ko
 phy-qcom-ufs.ko
 phy-qcom-ufs-qmp-v4-canoe.ko
+phy-qcom-ufs-qmp-v4-waipio.ko
 phy-qcom-ufs-qmp-v4-crow.ko
 sg.ko
 gh_arm_drv.ko

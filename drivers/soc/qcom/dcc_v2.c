@@ -193,21 +193,25 @@ struct dcc_drvdata {
 	struct reg_state	*ll_state;
 	void			*sram_state;
 	uint8_t			*qad_output;
+	bool			no_offset_conv;
 };
 
 static uint32_t dcc_offset_conv(struct dcc_drvdata *drvdata, uint32_t off)
 {
-	if (drvdata->mem_map_ver == DCC_MEM_MAP_VER1) {
-		if ((off & 0x7F) >= DCC_MAP_LEVEL3)
-			return (off - DCC_MAP_OFFSET3);
-		if ((off & 0x7F) >= DCC_MAP_LEVEL2)
-			return (off - DCC_MAP_OFFSET2);
-		else if ((off & 0x7F) >= DCC_MAP_LEVEL1)
-			return (off - DCC_MAP_OFFSET1);
-	} else if (drvdata->mem_map_ver == DCC_MEM_MAP_VER2) {
-		if ((off & 0x7F) >= DCC_MAP_LEVEL2)
-			return (off - DCC_MAP_OFFSET4);
+	if (!drvdata->no_offset_conv) {
+		if (drvdata->mem_map_ver == DCC_MEM_MAP_VER1) {
+			if ((off & 0x7F) >= DCC_MAP_LEVEL3)
+				return (off - DCC_MAP_OFFSET3);
+			if ((off & 0x7F) >= DCC_MAP_LEVEL2)
+				return (off - DCC_MAP_OFFSET2);
+			else if ((off & 0x7F) >= DCC_MAP_LEVEL1)
+				return (off - DCC_MAP_OFFSET1);
+		} else if (drvdata->mem_map_ver == DCC_MEM_MAP_VER2) {
+			if ((off & 0x7F) >= DCC_MAP_LEVEL2)
+				return (off - DCC_MAP_OFFSET4);
+		}
 	}
+
 	return (off);
 }
 
@@ -2103,6 +2107,12 @@ static int dcc_probe(struct platform_device *pdev)
 	if (ret)
 		return -EINVAL;
 
+	drvdata->no_offset_conv = of_property_read_bool(pdev->dev.of_node, "dcc-no-offset-conv");
+	if (!drvdata->no_offset_conv)
+		dev_dbg(dev, "DCC will do offset conversion\n");
+	else
+		dev_dbg(dev, "DCC will not do offset conversion\n");
+
 	drvdata->ll_state_cnt = of_property_count_elems_of_size(dev->of_node,
 					"ll-reg-offsets", sizeof(u32)); /* optional */
 	if (drvdata->ll_state_cnt <= 0) {
@@ -2332,7 +2342,7 @@ out:
 #ifdef CONFIG_DEEPSLEEP
 static int dcc_v2_suspend(struct device *dev)
 {
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return dcc_state_store(dev);
 
 	return 0;
@@ -2340,7 +2350,7 @@ static int dcc_v2_suspend(struct device *dev)
 
 static int dcc_v2_resume(struct device *dev)
 {
-	if (pm_suspend_via_firmware())
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
 		return dcc_state_restore(dev);
 
 	return 0;

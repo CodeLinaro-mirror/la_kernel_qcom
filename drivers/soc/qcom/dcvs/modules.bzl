@@ -229,3 +229,38 @@ def register_modules(registry):
             "drivers/firmware/qcom/si_core/si_core_module",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/bwprof_scmi",
+        out = "bwprof_scmi.ko",
+        config = "CONFIG_QCOM_BWPROF_SCMI",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/bwprof_scmi.c",
+            "drivers/soc/qcom/dcvs/bwprof_scmi.h",
+            "drivers/soc/qcom/dcvs/smci_bwprof.h",
+            "drivers/soc/qcom/dcvs/trace-dcvs.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+            "drivers/firmware/qcom/qcom-scm",
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/firmware/qcom/si_core/si_core_module",
+            "drivers/soc/qcom/dcvs/qcom-dcvs",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/cpufreq_stats_scmi_v2",
+        out = "cpufreq_stats_scmi_v2.ko",
+        config = "CONFIG_QTI_CPUFREQ_STATS_SCMI_V2",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/cpufreq_stats_scmi_v2.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+        ],
+    )
