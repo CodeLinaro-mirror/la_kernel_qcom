@@ -1,5 +1,6 @@
 lahaina_perf_config = {
     # keep sorted
+    "CONFIG_AQUANTIA_PHY": "m",
     "CONFIG_ARCH_LAHAINA": "y",
     "CONFIG_ARCH_YUPIK": "y",
     "CONFIG_ARM64_AMU_EXTN": "n",
