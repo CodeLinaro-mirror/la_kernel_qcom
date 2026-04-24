@@ -58,6 +58,7 @@ glymur_perf_config = {
     "CONFIG_REGULATOR_RPMH": "m",
     "CONFIG_SERIAL_PKVM_GENI": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
+    "CONFIG_SPMI_MSM_PMIC_ARB_DEBUG": "m",
     "CONFIG_USB_DWC2": "n",
     "CONFIG_USB_DWC2_DEBUG": "n",
     "CONFIG_USB_DWC2_DUAL_ROLE": "n",
