@@ -62,6 +62,9 @@ static int qcom_dma_heap_probe(struct platform_device *pdev)
 		case HEAP_TYPE_CARVEOUT:
 			ret = qcom_carveout_heap_create(heap_data);
 			break;
+		case HEAP_TYPE_SC_TCM_CARVEOUT:
+			ret = qcom_sc_tcm_carveout_heap_create(heap_data);
+			break;
 		case HEAP_TYPE_CMA:
 			ret = qcom_add_cma_heap(heap_data);
 			break;

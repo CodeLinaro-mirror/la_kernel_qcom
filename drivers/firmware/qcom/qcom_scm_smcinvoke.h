@@ -17,6 +17,7 @@
 #define SMCI_PILOBJECT_UID 446
 #define SMCI_GPUOBJECT_UID 470
 #define SMCI_DCVSOBJECT_UID 472
+#define SMCI_VIDEOVAROBJECT_UID 474
 
 #define SMCI_DT_OP_SET 0
 #define SMCI_PIL_OP_INITIMAGE 0
@@ -38,6 +39,8 @@
 #define SMCI_DCVS_OP_INIT_CA 2
 #define SMCI_DCVS_OP_UPDATE 3
 #define SMCI_DCVS_OP_TUNING 4
+
+#define SMCI_SET_VIDEO_VAR 0
 
 struct smci_image_service_info {
 	struct list_head list;

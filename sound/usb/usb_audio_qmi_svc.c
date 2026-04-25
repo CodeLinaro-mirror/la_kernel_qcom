@@ -177,6 +177,7 @@ struct uaudio_qmi_svc {
 	struct sockaddr_qrtr client_sq;
 	bool client_connected;
 	void *uaudio_ipc_log;
+	struct qsram_xhci __iomem *qsram;
 };
 
 static struct uaudio_qmi_svc *uaudio_svc;

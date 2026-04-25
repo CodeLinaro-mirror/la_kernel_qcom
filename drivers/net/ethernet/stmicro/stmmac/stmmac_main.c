@@ -5609,6 +5609,8 @@ read_again:
 		if (unlikely(status & dma_own))
 			break;
 
+		dma_rmb();
+
 		rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
 						priv->dma_conf.dma_rx_size);
 		next_entry = rx_q->cur_rx;

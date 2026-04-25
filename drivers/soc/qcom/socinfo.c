@@ -713,6 +713,8 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(BOURTZIP) },
 	{ qcom_board_id(SM4250P) },
 	{ qcom_board_id(SM6115P) },
+	{ qcom_board_id(DIWALI) },
+	{ qcom_board_id(DIWALIP) },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];

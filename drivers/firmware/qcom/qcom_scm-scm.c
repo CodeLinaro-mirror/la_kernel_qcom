@@ -313,6 +313,37 @@ void qcom_scm_pas_store_memoryinfo(u32 peripheral, phys_addr_t addr,
 }
 EXPORT_SYMBOL_GPL(qcom_scm_pas_store_memoryinfo);
 
+int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
+				   u32 cp_nonpixel_start,
+				   u32 cp_nonpixel_size)
+{
+	int ret;
+	struct device *scm_dev = NULL;
+
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_MP,
+		.cmd = QCOM_SCM_MP_VIDEO_VAR,
+		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_VAL, QCOM_SCM_VAL,
+					 QCOM_SCM_VAL, QCOM_SCM_VAL),
+		.args[0] = cp_start,
+		.args[1] = cp_size,
+		.args[2] = cp_nonpixel_start,
+		.args[3] = cp_nonpixel_size,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+
+	struct qcom_scm_res res;
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	ret = qcom_scm_call(scm_dev, &desc, &res);
+
+	return ret ? : res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_mem_protect_video_var);
+
 /**
  * qcom_scm_assign_dump_table_region() - Assign a memory region to the
  *                                       dump table
@@ -602,6 +633,54 @@ int qcom_scm_kgsl_init_regs(u32 gpu_req)
 	return qcom_scm_call(scm_dev, &desc, NULL);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
+
+int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
+{
+	struct device *scm_dev = NULL;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_MP,
+		.cmd = QCOM_SCM_MP_CP_SMMU_APERTURE_ID,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = 0xffff0000
+			   | ((QCOM_SCM_CP_APERTURE_REG & 0xff) << 8)
+			   | (num_context_bank & 0xff),
+		.args[1] = 0xffffffff,
+		.args[2] = 0xffffffff,
+		.args[3] = 0xffffffff,
+		.arginfo = QCOM_SCM_ARGS(4),
+	};
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	return qcom_scm_call(scm_dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture);
+
+int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
+{
+	struct device *scm_dev = NULL;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_MP,
+		.cmd = QCOM_SCM_MP_CP_SMMU_APERTURE_ID,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = 0xffff0000
+			   | ((QCOM_SCM_CP_LPAC_APERTURE_REG & 0xff) << 8)
+			   | (num_context_bank & 0xff),
+		.args[1] = 0xffffffff,
+		.args[2] = 0xffffffff,
+		.args[3] = 0xffffffff,
+		.arginfo = QCOM_SCM_ARGS(4),
+	};
+
+	scm_dev = qcom_scm_get_dev();
+	if (!scm_dev)
+		return -ENODEV;
+
+	return qcom_scm_call(scm_dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_lpac_aperture);
 
 /**
  * qcom_scm_dcvs_core_available() - check if core DCVS operations are available

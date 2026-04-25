@@ -1,9 +1,11 @@
+load(":drivers/firmware/qcom/pkvm-secure-memory-manager/modules.bzl", register_secure_memory_manager = "register_modules")
 load(":drivers/firmware/qcom/pkvm-smc-filter/modules.bzl", register_pkvm_smc_filter = "register_modules")
 load(":drivers/firmware/qcom/si_core/modules.bzl", register_si_core = "register_modules")
 
 def register_modules(registry):
     register_si_core(registry)
     register_pkvm_smc_filter(registry)
+    register_secure_memory_manager(registry)
 
     registry.register(
         name = "drivers/firmware/qcom/qcom-scm",

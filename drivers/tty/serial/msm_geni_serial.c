@@ -5858,17 +5858,6 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 		return PTR_ERR(dev_port->serial_rsc.geni_pinctrl);
 	}
 
-	if (!dev_port->is_console) {
-		if (IS_ERR_OR_NULL(pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
-				PINCTRL_SHUTDOWN))) {
-			dev_info(&pdev->dev, "No Shutdown config specified\n");
-		} else {
-			dev_port->serial_rsc.geni_gpio_shutdown =
-			pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
-							PINCTRL_SHUTDOWN);
-		}
-	}
-
 	dev_port->serial_rsc.geni_gpio_active =
 		pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
 							PINCTRL_ACTIVE);
@@ -5893,6 +5882,19 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 	if (IS_ERR_OR_NULL(dev_port->serial_rsc.geni_gpio_sleep)) {
 		dev_err(&pdev->dev, "No sleep config specified!\n");
 		return PTR_ERR(dev_port->serial_rsc.geni_gpio_sleep);
+	}
+
+	if (!dev_port->is_console) {
+		if (IS_ERR_OR_NULL(pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
+				PINCTRL_SHUTDOWN))) {
+			dev_warn(&pdev->dev, "No Shutdown config specified, use sleep config\n");
+			dev_port->serial_rsc.geni_gpio_shutdown =
+				  dev_port->serial_rsc.geni_gpio_sleep;
+		} else {
+			dev_port->serial_rsc.geni_gpio_shutdown =
+			pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
+							PINCTRL_SHUTDOWN);
+		}
 	}
 
 	uport->irq = platform_get_irq(pdev, 0);
