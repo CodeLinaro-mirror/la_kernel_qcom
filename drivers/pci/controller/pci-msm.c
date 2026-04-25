@@ -1433,7 +1433,7 @@ static int msm_pcie_drv_rpmsg_cb(struct rpmsg_device *rpdev, void *data,
 
 static int msm_pcie_drv_send_rpmsg(struct msm_pcie_dev_t *pcie_dev,
 				   struct msm_pcie_drv_msg *msg);
-static int msm_pcie_config_sid(struct msm_pcie_dev_t *dev);
+static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev);
 static void msm_pcie_config_l0s_disable_all(struct msm_pcie_dev_t *dev,
 				struct pci_bus *bus);
 static void msm_pcie_config_l1_disable_all(struct msm_pcie_dev_t *dev,
@@ -6376,7 +6376,7 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 	}
 
 	if (!dev->tc2bdf_tc_count)
-		ret = msm_pcie_config_sid(dev);
+		msm_pcie_config_sid(dev);
 	else
 		ret = msm_pcie_config_tc_bdf_sid_map(dev);
 	if (ret)
@@ -6771,6 +6771,11 @@ static int msm_pcie_save_sid_config(struct msm_pcie_dev_t *dev)
 	if (!dev)
 		return -EINVAL;
 
+	if (!dev->sid_info) {
+		PCIE_DBG(dev, "PCIe: RC%d: SID info not available .\n", dev->rc_idx);
+		return 0;
+	}
+
 	sid_table_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 	sid_table_size = CRC8_TABLE_SIZE * sizeof(u32);
 
@@ -6800,6 +6805,11 @@ static int msm_pcie_restore_sid_config(struct msm_pcie_dev_t *dev)
 	if (!dev)
 		return -EINVAL;
 
+	if (!dev->sid_info) {
+		PCIE_DBG(dev, "PCIe: RC%d: SID info not available .\n", dev->rc_idx);
+		return 0;
+	}
+
 	sid_table_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 	sid_table_size = CRC8_TABLE_SIZE * sizeof(u32);
 
@@ -6817,17 +6827,19 @@ static int msm_pcie_restore_sid_config(struct msm_pcie_dev_t *dev)
 	return 0;
 }
 
-static int msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
+static void msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 {
 	void __iomem *bdf_to_sid_base;
 	int i;
 
 	/* Perform SID mapping only if the configuration hasn't been saved yet */
 	if (dev->save_sid_config)
-		return 0;
+		return;
 
-	if (!dev->sid_info)
-		return -EINVAL;
+	if (!dev->sid_info) {
+		PCIE_DBG(dev, "PCIe: RC%d: SID info not available .\n", dev->rc_idx);
+		return;
+	}
 
 	bdf_to_sid_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 
@@ -6886,7 +6898,6 @@ static int msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 	/* clear BDF_TO_SID_BYPASS bit to enable BDF to SID translation */
 	msm_pcie_write_mask(dev->parf + PCIE20_PARF_BDF_TO_SID_CFG, BIT(0), 0);
 
-	return 0;
 }
 
 static int msm_pcie_config_tc_bdf_sid_map(struct msm_pcie_dev_t *dev)
