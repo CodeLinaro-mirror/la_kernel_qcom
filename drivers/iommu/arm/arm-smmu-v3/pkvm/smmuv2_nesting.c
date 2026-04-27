@@ -201,7 +201,9 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	current_type = FIELD_GET(ARM_SMMU_CBAR_TYPE, val);
 
 	/* If type is S1_TRANS_S2_BYPASS, modify hardware value for nested translation */
-	if (current_type == CBAR_TYPE_S1_TRANS_S2_BYPASS) {
+	if (current_type == CBAR_TYPE_S2_TRANS ||
+		current_type == CBAR_TYPE_S1_TRANS_S2_BYPASS ||
+		current_type == CBAR_TYPE_S1_TRANS_S2_TRANS) {
 		/* Clear the TYPE, VMID, and S1-specific fields (bits [8:15]) in hardware value */
 		hw_val &= ~(ARM_SMMU_CBAR_TYPE | ARM_SMMU_CBAR_VMID |
 			    ARM_SMMU_CBAR_S1_MEMATTR | ARM_SMMU_CBAR_S1_BPSHCFG);
@@ -214,10 +216,10 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 
 		/* Set bits [8:15] to host_s2_cb_idx (S2 host context bank) */
 		hw_val |= (smmu->host_s2_cb_idx << 8);
-	}
 
-	/* Write the (possibly modified) value to hardware */
-	arm_smmu_gr1_write(smmu, offset, hw_val);
+		/* Write the (possibly modified) value to hardware */
+		arm_smmu_gr1_write(smmu, offset, hw_val);
+	}
 
 	smmu_v2_debug_print("cbar_write: idx: %d, EL1_val: 0x%x, HW_val: 0x%x, stored: 0x%x\n",
 			    i, val, hw_val, smmu->cbar_pool[i]);
