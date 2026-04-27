@@ -3272,7 +3272,6 @@ static const struct adsp_data shikra_lpaicp_resource = {
 	.ssr_name = "lpaicp",
 	.uses_elf64 = true,
 	.sysmon_name = "lpaicp",
-	.auto_boot = true,
 };
 
 
