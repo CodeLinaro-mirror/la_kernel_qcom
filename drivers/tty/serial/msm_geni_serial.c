@@ -6361,6 +6361,10 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		goto exit_geni_serial_probe;
 
 	msm_geni_serial_debug_init(uport, is_console);
+
+	/* Initialize the GSI mode */
+	msm_geni_serial_init_gsi(uport);
+
 	ret = msm_geni_serial_port_init(pdev, dev_port);
 	if (ret)
 		goto exit_geni_serial_probe;
@@ -6371,8 +6375,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_port->port_setup = false;
 
 	dev_port->uart_error = UART_ERROR_DEFAULT;
-	/* Initialize the GSI mode */
-	msm_geni_serial_init_gsi(uport);
 
 	/*
 	 * In abrupt kill scenarios, previous state of the uart causing runtime
