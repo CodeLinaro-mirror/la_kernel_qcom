@@ -34,6 +34,7 @@
 
 /* GPU Control Operations (IGPUControl OP_regSetup) */
 #define SMCI_GPU_OP_REG_SETUP 0
+#define SMCI_GPU_OP_CONFIG_GPU_SMMU_APERTURE 1
 
 /* GPU DCVS Control Operations (IGFXDCVSControl OPs) */
 #define SMCI_DCVS_OP_RESET 0
