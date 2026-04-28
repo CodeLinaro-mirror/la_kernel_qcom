@@ -3274,6 +3274,34 @@ static const struct adsp_data shikra_lpaicp_resource = {
 	.sysmon_name = "lpaicp",
 };
 
+
+static const struct adsp_data scuba_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = false,
+};
+
+static const struct adsp_data scuba_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.uses_elf64 = true,
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
+
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
@@ -3383,6 +3411,8 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,ravelin-adsp-pas", .data = &ravelin_adsp_resource},
 	{ .compatible = "qcom,ravelin-modem-pas", .data = &ravelin_mpss_resource},
 	{ .compatible = "qcom,ravelin-wpss-pas", .data = &ravelin_wpss_resource},
+	{ .compatible = "qcom,scuba-adsp-pas", .data = &scuba_adsp_resource},
+	{ .compatible = "qcom,scuba-modem-pas", .data = &scuba_mpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

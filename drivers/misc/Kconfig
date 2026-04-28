@@ -55,4 +55,18 @@ config ISL97900_LED
 	  using I2C.
 
 	  Say Y if you want to enable ISL97900 driver.
+
+
+config QTI_FASTRPC
+	tristate "Qualcomm FastRPC"
+	depends on ARCH_QCOM || COMPILE_TEST
+	depends on RPMSG
+	select QCOM_SCM
+	select DMA_SHARED_BUFFER
+	help
+	  Provides a communication mechanism that allows for clients to
+	  make remote method invocations across processor boundary to
+	  applications DSP processor. Say M if you want to enable this
+	  module.
+
 endmenu

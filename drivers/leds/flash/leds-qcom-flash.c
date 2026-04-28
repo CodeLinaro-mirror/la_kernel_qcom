@@ -13,6 +13,7 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/soc/qcom/battery_charger.h>
+#include <linux/iio/consumer.h>
 #include <media/v4l2-flash-led-class.h>
 
 /* registers definitions */
@@ -25,6 +26,7 @@
 #define FLASH_SUBTYPE_REG		0x05
 #define FLASH_SUBTYPE_3CH_PM8150_VAL	0x04
 #define FLASH_SUBTYPE_3CH_PMI8998_VAL	0x03
+#define FLASH_SUBTYPE_3CH_PMI632_VAL	0x05
 #define FLASH_SUBTYPE_4CH_VAL		0x07
 
 #define FLASH_STS_3CH_OTST1		BIT(0)
@@ -110,6 +112,16 @@ struct flash_current_headroom {
 	u16 headroom_mv;
 };
 
+enum qcom_flash_iio_props {
+	RBATT,
+	OCV,
+};
+
+static const char * const qcom_flash_iio_prop_names[] = {
+	[RBATT] = "rbatt",
+	[OCV] = "voltage_ocv",
+};
+
 static const struct flash_current_headroom mvflash_4ch_map[4] = {
 	{750,	200},
 	{1000,	250},
@@ -186,9 +198,11 @@ static const struct reg_field mvflash_4ch_regs[REG_MAX_COUNT] = {
 };
 
 struct qcom_flash_data {
+	struct device		*dev;
 	struct v4l2_flash	**v4l2_flash;
 	struct regmap_field     *r_fields[REG_MAX_COUNT];
 	struct power_supply	*batt_psy;
+	struct iio_channel	**iio_channels;
 	spinlock_t              lock;
 	enum hw_type		hw_type;
 	u32			total_ma;
@@ -199,6 +213,7 @@ struct qcom_flash_data {
 	u8			torch_clamp;
 	bool			trigger_lmh;
 	bool			debug_board_present;
+	bool			use_smb_battery_interface;
 };
 
 struct qcom_flash_led {
@@ -695,6 +710,54 @@ static int qcom_flash_led_brightness_set(struct led_classdev *led_cdev,
 #define VOLTAGE_HDRM_DEFAULT_MV		400
 #define VDIP_THRESH_DEFAULT_UV		2800000LL
 
+static int qcom_flash_get_iio_chan(struct qcom_flash_data *flash_data,
+		enum qcom_flash_iio_props chan)
+{
+	int rc;
+
+	/*
+	 * if the channel pointer is not-NULL and has a ERR value it has
+	 * already been queried upon earlier, hence return from here.
+	 */
+	if (IS_ERR(flash_data->iio_channels[chan]))
+		return PTR_ERR(flash_data->iio_channels[chan]);
+
+	if (!flash_data->iio_channels[chan]) {
+		flash_data->iio_channels[chan] = devm_iio_channel_get(flash_data->dev,
+						qcom_flash_iio_prop_names[chan]);
+		if (IS_ERR(flash_data->iio_channels[chan])) {
+			rc = PTR_ERR(flash_data->iio_channels[chan]);
+			if (rc == -EPROBE_DEFER) {
+				flash_data->iio_channels[chan] = NULL;
+				return rc;
+			}
+			dev_err(flash_data->dev, "%s channel unavailable %d\n",
+				qcom_flash_iio_prop_names[chan], rc);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+
+static int qcom_flash_iio_getprop(struct qcom_flash_data *flash_data,
+				enum qcom_flash_iio_props chan, int *data)
+{
+	int rc;
+
+	rc = qcom_flash_get_iio_chan(flash_data, chan);
+	if (rc < 0)
+		return rc;
+
+	rc = iio_read_channel_processed(flash_data->iio_channels[chan], data);
+
+	if (rc < 0)
+		dev_err(flash_data->dev,
+				"Error in reading IIO channel data rc = %d\n", rc);
+
+	return rc;
+}
+
 static int qcom_flash_led_voltage_headroom_get(struct qcom_flash_data *flash_data)
 {
 	int i, voltage_hdrm_mv = 0;
@@ -733,7 +796,10 @@ static int __qcom_flash_led_get_max_avail_current(
 		return 0;
 	}
 
-	rc = qti_battery_charger_get_prop("battery", BATTERY_RESISTANCE,
+	if (flash_data->use_smb_battery_interface)
+		rc = qcom_flash_iio_getprop(flash_data, RBATT, &rbatt_uohm);
+	else
+		rc = qti_battery_charger_get_prop("battery", BATTERY_RESISTANCE,
 						&rbatt_uohm);
 	if (rc < 0) {
 		pr_err("Failed to get battery resistance, rc=%d\n",
@@ -747,13 +813,23 @@ static int __qcom_flash_led_get_max_avail_current(
 		return 0;
 	}
 
-	rc = power_supply_get_property(flash_data->batt_psy,
-		POWER_SUPPLY_PROP_VOLTAGE_OCV, &prop);
-	if (rc < 0) {
-		pr_err("Failed to get battery OCV, rc=%d\n", rc);
-		return rc;
+	if (flash_data->use_smb_battery_interface) {
+		rc = qcom_flash_iio_getprop(flash_data, OCV, &ocv_uv);
+		if (rc < 0) {
+			dev_err(flash_data->dev,
+					"Failed to get battery OCV, rc=%d\n", rc);
+			return rc;
+		}
+	} else {
+		rc = power_supply_get_property(flash_data->batt_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_OCV, &prop);
+		if (rc < 0) {
+			dev_err(flash_data->dev,
+					"Failed to get battery OCV, rc=%d\n", rc);
+			return rc;
+		}
+		ocv_uv = prop.intval;
 	}
-	ocv_uv = prop.intval;
 
 	rc = power_supply_get_property(flash_data->batt_psy,
 		POWER_SUPPLY_PROP_CURRENT_NOW, &prop);
@@ -1067,7 +1143,7 @@ static int qcom_flash_led_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	if (val == FLASH_SUBTYPE_3CH_PM8150_VAL) {
+	if (val == FLASH_SUBTYPE_3CH_PM8150_VAL || val == FLASH_SUBTYPE_3CH_PMI632_VAL) {
 		flash_data->hw_type = QCOM_MVFLASH_3CH;
 		flash_data->max_channels = 3;
 		regs = devm_kmemdup(dev, mvflash_3ch_regs, sizeof(mvflash_3ch_regs),
@@ -1138,6 +1214,20 @@ static int qcom_flash_led_probe(struct platform_device *pdev)
 			goto release;
 
 		flash_data->leds_count++;
+	}
+
+	flash_data->use_smb_battery_interface =
+		device_property_read_bool(&pdev->dev,
+				"qcom,use-smb-battery-interface");
+	if (flash_data->use_smb_battery_interface) {
+		flash_data->dev = &pdev->dev;
+		flash_data->iio_channels = devm_kcalloc(&pdev->dev,
+				ARRAY_SIZE(qcom_flash_iio_prop_names),
+					sizeof(struct iio_channel *), GFP_KERNEL);
+		if (!flash_data->iio_channels) {
+			rc = -ENOMEM;
+			goto release;
+		}
 	}
 
 	return regmap_field_write(flash_data->r_fields[REG_TORCH_CLAMP], flash_data->torch_clamp);

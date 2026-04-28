@@ -300,12 +300,11 @@ void walt_config(void)
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 		sysctl_walt_features |= WALT_FEAT_TOPAPP_BASED_HISPEED;
-		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
-		soc_sched_lib_name_capacity = 4;
 		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 
+		soc_sched_lib_name_capacity = 2;
 		// Evaluate and change the swap util thres as per need in future.
 		pipeline_swap_util_th = 50;
 
