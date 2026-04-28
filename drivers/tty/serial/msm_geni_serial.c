@@ -1378,6 +1378,51 @@ static void dump_ipc(struct uart_port *uport, void *ipc_ctx, char *prefix,
 	UART_LOG_DBG(ipc_ctx, uport->dev, "%s : %s\n", __func__, data);
 }
 
+/*
+ * msm_geni_find_wakeup_byte() - Checks if wakeup byte is present
+ * in rx buffer
+ *
+ * @uport: pointer to uart port
+ * @size: size of rx data
+ *
+ * Return: true if wakeup byte found else false
+ */
+static bool msm_geni_find_wakeup_byte(struct uart_port *uport, int size)
+{
+	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
+	unsigned char *buf = NULL;
+
+	if (size <= 0) {
+		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
+			     "Invalid size(%d) when checking wakeup-byte\n", size);
+		return false;
+	}
+
+	if (port->xfer_mode == GENI_GPI_DMA)
+		buf = (unsigned char *)port->rx_gsi_buf[port->rx_buf_idx];
+	else
+		buf = (unsigned char *)port->rx_buf;
+
+	if (!buf) {
+		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
+			     "NULL RX buffer pointer in wakeup-byte check\n");
+		return false;
+	}
+
+	/* Wakeup-byte can be expected anywhere in the buffer */
+	if (memchr(buf, port->wakeup_byte, size)) {
+		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
+			     "Found wakeup byte (0x%x) in size %u\n",
+			     port->wakeup_byte, size);
+		atomic_set(&port->check_wakeup_byte, 0);
+		return true;
+	}
+
+	dump_ipc(uport, port->ipc_log_rx, "No wakeup-byte found. Dropped Rx", buf, 0, size);
+
+	return false;
+}
+
 static bool check_transfers_inflight(struct uart_port *uport)
 {
 	bool xfer_on = false;
@@ -2310,6 +2355,13 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 		return;
 	}
 
+	if (atomic_read(&msm_port->check_wakeup_byte)) {
+		ret = msm_geni_find_wakeup_byte(uport, rx_bytes);
+		if (!ret)
+		/* Wakeup byte not found; drop data and recycle DMA buffer */
+			goto skip_tty_push;
+	}
+
 	ret = tty_insert_flip_string(tport, (unsigned char *)(msm_port->rx_gsi_buf[idx]), rx_bytes);
 	if (ret != rx_bytes)
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
@@ -2318,6 +2370,8 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 
 	uport->icount.rx += ret;
 	tty_flip_buffer_push(tport);
+
+skip_tty_push:
 	dump_ipc(uport, msm_port->ipc_log_rx, "GSI Rx",
 		 (char *)msm_port->rx_gsi_buf[idx], 0, rx_bytes);
 
@@ -3910,31 +3964,6 @@ exit_handle_tx:
 	return 0;
 }
 
-/*
- * msm_geni_find_wakeup_byte() - Checks if wakeup byte is present
- * in rx buffer
- *
- * @uport: pointer to uart port
- * @size: size of rx data
- *
- * Return: true if wakeup byte found else false
- */
-static bool msm_geni_find_wakeup_byte(struct uart_port *uport, int size)
-{
-	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
-	unsigned char *buf = (unsigned char *)port->rx_buf;
-
-	if (buf[0] == port->wakeup_byte) {
-		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
-			     "%s Found wakeup byte\n", __func__);
-		atomic_set(&port->check_wakeup_byte, 0);
-		return true;
-	}
-	dump_ipc(uport, port->ipc_log_rx, "Dropped Rx", buf, 0, size);
-
-	return false;
-}
-
 static void check_rx_buf(char *buf, struct uart_port *uport, int size)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
@@ -4023,7 +4052,7 @@ static int msm_geni_serial_handle_dma_rx(struct uart_port *uport, bool drop_rx)
 	rx_bytes_copied = ret;
 	if (ret != rx_bytes) {
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
-			     "%s: ret %d rx_bytes %d\n", __func__, ret, rx_bytes);
+			     "tty_insert_flip: ret-bytes %d rx_bytes %d\n", ret, rx_bytes);
 		rx_buf = (unsigned char *)(msm_port->rx_buf);
 		rx_buf += ret;
 		/* Bytes still left to copy from rx buffer */
@@ -4450,19 +4479,12 @@ static void msm_geni_wakeup_work(struct work_struct *work)
 
 	port = container_of(work, struct msm_geni_serial_port,
 			    wakeup_irq_dwork.work);
-
 	uport = &port->uport;
-	UART_LOG_DBG(port->ipc_log_rx, uport->dev, "Wakeup work start\n");
 
 	if (!atomic_read(&port->check_wakeup_byte))
 		return;
 
-	if (port->xfer_mode == GENI_GPI_DMA) {
-		if (msm_geni_serial_power_on(uport))
-			UART_LOG_DBG(port->ipc_log_pwr, uport->dev, "Failed to power on\n");
-		return;
-	}
-
+	UART_LOG_DBG(port->ipc_log_rx, uport->dev, "Wakeup work started\n");
 	reinit_completion(&port->wakeup_comp);
 	if (msm_geni_serial_power_on(uport)) {
 		atomic_set(&port->check_wakeup_byte, 0);
