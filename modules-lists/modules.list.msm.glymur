@@ -22,3 +22,9 @@ rpmh-regulator.ko
 pkvm-geni.ko
 pkvm-smc-filter.ko
 qcom_smmu_v2_v3_dispatcher.ko
+clk-dummy.ko
+clk-qcom.ko
+clk-rpmh.ko
+gcc-glymur.ko
+tcsrcc-glymur.ko
+icc-clk.ko
