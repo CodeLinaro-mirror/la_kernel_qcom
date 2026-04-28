@@ -3,7 +3,6 @@ virtio_blk.ko
 virtio_console.ko
 virtio_dma_buf.ko
 virtio-gpu.ko
-virtio_snd.ko
 virtio_input.ko
 qcom-scm.ko
 secure_buffer.ko
