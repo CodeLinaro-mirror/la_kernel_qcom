@@ -10,6 +10,7 @@
 
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
 #include <linux/init.h>
@@ -103,6 +104,7 @@ struct qcom_ptp_tsc {
 	void __iomem *baseaddr;
 	void __iomem *etu_baseaddr;
 	void __iomem *timer_baseaddr;
+	void __iomem *mux_addr;
 	struct clk *tsc_cfg_ahb_clk;
 	struct clk *tsc_cntr_clk;
 	struct clk *tsc_etu_clk;
@@ -801,6 +803,48 @@ static struct ptp_clock_info qcom_ptp_clock_info = {
 	.enable   = qcom_ptp_enable,
 };
 
+/* --- Sysfs Interface --- */
+
+static ssize_t tsc_src_ctrl_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct qcom_ptp_tsc *timer = dev_get_drvdata(dev);
+	u32 val;
+
+	val = readl_relaxed(timer->mux_addr);
+
+	return sysfs_emit(buf, "%u\n", val);
+}
+
+static ssize_t tsc_src_ctrl_store(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct qcom_ptp_tsc *timer = dev_get_drvdata(dev);
+	bool val;
+	u32 regval;
+	int ret;
+
+	ret = kstrtobool(buf, &val);
+	if (ret)
+		return ret;
+
+	regval = readl_relaxed(timer->mux_addr);
+
+	/* BIT(0) selects timestamp source:
+	 * 0 = default source (MD)
+	 * 1 = alternate source (SD)
+	 */
+	if (!val)
+		regval &= ~BIT(0);
+	else
+		regval |= BIT(0);
+
+	writel_relaxed(regval, timer->mux_addr);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(tsc_src_ctrl);
+
 /* module operations */
 
 static int qcom_ptp_tsc_remove(struct platform_device *pdev)
@@ -808,6 +852,8 @@ static int qcom_ptp_tsc_remove(struct platform_device *pdev)
 	struct qcom_ptp_tsc *timer = platform_get_drvdata(pdev);
 
 	if (timer->ptp_clock) {
+		if (timer->mux_addr)
+			device_remove_file(&pdev->dev, &dev_attr_tsc_src_ctrl);
 		ptp_clock_unregister(timer->ptp_clock);
 		timer->ptp_clock = NULL;
 	}
@@ -954,6 +1000,30 @@ static int qcom_tsc_self_test(struct qcom_ptp_tsc *timer)
 	return 0;
 }
 
+static int tsc_mux_src_ctrl(struct platform_device *pdev, struct qcom_ptp_tsc *timer)
+{
+	struct resource *r_mem;
+	int ret = 0;
+
+	r_mem = platform_get_resource_byname(pdev, IORESOURCE_MEM, "tsc_src_sel");
+	if (!r_mem) {
+		dev_warn(&pdev->dev, "no tsc mux ctrl resource defined\n");
+		return -ENXIO;
+	}
+
+	timer->mux_addr = devm_ioremap_resource(&pdev->dev, r_mem);
+	if (IS_ERR(timer->mux_addr))
+		return PTR_ERR(timer->mux_addr);
+
+	ret = device_create_file(&pdev->dev, &dev_attr_tsc_src_ctrl);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to create mux_ctrl sysfs attribute: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 {
 	struct qcom_ptp_tsc *timer;
@@ -1061,6 +1131,11 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 	}
 
 	qcom_tsc_etu_get_data(pdev, timer);
+
+	ret = tsc_mux_src_ctrl(pdev, timer);
+	if (ret)
+		dev_warn(&pdev->dev, "mux control not enabled (%d)\n", ret);
+
 
 	if (!timer->tsc_nsec_update) {
 		cntr_val = (timer->tsc_hw_preload ? 0x1D8 : 0x1CC);
