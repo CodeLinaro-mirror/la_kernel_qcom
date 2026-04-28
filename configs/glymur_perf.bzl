@@ -71,6 +71,8 @@ glymur_perf_config = {
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_LOGBUF_VENDOR_HOOKS": "m",
+    "CONFIG_QCOM_MEM_BUF": "m",
+    "CONFIG_QCOM_MEM_BUF_DEV": "m",
     "CONFIG_QCOM_PDC": "m",
     "CONFIG_QCOM_RPMH": "m",
     "CONFIG_QCOM_SCM": "m",

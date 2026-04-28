@@ -62,3 +62,6 @@ dispcc-glymur.ko
 camcc-glymur.ko
 evacc-glymur.ko
 videocc-glymur.ko
+mem_buf.ko
+mem_buf_dev.ko
+secure_buffer.ko
