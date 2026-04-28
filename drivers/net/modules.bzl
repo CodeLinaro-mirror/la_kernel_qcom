@@ -11,6 +11,16 @@ def register_modules(registry):
     register_mdio_fe(registry)
     register_phy_qcom(registry)
     registry.register(
+        name = "drivers/net/phy/dp83867",
+        out = "dp83867.ko",
+        config = "CONFIG_DP83867_PHY",
+        srcs = [
+            # do not sort
+            "drivers/net/phy/dp83867.c",
+            "include/dt-bindings/net/ti-dp83867.h",
+        ],
+    )
+    registry.register(
         name = "net/core/failover",
         out = "failover.ko",
         config = "CONFIG_FAILOVER",
