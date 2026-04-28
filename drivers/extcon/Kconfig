@@ -17,3 +17,13 @@ config EXTCON_QTI_SPMI_MISC
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called extcon-qti-spmi-misc.
+
+config EXTCON_USB_GPIO
+	tristate "USB GPIO extcon support"
+	depends on GPIOLIB || COMPILE_TEST
+	help
+	  Say Y here to enable GPIO based USB cable detection extcon support.
+	  Used typically if GPIO is used for USB ID pin detection.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called extcon-qti-spmi-misc.
