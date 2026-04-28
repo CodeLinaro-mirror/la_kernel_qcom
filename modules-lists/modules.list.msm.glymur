@@ -65,3 +65,6 @@ videocc-glymur.ko
 mem_buf.ko
 mem_buf_dev.ko
 secure_buffer.ko
+qcom_dma_heaps.ko
+deferred-free-helper.ko
+msm_dma_iommu_mapping.ko
