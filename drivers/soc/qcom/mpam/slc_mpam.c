@@ -499,7 +499,7 @@ static int slc_config_fs_register(struct  device *dev)
 		}
 	}
 
-	if (slc_firmware_ver == SLC_MPAM_VERSION_1_0)
+	if (slc_firmware_ver >= SLC_MPAM_VERSION_0_3)
 		create_config_node("total", dev, 0, 0, root_group, &slc_mpam_total_type);
 
 	return 0;
