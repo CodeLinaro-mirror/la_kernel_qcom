@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -24,6 +23,7 @@
 		serial0 = &uart10;
 		serial1 = &uart4;
 		serial2 = &uart17;
+		serial3 = &uart3;
 		spi16 = &spi16;
 		ufshc1 = &ufs_mem_hc;
 		ufshc2 = &ufs_mem_hc2;
