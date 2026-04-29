@@ -5334,6 +5334,9 @@ static unsigned int msm_geni_serial_tx_empty(struct uart_port *uport)
 
 	if (port->xfer_mode == GENI_SE_DMA)
 		tx_fifo_status = port->tx_dma ? 1 : 0;
+	else if (port->xfer_mode == GENI_GPI_DMA)
+		tx_fifo_status = (port->tx_dma ||
+				  port->split_dma_tre.immediate_dma_in_progress) ? 1 : 0;
 	else
 		tx_fifo_status = geni_read_reg(uport->membase,
 						SE_GENI_TX_FIFO_STATUS);
