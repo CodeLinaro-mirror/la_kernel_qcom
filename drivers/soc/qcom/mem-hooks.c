@@ -21,8 +21,18 @@
 #include <trace/events/cma.h>
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/mm.h>
+#include <trace/hooks/vmscan.h>
 #include <trace/hooks/fault.h>
 #include "mm/cma.h"
+
+#ifdef CONFIG_QCOM_MGLRU_SCAN_ABORT
+static void scan_abort_checks(void *data, unsigned long nr_reclaimed,
+			       unsigned long nr_to_reclaim,
+			       unsigned int order, bool *bypass)
+{
+	*bypass = true;
+}
+#endif
 
 static bool is_el1_instruction_abort(unsigned long esr)
 {
@@ -127,6 +137,15 @@ static int __init init_mem_hooks(void)
 		return ret;
 	}
 	register_cma_hooks();
+
+#ifdef CONFIG_QCOM_MGLRU_SCAN_ABORT
+	ret = register_trace_android_vh_mglru_should_abort_scan(
+						scan_abort_checks, NULL);
+	if (ret) {
+		pr_err("Failed to register mglru_should_abort_scan hook\n");
+		return ret;
+	}
+#endif
 
 	return 0;
 }

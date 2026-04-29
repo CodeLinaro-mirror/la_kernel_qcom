@@ -986,6 +986,16 @@ config QCOM_MEM_HOOKS
 	  If unsure, say 'M' here to ensure that the hooks are compiled
 	  in.
 
+config QCOM_MGLRU_SCAN_ABORT
+	bool "MGLRU scan abort vendor hook"
+	depends on QCOM_MEM_HOOKS && LRU_GEN
+	help
+	  Enable the MGLRU scan abort vendor hook. When enabled, this
+	  hook causes the MGLRU scanner to always bypass reclaim by
+	  setting the bypass flag. This is a target-specific tuning
+	  intended for select Qualcomm Technologies, Inc. SoC targets.
+	  If unsure, say N.
+
 config CMA_BEST_FIT
 	bool "Use best fit over first fit for CMA allocations"
 	depends on CMA
