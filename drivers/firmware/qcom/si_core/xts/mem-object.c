@@ -152,8 +152,31 @@ int op_supported(unsigned long op)
 	}
 }
 
-/** Support for FFA based memory sharing, which supports scattered memory **/
+/*
+ * Translate FFA_MEM_* permission bits to the QCOM_SCM_PERM_* encoding.
+ *
+ * FFA encoding:              QCOM SCM encoding:
+ *   FFA_MEM_RO   BIT(0)  ->  QCOM_SCM_PERM_READ  (0x4)
+ *   FFA_MEM_RW   BIT(1)  ->  QCOM_SCM_PERM_RW    (0x6)
+ *   FFA_MEM_EXEC BIT(3)  ->  QCOM_SCM_PERM_EXEC  (0x1)
+ *
+ */
+static uint32_t ffa_perm_to_qcom_scm_perm(u8 ffa_perm)
+{
+	uint32_t scm_perm = 0;
 
+	if (ffa_perm & FFA_MEM_RW)
+		scm_perm |= QCOM_SCM_PERM_RW;
+	else if (ffa_perm & FFA_MEM_RO)
+		scm_perm |= QCOM_SCM_PERM_READ;
+
+	if (ffa_perm & FFA_MEM_EXEC)
+		scm_perm |= QCOM_SCM_PERM_EXEC;
+
+	return scm_perm;
+}
+
+/** Support for FFA based memory sharing, which supports scattered memory **/
 static int map_via_ffa_abi(struct mem_object *mo)
 {
 	int ret;
@@ -163,11 +186,21 @@ static int map_via_ffa_abi(struct mem_object *mo)
 	struct scatterlist *sgl = sgt->sgl;
 	unsigned int nents = sg_nents(sgl);
 	struct scatterlist *sg;
+	u8 ffa_perm;
+
+	/*
+	 * Extract FFA permission bits from flags (bits 8-11).
+	 * Default to FFA_MEM_RW if the caller did not specify any.
+	 */
+	ffa_perm = (mo->flags & SI_CORE_MEM_OBJ_FFA_PERM_MASK) >>
+		   SI_CORE_MEM_OBJ_FFA_PERM_SHIFT;
+	if (!ffa_perm)
+		ffa_perm = FFA_MEM_RW;
 
 	if (mo->flags & SI_CORE_MEM_OBJ_LEND)
-		ret = qtee_ffa_mem_lend(sgt, mo->tag, &mo->handle);
+		ret = qtee_ffa_mem_lend(sgt, mo->tag, ffa_perm, &mo->handle);
 	else /* By default, we always share */
-		ret = qtee_ffa_mem_share(sgt, mo->tag, &mo->handle);
+		ret = qtee_ffa_mem_share(sgt, mo->tag, ffa_perm, &mo->handle);
 
 	if (ret) {
 		mo->handle = 0;
@@ -190,8 +223,10 @@ static int map_via_ffa_abi(struct mem_object *mo)
 	mo->ffa_mapping_info.ffa_tag = mo->tag;
 	mo->ffa_mapping_info.offset = 0;
 	mo->ffa_mapping_info.size = total_len;
-	mo->ffa_mapping_info.mem_attr = QCOM_SCM_PERM_RW;
+	mo->ffa_mapping_info.mem_attr = ffa_perm_to_qcom_scm_perm(ffa_perm);
 
+	pr_debug("tag: %llx, total_len: %#zx, ffa_perm: %x, mem_attr: %x\n",
+		 mo->tag, total_len, ffa_perm, mo->ffa_mapping_info.mem_attr);
 out:
 	return ret;
 }
