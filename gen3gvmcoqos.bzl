@@ -10,6 +10,7 @@ def define_gen3gvmcoqos():
         "drivers/block/virtio_blk.ko",
         "drivers/char/hw_random/virtio-rng.ko",
         "drivers/char/virtio_console.ko",
+        "drivers/clk/clk-scmi.ko",
         "drivers/dma-buf/heaps/qcom_dma_heaps.ko",
         "drivers/dma-buf/heaps/system_heap.ko",
         "drivers/gpio/gpio-virtio.ko",
