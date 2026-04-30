@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * ​​​​Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/cdev.h>
@@ -819,11 +819,13 @@ static int rdbg_open(struct inode *inode, struct file *filp)
 					&(rdbgdata->smem_size));
 		}
 	}
-	if (!rdbgdata->smem_addr) {
-		dev_err(rdbgdata->device, "%s: Could not allocate smem memory\n",
-			__func__);
-		err = -ENOMEM;
-		pr_err("rdbg:Could not allocate smem memory\n");
+	if (!rdbgdata->smem_addr ||
+		(unsigned long)rdbgdata->smem_addr < PAGE_OFFSET ||
+		(unsigned long)rdbgdata->smem_addr > -256UL) {
+		dev_err(rdbgdata->device,
+			"%s: invalid SMEM addr %p\n",
+			__func__, rdbgdata->smem_addr);
+		err = -ENODEV;
 		goto bail;
 	}
 	dev_dbg(rdbgdata->device, "%s: SMEM address=0x%lx smem_size=%d\n",
