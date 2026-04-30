@@ -576,6 +576,8 @@ struct msm_geni_serial_port {
 	dma_addr_t ts_dma[TS_DMA_MAX_INSTANCES];
 	bool time_stamp;
 	struct one_wire_uart_config one_wire_uart;
+	u32 cpu_affinity_ids[2];
+	bool cpu_affinity;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -2399,6 +2401,33 @@ static void msm_geni_deallocate_chan(struct uart_port *uport)
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "DMA channel release done\n");
 }
 
+/**
+ * msm_geni_serial_set_gsi_cpu_affinity() - Configure CPU affinity for GSI IRQ
+ * @uport: Pointer to the UART port
+ *
+ * This function sets the CPU affinity for the shared GPII (General Purpose
+ * Interface) IRQ used by both TX and RX channels in GSI DMA mode. It configures
+ * the IRQ to be handled by specific CPUs to optimize performance and reduce
+ * latency.
+ *
+ * Return: None
+ */
+static void msm_geni_serial_set_gsi_cpu_affinity(struct uart_port *uport)
+{
+	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+
+	cpumask_clear(&msm_port->gsi->tx_ev.cpu_affinity.cpu_mask);
+	cpumask_set_cpu(msm_port->cpu_affinity_ids[0],
+			&msm_port->gsi->tx_ev.cpu_affinity.cpu_mask);
+	cpumask_set_cpu(msm_port->cpu_affinity_ids[1],
+			&msm_port->gsi->tx_ev.cpu_affinity.cpu_mask);
+
+	msm_port->gsi->tx_ev.cmd = MSM_GPI_SET_CPU_AFFINITY;
+	if (dmaengine_slave_config(msm_port->gsi->tx_c, NULL))
+		UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
+			     "Failed to set GSI CPU affinity\n");
+}
+
 static int msm_geni_allocate_chan(struct uart_port *uport)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
@@ -2450,6 +2479,10 @@ static int msm_geni_allocate_chan(struct uart_port *uport)
 			msm_geni_deallocate_chan(uport);
 			goto out;
 		}
+
+		/* Set CPU affinity for GPI IRQ after both channels are ready */
+		if (msm_port->cpu_affinity)
+			msm_geni_serial_set_gsi_cpu_affinity(uport);
 	}
 out:
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
@@ -6138,6 +6171,21 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,split-tx-dma-tre")) {
 		dev_port->split_dma_tre.split_tx = true;
 		dev_dbg(&pdev->dev, "UART split Tx support is enabled\n");
+	}
+
+	if (!of_property_read_u32_array(pdev->dev.of_node, "qcom,cpu-affinity",
+					dev_port->cpu_affinity_ids, 2)) {
+		if (dev_port->cpu_affinity_ids[0] < nr_cpu_ids &&
+		    dev_port->cpu_affinity_ids[1] < nr_cpu_ids) {
+			dev_port->cpu_affinity = true;
+			dev_info(&pdev->dev, "CPU affinity: for cores %u and %u\n",
+				 dev_port->cpu_affinity_ids[0], dev_port->cpu_affinity_ids[1]);
+		} else {
+			dev_warn(&pdev->dev,
+				 "Invalid CPU affinity cores: %u and %u are out of range (nr_cpu_ids=%u), skipping\n",
+				 dev_port->cpu_affinity_ids[0], dev_port->cpu_affinity_ids[1],
+				 nr_cpu_ids);
+		}
 	}
 
 	return ret;
