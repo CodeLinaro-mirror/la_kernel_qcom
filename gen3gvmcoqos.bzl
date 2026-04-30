@@ -34,7 +34,6 @@ def define_gen3gvmcoqos():
         "drivers/power/reset/msm-vm-poweroff.ko",
         "drivers/power/supply/wallpower_charger.ko",
         "drivers/regulator/scmi-regulator.ko",
-        "drivers/reset/reset-scmi.ko",
         "drivers/soc/qcom/boot_stats.ko",
         "drivers/soc/qcom/mem_buf/mem_buf.ko",
         "drivers/soc/qcom/mem_buf/mem_buf_dev.ko",
