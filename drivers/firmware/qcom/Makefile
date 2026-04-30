@@ -3,6 +3,7 @@
 ccflags-y += -I$(src)
 
 # Subdirectories
+obj-y += pkvm-secure-memory-manager/
 obj-y += pkvm-smc-filter/
 obj-y += si_core/
 
