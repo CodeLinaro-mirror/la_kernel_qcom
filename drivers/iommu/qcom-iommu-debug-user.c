@@ -483,50 +483,6 @@ const struct file_operations iommu_debug_dma_unmap_fops = {
 	.write	= iommu_debug_dma_unmap_write,
 };
 
-static int iommu_debug_build_phoney_sg_table(struct device *dev,
-					     struct sg_table *table,
-					     unsigned long total_size,
-					     unsigned long chunk_size)
-{
-	unsigned long nents = total_size / chunk_size;
-	struct scatterlist *sg;
-	int i, j;
-	struct page *page;
-
-	if (!IS_ALIGNED(total_size, PAGE_SIZE))
-		return -EINVAL;
-	if (!IS_ALIGNED(total_size, chunk_size))
-		return -EINVAL;
-	if (sg_alloc_table(table, nents, GFP_KERNEL))
-		return -EINVAL;
-
-	for_each_sg(table->sgl, sg, table->nents, i) {
-		page = alloc_pages(GFP_KERNEL, get_order(chunk_size));
-		if (!page)
-			goto free_pages;
-		sg_set_page(sg, page, chunk_size, 0);
-	}
-
-	return 0;
-free_pages:
-	for_each_sg(table->sgl, sg, i, j)
-		__free_pages(sg_page(sg), get_order(chunk_size));
-	sg_free_table(table);
-	return -ENOMEM;
-}
-
-static void iommu_debug_destroy_phoney_sg_table(struct device *dev,
-						struct sg_table *table,
-						unsigned long chunk_size)
-{
-	struct scatterlist *sg;
-	int i;
-
-	for_each_sg(table->sgl, sg, table->nents, i)
-		__free_pages(sg_page(sg), get_order(chunk_size));
-	sg_free_table(table);
-}
-
 #define ps_printf(name, s, fmt, ...) ({						\
 			pr_err("%s: " fmt, name, ##__VA_ARGS__);		\
 			seq_printf(s, fmt, ##__VA_ARGS__);			\
@@ -623,34 +579,34 @@ static int __functional_dma_api_map_sg_test(struct device *dev, struct seq_file 
 					    struct iommu_domain *domain, size_t sizes[])
 {
 	const size_t *sz;
-	int ret = 0, count = 0;
+	int ret = 0;
+	struct iommu_debug_usecase_device *udev = dev_get_drvdata(dev);
+	struct iommu_debug_mem *mem;
 
 	ps_printf(dev_name(dev), s, "Map SG DMA API test");
 
 	for (sz = sizes; *sz; ++sz) {
 		size_t size = *sz;
-		struct sg_table table;
 		unsigned long chunk_size = SZ_4K;
 
 		/* Build us a table */
-		ret = iommu_debug_build_phoney_sg_table(dev, &table, size, chunk_size);
-		if (ret) {
-			seq_puts(s, "couldn't build phoney sg table! bailing...\n");
+		mem = iommu_debug_mem_alloc_sgt(udev, size, chunk_size);
+		if (IS_ERR_OR_NULL(mem)) {
+			seq_puts(s, "couldn't build sg table! bailing...\n");
 			goto out;
 		}
 
-		count = dma_map_sg(dev, table.sgl, table.nents, DMA_BIDIRECTIONAL);
-		if (!count) {
-			ret = -EINVAL;
+		ret = dma_map_sgtable(dev, &mem->sgt, DMA_BIDIRECTIONAL, 0);
+		if (ret)
 			goto destroy_table;
-		}
 
 		/* Check mappings... */
-		ret = iommu_debug_check_mapping_sg_fast(dev, table.sgl, 0, table.nents, count);
+		ret = iommu_debug_check_mapping_sg_fast(dev, mem->sgt.sgl, 0,
+				mem->sgt.nents, mem->sgt.orig_nents);
 
-		dma_unmap_sg(dev, table.sgl, table.nents, DMA_BIDIRECTIONAL);
+		dma_unmap_sgtable(dev, &mem->sgt, DMA_BIDIRECTIONAL, 0);
 destroy_table:
-		iommu_debug_destroy_phoney_sg_table(dev, &table, chunk_size);
+		iommu_debug_mem_free(udev, mem);
 	}
 out:
 	if (ret)
