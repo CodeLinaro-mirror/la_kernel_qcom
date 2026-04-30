@@ -139,6 +139,106 @@ static int test_large_num_objects(struct seq_file *s, struct iommu_debug_device 
 }
 
 /**
+ * test_large_14mb_objects
+ * @s: sequence file for output
+ * @ddev: debug device
+ *
+ * Returns 0 on success, negative error code on failure
+ */
+static int test_max_limit_secure_memory(struct seq_file *s, struct iommu_debug_device *ddev)
+{
+	struct iommu_debug_usecase_device *udev;
+	struct iommu_debug_mem *mem, *tmp;
+	int usecase_idx;
+	int i, allocated_count = 0;
+	int ret = 0;
+	size_t object_size = 2 * SZ_1M;
+	size_t target_total = 2UL * SZ_1G;
+	int max_objects = target_total / object_size;
+
+	seq_printf(s, "Test secure memory limit (target: %zx)\n", target_total);
+	seq_puts(s, "========================================\n");
+
+	/* Find the DPD proxy usecase */
+	usecase_idx = iommu_debug_find_dpd_proxy_usecase(ddev);
+	if (usecase_idx < 0) {
+		seq_puts(s, "FAILED - No DPD proxy usecase found\n");
+		return -ENODEV;
+	}
+
+	/* Switch to the DPD proxy usecase */
+	mutex_lock(&ddev->state_lock);
+	if (!iommu_debug_switch_usecase(ddev, usecase_idx)) {
+		mutex_unlock(&ddev->state_lock);
+		seq_puts(s, "FAILED - Could not switch to DPD proxy usecase\n");
+		return -EINVAL;
+	}
+
+	/* Get the usecase device */
+	udev = dev_get_drvdata(ddev->test_dev);
+	if (!udev) {
+		mutex_unlock(&ddev->state_lock);
+		seq_puts(s, "FAILED - Could not get usecase device data\n");
+		return -EINVAL;
+	}
+
+	seq_puts(s, "Successfully switched to DPD proxy usecase\n");
+	seq_printf(s, "Allocating objects of size %zx until reaching %zx total (%d objects)...\n",
+		object_size, target_total, max_objects);
+
+	for (i = 0; i < max_objects; i++) {
+		mem = iommu_debug_mem_alloc_sgt(udev, object_size, SZ_4K);
+		if (IS_ERR_OR_NULL(mem)) {
+			seq_printf(s, "Allocation failed at object %d\n", i);
+			ret = -ENOMEM;
+			break;
+		}
+
+		ret = dma_map_sgtable(udev->dev, &mem->sgt, DMA_BIDIRECTIONAL, 0);
+		if (ret) {
+			seq_printf(s, "DMA mapping failed at object %d: %d\n", i, ret);
+			/* Free the allocated memory since DMA mapping failed */
+			iommu_debug_mem_free(udev, mem);
+			ret = -ENOMEM;
+			break;
+		}
+		mem->dma_mapped = true;
+
+		allocated_count++;
+
+		/* Print progress every 10 allocations */
+		if ((i + 1) % 10 == 0) {
+			seq_printf(s, "Allocated and DMA mapped %d objects (%lu MB total)\n",
+				   i + 1, ((i + 1UL) * object_size) / SZ_1M);
+		}
+	}
+
+	if (allocated_count == max_objects) {
+		seq_printf(s, "SUCCESS - Allocated and DMA mapped all %d objects (%lu MB total)\n",
+			   max_objects, ((unsigned long)max_objects * object_size) / SZ_1M);
+	} else {
+		seq_printf(s, "PARTIAL SUCCESS - Allocated and DMA mapped %d objects (%lu MB total)\n",
+			   allocated_count, ((unsigned long)allocated_count * object_size) / SZ_1M);
+	}
+
+	/* Create temporary list for objects to free */
+	LIST_HEAD(temp_free_list);
+
+	/* Move objects allocated during this test to temporary list */
+	mutex_lock(&udev->mem_lock);
+	list_splice_init(&udev->mem_list, &temp_free_list);
+	mutex_unlock(&udev->mem_lock);
+
+	list_for_each_entry_safe(mem, tmp, &temp_free_list, list)
+		iommu_debug_mem_free(udev, mem);
+
+	mutex_unlock(&ddev->state_lock);
+	seq_puts(s, "Max limit secure memory test completed\n\n");
+
+	return ret;
+}
+
+/**
  * test_iommu_bypass_vms_loop - Test secure memory allocation for a specific VMID and size
  * @s: sequence file for output
  * @ddev: debug device
@@ -309,6 +409,29 @@ static const struct file_operations large_num_objects_fops = {
 	.release = single_release,
 };
 
+static int max_limit_secure_memory_show(struct seq_file *s, void *ignored)
+{
+	struct iommu_debug_device *ddev = s->private;
+	int ret;
+
+	ret = test_max_limit_secure_memory(s, ddev);
+	seq_printf(s, "Test result: %s\n", ret == 0 ? "PASSED" : "FAILED");
+
+	return 0;
+}
+
+static int max_limit_secure_memory_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, max_limit_secure_memory_show, inode->i_private);
+}
+
+static const struct file_operations max_limit_secure_memory_fops = {
+	.open	 = max_limit_secure_memory_open,
+	.read	 = seq_read,
+	.llseek	 = seq_lseek,
+	.release = single_release,
+};
+
 void iommu_debug_debugfs_setup_dpd(struct iommu_debug_device *ddev)
 {
 	struct dentry *dpd_proxy2_dir;
@@ -320,6 +443,8 @@ void iommu_debug_debugfs_setup_dpd(struct iommu_debug_device *ddev)
 
 	/* Create individual test files within the directory */
 	debugfs_create_file("iommu_bypass_vms", 0400, dpd_proxy2_dir, ddev, &iommu_bypass_vms_fops);
+	debugfs_create_file("max_limit_secure_memory", 0400, dpd_proxy2_dir, ddev,
+			&max_limit_secure_memory_fops);
 	debugfs_create_file("large_num_objects", 0400, dpd_proxy2_dir, ddev,
 				&large_num_objects_fops);
 }
