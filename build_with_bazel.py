@@ -224,10 +224,10 @@ class BazelBuilder:
         if os.path.exists(f):
             os.remove(f)
 
-        for root, _, files in os.walk(os.path.join(self.workspace, "bootable")):
-            for f in files:
-                if f.endswith(".pyc"):
-                    os.remove(os.path.join(root, f))
+        for pyc in glob.iglob(
+                os.path.join(self.workspace, 'bootable', '**', '*.pyc'),
+                recursive=True):
+            os.remove(pyc)
 
     def bazel(
         self,
@@ -349,6 +349,7 @@ class BazelBuilder:
 
     def run_targets(self, targets):
         """Run "bazel run" on all dist targets serially (bazel run is single-target only)."""
+        opts_content = ("\n".join(self.user_opts) + "\n") if self.user_opts else "\n"
         for target in targets:
             # Set the output directory based on if it's a host target
             if any(
@@ -370,7 +371,7 @@ class BazelBuilder:
                 extra_options=self.user_opts,
                 bazel_target_opts=["--dist_dir", out_dir]
             )
-            self.write_opts(out_dir)
+            self.write_opts(out_dir, opts_content)
             if out_dir == target.get_out_dir("dist"):
                 self.setup_kbdev_symlinks(out_dir)
 
@@ -383,7 +384,8 @@ class BazelBuilder:
         for img in images:
             src_path = os.path.join(out_dir, img)
             dst_path = os.path.join(out_dir, "k" + img)
-            if os.path.isfile(src_path) and not os.path.isfile(dst_path):
+            dst_exists = os.path.islink(dst_path) or os.path.exists(dst_path)
+            if os.path.isfile(src_path) and not dst_exists:
                 try:
                     os.symlink(src_path, dst_path)
                 except OSError as e:
@@ -396,15 +398,15 @@ class BazelBuilder:
             menuconfig_target = [Target(self.workspace, t, v, menuconfig_label, self.out_dir)]
             self.bazel("run", menuconfig_target, bazel_target_opts=["menuconfig"])
 
-    def write_opts(self, out_dir):
+    def write_opts(self, out_dir, content=None):
+        if content is None:
+            content = ("\n".join(self.user_opts) + "\n") if self.user_opts else "\n"
         with open(os.path.join(out_dir, "build_opts.txt"), "w") as opt_file:
-            if self.user_opts:
-                opt_file.write("{}".format("\n".join(self.user_opts)))
-            opt_file.write("\n")
-
+            opt_file.write(content)
     def build(self):
         """Determine which targets to build, then build them"""
         targets_to_build = self.get_build_targets()
+        self._targets = targets_to_build
 
         if not targets_to_build:
             logging.error("no targets to build")
