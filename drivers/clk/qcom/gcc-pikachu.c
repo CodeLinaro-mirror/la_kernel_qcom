@@ -1928,36 +1928,6 @@ static struct clk_branch gcc_ddrss_pcie_sf_qtb_clk = {
 	},
 };
 
-static struct clk_branch gcc_disp_0_hf_axi_clk = {
-	.halt_reg = 0x2700c,
-	.halt_check = BRANCH_HALT_SKIP,
-	.hwcg_reg = 0x2700c,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x2700c,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_disp_0_hf_axi_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_disp_tsctr_clk = {
-	.halt_reg = 0x27034,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x27034,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x27034,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_disp_tsctr_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gcc_eva_axi0_clk = {
 	.halt_reg = 0xb2008,
 	.halt_check = BRANCH_HALT_SKIP,
@@ -2752,21 +2722,6 @@ static struct clk_branch gcc_qmip_camera_rt_ahb_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gcc_qmip_camera_rt_ahb_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_qmip_disp_ahb_clk = {
-	.halt_reg = 0x27008,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x27008,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x27008,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qmip_disp_ahb_clk",
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -3681,8 +3636,6 @@ static struct clk_regmap *gcc_pikachu_clocks[] = {
 	[GCC_CFG_NOC_USB3_PRIM_AXI_CLK] = &gcc_cfg_noc_usb3_prim_axi_clk.clkr,
 	[GCC_CNOC_PCIE_SF_AXI_CLK] = &gcc_cnoc_pcie_sf_axi_clk.clkr,
 	[GCC_DDRSS_PCIE_SF_QTB_CLK] = &gcc_ddrss_pcie_sf_qtb_clk.clkr,
-	[GCC_DISP_0_HF_AXI_CLK] = &gcc_disp_0_hf_axi_clk.clkr,
-	[GCC_DISP_TSCTR_CLK] = &gcc_disp_tsctr_clk.clkr,
 	[GCC_EVA_AXI0_CLK] = &gcc_eva_axi0_clk.clkr,
 	[GCC_EVA_AXI0C_CLK] = &gcc_eva_axi0c_clk.clkr,
 	[GCC_GP10_CLK] = &gcc_gp10_clk.clkr,
@@ -3768,7 +3721,6 @@ static struct clk_regmap *gcc_pikachu_clocks[] = {
 	[GCC_QMIP_CAMERA_ICP_AHB_CLK] = &gcc_qmip_camera_icp_ahb_clk.clkr,
 	[GCC_QMIP_CAMERA_NRT_AHB_CLK] = &gcc_qmip_camera_nrt_ahb_clk.clkr,
 	[GCC_QMIP_CAMERA_RT_AHB_CLK] = &gcc_qmip_camera_rt_ahb_clk.clkr,
-	[GCC_QMIP_DISP_AHB_CLK] = &gcc_qmip_disp_ahb_clk.clkr,
 	[GCC_QMIP_GPU_AHB_CLK] = &gcc_qmip_gpu_ahb_clk.clkr,
 	[GCC_QMIP_PCIE_AHB_CLK] = &gcc_qmip_pcie_ahb_clk.clkr,
 	[GCC_QMIP_VIDEO_CV_CPU_AHB_CLK] = &gcc_qmip_video_cv_cpu_ahb_clk.clkr,
@@ -3857,7 +3809,6 @@ static struct gdsc *gcc_pikachu_gdscs[] = {
 
 static const struct qcom_reset_map gcc_pikachu_resets[] = {
 	[GCC_CAMERA_BCR] = { 0x26000 },
-	[GCC_DISPLAY_0_BCR] = { 0x27000 },
 	[GCC_EVA_AXI0_CLK_ARES] = { 0xb2008, 2 },
 	[GCC_EVA_AXI0C_CLK_ARES] = { 0xb2018, 2 },
 	[GCC_EVA_BCR] = { 0xb2000 },
