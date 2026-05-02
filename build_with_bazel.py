@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-# Copyright (c) 2022-2023,2025, Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 import argparse
 import errno
@@ -62,7 +62,9 @@ class Target:
 class BazelBuilder:
     """Helper class for building with Bazel"""
 
-    def __init__(self, target_list, skip_list, out_dir, cache_dir, dry_run, gki_headers, user_opts):
+    def __init__(
+            self, target_list, skip_list, out_dir, cache_dir,
+            dry_run, gki_headers, user_opts):
         BazelBuilder.targets_done = []
         self.workspace = os.path.realpath(
             os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
@@ -141,17 +143,21 @@ class BazelBuilder:
                     re.compile(r"//{}:{}[^-]*_.*_{}_dist".format(self.kernel_dir, t, s))
                     for s in self.skip_list
                 ]
-                query = 'filter("{}[^-]*_.*_dist$", attr(generator_function, define_msm_platforms, {}/...))'.format(
-                    t, self.kernel_dir
-                )
+                query = (
+                    'filter("{}[^-]*_.*_dist$",'
+                    ' attr(generator_function, define_msm_platforms, {}/...))'
+                ).format(
+                    t, self.kernel_dir)
             else:
                 skip_list_re = [
                     re.compile(r"//{}:{}[^-]*_{}_{}_dist".format(self.kernel_dir, t, v, s))
                     for s in self.skip_list
                 ]
-                query = 'filter("{}[^-]*_{}.*_dist$", attr(generator_function, define_msm_platforms, {}/...))'.format(
-                    t, v, self.kernel_dir
-                )
+                query = (
+                    'filter("{}[^-]*_{}.*_dist$",'
+                    ' attr(generator_function, define_msm_platforms, {}/...))'
+                ).format(
+                    t, v, self.kernel_dir)
 
             cmdline = [
                 self.bazel_bin,
@@ -207,10 +213,14 @@ class BazelBuilder:
 
     def clean_legacy_generated_files(self):
         """Clean generated files from legacy build to avoid conflicts with Bazel"""
-        for f in glob.glob("{}/msm-kernel/arch/arm64/configs/vendor/*_defconfig".format(self.workspace)):
+        for f in glob.glob(
+                "{}/msm-kernel/arch/arm64/configs/vendor/*_defconfig".format(
+                    self.workspace)):
             os.remove(f)
 
-        f = os.path.join(self.workspace, "bootable", "bootloader", "edk2", "Conf", ".AutoGenIdFile.txt")
+        f = os.path.join(
+            self.workspace, "bootable", "bootloader", "edk2",
+            "Conf", ".AutoGenIdFile.txt")
         if os.path.exists(f):
             os.remove(f)
 
@@ -321,7 +331,7 @@ class BazelBuilder:
         cmdline_str = " ".join(cmdline)
         try:
             logging.info('Running "%s"', cmdline_str)
-            build_proc = subprocess.Popen(cmdline_str, cwd=self.workspace, shell=True)
+            build_proc = subprocess.Popen(cmdline, cwd=self.workspace)
             self.process_list.append(build_proc)
             build_proc.wait()
             if build_proc.returncode != 0:
@@ -338,7 +348,7 @@ class BazelBuilder:
         self.bazel("build", targets, extra_options=self.user_opts)
 
     def run_targets(self, targets):
-        """Run "bazel run" on all targets in serial (since bazel run cannot have multiple targets)"""
+        """Run "bazel run" on all dist targets serially (bazel run is single-target only)."""
         for target in targets:
             # Set the output directory based on if it's a host target
             if any(
@@ -361,6 +371,23 @@ class BazelBuilder:
                 bazel_target_opts=["--dist_dir", out_dir]
             )
             self.write_opts(out_dir)
+            if out_dir == target.get_out_dir("dist"):
+                self.setup_kbdev_symlinks(out_dir)
+
+    def setup_kbdev_symlinks(self, out_dir):
+        """Setup k*.img sylinks needed for test builds"""
+        images = [
+            "abl.elf", "boot.img", "dtbo.img",
+            "init_boot.img", "super.img", "vendor_boot.img",
+        ]
+        for img in images:
+            src_path = os.path.join(out_dir, img)
+            dst_path = os.path.join(out_dir, "k" + img)
+            if os.path.isfile(src_path) and not os.path.isfile(dst_path):
+                try:
+                    os.symlink(src_path, dst_path)
+                except OSError as e:
+                    logging.warning("Failed to create symlink for %s: %s", img, e)
 
     def run_menuconfig(self):
         """Run menuconfig on all target-variant combos class is initialized with"""
@@ -459,7 +486,10 @@ def main():
         action="append",
         nargs=2,
         required=True,
-        help='Target and variant to build (e.g. -t kalama gki). May be passed multiple times. A special VARIANT may be passed, "ALL", which will build all variants for a particular target',
+        help=('Target and variant to build (e.g. -t kalama gki).'
+              ' May be passed multiple times.'
+              ' A special VARIANT may be passed, "ALL",'
+              ' which will build all variants for a particular target'),
     )
     parser.add_argument(
         "-s",
@@ -467,13 +497,15 @@ def main():
         metavar="BUILD_RULE",
         action="append",
         default=[],
-        help="Skip specific build rules (e.g. --skip abl will skip the //msm-kernel:<target>_<variant>_abl build)",
+        help=("Skip specific build rules (e.g. --skip abl will skip"
+              " the //msm-kernel:<target>_<variant>_abl build)"),
     )
     parser.add_argument(
         "-o",
         "--out_dir",
         metavar="OUT_DIR",
-        help='Specify the output distribution directory (by default, "$PWD/out/msm-kernel-<target>-variant")',
+        help=('Specify the output distribution directory'
+              ' (by default, "$PWD/out/msm-kernel-<target>-variant")'),
     )
     parser.add_argument(
         "--log",
