@@ -6364,8 +6364,7 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 		dev->rc_idx, dev->link_speed_max);
 
 	if (dev->target_link_width) {
-		ret = msm_pcie_set_link_width(dev, dev->target_link_width <<
-					      PCI_EXP_LNKSTA_NLW_SHIFT);
+		ret = msm_pcie_set_link_width(dev, dev->target_link_width);
 		if (ret)
 			return ret;
 	}
@@ -9482,7 +9481,7 @@ static int msm_pcie_set_link_width(struct msm_pcie_dev_t *pcie_dev,
 	    (pcie_dev->target_link_width > pcie_dev->link_width_max))
 		goto invalid_link_width;
 
-	switch (target_link_width) {
+	switch (target_link_width << PCI_EXP_LNKSTA_NLW_SHIFT) {
 	case PCI_EXP_LNKSTA_NLW_X1:
 		link_width = LINK_WIDTH_X1;
 		break;
@@ -9521,7 +9520,7 @@ static int msm_pcie_set_link_width(struct msm_pcie_dev_t *pcie_dev,
 	/* Set Maximum link width as current width */
 	msm_pcie_write_reg_field(pcie_dev->dm_core, PCIE20_CAP + PCI_EXP_LNKCAP,
 				 PCI_EXP_LNKCAP_MLW,
-				 target_link_width >> PCI_EXP_LNKSTA_NLW_SHIFT);
+				 target_link_width);
 
 	/* disable write access to RO register */
 	msm_pcie_write_mask(pcie_dev->dm_core + PCIE_GEN3_MISC_CONTROL, BIT(0),
