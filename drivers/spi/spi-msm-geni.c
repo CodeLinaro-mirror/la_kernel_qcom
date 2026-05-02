@@ -81,7 +81,10 @@
 #define SPI_TX_ONLY		(1)
 #define SPI_RX_ONLY		(2)
 #define SPI_FULL_DUPLEX		(3)
+
+/* SPI Tx followed by Rx transfer */
 #define SPI_TX_RX		(7)
+
 #define SPI_CS_ASSERT		(8)
 #define SPI_CS_DEASSERT		(9)
 #define SPI_SCK_ONLY		(10)
@@ -119,6 +122,21 @@
 #define MAX_IPC_NAME_BUF	(36)
 #define SPI_DATA_DUMP_SIZE	(16)
 
+#define	SPI_SUPPORTED_MODES	(SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH | SPI_LSB_FIRST)
+
+#define	QSPI_SUPPORTED_MODES	(SPI_CPOL | SPI_CPHA | SPI_CS_HIGH | SPI_LSB_FIRST | \
+				 SPI_TX_DUAL | SPI_RX_DUAL | SPI_TX_QUAD | SPI_RX_QUAD)
+#define	QSPI_SINGLE_LANE	0x1
+#define	QSPI_DUAL_LANE		0x2
+#define	QSPI_QUAD_LANE		0x4
+
+#define	QSPI_SINGLE_SDR		0x0
+#define	QSPI_SINGLE_DDR		(BIT(10) | BIT(11))
+#define	QSPI_DUAL_SDR		BIT(10)
+#define	QSPI_DUAL_DDR		(BIT(9) | BIT(10))
+#define	QSPI_QUAD_SDR		BIT(9)
+#define	QSPI_QUAD_DDR		BIT(8)
+
 #define SPI_LOG_DBG(log_ctx, print, dev, x...) do { \
 GENI_SE_DBG(log_ctx, print, dev, x); \
 if (dev) \
@@ -130,6 +148,10 @@ GENI_SE_ERR(log_ctx, print, dev, x); \
 if (dev) \
 	spi_trace_log(dev, x); \
 } while (0)
+
+/* Macro to convert transfer length to word count */
+#define XFER_LEN_IN_WORDS(xfer, word_len)	(((xfer)->len << 3) / (word_len))
+#define XFER_LEN_IN_BYTES(xfer, bpw)		((xfer)->len / (bpw))
 
 #define CREATE_TRACE_POINTS
 #include "spi-qup-trace.h"
@@ -154,6 +176,7 @@ void spi_trace_log(struct device *dev, const char *fmt, ...)
 struct gsi_desc_cb {
 	struct spi_master *spi;
 	struct spi_transfer *xfer;
+	struct spi_transfer *xfer_tx_rx;
 };
 
 struct spi_geni_qcom_ctrl_data {
@@ -248,6 +271,10 @@ struct spi_geni_master {
 	struct spi_geni_ssr spi_ssr;
 	struct geni_se_rsc rsc;
 	int max_data_dump_size;
+	unsigned int proto;
+	bool qspi_ddr_support;
+	bool is_tx_rx; /* Indicates if current transfer Tx_Rx  */
+	u8 dummy_len;
 };
 
 /**
@@ -822,7 +849,8 @@ static struct msm_gpi_tre *setup_lock_tre(struct spi_geni_master *mas)
 
 static struct msm_gpi_tre *setup_config0_tre(struct spi_transfer *xfer,
 				struct spi_geni_master *mas, u16 mode,
-				u32 cs_clk_delay, u32 inter_words_delay)
+				u32 cs_clk_delay, u32 inter_words_delay,
+				u8 dummy_clk_cnt)
 {
 	struct msm_gpi_tre *c0_tre = &mas->gsi[mas->num_xfers].config0_tre;
 	u8 flags = 0;
@@ -860,18 +888,20 @@ static struct msm_gpi_tre *setup_config0_tre(struct spi_transfer *xfer,
 		}
 	}
 
-	c0_tre->dword[0] = MSM_GPI_SPI_CONFIG0_TRE_DWORD0(pack, flags,
-								word_len);
-	c0_tre->dword[1] = MSM_GPI_SPI_CONFIG0_TRE_DWORD1(0, cs_clk_delay,
-							inter_words_delay);
+	c0_tre->dword[0] = MSM_GPI_SPI_CONFIG0_TRE_DWORD0(pack, flags, word_len, dummy_clk_cnt);
+	c0_tre->dword[1] = MSM_GPI_SPI_CONFIG0_TRE_DWORD1(0, cs_clk_delay, inter_words_delay);
 	c0_tre->dword[2] = MSM_GPI_SPI_CONFIG0_TRE_DWORD2(idx, div);
 	c0_tre->dword[3] = MSM_GPI_SPI_CONFIG0_TRE_DWORD3(0, 0, 0, 0, 1);
 	SPI_LOG_DBG(mas->ipc, false, mas->dev,
-		"%s: flags 0x%x word %d pack %d freq %d idx %d div %d\n",
-		__func__, flags, word_len, pack, mas->cur_speed_hz, idx, div);
+		    "config0_tre: flags 0x%x word %d pack %d freq %d idx %d div %d\n",
+		    flags, word_len, pack, mas->cur_speed_hz, idx, div);
 	SPI_LOG_DBG(mas->ipc, false, mas->dev,
-		"%s: cs_clk_delay %d inter_words_delay %d\n", __func__,
-				 cs_clk_delay, inter_words_delay);
+		    "config0_tre: cs_clk_delay %d inter_words_delay %d dummy_clk_cnt %d\n",
+		    cs_clk_delay, inter_words_delay, dummy_clk_cnt);
+	SPI_LOG_DBG(mas->ipc, false, mas->dev,
+		    "config0_tre: dword[0]:0x%x dword[1]:0x%x dword[2]:0x%x dword[3]:0x%x\n",
+		    c0_tre->dword[0], c0_tre->dword[1], c0_tre->dword[2], c0_tre->dword[3]);
+
 	return c0_tre;
 }
 
@@ -887,7 +917,10 @@ static struct msm_gpi_tre *setup_go_tre(int cmd, int cs, int rx_len, int flags,
 	if (IS_ERR_OR_NULL(go_tre))
 		return go_tre;
 
-	go_tre->dword[0] = MSM_GPI_SPI_GO_TRE_DWORD0(flags, cs, cmd);
+	if (mas->proto == GENI_SE_QSPI)
+		go_tre->dword[0] = MSM_GPI_QSPI_GO_TRE_DWORD0(flags, cs, cmd);
+	else
+		go_tre->dword[0] = MSM_GPI_SPI_GO_TRE_DWORD0(flags, cs, cmd);
 	go_tre->dword[1] = MSM_GPI_SPI_GO_TRE_DWORD1;
 	go_tre->dword[2] = MSM_GPI_SPI_GO_TRE_DWORD2(rx_len);
 	if (cmd == SPI_RX_ONLY) {
@@ -901,26 +934,44 @@ static struct msm_gpi_tre *setup_go_tre(int cmd, int cs, int rx_len, int flags,
 	}
 	if (cmd & SPI_RX_ONLY)
 		link_rx = 1;
-	go_tre->dword[3] = MSM_GPI_SPI_GO_TRE_DWORD3(link_rx, 0, eot, eob,
-								chain);
+	go_tre->dword[3] = MSM_GPI_SPI_GO_TRE_DWORD3(link_rx, 0, eot, eob, chain);
 	SPI_LOG_DBG(mas->ipc, false, mas->dev,
-	"%s: rx len %d flags 0x%x cs %d cmd %d eot %d eob %d chain %d\n",
-		__func__, rx_len, flags, cs, cmd, eot, eob, chain);
+		    "go_tre: rx len %d flags 0x%x cs %d cmd %d eot %d eob %d chain %d\n",
+		    rx_len, flags, cs, cmd, eot, eob, chain);
+	SPI_LOG_DBG(mas->ipc, false, mas->dev,
+		    "go_tre: dword[0]:0x%x dword[1]:0x%x dword[2]:0x%x dword[3]:0x%x\n",
+		    go_tre->dword[0], go_tre->dword[1], go_tre->dword[2], go_tre->dword[3]);
+
 	return go_tre;
 }
 
-static struct msm_gpi_tre *setup_dma_tre(struct msm_gpi_tre *tre,
-					dma_addr_t buf, u32 len,
-					struct spi_geni_master *mas,
-					bool is_tx)
+static struct msm_gpi_tre *setup_dma_tre(struct msm_gpi_tre *tre, struct spi_transfer *xfer,
+					 dma_addr_t dma_buf, struct spi_geni_master *mas,
+					 bool is_tx)
 {
 	if (IS_ERR_OR_NULL(tre))
 		return tre;
 
-	tre->dword[0] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD0(buf);
-	tre->dword[1] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD1(buf);
-	tre->dword[2] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(len);
-	tre->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, 0, is_tx, 0, 0);
+	if (xfer->len <= IMMEDIATE_DMA_LEN && is_tx) {
+		if (!xfer->tx_buf) {
+			dev_err(mas->dev, "NULL tx_buf for immediate DMA\n");
+			return ERR_PTR(-EINVAL);
+		}
+		tre->dword[0] = 0;
+		tre->dword[1] = 0;
+		memcpy((u8 *)&tre->dword[0], (u8 *)xfer->tx_buf, xfer->len);
+		tre->dword[2] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD2(xfer->len);
+		tre->dword[3] = MSM_GPI_DMA_IMMEDIATE_TRE_DWORD3(0, 0, is_tx, 0, 0);
+	} else {
+		tre->dword[0] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD0(dma_buf);
+		tre->dword[1] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD1(dma_buf);
+		tre->dword[2] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD2(xfer->len);
+		tre->dword[3] = MSM_GPI_DMA_W_BUFFER_TRE_DWORD3(0, 0, is_tx, 0, 0);
+	}
+	SPI_LOG_DBG(mas->ipc, false, mas->dev,
+		    "dma_tre: dword[0]:0x%x dword[1]:0x%x dword[2]:0x%x dword[3]:0x%x\n",
+		    tre->dword[0], tre->dword[1], tre->dword[2], tre->dword[3]);
+
 	return tre;
 }
 
@@ -1003,6 +1054,9 @@ static void spi_gsi_rx_callback(void *cb)
 	xfer = desc_cb->xfer;
 	mas = spi_master_get_devdata(spi);
 
+	if (mas->is_tx_rx)
+		xfer = desc_cb->xfer_tx_rx;
+
 	if (xfer->rx_buf) {
 		if (cb_param->status == MSM_GPI_TCE_UNEXP_ERR) {
 			SPI_LOG_ERR(mas->ipc, true, mas->dev,
@@ -1010,8 +1064,8 @@ static void spi_gsi_rx_callback(void *cb)
 			return;
 		}
 		if (cb_param->length == xfer->len) {
-			SPI_LOG_DBG(mas->ipc, false, mas->dev,
-			"%s\n", __func__);
+			SPI_LOG_DBG(mas->ipc, false, mas->dev, "GSI Rx Callback for %d bytes\n",
+				    xfer->len);
 			spi_dump_ipc(mas, "GSI Rx", (char *)xfer->rx_buf, xfer->len);
 			complete(&mas->rx_cb);
 		} else {
@@ -1049,7 +1103,7 @@ static void spi_gsi_tx_callback(void *cb)
 	 */
 	if (!xfer) {
 		SPI_LOG_DBG(mas->ipc, false, mas->dev,
-		"Lock/unlock IEOB received %s\n", __func__);
+		"Lock/unlock/CS Deassert IEOB received %s\n", __func__);
 		complete(&mas->tx_cb);
 		return;
 	}
@@ -1062,7 +1116,7 @@ static void spi_gsi_tx_callback(void *cb)
 		}
 		if (cb_param->length == xfer->len) {
 			SPI_LOG_DBG(mas->ipc, false, mas->dev,
-			"%s\n", __func__);
+				   "GSI Tx Callback for %d bytes\n", xfer->len);
 			spi_dump_ipc(mas, "GSI Tx", (char *)xfer->tx_buf, xfer->len);
 			complete(&mas->tx_cb);
 		} else {
@@ -1205,8 +1259,75 @@ err_spi_geni_unlock_bus:
 }
 
 /**
- * spi_xfer_cmd_update() - Update SPI transfer command
+ * qspi_gsi_xfer_prepare() - Prepare QSPI GSI mode transfer
+ * @xfer: Pointer to spi transfer
+ * @mas: Pointer to spi_geni_master
+ * @flags: Flags for qspi config0 support
+ *
+ * Return: 0 on success, or a negative error code upon failure.
+ */
+static int qspi_gsi_xfer_prepare(struct spi_transfer *xfer, struct spi_geni_master *mas,
+				 int *flags)
+{
+	unsigned int buswidth;
+	unsigned int mode;
+
+	if (!xfer->tx_buf && !xfer->rx_buf) {
+		SPI_LOG_ERR(mas->ipc, true, mas->dev,
+			    "%s: Invalid xfer, both tx and rx buffers are NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	if (xfer->tx_buf && xfer->rx_buf) {
+		if (xfer->tx_nbits != xfer->rx_nbits) {
+			SPI_LOG_ERR(mas->ipc, false, mas->dev, "tx_nbits %d, rx_nbits %d\n",
+				    xfer->tx_nbits, xfer->rx_nbits);
+			return -EINVAL;
+		}
+
+		buswidth = xfer->tx_nbits;
+	} else if (xfer->tx_buf) {
+		buswidth = xfer->tx_nbits;
+	} else if (xfer->rx_buf) {
+		buswidth = xfer->rx_nbits;
+	} else {
+		SPI_LOG_ERR(mas->ipc, false, mas->dev, "Neither tx_buf nor rx_buf provided.\n");
+		return -EINVAL;
+	}
+
+	switch (buswidth) {
+	case QSPI_SINGLE_LANE:
+		if (mas->qspi_ddr_support) {
+			SPI_LOG_ERR(mas->ipc, false, mas->dev,
+				    "DDR not supported for single lane.\n");
+			return -EPROTONOSUPPORT;
+		}
+		*flags |=  QSPI_SINGLE_SDR;
+		break;
+
+	case QSPI_DUAL_LANE:
+		*flags |=  QSPI_DUAL_SDR;
+		break;
+
+	case QSPI_QUAD_LANE:
+		mode = (mas->qspi_ddr_support) ? QSPI_QUAD_DDR : QSPI_QUAD_SDR;
+		*flags |=  mode;
+		break;
+
+	default:
+		SPI_LOG_ERR(mas->ipc, false, mas->dev, "Unexpected bus width: %u\n", buswidth);
+		*flags |=  QSPI_SINGLE_SDR;
+		break;
+	}
+
+	return 0;
+}
+
+/**
+ * spi_xfer_cmd_update() - Update spi transfer command
  * @xfer: pointer to spi transfer
+ * @xfer_tx_rx: pointer to spi Tx_Rx transfer
+ * @mas: pointer to spi_geni_master
  * @tx_nent: number of tx entries
  * @rx_nent: number ox rx entries
  * @rx_len: length of rx buffer
@@ -1214,11 +1335,18 @@ err_spi_geni_unlock_bus:
  *
  * Return: void
  */
-static void spi_xfer_cmd_update(struct spi_transfer *xfer, int *tx_nent,
-				int *rx_nent, u32 *rx_len, u8 *cmd)
+static void spi_xfer_cmd_update(struct spi_transfer *xfer, struct spi_transfer *xfer_tx_rx,
+				struct spi_geni_master *mas, int *tx_nent, int *rx_nent,
+				u32 *rx_len, u8 *cmd)
 {
-	if (xfer->tx_buf && xfer->rx_buf) {
-		*cmd = SPI_FULL_DUPLEX;
+	if (xfer->tx_buf && xfer_tx_rx && xfer_tx_rx->rx_buf) {
+		*cmd = SPI_TX_RX;
+		*tx_nent += 2;
+		*rx_nent += 1;
+	} else if (xfer->tx_buf && xfer->rx_buf) {
+		if (mas->proto == GENI_SE_SPI)
+			*cmd = SPI_FULL_DUPLEX;
+
 		*tx_nent += 2;
 		*rx_nent += 1;
 	} else if (xfer->tx_buf) {
@@ -1248,7 +1376,7 @@ static int spi_gsi_rx_xfer(struct spi_transfer *xfer, struct spi_geni_master *ma
 	struct msm_gpi_tre *rx_tre = NULL;
 
 	rx_tre = &mas->gsi[mas->num_xfers].rx_dma_tre;
-	rx_tre = setup_dma_tre(rx_tre, xfer->rx_dma, xfer->len, mas, 0);
+	rx_tre = setup_dma_tre(rx_tre, xfer, xfer->rx_dma, mas, 0);
 	if (IS_ERR_OR_NULL(rx_tre)) {
 		dev_err(mas->dev, "Error setting up rx tre\n");
 		return PTR_ERR(rx_tre);
@@ -1289,7 +1417,7 @@ static int spi_gsi_tx_xfer(struct spi_transfer *xfer, struct spi_geni_master *ma
 	struct msm_gpi_tre *tx_tre = NULL;
 
 	tx_tre = &mas->gsi[mas->num_xfers].tx_dma_tre;
-	tx_tre = setup_dma_tre(tx_tre, xfer->tx_dma, xfer->len, mas, 1);
+	tx_tre = setup_dma_tre(tx_tre, xfer, xfer->tx_dma, mas, 1);
 	if (IS_ERR_OR_NULL(tx_tre)) {
 		dev_err(mas->dev, "Error setting up tx tre\n");
 		return PTR_ERR(tx_tre);
@@ -1301,10 +1429,169 @@ static int spi_gsi_tx_xfer(struct spi_transfer *xfer, struct spi_geni_master *ma
 	return 0;
 }
 
-static int setup_gsi_xfer(struct spi_transfer *xfer,
-				struct spi_geni_master *mas,
-				struct spi_device *spi_slv,
-				struct spi_master *spi)
+static  u32 spi_geni_get_rx_len(const struct spi_transfer *xfer,
+				const struct spi_transfer *xfer_tx_rx,
+				const struct spi_geni_master *mas)
+{
+	u32 rx_len;
+
+	if (!(mas->cur_word_len % MIN_WORD_LEN)) {
+		if (mas->is_tx_rx)
+			rx_len = XFER_LEN_IN_WORDS(xfer_tx_rx, mas->cur_word_len);
+		else
+			rx_len = XFER_LEN_IN_WORDS(xfer, mas->cur_word_len);
+	} else {
+		int bytes_per_word = (mas->cur_word_len / BITS_PER_BYTE) + 1;
+
+		if (mas->is_tx_rx)
+			rx_len = XFER_LEN_IN_BYTES(xfer_tx_rx, bytes_per_word);
+		else
+			rx_len = XFER_LEN_IN_BYTES(xfer, bytes_per_word);
+	}
+
+	return rx_len;
+}
+
+static int spi_gsi_setup_config0_tre(struct spi_transfer *xfer,
+				     struct spi_geni_master *mas,
+				     struct spi_device *spi_slv,
+				     u32 cs_clk_delay, u32 inter_words_delay,
+				     struct msm_gpi_tre **out_c0_tre,
+				     int *tx_nent)
+{
+	struct msm_gpi_tre *c0_tre = NULL;
+	int err = 0;
+
+	if (xfer->bits_per_word != mas->cur_word_len ||
+	    xfer->speed_hz != mas->cur_speed_hz ||
+	    mas->proto == GENI_SE_QSPI) {
+		mas->cur_word_len = xfer->bits_per_word;
+		mas->cur_speed_hz = xfer->speed_hz;
+		(*tx_nent)++;
+		c0_tre = setup_config0_tre(xfer, mas, spi_slv->mode,
+					   cs_clk_delay, inter_words_delay,
+					   mas->dummy_len);
+		if (IS_ERR_OR_NULL(c0_tre)) {
+			err = PTR_ERR(c0_tre);
+			dev_err(mas->dev, "Err setting c0tre:%d\n", err);
+			return err ? err : -EIO;
+		}
+	}
+
+	*out_c0_tre = c0_tre;
+
+	return 0;
+}
+
+static int spi_geni_prep_submit_tx_desc(struct spi_geni_master *mas, unsigned long flags,
+					int tx_nent)
+{
+	mas->gsi[mas->num_xfers].tx_desc =
+			dmaengine_prep_slave_sg(mas->tx, mas->gsi[mas->num_xfers].tx_sg,
+						tx_nent, DMA_MEM_TO_DEV, flags);
+	if (IS_ERR_OR_NULL(mas->gsi[mas->num_xfers].tx_desc)) {
+		dev_err(mas->dev, "Err setting up tx desc\n");
+		return -EIO;
+	}
+
+	mas->gsi[mas->num_xfers].tx_desc->callback = spi_gsi_tx_callback;
+	mas->gsi[mas->num_xfers].tx_desc->callback_param =
+					&mas->gsi[mas->num_xfers].tx_cb_param;
+	mas->gsi[mas->num_xfers].tx_cb_param.userdata =
+					&mas->gsi[mas->num_xfers].desc_cb;
+
+	mas->gsi[mas->num_xfers].tx_cookie =
+			dmaengine_submit(mas->gsi[mas->num_xfers].tx_desc);
+	if (dma_submit_error(mas->gsi[mas->num_xfers].tx_cookie)) {
+		dev_err(mas->dev, "TX:dmaengine_submit failed (%d)\n",
+			mas->gsi[mas->num_xfers].tx_cookie);
+		dmaengine_terminate_all(mas->tx);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int spi_geni_submit_rx_desc(u8 cmd, struct spi_geni_master *mas)
+{
+	if (cmd & SPI_RX_ONLY) {
+		mas->gsi[mas->num_xfers].rx_cookie =
+			dmaengine_submit(mas->gsi[mas->num_xfers].rx_desc);
+		if (dma_submit_error(mas->gsi[mas->num_xfers].rx_cookie)) {
+			dev_err(mas->dev, "RX:dmaengine_submit failed (%d)\n",
+				mas->gsi[mas->num_xfers].rx_cookie);
+			dmaengine_terminate_all(mas->rx);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * spi_geni_setup_cs_deassert_tre() - Setup CS deassert GO TRE for QSPI TX_RX transfers
+ * @mas: pointer to spi_geni_master
+ * @spi: pointer to spi_master
+ * @cs: chip select value
+ * @flags: DMA flags
+ *
+ * Return: 0 on success, or a negative error code upon failure.
+ */
+static int spi_geni_setup_cs_deassert_tre(struct spi_geni_master *mas,
+					  struct spi_master *spi, u8 cs,
+					  unsigned long flags)
+{
+	struct msm_gpi_tre *go_tre_cs_deassert;
+	struct scatterlist *xfer_tx_sg_cs;
+	int tx_nent_cs = 1;
+	int ret;
+
+	SPI_LOG_DBG(mas->ipc, false, mas->dev,
+		    "Adding GO TRE to deassert CS for QSPI TX_RX\n");
+	if (mas->num_xfers >= NUM_SPI_XFER) {
+		dev_err(mas->dev, "No more GSI slots available for CS deassert\n");
+		return -ENOMEM;
+	}
+
+	xfer_tx_sg_cs = mas->gsi[mas->num_xfers].tx_sg;
+	sg_init_table(xfer_tx_sg_cs, tx_nent_cs);
+	go_tre_cs_deassert = &mas->gsi[mas->num_xfers].go_tre;
+	go_tre_cs_deassert->dword[0] = MSM_GPI_QSPI_GO_TRE_DWORD0(0, cs, SPI_CS_DEASSERT);
+	go_tre_cs_deassert->dword[1] = MSM_GPI_SPI_GO_TRE_DWORD1;
+	go_tre_cs_deassert->dword[2] = MSM_GPI_SPI_GO_TRE_DWORD2(0);
+	go_tre_cs_deassert->dword[3] = MSM_GPI_SPI_GO_TRE_DWORD3(0, 0, 1, 1, 0);
+	SPI_LOG_DBG(mas->ipc, false, mas->dev,
+		    "CS deassert go_tre: dword[0]:0x%x dword[1]:0x%x dword[2]:0x%x dword[3]:0x%x\n",
+		    go_tre_cs_deassert->dword[0], go_tre_cs_deassert->dword[1],
+		    go_tre_cs_deassert->dword[2], go_tre_cs_deassert->dword[3]);
+	sg_set_buf(xfer_tx_sg_cs, go_tre_cs_deassert, sizeof(*go_tre_cs_deassert));
+	mas->gsi[mas->num_xfers].desc_cb.spi = spi;
+	mas->gsi[mas->num_xfers].desc_cb.xfer = NULL;
+	ret = spi_geni_prep_submit_tx_desc(mas, flags, tx_nent_cs);
+	if (ret)
+		return ret;
+
+	dma_async_issue_pending(mas->tx);
+	mas->num_tx_eot++;
+	mas->num_xfers++;
+
+	return 0;
+}
+
+static int spi_geni_setup_cs_deassert_on_tx_rx(struct spi_geni_master *mas,
+					       struct spi_master *spi,
+					       u8 cs, unsigned long flags,
+					       u8 cmd)
+{
+	if (cmd == SPI_TX_RX && mas->proto == GENI_SE_QSPI)
+		return spi_geni_setup_cs_deassert_tre(mas, spi, cs, flags);
+
+	return 0;
+}
+
+static int setup_gsi_xfer(struct spi_transfer *xfer, struct spi_transfer *xfer_tx_rx,
+			  struct spi_geni_master *mas, struct spi_device *spi_slv,
+			  struct spi_master *spi)
 {
 	int ret = 0;
 	struct msm_gpi_tre *c0_tre = NULL;
@@ -1335,48 +1622,32 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 	}
 
 	if (spi_slv->controller_data) {
-		delay_params =
-		(struct spi_geni_qcom_ctrl_data *) spi_slv->controller_data;
-
-		cs_clk_delay =
-			delay_params->spi_cs_clk_delay;
-		inter_words_delay =
-			delay_params->spi_inter_words_delay;
+		delay_params = (struct spi_geni_qcom_ctrl_data *)spi_slv->controller_data;
+		cs_clk_delay = delay_params->spi_cs_clk_delay;
+		inter_words_delay = delay_params->spi_inter_words_delay;
 	}
 
-	if ((xfer->bits_per_word != mas->cur_word_len) ||
-		(xfer->speed_hz != mas->cur_speed_hz)) {
-		mas->cur_word_len = xfer->bits_per_word;
-		mas->cur_speed_hz = xfer->speed_hz;
-		tx_nent++;
-		c0_tre = setup_config0_tre(xfer, mas, spi_slv->mode,
-					cs_clk_delay, inter_words_delay);
-		if (IS_ERR_OR_NULL(c0_tre)) {
-			dev_err(mas->dev, "%s:Err setting c0tre:%d\n",
-							__func__, ret);
-			return PTR_ERR(c0_tre);
-		}
+	if (mas->proto == GENI_SE_QSPI) {
+		ret = qspi_gsi_xfer_prepare(xfer, mas, &go_flags);
+		if (ret)
+			return ret;
 	}
 
-	if (!(mas->cur_word_len % MIN_WORD_LEN)) {
-		rx_len = ((xfer->len << 3) / mas->cur_word_len);
-	} else {
-		int bytes_per_word = (mas->cur_word_len / BITS_PER_BYTE) + 1;
+	ret = spi_gsi_setup_config0_tre(xfer, mas, spi_slv,
+					cs_clk_delay, inter_words_delay,
+					&c0_tre, &tx_nent);
+	if (ret)
+		return ret;
 
-		rx_len = (xfer->len / bytes_per_word);
-	}
-
-	spi_xfer_cmd_update(xfer, &tx_nent, &rx_nent, &rx_len, &cmd);
-
+	rx_len =  spi_geni_get_rx_len(xfer, xfer_tx_rx, mas);
+	spi_xfer_cmd_update(xfer, xfer_tx_rx, mas, &tx_nent, &rx_nent, &rx_len, &cmd);
 	cs |= spi_slv->chip_select;
-
 	if (!spi->cs_gpiods && !xfer->cs_change) {
-		if (!list_is_last(&xfer->transfer_list,
-					&spi->cur_msg->transfers))
+		if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers))
 			go_flags |= FRAGMENTATION;
 	}
-	go_tre = setup_go_tre(cmd, cs, rx_len, go_flags, mas);
 
+	go_tre = setup_go_tre(cmd, cs, rx_len, go_flags, mas);
 	sg_init_table(xfer_tx_sg, tx_nent);
 	if (rx_nent)
 		sg_init_table(xfer_rx_sg, rx_nent);
@@ -1387,8 +1658,14 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 	sg_set_buf(xfer_tx_sg++, go_tre, sizeof(*go_tre));
 	mas->gsi[mas->num_xfers].desc_cb.spi = spi;
 	mas->gsi[mas->num_xfers].desc_cb.xfer = xfer;
+	if (mas->is_tx_rx)
+		mas->gsi[mas->num_xfers].desc_cb.xfer_tx_rx = xfer_tx_rx;
+
 	if (cmd & SPI_RX_ONLY) {
-		ret = spi_gsi_rx_xfer(xfer, mas, xfer_rx_sg, rx_nent, flags);
+		if (mas->is_tx_rx)
+			ret = spi_gsi_rx_xfer(xfer_tx_rx, mas, xfer_rx_sg, rx_nent, flags);
+		else
+			ret = spi_gsi_rx_xfer(xfer, mas, xfer_rx_sg, rx_nent, flags);
 		if (ret)
 			return ret;
 	}
@@ -1398,40 +1675,22 @@ static int setup_gsi_xfer(struct spi_transfer *xfer,
 		if (ret)
 			return ret;
 	}
-	mas->gsi[mas->num_xfers].tx_desc = dmaengine_prep_slave_sg(mas->tx,
-					mas->gsi[mas->num_xfers].tx_sg, tx_nent,
-					DMA_MEM_TO_DEV, flags);
-	if (IS_ERR_OR_NULL(mas->gsi[mas->num_xfers].tx_desc)) {
-		dev_err(mas->dev, "Err setting up tx desc\n");
-		return -EIO;
-	}
-	mas->gsi[mas->num_xfers].tx_desc->callback = spi_gsi_tx_callback;
-	mas->gsi[mas->num_xfers].tx_desc->callback_param =
-					&mas->gsi[mas->num_xfers].tx_cb_param;
-	mas->gsi[mas->num_xfers].tx_cb_param.userdata =
-					&mas->gsi[mas->num_xfers].desc_cb;
-	mas->gsi[mas->num_xfers].tx_cookie =
-			dmaengine_submit(mas->gsi[mas->num_xfers].tx_desc);
-	if (dma_submit_error(mas->gsi[mas->num_xfers].tx_cookie)) {
-		dev_err(mas->dev, "%s: dmaengine_submit failed (%d)\n",
-			__func__, mas->gsi[mas->num_xfers].tx_cookie);
-		dmaengine_terminate_all(mas->tx);
-		return -EINVAL;
-	}
-	if (cmd & SPI_RX_ONLY) {
-		mas->gsi[mas->num_xfers].rx_cookie =
-			dmaengine_submit(mas->gsi[mas->num_xfers].rx_desc);
-		if (dma_submit_error(mas->gsi[mas->num_xfers].rx_cookie)) {
-			dev_err(mas->dev, "%s: dmaengine_submit failed (%d)\n",
-				__func__, mas->gsi[mas->num_xfers].rx_cookie);
-			dmaengine_terminate_all(mas->rx);
-			return -EINVAL;
-		}
-	}
+
+	ret = spi_geni_prep_submit_tx_desc(mas, flags, tx_nent);
+	if (ret)
+		return ret;
+
+	ret = spi_geni_submit_rx_desc(cmd, mas);
+	if (ret)
+		return ret;
+
 	dma_async_issue_pending(mas->tx);
 	if (cmd & SPI_RX_ONLY)
 		dma_async_issue_pending(mas->rx);
+
 	mas->num_xfers++;
+	ret = spi_geni_setup_cs_deassert_on_tx_rx(mas, spi, cs, flags, cmd);
+
 	return ret;
 }
 
@@ -1690,7 +1949,8 @@ static void spi_geni_set_sampling_rate(struct spi_geni_master *mas,
 static int spi_verify_proto(struct spi_geni_master *mas)
 {
 	struct spi_master *spi = dev_get_drvdata(mas->dev);
-	unsigned int proto;
+	struct platform_device *pdev = to_platform_device(mas->dev);
+	const char *compatible;
 	int ret = 0;
 
 	if (!mas->is_le_vm) {
@@ -1703,20 +1963,36 @@ static int spi_verify_proto(struct spi_geni_master *mas)
 		}
 	}
 
-	proto = geni_se_read_proto(&mas->spi_rsc);
+	mas->proto = geni_se_read_proto(&mas->spi_rsc);
 
 	if (spi->slave) {
-		if (proto != GENI_SE_SPI_SLAVE) {
-			dev_err(mas->dev, "Invalid proto %d\n", proto);
+		if (mas->proto != GENI_SE_SPI_SLAVE) {
+			dev_err(mas->dev, "Invalid proto %d\n", mas->proto);
 			ret = -ENXIO;
+			goto out;
 		}
-	} else if (proto != GENI_SE_SPI) {
-		dev_err(mas->dev, "Invalid proto %d\n", proto);
-		ret = -ENXIO;
+	} else if (!of_property_read_string(pdev->dev.of_node, "compatible", &compatible)) {
+		bool valid_proto = (!strcmp(compatible, "qcom,qspi-geni") &&
+				    mas->proto == GENI_SE_QSPI) ||
+				   (!strcmp(compatible, "qcom,spi-geni") &&
+				    mas->proto == GENI_SE_SPI);
+		if (!valid_proto) {
+			dev_err(mas->dev, "Invalid proto %d or dt node.\n", mas->proto);
+			ret = -ENXIO;
+			goto out;
+		}
 	}
 
-	if (!mas->is_le_vm)
-		pm_runtime_put_sync(mas->dev);
+out:
+	if (!mas->is_le_vm) {
+		int cleanup_ret = pm_runtime_put_sync(mas->dev);
+
+		if (!ret)
+			ret = cleanup_ret;
+		if (cleanup_ret && cleanup_ret != ret)
+			dev_err(mas->dev, "%s:  pm_runtime_put_sync failed %d\n",
+				__func__, cleanup_ret);
+	}
 
 	return ret;
 }
@@ -2275,9 +2551,8 @@ static int spi_geni_check_gsi_transfer_completion(struct spi_geni_master *mas,
 	return ret;
 }
 
-static int spi_geni_transfer_one(struct spi_master *spi,
-				struct spi_device *slv,
-				struct spi_transfer *xfer)
+static int spi_geni_transfer_one(struct spi_master *spi, struct spi_device *slv,
+				 struct spi_transfer *xfer, struct spi_transfer *xfer_tx_rx)
 {
 	int ret = 0;
 	unsigned int xfer_timeout;
@@ -2384,7 +2659,7 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 		reinit_completion(&mas->rx_cb);
 
 		mutex_unlock(&mas->spi_ssr.ssr_lock);
-		ret = setup_gsi_xfer(xfer, mas, slv, spi);
+		ret = setup_gsi_xfer(xfer, xfer_tx_rx, mas, slv, spi);
 		mutex_lock(&mas->spi_ssr.ssr_lock);
 		if (mas->spi_ssr.is_ssr_down)
 			goto err_ssr_transfer_one;
@@ -2419,6 +2694,98 @@ err_fifo_geni_transfer_one:
 	return ret;
 err_ssr_transfer_one:
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
+	return ret;
+}
+
+static void spi_geni_set_cs(struct spi_device *spi_slv, bool cs_active)
+{
+	struct gpio_desc *desc = spi_get_csgpiod(spi_slv, 0);
+
+	if (desc) {
+		dev_dbg(&spi_slv->dev,
+			"CS GPIO toggle:  cs_active=%d\n", cs_active);
+			/* Polarity handled by GPIO library */
+		gpiod_set_value_cansleep(desc, cs_active);
+	}
+}
+
+/*
+ * spi_geni_transfer_one_message - Transfer an entire spi message.
+ * @spi - pointer to the spi controller structure.
+ * @msg - pointer to the message to be executed.
+ *
+ * This is the main entry point for processing a complete message.
+ * It processes each transfer in the SPI message. For each transfer
+ * that has either a Tx or Rx buffer, it invokes the low-level transfer
+ * function spi_geni_transfer_one(). If any transfer fails, the function
+ * logs the error and stops processing further transfers.
+ *
+ * Return: 0 in case of success or a negative error code in case of failure.
+ */
+static int spi_geni_transfer_one_message(struct spi_controller *spi, struct spi_message *msg)
+{
+	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
+	struct spi_transfer *xfer;
+	bool keep_cs = false;
+	struct spi_transfer *next_xfer = NULL;
+	struct spi_transfer *xfer_tx_rx = NULL;
+	int ret = 0;
+	bool is_qspi = (mas->proto == GENI_SE_QSPI);
+
+	spi_geni_set_cs(msg->spi, true);
+
+	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
+		mas->is_tx_rx = false;
+		xfer_tx_rx = NULL;
+		mas->dummy_len = 0;
+
+		/* This section applies only to the QSPI protocol, SPI Protocol support is TBD. */
+		if (is_qspi && !list_is_last(&xfer->transfer_list, &msg->transfers)) {
+			next_xfer = list_next_entry(xfer, transfer_list);
+			if (next_xfer->dummy_data) {
+				/*
+				 * Check if next transfer is dummy transfer only.
+				 * If yes, then update the dummy_len and skip the transfer.
+				 */
+				mas->dummy_len = next_xfer->len;
+				if (!list_is_last(&next_xfer->transfer_list,
+						  &msg->transfers))
+					xfer_tx_rx = list_next_entry(next_xfer, transfer_list);
+				mas->is_tx_rx = true;
+			} else if (next_xfer->rx_buf && !next_xfer->tx_buf) {
+				/*
+				 * Check if next transfer is Rx transfer. If yes, then combine
+				 * current Tx with next Rx into a single Tx_Rx transfer.
+				 */
+				xfer_tx_rx = next_xfer;
+				mas->is_tx_rx = true;
+			}
+		}
+
+		ret = spi_geni_transfer_one(spi, msg->spi, xfer, xfer_tx_rx);
+		if (ret < 0) {
+			SPI_LOG_ERR(mas->ipc, true, mas->dev,
+				    "SPI transfer failed: %d\n", ret);
+			goto out;
+		}
+		msg->actual_length += xfer->len;
+
+		if (mas->is_tx_rx) {
+			msg->actual_length += xfer_tx_rx->len;
+			xfer = xfer_tx_rx;
+		}
+		if (xfer->cs_change) {
+			if (list_is_last(&xfer->transfer_list, &msg->transfers))
+				keep_cs = true;
+		}
+	}
+
+out:
+	if (ret != 0 || !keep_cs)
+		spi_geni_set_cs(msg->spi, false);
+	msg->status = ret;
+	spi_finalize_current_message(spi);
+
 	return ret;
 }
 
@@ -3090,13 +3457,13 @@ static int spi_geni_probe(struct platform_device *pdev)
 	geni_mas->spi_rsc.base = geni_mas->base;
 
 	geni_mas->is_deep_sleep = false;
-	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
 	spi->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 32);
 	spi->num_chipselect = SPI_NUM_CHIPSELECT;
 	spi->prepare_transfer_hardware = spi_geni_prepare_transfer_hardware;
 	spi->prepare_message = spi_geni_prepare_message;
 	spi->unprepare_message = spi_geni_unprepare_message;
-	spi->transfer_one = spi_geni_transfer_one;
+	spi->transfer_one = NULL;
+	spi->transfer_one_message = spi_geni_transfer_one_message;
 	spi->unprepare_transfer_hardware
 			= spi_geni_unprepare_transfer_hardware;
 	spi->auto_runtime_pm = false;
@@ -3125,6 +3492,17 @@ static int spi_geni_probe(struct platform_device *pdev)
 		ret = spi_verify_proto(geni_mas);
 		if (ret)
 			goto spi_geni_probe_err;
+	}
+
+	if (geni_mas->proto == GENI_SE_QSPI) {
+		spi->mode_bits = QSPI_SUPPORTED_MODES;
+
+		/*
+		 * DDR Mode is not supported due to HW limitations for now.
+		 */
+		geni_mas->qspi_ddr_support = false;
+	} else {
+		spi->mode_bits = SPI_SUPPORTED_MODES;
 	}
 
 	if (device_create_file(geni_mas->dev, &dev_attr_spi_max_dump_size))
@@ -3723,6 +4101,7 @@ static const struct dev_pm_ops spi_geni_pm_ops = {
 
 static const struct of_device_id spi_geni_dt_match[] = {
 	{ .compatible = "qcom,spi-geni" },
+	{ .compatible = "qcom,qspi-geni" },
 	{}
 };
 
@@ -3751,4 +4130,3 @@ module_exit(spi_dev_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:spi_geni");
-
