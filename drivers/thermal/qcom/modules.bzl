@@ -406,3 +406,13 @@ def register_modules(registry):
             "drivers/thermal/thermal-generic-adc.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/thermal/qcom/regulator_aop_cdev",
+        out = "regulator_aop_cdev.ko",
+        config = "CONFIG_QTI_AOP_REG_COOLING_DEVICE",
+        srcs = [
+            # do not sort
+            "drivers/thermal/qcom/regulator_aop_cdev.c",
+        ],
+    )

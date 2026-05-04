@@ -289,3 +289,12 @@ config GENERIC_ADC_THERMAL
 	   is read via IIO framework and the channel information is provided
 	   to this driver. This driver reports the temperature by reading ADC
 	   channel and converts it to temperature based on lookup table.
+
+config QTI_AOP_REG_COOLING_DEVICE
+	tristate "QTI AOP Regulator cooling device"
+	depends on THERMAL_OF && MSM_QMP
+	help
+	  This enables the AOP based Regulator cooling device. This cooling
+	  device will be used by QTI chipset to place a floor voltage
+	  restriction at low temperatures. The cooling device will message
+	  the AOP using mail box to establish the floor voltage.
