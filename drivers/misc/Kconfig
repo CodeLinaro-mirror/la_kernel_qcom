@@ -569,6 +569,14 @@ config USBMUX_PS8822
 
           If unsure, say N.
 
+config CCI_UTIL
+	tristate "Lontium LT7911UXC DP to CSI Bridge chip driver"
+	help
+	   This driver powers up Lontium LT7911UXC bridge chip and handles the
+	   communication with the Lontium chip over i2c. In addition, the driver
+	   performs LT7911 firmware upgrade when a new version of the firmware
+	   is available.
+
 source "drivers/misc/rtimd-i2c/Kconfig"
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
