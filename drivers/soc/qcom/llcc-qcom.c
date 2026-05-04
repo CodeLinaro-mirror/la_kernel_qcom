@@ -2846,10 +2846,12 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 
 	tcm_memory_node = of_parse_phandle(dev->of_node, "memory-region", 0);
 	if (tcm_memory_node) {
-		ret = qcom_llcc_tcm_init(pdev, llcc_cfg, sz, tcm_memory_node, drv_data);
-		of_node_put(tcm_memory_node);
-		if (ret)
-			dev_err(dev, "Failed to probe TCM manager\n");
+		if (((struct slc_sct_mem *)slc_mem)->tcm_mem_info.is_present){
+			ret = qcom_llcc_tcm_init(pdev, llcc_cfg, sz, tcm_memory_node, drv_data);
+			of_node_put(tcm_memory_node);
+			if (ret)
+				dev_err(dev, "Failed to probe TCM manager\n");
+		}
 	}
 end:
 	devm_iounmap(dev, slc_mem);
