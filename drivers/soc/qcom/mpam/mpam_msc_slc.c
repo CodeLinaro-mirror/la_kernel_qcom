@@ -33,7 +33,7 @@ static int perf_clk_enable;
 
 static int llcc_perf_clk_enable(bool enable, uint32_t version)
 {
-	if (version == SLC_MPAM_VERSION_0_3)
+	if (version == SLC_MPAM_VERSION_1_0)
 		return 0;
 
 	if (llcc_perfmon_clock == NULL)
@@ -748,6 +748,7 @@ static int slc_mon_config(struct device *dev, void *msc_partid, void *msc_partco
 			if (firmware_ver == SLC_MPAM_VERSION_0)
 				return -EPERM;
 
+			is_fe_be_mon = true;
 			break;
 		}
 	}
