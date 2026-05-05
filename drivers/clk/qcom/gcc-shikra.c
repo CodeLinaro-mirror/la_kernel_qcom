@@ -3582,6 +3582,36 @@ static struct clk_branch gcc_gpu_throttle_core_clk = {
 	},
 };
 
+static struct clk_branch gcc_lpass_config_clk = {
+	.halt_reg = 0x3a00c,
+	.halt_check = BRANCH_HALT_VOTED,
+	.hwcg_reg = 0x3a00c,
+	.hwcg_bit = 1,
+	.clkr = {
+		.enable_reg = 0x3a00c,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "gcc_lpass_config_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
+static struct clk_branch gcc_lpass_core_axim_clk = {
+	.halt_reg = 0x3a008,
+	.halt_check = BRANCH_HALT_VOTED,
+	.hwcg_reg = 0x3a008,
+	.hwcg_bit = 1,
+	.clkr = {
+		.enable_reg = 0x3a008,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "gcc_lpass_core_axim_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch gcc_mmu_tcu_vote_clk = {
 	.halt_reg = 0x7d06c,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -4843,6 +4873,8 @@ static struct clk_regmap *gcc_shikra_clocks[] = {
 	[GCC_GPU_SMMU_VOTE_CLK] = &gcc_gpu_smmu_vote_clk.clkr,
 	[GCC_GPU_SNOC_DVM_GFX_CLK] = &gcc_gpu_snoc_dvm_gfx_clk.clkr,
 	[GCC_GPU_THROTTLE_CORE_CLK] = &gcc_gpu_throttle_core_clk.clkr,
+	[GCC_LPASS_CONFIG_CLK] = &gcc_lpass_config_clk.clkr,
+	[GCC_LPASS_CORE_AXIM_CLK] = &gcc_lpass_core_axim_clk.clkr,
 	[GCC_MMU_TCU_VOTE_CLK] = &gcc_mmu_tcu_vote_clk.clkr,
 	[GCC_PCIE_AUX_CLK] = &gcc_pcie_aux_clk.clkr,
 	[GCC_PCIE_AUX_CLK_SRC] = &gcc_pcie_aux_clk_src.clkr,

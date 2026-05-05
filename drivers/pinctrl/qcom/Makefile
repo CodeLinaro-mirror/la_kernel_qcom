@@ -6,9 +6,13 @@ obj-$(CONFIG_PINCTRL_CANOE) += pinctrl-canoe.o
 
 obj-$(CONFIG_PINCTRL_MSM) += pinctrl-msm.o
 
+obj-$(CONFIG_PINCTRL_SCUBA) += pinctrl-scuba.o
+
 obj-$(CONFIG_PINCTRL_QCOM_SPMI_PMIC) += pinctrl-spmi-gpio.o
 
 obj-$(CONFIG_PINCTRL_QCOM_SPMI_PMIC) += pinctrl-spmi-mpp.o
+
+obj-$(CONFIG_PINCTRL_RAVELIN) += pinctrl-ravelin.o
 
 obj-$(CONFIG_PINCTRL_SUN) += pinctrl-sun.o
 

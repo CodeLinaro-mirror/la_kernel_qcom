@@ -19,7 +19,7 @@ obj-$(CONFIG_GH_PANIC_NOTIFIER) += gh_panic_notifier.o
 obj-$(CONFIG_GH_RM_BOOSTER) += gh_rm_booster.o
 
 obj-$(CONFIG_GH_RM_DRV) += gh_rm_drv.o
-gh_rm_drv-objs += gh_rm_core.o gh_rm_iface.o
+gh_rm_drv-objs += gh_rm_core.o gh_rm_iface.o gh_devices.o
 
 obj-$(CONFIG_GH_VIRT_WATCHDOG) += gh_virt_wdt.o
 

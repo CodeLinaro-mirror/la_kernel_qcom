@@ -13,6 +13,9 @@ obj-y += sps/
 
 obj-$(CONFIG_MEM_PROT) += mem-prot.o
 
+obj-$(CONFIG_QCOM_CX_IPEAK) += cx-ipeak.o
+cx-ipeak-objs += cx_ipeak.o
+
 obj-$(CONFIG_QCOM_ADSP_SLEEPMON) += adsp_sleepmon.o
 
 obj-$(CONFIG_QTI_ALTMODE_GLINK) += altmode-glink.o
@@ -61,6 +64,8 @@ obj-$(CONFIG_QCOM_LLCC_PERFMON) += llcc_perfmon.o
 obj-$(CONFIG_QCOM_LLCC_HEURISTICS) += llcc_heuristics.o
 
 obj-$(CONFIG_QCOM_LLCC) += llcc-qcom.o
+
+obj-$(CONFIG_QCOM_LLCC_DEBUG) += llcc_perf_debug.o
 
 obj-$(CONFIG_QCOM_MDT_LOADER) += mdt_loader.o
 
@@ -158,6 +163,8 @@ obj-$(CONFIG_QTI_DMOF_SCMI) += qti_dmof_scmi.o
 
 obj-$(CONFIG_QTI_PMIC_GLINK) += qti_pmic_glink.o
 
+obj-$(CONFIG_QCOM_SC_TCM_MEM) += sc_tcm.o
+
 obj-$(CONFIG_QCOM_SECURE_BUFFER) += secure_buffer.o
 
 obj-$(CONFIG_QCOM_SLC_PERFMON) += slc_perfmon.o
@@ -167,6 +174,8 @@ obj-$(CONFIG_QCOM_SMEM) += smem.o
 obj-$(CONFIG_QCOM_DBL) += qcom_dbl.o
 
 obj-$(CONFIG_QCOM_SMP2P) += smp2p.o
+
+obj-$(CONFIG_QCOM_SMSM) += smsm.o
 
 obj-$(CONFIG_QCOM_SMP2P_SLEEPSTATE) += smp2p_sleepstate.o
 
@@ -209,4 +218,8 @@ obj-$(CONFIG_MSM_SLATECOM_EVENT) += slatecom_event.o
 obj-$(CONFIG_MSM_SEB) += slate_events_bridge.o
 
 obj-$(CONFIG_MSM_SEB_RPMSG) += slate_events_bridge_rpmsg.o
+
+obj-$(CONFIG_QCOM_PBS) += qcom-pbs.o
+
+obj-$(CONFIG_MSM_BAM_DMUX) += bam_dmux.o
 

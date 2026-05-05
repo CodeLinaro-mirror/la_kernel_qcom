@@ -4,6 +4,7 @@ ccflags-y += -I$(src)
 
 # Subdirectories
 obj-y += ethernet/stmicro/stmmac/
+obj-y += mdio_fe/
 obj-y += pcs/
 obj-y += phy/aquantia/
 

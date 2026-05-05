@@ -3,6 +3,7 @@
 qcom-scm.ko
 arm_smmu.ko
 smem.ko
+qcom_iommu_debug.ko
 qcom_iommu_util.ko
 llcc-qcom.ko
 socinfo.ko
@@ -55,6 +56,11 @@ deferred-free-helper.ko
 qcom_cpucp.ko
 rproc_qcom_common.ko
 mdt_loader.ko
+qcom_scmi_vendor.ko
+qcom_scmi_client.ko
+qseecom_proxy.ko
+si_core_module.ko
+mem_object.ko
 spmi-pmic-arb.ko
 clk-dummy.ko
 clk-qcom.ko
@@ -95,3 +101,4 @@ msm_gpi.ko
 spi-msm-geni.ko
 wcd_usbss_i2c.ko
 qcom-reboot-reason.ko
+iommu-logger.ko
