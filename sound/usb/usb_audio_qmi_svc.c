@@ -136,6 +136,12 @@ struct uaudio_dev {
 
 static struct uaudio_dev uadev[SNDRV_CARDS];
 
+struct stop_ep_monitor {
+	struct work_struct work;
+	int card_num;
+	atomic_t stop_completed;
+};
+
 struct uaudio_qmi_dev {
 	struct device *dev;
 	u32 sid;
@@ -168,6 +174,14 @@ struct uaudio_qmi_dev {
 
 	struct work_struct offload_ready_work;
 	bool poll_active;
+	bool sw_evt_ring_freed;
+	struct workqueue_struct *stop_monitor_wq;
+	struct stop_ep_monitor stop_monitor;
+	struct workqueue_struct *disable_stream_wq;
+	struct work_struct disable_stream_work;
+	int disable_stream_card_num;
+	bool disable_stream_queued;
+	bool in_disconnect;
 };
 
 static struct uaudio_qmi_dev *uaudio_qdev;
@@ -288,17 +302,21 @@ static int xhci_sync_erst_dequeue(struct xhci_hcd *xhci,
 	dma_addr_t hw_deq_dma, seg_dma;
 	unsigned long offset;
 	unsigned int trb_index;
-	u64 hw_deq;
+	u64 hw_deq, erst;
+	int i = 0;
 
 	if (!ring || !ring->first_seg)
 		return -EINVAL;
 
 	/* Read hardware dequeue pointer (DMA address) */
-	hw_deq = xhci_read_64(xhci, &ir->ir_set->erst_dequeue);
+	erst = xhci_read_64(xhci, &ir->ir_set->erst_dequeue);
+	hw_deq = (u64)readl(&uaudio_qdev->qsram->data[3]);
 	hw_deq_dma = (dma_addr_t)(hw_deq & ERST_PTR_MASK);
 
 	ring->cycle_state = readl(&uaudio_qdev->qsram->data[2]);
-
+	pr_err("UGMI: hw_deq=%llx dma=%pa erst=%llx\n", (unsigned long long)hw_deq, &hw_deq_dma, (unsigned long long)erst);
+	for(i=0 ;i<64;i++)
+		uaudio_err("QSRAM[%d]=%x\n",i,readl((&uaudio_qdev->qsram->data[i])));
 	/* Search through all segments in the ring */
 	seg = ring->first_seg;
 	do {
@@ -323,10 +341,11 @@ static int xhci_sync_erst_dequeue(struct xhci_hcd *xhci,
 			/* Update ring pointers with virtual address */
 			ring->deq_seg = seg;
 			ring->dequeue = &seg->trbs[trb_index];
-			/*EHB set to clear */
 
+			/*EHB set to clear */
 			hw_deq |= ERST_EHB;
 			xhci_write_64(xhci, hw_deq, &ir->ir_set->erst_dequeue);
+			pr_err("UGMI: hw_deq=%llx\n", (unsigned long long)hw_deq);
 			return 0;
 
 		}
@@ -390,6 +409,19 @@ static void xhci_handle_offload(void *unused, struct xhci_hcd *xhci,
 	struct qsram_xhci __iomem *qsram;
 	int card_num;
 
+	/* Get QSRAM pointer */
+	qsram = uaudio_qdev->qsram;
+	if (!qsram) {
+		uaudio_err("QSRAM not available for audio offload\n");
+		*offload = false;
+		return;
+	}
+
+	/* Read SW event ring state from QSRAM */
+	enqueue_idx = readl(&qsram->data[0]);
+	dequeue_idx = readl(&qsram->data[1]);
+	cycle_state = readl(&qsram->data[2]);
+
 	/* Check if this is the primary interrupter */
 	if (!ir || ir->intr_num != 0) {
 		*offload = false;
@@ -439,19 +471,6 @@ static void xhci_handle_offload(void *unused, struct xhci_hcd *xhci,
 		*offload = false;
 		return;
 	}
-	/* Get QSRAM pointer */
-	qsram = uaudio_qdev->qsram;
-	if (!qsram) {
-		uaudio_err("QSRAM not available for audio offload\n");
-		*offload = false;
-		return;
-	}
-
-	/* Read SW event ring state from QSRAM */
-	enqueue_idx = readl(&qsram->data[0]);
-	dequeue_idx = readl(&qsram->data[1]);
-	cycle_state = readl(&qsram->data[2]);
-
 
 	/* Setup pointers */
 	sw_event_ring = (union xhci_trb *)offload_data->event_buffer;
@@ -1629,6 +1648,10 @@ static int uaudio_send_disconnect_ind(struct snd_usb_audio *chip)
 	return ret;
 }
 
+static void xhci_sideband_cleanup_sw_event_ring
+			(struct xhci_sideband *sb,
+			struct audio_offload_data *offload_data);
+
 static void uaudio_disconnect(struct snd_usb_audio *chip)
 {
 	struct uaudio_dev *dev;
@@ -1653,14 +1676,16 @@ static void uaudio_disconnect(struct snd_usb_audio *chip)
 		uaudio_dbg("no clean up required\n");
 		goto done;
 	}
-
+	uaudio_qdev->in_disconnect = true;
 	uaudio_send_disconnect_ind(chip);
 	/* Make sure indication does first before dev.*/
 	mb();
+	uaudio_qdev->in_disconnect = false;
+	uaudio_qdev->sw_evt_ring_freed = true;
 	uaudio_dev_cleanup(dev);
 done:
-	if (dev->xhci)
-		unregister_trace_android_vh_xhci_handle_offload(xhci_handle_offload, NULL);
+	unregister_trace_android_vh_xhci_handle_offload(xhci_handle_offload, NULL);
+	pr_err("UGMI: sb_sync");
 
 	if (dev->sb)
 		xhci_sideband_unregister(dev->sb);
@@ -1740,8 +1765,10 @@ static int uaudio_sb_notifier(struct usb_interface *intf,
 
 		for (if_idx = 0; if_idx < dev->num_intf; if_idx++) {
 			if ((dev->info[if_idx].data_ep_idx == ep_addr) ||
-			    (dev->info[if_idx].sync_ep_idx == ep_addr))
+			    (dev->info[if_idx].sync_ep_idx == ep_addr)) {
+				uaudio_qdev->in_disconnect = true;
 				uaudio_send_disconnect_ind(chip);
+			}
 		}
 	}
 
@@ -2095,9 +2122,105 @@ static void xhci_sideband_cleanup_sw_event_ring
 
 	/* Make sure qsram sync completes.*/
 	mb();
+	uaudio_qdev->sw_evt_ring_freed = true;
 	uaudio_dbg("SW event ring cleaned up\n");
 
 }
+
+static void stop_ep_monitor_work(struct work_struct *work)
+{
+	struct stop_ep_monitor *monitor = container_of(work,
+							struct stop_ep_monitor, work);
+	int card_num = monitor->card_num;
+	u32 adsp_state;
+	int poll_count = 0, i = 0;
+	const int max_polls = 500;
+	const int poll_interval_ms = 2;
+	bool offload = false;
+	unsigned long flags;
+
+	uaudio_dbg("UGMI:card#%d: monitor start\n", card_num);
+
+	while (poll_count < max_polls) {
+		adsp_state = readl(&uaudio_qdev->qsram->data[5]);
+
+		if (atomic_read(&monitor->stop_completed)) {
+			uaudio_dbg("UGMI:card#%d: stop_ep completed\n", card_num);
+			return;
+		}
+
+		if (!adsp_state) {
+			uaudio_dbg("UGMI:card#%d: DSP released, cleanup\n", card_num);
+			spin_lock_irqsave(&uadev[card_num].sb->xhci->lock, flags);
+			trace_android_vh_xhci_handle_offload(uadev[card_num].xhci,
+								uadev[card_num].sb->ir,
+								&offload);
+			uaudio_dbg("UGMI:drained");
+			spin_unlock_irqrestore(&uadev[card_num].sb->xhci->lock, flags);
+
+			unregister_trace_android_vh_xhci_handle_offload(
+						xhci_handle_offload, NULL);
+			if (!uaudio_qdev->sw_evt_ring_freed)
+				xhci_sideband_cleanup_sw_event_ring(uadev[card_num].sb,
+						&uadev[card_num].offload_data);
+			for (i = 0; i < 64; i++)
+				writel(0x0, &uaudio_qdev->qsram->data[i]);
+			return;
+		}
+
+		msleep(poll_interval_ms);
+		poll_count++;
+	}
+
+	uaudio_dbg("UGMI:card#%d: DSP released at timeout\n", card_num);
+	spin_lock_irqsave(&uadev[card_num].sb->xhci->lock, flags);
+	trace_android_vh_xhci_handle_offload(uadev[card_num].xhci,
+			uadev[card_num].sb->ir, &offload);
+	uaudio_dbg("UGMI:drained timedout");
+	spin_unlock_irqrestore(&uadev[card_num].sb->xhci->lock, flags);
+
+	unregister_trace_android_vh_xhci_handle_offload
+						(xhci_handle_offload, NULL);
+	if (!uaudio_qdev->sw_evt_ring_freed)
+		xhci_sideband_cleanup_sw_event_ring(uadev[card_num].sb,
+					&uadev[card_num].offload_data);
+
+	for (i = 0; i < 64; i++)
+		writel(0x0, &uaudio_qdev->qsram->data[i]);
+
+	uaudio_dbg("card#%d: monitor exit\n", card_num);
+}
+
+static void uaudio_disable_stream_work(struct work_struct *work)
+{
+	int card_num = uaudio_qdev->disable_stream_card_num;
+	int i;
+
+	uaudio_dbg("card#%d: deferred disable for %d stream(s)\n",
+		   card_num, uadev[card_num].num_intf);
+
+	for (i = 0; i < uadev[card_num].num_intf; i++) {
+
+		struct intf_info *info = &uadev[card_num].info[i];
+		struct snd_usb_substream *subs;
+
+		subs = find_substream(info->pcm_card_num,
+				      info->pcm_dev_num,
+				      info->direction);
+
+		if (subs && subs->stream->chip) {
+			pr_err("UGMI: about to disable %d", i);
+			disable_audio_stream(subs);
+			pr_err("UGMI: disabled sub %d", i);
+		}
+
+	}
+
+	pr_err("UGMI: IN_USE= %d", atomic_read(&uadev[card_num].in_use));
+	uaudio_qdev->disable_stream_queued = false;
+	uaudio_dev_release(&uadev[card_num]);
+}
+
 
 static void handle_uaudio_stream_req(struct qmi_handle *handle,
 			struct sockaddr_qrtr *sq,
@@ -2114,6 +2237,7 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 	struct snd_usb_audio *chip = NULL;
 	u32 adsp_state = 1;
 	int i;
+	unsigned long flags;
 
 	u8 pcm_card_num, pcm_dev_num, direction;
 	int info_idx = -EINVAL, datainterval = -EINVAL, ret = 0;
@@ -2138,7 +2262,16 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 	pcm_card_num = (req_msg->usb_token & SND_PCM_CARD_NUM_MASK) >> 16;
 
 	subs = find_substream(pcm_card_num, pcm_dev_num, direction);
+	if (!subs) {
+		uaudio_err("invalid substream\n");
+		goto response;
+	}
+
 	chip = uadev[pcm_card_num].chip;
+	if (!chip) {
+		uaudio_err("invalid chip\n");
+		goto response;
+	}
 
 	ret = check_valid_request(req_msg, &info_idx);
 	if (ret)
@@ -2160,6 +2293,9 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 	uadev[pcm_card_num].ctrl_intf = chip->ctrl_intf;
 
 	if (req_msg->enable) {
+		if (uaudio_qdev->disable_stream_queued)
+			flush_work(&uaudio_qdev->disable_stream_work);
+
 		mutex_lock(&chip->mutex);
 		atomic_inc(&uadev[pcm_card_num].in_use);
 		mutex_unlock(&chip->mutex);
@@ -2178,6 +2314,7 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 					 &uadev[pcm_card_num].offload_data);
 
 				uadev[pcm_card_num].offload_data.active++;
+				uaudio_qdev->sw_evt_ring_freed = false;
 				if (!uaudio_qdev->poll_active) {
 					uaudio_qdev->poll_active = true;
 					schedule_work(
@@ -2196,7 +2333,7 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 		}
 
 	} else {
-
+		pr_err("UGMI: IN_USE= %d", atomic_read(&uadev[pcm_card_num].in_use));
 		if (uadev[pcm_card_num].offload_data.active) {
 			cancel_work_sync(&uaudio_qdev->offload_ready_work);
 			uadev[pcm_card_num].offload_data.active--;
@@ -2206,19 +2343,32 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 
 		if (!adsp_state && !uaudio_qdev->intr_num) {
 			bool offload = false;
+			pr_err("UGMI: normal free %d", atomic_read(&uadev[pcm_card_num].in_use));
+			uaudio_qdev->poll_active = false;  /* signal worker to stop */
 
-			uaudio_qdev->poll_active = false;
-			spin_lock(&uadev[pcm_card_num].sb->xhci->lock);
+			/* Cleanup SW event ring */
+			spin_lock_irqsave(&uadev[pcm_card_num].sb->xhci->lock, flags);
 			trace_android_vh_xhci_handle_offload(uadev[pcm_card_num].xhci,
 								uadev[pcm_card_num].sb->ir,
 								&offload);
-			spin_unlock(&uadev[pcm_card_num].sb->xhci->lock);
+			spin_unlock_irqrestore(&uadev[pcm_card_num].sb->xhci->lock, flags);
 
 			unregister_trace_android_vh_xhci_handle_offload(xhci_handle_offload, NULL);
-			xhci_sideband_cleanup_sw_event_ring(uadev[pcm_card_num].sb,
+			if (!uaudio_qdev->sw_evt_ring_freed)
+				xhci_sideband_cleanup_sw_event_ring(uadev[pcm_card_num].sb,
 						&uadev[pcm_card_num].offload_data);
 			for (i = 0; i < 64; i++)
 				writel(0x0, &uaudio_qdev->qsram->data[i]);
+		}
+
+		if (!uaudio_qdev->intr_num && adsp_state &&
+				uadev[pcm_card_num].offload_data.active) {
+			uaudio_qdev->stop_monitor.card_num = pcm_card_num;
+			atomic_set(&uaudio_qdev->stop_monitor.stop_completed, 0);
+			pr_err("UGMI: workqueue free");
+			pr_err("UGMI: IN_USE= %d", atomic_read(&uadev[pcm_card_num].in_use));
+			queue_work(uaudio_qdev->stop_monitor_wq,
+						&uaudio_qdev->stop_monitor.work);
 		}
 
 		info = &uadev[pcm_card_num].info[info_idx];
@@ -2228,9 +2378,11 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 			if (!ep) {
 				uaudio_dbg("no data ep\n");
 			} else  {
-				xhci_sideband_stop_endpoint(uadev[pcm_card_num].sb,
-						ep);
+				pr_err("UGMI: rm ep");
+				mb();
 				xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb, ep);
+				atomic_set(&uaudio_qdev->stop_monitor.stop_completed, 1);
+				pr_err("UGMI: rm ep done");
 			}
 			info->data_ep_pipe = 0;
 		}
@@ -2241,14 +2393,31 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 			if (!ep) {
 				uaudio_dbg("no sync ep\n");
 			} else {
-				xhci_sideband_stop_endpoint(uadev[pcm_card_num].sb,
-						ep);
+				pr_err("UGMI: sync ep rm");
 				xhci_sideband_remove_endpoint(uadev[pcm_card_num].sb, ep);
+				atomic_set(&uaudio_qdev->stop_monitor.stop_completed, 1);
+				pr_err("UGMI: sync ep done");
 			}
 			info->sync_ep_pipe = 0;
 		}
 
-		disable_audio_stream(subs);
+		if (uadev[pcm_card_num].offload_data.active == 0) {
+			if (!uaudio_qdev->in_disconnect) {
+				uaudio_qdev->disable_stream_card_num = pcm_card_num;
+				uaudio_qdev->disable_stream_queued = true;
+				pr_err("UGMI: disable wq");
+				queue_work(uaudio_qdev->disable_stream_wq,
+					&uaudio_qdev->disable_stream_work);
+			} else {
+
+				chip->quirk_flags |= QUIRK_FLAG_IFACE_SKIP_CLOSE;
+				pr_err("UGMI: disconnect process direct call: %d",chip->quirk_flags);
+				disable_audio_stream(subs);
+				chip->quirk_flags &= ~QUIRK_FLAG_IFACE_SKIP_CLOSE;
+				pr_err("UGMI: disconnect process done: %d",chip->quirk_flags);
+			}
+		}
+
 	}
 
 response:
@@ -2260,8 +2429,11 @@ response:
 					uadev[pcm_card_num].udev,
 					info);
 		}
-		if (atomic_dec_and_test(&uadev[pcm_card_num].in_use))
-			uaudio_dev_release(&uadev[pcm_card_num]);
+		if (atomic_dec_and_test(&uadev[pcm_card_num].in_use)) {
+			wake_up(&uadev[pcm_card_num].disconnect_wq);
+			if (!uaudio_qdev->sw_evt_ring_freed)
+				uaudio_dev_release(&uadev[pcm_card_num]);
+		}
 		mutex_unlock(&chip->mutex);
 	}
 
@@ -2381,21 +2553,22 @@ static void uaudio_handle_bye(void)
 {
 	int idx = 0;
 	bool offload = false;
+	unsigned long flags;
 
 	for (idx = 0; idx < SNDRV_CARDS; idx++) {
 		if (!atomic_read(&uadev[idx].in_use))
 			continue;
 
-		spin_lock(&uadev[idx].sb->xhci->lock);
+		spin_lock_irqsave(&uadev[idx].sb->xhci->lock, flags);
 		trace_android_vh_xhci_handle_offload(uadev[idx].xhci,
 					uadev[idx].sb->ir,
 						&offload);
-		spin_unlock(&uadev[idx].sb->xhci->lock);
+		spin_unlock_irqrestore(&uadev[idx].sb->xhci->lock, flags);
 
 		unregister_trace_android_vh_xhci_handle_offload
 			(xhci_handle_offload, NULL);
-
-		xhci_sideband_cleanup_sw_event_ring(uadev[idx].sb,
+		if (!uaudio_qdev->sw_evt_ring_freed)
+			xhci_sideband_cleanup_sw_event_ring(uadev[idx].sb,
 				&uadev[idx].offload_data);
 	}
 
@@ -2575,6 +2748,21 @@ static int uaudio_qmi_plat_probe(struct platform_device *pdev)
 
 	INIT_WORK(&uaudio_qdev->offload_ready_work, uaudio_offload_ready_work);
 	uaudio_qdev->poll_active = false;
+
+	uaudio_qdev->stop_monitor_wq = alloc_ordered_workqueue("uaudio_stop_mon", 0);
+	if (!uaudio_qdev->stop_monitor_wq)
+		return -ENOMEM;
+
+	uaudio_qdev->disable_stream_wq = alloc_ordered_workqueue("disable_stream_wq", 0);
+	if (!uaudio_qdev->disable_stream_wq)
+		return -ENOMEM;
+
+	INIT_WORK(&uaudio_qdev->stop_monitor.work, stop_ep_monitor_work);
+	atomic_set(&uaudio_qdev->stop_monitor.stop_completed, 0);
+
+	INIT_WORK(&uaudio_qdev->disable_stream_work, uaudio_disable_stream_work);
+	uaudio_qdev->disable_stream_queued = false;
+
 	ret = snd_usb_register_platform_ops(&offload_ops);
 	if (ret < 0)
 		goto detach_device;
@@ -2594,6 +2782,13 @@ static void uaudio_qmi_plat_remove(struct platform_device *pdev)
 	iommu_detach_device(uaudio_qdev->domain, &pdev->dev);
 	iommu_domain_free(uaudio_qdev->domain);
 	uaudio_qdev->domain = NULL;
+
+	if (uaudio_qdev->stop_monitor_wq) {
+		cancel_work_sync(&uaudio_qdev->stop_monitor.work);
+		cancel_work_sync(&uaudio_qdev->disable_stream_work);
+		destroy_workqueue(uaudio_qdev->stop_monitor_wq);
+		destroy_workqueue(uaudio_qdev->disable_stream_wq);
+	}
 
 	/* Free shared pseudo event ring if all	cated */
 	if (uaudio_qdev->pseudo_evt_ring_mapped) {
