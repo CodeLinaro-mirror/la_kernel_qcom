@@ -4,6 +4,7 @@
  *
  * Copyright (C) 1996 Russell King.
  * Copyright (C) 2012 ARM Ltd.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __ASM_MMU_CONTEXT_H
 #define __ASM_MMU_CONTEXT_H
@@ -26,6 +27,11 @@
 #include <asm/tlbflush.h>
 
 extern bool rodata_full;
+
+#if IS_ENABLED(CONFIG_QTI_CPU_MPAM_HOOK)
+extern void cpu_mpam_callback(struct task_struct *task);
+#define prepare_arch_switch cpu_mpam_callback
+#endif
 
 static inline void contextidr_thread_switch(struct task_struct *next)
 {

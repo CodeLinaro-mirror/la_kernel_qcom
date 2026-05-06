@@ -25,7 +25,6 @@
 		i2c18 = &i2c18;
 		mmc0 = &sdhc_1; /* SDC1 eMMC slot */
 		mmc1 = &sdhc_2; /* SDC2 SD card slot */
-		i2c1 = &i2c1;
 		serial0 = &uart10;
 		serial1 = &uart17;
 		serial2 = &uart0;
@@ -43,21 +42,6 @@
 		startup-delay-us = <10000>;
 		enable-active-high;
 		gpio = <&pmm8654au_0_gpios 8 GPIO_ACTIVE_HIGH>;
-	};
-
-	display_bl: backlight {
-		compatible = "pwm-backlight";
-		power-supply = <&reg_dsi_touch>;
-		pwms = <&reg_backlight 0 255 0>;
-	};
-
-	reg_dsi_touch: regulator-touch {
-		compatible = "regulator-fixed";
-		regulator-name = "rpi-dsi-touch";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-		gpio = <&expander3 1 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
 	};
 
 	wcn6855-pmu {
@@ -512,31 +496,17 @@
 	remote-endpoint = <&usb_role_switch>;
 };
 
-&i2c1 {
-	qcom,load-firmware;
-	qcom,xfer-mode = <1>;
-
-	status = "okay";
-
-	reg_backlight: reg_backlight@45 {
-		compatible = "raspberrypi,touchscreen-panel-regulator-v2";
-		reg = <0x45>;
-		gpio-controller;
-		#gpio-cells = <2>;
-		#pwm-cells = <3>;
-	};
-};
-
 &i2c11 {
 	status = "okay";
 
 	hd3ss3220@67 {
 		compatible = "ti,hd3ss3220";
 		reg = <0x67>;
-		interrupt-parent = <&pmm8654au_2_gpios>;
-		interrupts = < 5 IRQ_TYPE_EDGE_FALLING>;
-		pinctrl-0 = <&usb0_intr_state>;
+		interrupts-extended = <&pmm8654au_2_gpios 5 IRQ_TYPE_EDGE_FALLING>;
+		id-gpios = <&tlmm 50 GPIO_ACTIVE_HIGH>;
+		pinctrl-0 = <&usb0_id>, <&usb0_intr_state>;
 		pinctrl-names = "default";
+		vbus-supply = <&vbus_supply_regulator_0>;
 		wakeup-source;
 
 		connector@0 {
@@ -567,6 +537,7 @@
 		pinctrl-0 = <&usb1_id>, <&usb1_intr_state>;
 		pinctrl-names = "default";
 		vbus-supply = <&vbus_supply_regulator_1>;
+		wakeup-source;
 
 		connector@1 {
 			compatible = "usb-c-connector";
@@ -609,6 +580,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <138 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&expander0_int>;
 		reg = <0x38>;
 	};
 
@@ -616,27 +593,25 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <19 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&expander1_int>;
 		reg = <0x39>;
-
-		io-exp-hog2 {
-			gpio-hog;
-			gpios = <2 GPIO_ACTIVE_HIGH>;
-			output-low;
-			line-name = "io_exp_gpio2";
-		};
-
-		io-exp-hog3 {
-			gpio-hog;
-			gpios = <3 GPIO_ACTIVE_HIGH>;
-			output-low;
-			line-name = "io_exp_gpio3";
-		};
 	};
 
 	expander2: pca953x@3a {
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <139 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&expander2_int>;
 		reg = <0x3a>;
 	};
 
@@ -644,6 +619,13 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <39 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&expander3_int>;
+		wakeup-source;
 		reg = <0x3b>;
 	};
 
@@ -706,36 +688,6 @@
 &mdss0_dp1_out {
 	data-lanes = <0 1 2 3>;
 	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
-};
-
-&mdss0_dsi0 {
-	vdda-supply = <&vreg_l1c>;
-	status = "okay";
-
-	panel:panel@0 {
-		compatible = "raspberrypi,dsi-7inch";
-		reg = <0>;
-
-		reset-gpios = <&reg_backlight 0 GPIO_ACTIVE_LOW>;
-		power-supply = <&reg_dsi_touch>;
-		backlight = <&display_bl>;
-
-		port {
-			panel0_in: endpoint {
-				remote-endpoint = <&mdss0_dsi0_out>;
-			};
-		};
-	};
-};
-
-&mdss0_dsi0_out {
-	remote-endpoint = <&panel0_in>;
-	data-lanes = <0 1>;
-};
-
-&mdss0_dsi0_phy {
-	vdds-supply = <&vreg_l4a>;
-	status = "okay";
 };
 
 &mdss0_edp_phy {
@@ -894,6 +846,34 @@
 		};
 	};
 
+	expander0_int: expander0-int-state {
+		pins = "gpio138";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander1_int: expander1-int-state {
+		pins = "gpio19";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander2_int: expander2-int-state {
+		pins = "gpio139";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander3_int: expander3-int-state {
+		pins = "gpio39";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
 	pcie0_default_state: pcie0-default-state {
 		perst-pins {
 			pins = "gpio2";
@@ -1013,6 +993,12 @@
 		bias-pull-up;
 	};
 
+	usb0_id: usb0-id-state {
+		pins = "gpio50";
+		function = "gpio";
+		bias-pull-up;
+	};
+
 	usb1_id: usb1-id-state {
 		pins = "gpio51";
 		function = "gpio";
@@ -1122,25 +1108,6 @@
 };
 
 &soc {
-	connector_usb2: connector-usb2 {
-		compatible = "gpio-usb-b-connector";
-		id-gpio = <&pmm8654au_2_gpios 11 GPIO_ACTIVE_HIGH>;
-		vbus-supply = <&vbus_supply_regulator_2>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&usb2_id_det_default>;
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				usb2_port_connector: endpoint {
-					remote-endpoint = <&usb2_port>;
-				};
-			};
-		};
-	};
-
 	vreg_sdc: regulator-sdc {
 		compatible = "regulator-gpio";
 
@@ -1229,7 +1196,6 @@
 	snps,dis_enblslpm_quirk;
 	qcom,enable-rt;
 	wakeup-source;
-	vbus_dwc3-supply = <&vbus_supply_regulator_0>;
 	status = "okay";
 
 	ports {
@@ -1371,6 +1337,28 @@
 	wakeup-source;
 
 	status = "okay";
+
+	connector_usb2: connector-usb2 {
+		compatible = "gpio-usb-b-connector";
+		label = "micro-USB";
+		type = "micro";
+		id-gpio = <&pmm8654au_2_gpios 11 GPIO_ACTIVE_HIGH>;
+		vbus-gpio = <&expander3 3 GPIO_ACTIVE_HIGH>;
+		vbus-supply = <&vbus_supply_regulator_2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_id_det_default>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				usb2_port_connector: endpoint {
+					remote-endpoint = <&usb2_port>;
+				};
+			};
+		};
+	};
 
 	ports {
 

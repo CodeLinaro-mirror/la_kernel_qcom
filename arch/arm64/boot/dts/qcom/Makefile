@@ -29,7 +29,13 @@ dtb-$(CONFIG_ARCH_QCOM) += lemans-amr.dtb
 monaco-addons-monza-dtbs:= monaco-monza.dtb monaco-addons-monza.dtbo
 
 dtb-$(CONFIG_ARCH_QCOM)	+= monaco-addons-monza.dtb
+monaco-addons-monza-el2-dtbs:= monaco-addons-monza.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= monaco-addons-monza-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM)	+= monaco-monza.dtb
+monaco-monza-el2-dtbs:= monaco-monza.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= monaco-monza-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8916-acer-a1-724.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8916-alcatel-idol347.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= msm8916-asus-z00l.dtb
@@ -125,28 +131,58 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcs404-evb-1000.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs404-evb-4000.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs615-addons-ride.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs615-ride.dtb
+
 dtb-$(CONFIG_ARCH_QCOM) += talos-addons-evk.dtb
+talos-addons-evk-el2-dtbs := talos-addons-evk.dtb qcs615-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM) += talos-addons-evk-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM) += talos-evk.dtb
+talos-evk-el2-dtbs := talos-evk.dtb qcs615-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM) += talos-evk-el2.dtb
+
+qcs615-ride-el2-dtbs := qcs615-ride.dtb qcs615-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM) += qcs615-ride-el2.dtb
 
 qcs8275-addons-iq-8275-evk-dtbs:= qcs8275-iq-8275-evk.dtb qcs8275-addons-iq-8275-evk.dtbo
 
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk.dtb
+qcs8275-addons-iq-8275-evk-el2-dtbs:= qcs8275-addons-iq-8275-evk.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-el2.dtb
 
 qcs8275-addons-iq-8275-evk-mezz-dtbs:= qcs8275-addons-iq-8275-evk.dtb qcs8275-addons-iq-8275-evk-mezz.dtbo
 
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-mezz.dtb
+qcs8275-addons-iq-8275-evk-mezz-el2-dtbs:= qcs8275-addons-iq-8275-evk-mezz.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-mezz-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-iq-8275-evk.dtb
+qcs8275-iq-8275-evk-el2-dtbs:= qcs8275-iq-8275-evk.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-iq-8275-evk-el2.dtb
 
 qcs8275-addons-iq-8275-evk-pro-sku-dtbs:= qcs8275-iq-8275-evk-pro-sku.dtb qcs8275-addons-iq-8275-evk-pro-sku.dtbo
 
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-pro-sku.dtb
+qcs8275-addons-iq-8275-evk-pro-sku-el2-dtbs:= qcs8275-addons-iq-8275-evk-pro-sku.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-pro-sku-el2.dtb
 
 qcs8275-addons-iq-8275-evk-pro-sku-mezz-dtbs:= qcs8275-addons-iq-8275-evk-pro-sku.dtb qcs8275-addons-iq-8275-evk-pro-sku-mezz.dtbo
 
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-pro-sku-mezz.dtb
+qcs8275-addons-iq-8275-evk-pro-sku-mezz-el2-dtbs:= qcs8275-addons-iq-8275-evk-pro-sku-mezz.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-addons-iq-8275-evk-pro-sku-mezz-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-iq-8275-evk-pro-sku.dtb
+qcs8275-iq-8275-evk-pro-sku-el2-dtbs:= qcs8275-iq-8275-evk-pro-sku.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8275-iq-8275-evk-pro-sku-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-addons-ride.dtb
+qcs8300-addons-ride-el2-dtbs:= qcs8300-addons-ride.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-addons-ride-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-ride.dtb
+qcs8300-ride-el2-dtbs:= qcs8300-ride.dtb qcs8300-el2.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8300-ride-el2.dtb
+
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-addons-aim300-aiot.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-aim300-aiot.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-rb5gen2-hdk.dtb

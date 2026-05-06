@@ -409,18 +409,14 @@ int dw_pcie_msi_host_init(struct dw_pcie_rp *pp)
 }
 EXPORT_SYMBOL_GPL(dw_pcie_msi_host_init);
 
-int dw_pcie_host_init(struct dw_pcie_rp *pp)
+static int dw_pcie_host_get_resources(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct device *dev = pci->dev;
-	struct device_node *np = dev->of_node;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct resource_entry *win;
-	struct pci_host_bridge *bridge;
 	struct resource *res;
 	int ret;
-
-	raw_spin_lock_init(&pp->lock);
 
 	ret = dw_pcie_get_resources(pci);
 	if (ret)
@@ -439,19 +435,35 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 		return -ENODEV;
 	}
 
-	bridge = devm_pci_alloc_host_bridge(dev, 0);
-	if (!bridge)
-		return -ENOMEM;
-
-	pp->bridge = bridge;
-
 	/* Get the I/O range from DT */
-	win = resource_list_first_type(&bridge->windows, IORESOURCE_IO);
+	win = resource_list_first_type(&pp->bridge->windows, IORESOURCE_IO);
 	if (win) {
 		pp->io_size = resource_size(win->res);
 		pp->io_bus_addr = win->res->start - win->offset;
 		pp->io_base = pci_pio_to_address(win->res->start);
 	}
+
+	return 0;
+}
+
+int dw_pcie_host_init(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	struct device *dev = pci->dev;
+	struct device_node *np = dev->of_node;
+	struct pci_host_bridge *bridge;
+	int ret;
+
+	raw_spin_lock_init(&pp->lock);
+
+	bridge = devm_pci_alloc_host_bridge(dev, 0);
+	if (!bridge)
+		return -ENOMEM;
+
+	pp->bridge = bridge;
+	ret = dw_pcie_host_get_resources(pp);
+	if (ret)
+		return ret;
 
 	/* Set default bus ops */
 	bridge->ops = &dw_pcie_ops;
@@ -526,13 +538,15 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 		dw_pcie_wait_for_link(pci);
 
 	bridge->sysdata = pp;
-
+	msleep(100);
 	ret = pci_host_probe(bridge);
 	if (ret)
 		goto err_stop_link;
 
 	if (pp->ops->host_post_init)
 		pp->ops->host_post_init(pp);
+
+	dwc_pcie_debugfs_init(pci, DW_PCIE_RC_TYPE);
 
 	return 0;
 
@@ -557,6 +571,8 @@ EXPORT_SYMBOL_GPL(dw_pcie_host_init);
 void dw_pcie_host_deinit(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+
+	dwc_pcie_debugfs_deinit(pci);
 
 	pci_stop_root_bus(pp->bridge->bus);
 	pci_remove_root_bus(pp->bridge->bus);

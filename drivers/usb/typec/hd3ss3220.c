@@ -178,14 +178,17 @@ static const struct regmap_config config = {
 static irqreturn_t hd3ss3220_id_isr(int irq, void *dev_id)
 {
 	struct hd3ss3220 *hd3ss3220 = dev_id;
-	int ret;
+	int ret = 0;
 	int id;
 
 	id = gpiod_get_value_cansleep(hd3ss3220->id_gpiod);
-	if (!id)
-		ret = regulator_enable(hd3ss3220->vbus);
-	else
-		ret = regulator_disable(hd3ss3220->vbus);
+	if (!id) {
+		if (!regulator_is_enabled(hd3ss3220->vbus))
+			ret = regulator_enable(hd3ss3220->vbus);
+	} else {
+		if (regulator_is_enabled(hd3ss3220->vbus))
+			ret = regulator_disable(hd3ss3220->vbus);
+	}
 
 	if (ret)
 		dev_err(hd3ss3220->dev,

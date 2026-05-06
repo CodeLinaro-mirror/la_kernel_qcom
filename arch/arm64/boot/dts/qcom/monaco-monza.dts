@@ -38,6 +38,17 @@
 		regulator-max-microvolt = <1800000>;
 	};
 
+	vdc_5v: vdc-5v {
+		compatible = "regulator-fixed";
+		regulator-name = "vdc_5v";
+
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&tlmm 49 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+
 	edp-connector {
 		compatible = "dp-connector";
 		label = "EDP";
@@ -201,7 +212,7 @@
 };
 
 &ethernet0 {
-	phy-mode = "sgmii";
+	phy-mode = "2500base-x";
 	phy-handle = <&hsgmii_phy0>;
 
 	pinctrl-0 = <&ethernet0_default>;
@@ -220,7 +231,7 @@
 		hsgmii_phy0: phy@1c {
 			compatible = "ethernet-phy-id004d.d101";
 			reg = <0x1c>;
-			reset-gpios = <&tlmm 31 GPIO_ACTIVE_LOW>;
+			reset-gpios = <&tlmm 50 GPIO_ACTIVE_LOW>;
 			reset-assert-us = <11000>;
 			reset-deassert-us = <70000>;
 		};
@@ -292,6 +303,14 @@
 
 &gpi_dma1 {
 	status = "okay";
+};
+
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	firmware-name = "qcom/qcs8300/a623_zap.mbn";
 };
 
 &i2c8 {

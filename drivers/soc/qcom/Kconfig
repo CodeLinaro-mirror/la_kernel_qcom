@@ -456,4 +456,6 @@ config QCOM_MINIDUMP
 
 	  This has dependency on PSTORE RAM for collecting the ramoops region with
 	  APSS Minidump.
+
+source "drivers/soc/qcom/mpam/Kconfig"
 endmenu

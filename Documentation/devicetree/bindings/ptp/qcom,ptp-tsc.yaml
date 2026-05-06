@@ -8,7 +8,7 @@ title: Qualcomm Technologies, Inc. Timestamp Counter(TSC) based PTP clock
 
 maintainers:
   - Taniya Das <quic_tdas@quicinc.com>
-  - Satya Priya Kakitapalli <quic_skakitap@quicinc.com>
+  - Sachin Gupta <sachgupt@qti.qualcomm.com>
 
 description:
   TSC module is a timestamp generator, which runs a 64 bit counter for
@@ -53,6 +53,12 @@ properties:
      description:
        Indicates the TSC supports frame pulse generation which can be used
        for sensors synchronization.
+     type: boolean
+
+  qcom,tsc-safety:
+     description:
+       Indicates that this TSC instance falls has functional-safety (FuSa)
+       use cases and requires additional safety handling.
      type: boolean
 
 required:

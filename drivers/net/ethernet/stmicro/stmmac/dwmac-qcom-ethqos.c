@@ -129,6 +129,7 @@ struct ethqos_emac_driver_data {
 	const char *link_clk_name;
 	u32 has_flags;
 	u32 dma_addr_width;
+	unsigned int axi_clk_rate;
 	struct dwmac4_addrs dwmac4_addrs;
 	bool needs_sgmii_loopback;
 	bool has_hdma;
@@ -389,6 +390,7 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.has_hdma = true,
 	.needs_sgmii_loopback = true,
 	.has_io_macro_ge_4 = true,
+	.axi_clk_rate = 380000000,
 	.dwxgmac_addrs = {
 		.dma_even_chan_base  = 0x00008500,
 		.dma_odd_chan_base = 0x00008580,
@@ -1237,6 +1239,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
 	plat_dat->dump_debug_regs = rgmii_dump;
 	plat_dat->ptp_clk_freq_config = ethqos_ptp_clk_freq_config;
+	plat_dat->clk_ref_rate = data->axi_clk_rate;
 	plat_dat->has_gmac4 = 1;
 	if (ethqos->has_emac_ge_3)
 		plat_dat->dwmac4_addrs = &data->dwmac4_addrs;
