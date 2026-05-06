@@ -69,6 +69,14 @@ static void dwmac4_core_init(struct mac_device_info *hw,
 		init_waitqueue_head(&priv->tstamp_busy_wait);
 }
 
+static void dwmac4_update_caps(struct stmmac_priv *priv)
+{
+	if (priv->plat->tx_queues_to_use > 1)
+		priv->hw->link.caps &= ~(MAC_10HD | MAC_100HD | MAC_1000HD);
+	else
+		priv->hw->link.caps |= (MAC_10HD | MAC_100HD | MAC_1000HD);
+}
+
 static void dwmac4_rx_queue_enable(struct mac_device_info *hw,
 				   u8 mode, u32 queue)
 {
@@ -1199,6 +1207,7 @@ void dwmac4_set_vlan_filter_rx_queue(struct vlan_filter_info *vlan,
 
 const struct stmmac_ops dwmac4_ops = {
 	.core_init = dwmac4_core_init,
+	.update_caps = dwmac4_update_caps,
 	.set_mac = stmmac_set_mac,
 	.qcom_set_vlan = dwmac4_set_vlan_filter_rx_queue,
 	.rx_ipc = dwmac4_rx_ipc_enable,
@@ -1242,6 +1251,7 @@ const struct stmmac_ops dwmac4_ops = {
 
 const struct stmmac_ops dwmac410_ops = {
 	.core_init = dwmac4_core_init,
+	.update_caps = dwmac4_update_caps,
 	.set_mac = stmmac_dwmac4_set_mac,
 	.qcom_set_vlan = dwmac4_set_vlan_filter_rx_queue,
 	.rx_ipc = dwmac4_rx_ipc_enable,
@@ -1291,6 +1301,7 @@ const struct stmmac_ops dwmac410_ops = {
 
 const struct stmmac_ops dwmac510_ops = {
 	.core_init = dwmac4_core_init,
+	.update_caps = dwmac4_update_caps,
 	.set_mac = stmmac_dwmac4_set_mac,
 	.qcom_set_vlan = dwmac4_set_vlan_filter_rx_queue,
 	.rx_ipc = dwmac4_rx_ipc_enable,
