@@ -30,6 +30,15 @@
 		stdout-path = "serial0:115200n8";
 	};
 
+	vhat_3p3: regulator-vhat-3p3 {
+		compatible = "regulator-fixed";
+		regulator-name = "VHAT_3V3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
 	vreg_s2s: vreg-s2s {
 		compatible = "regulator-fixed";
 		regulator-name = "vreg_s2s";
@@ -353,6 +362,61 @@
 	firmware-name = "qcom/qcs8300/a623_zap.mbn";
 };
 
+&i2c0 {
+	pinctrl-0 = <&qup_i2c0_data_clk>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	sensehat: sensehat@46 {
+		compatible = "raspberrypi,sensehat";
+		reg = <0x46>;
+		status = "okay";
+
+		joystick {
+			compatible = "raspberrypi,sensehat-joystick";
+			status = "okay";
+
+			pinctrl-names = "default";
+			pinctrl-0 = <&sensehat_joystick_int_default>;
+
+			interrupt-parent = <&tlmm>;
+			interrupts = <105 IRQ_TYPE_EDGE_RISING>;
+		};
+	};
+
+	lsm9ds1_imu: imu@6a {
+		compatible = "st,lsm9ds1-imu";
+		reg = <0x6a>;
+		vdd-supply = <&vhat_3p3>;
+		vddio-supply = <&vhat_3p3>;
+		status = "okay";
+	};
+
+	lsm9ds1_mag: lsm9ds1_mag@1c {
+		compatible = "st,lsm9ds1-magn";
+		reg = <0x1c>;
+		vdd-supply = <&vhat_3p3>;
+		vddio-supply = <&vhat_3p3>;
+		status = "okay";
+	};
+
+	lps25h_press: lps25h@5c {
+		compatible = "st,lps25h-press";
+		reg = <0x5c>;
+		vdd-supply = <&vhat_3p3>;
+		vddio-supply = <&vhat_3p3>;
+		status = "okay";
+	};
+
+	hts221_humid: hts221@5f {
+		compatible = "st,hts221";
+		reg = <0x5f>;
+		vdd-supply = <&vhat_3p3>;
+		vddio-supply = <&vhat_3p3>;
+		status = "okay";
+	};
+};
+
 &i2c8 {
 	pinctrl-0 = <&qup_i2c8_default>, <&usb0_intr_state>;
 	pinctrl-names = "default";
@@ -535,6 +599,11 @@
 	bias-pull-up;
 };
 
+&qup_i2c0_data_clk {
+	drive-strength = <2>;
+	bias-pull-up;
+};
+
 &qupv3_id_0 {
 	firmware-name = "qcom/qcs8300/qupv3fw.elf";
 	status = "okay";
@@ -683,6 +752,14 @@
 		  function = "qup1_se0";
 		  drive-strength = <16>;
 		  bias-pull-up;
+	};
+
+	sensehat_joystick_int_default: sensehat-joystick-int-default-state {
+		pins = "gpio105";
+		function = "gpio";
+		bias-disable;
+		input-enable;
+		drive-strength = <2>;
 	};
 
 	usb0_intr_state: usb0-intr-state {
