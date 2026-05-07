@@ -310,7 +310,7 @@ __clk_rcg2_recalc_rate(struct clk_hw *hw, unsigned long parent_rate, u32 cfg)
 	u32 src, hid_div, m = 0, n = 0, mode = 0, mask;
 	unsigned long rrate = 0, prate;
 
-	if (rcg->flags & RCG_UPDATE_BEFORE_PLL) {
+	if (parent && rcg->flags & RCG_UPDATE_BEFORE_PLL) {
 		prate =  clk_hw_get_rate(parent);
 		if (prate != parent_rate)
 			parent_rate = prate;

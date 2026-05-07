@@ -30,10 +30,12 @@ icc-rpmh.ko
 icc-clk.ko
 qcom-pdc.ko
 qcom_wdt_core.ko
-gh_virt_wdt.ko
+qcom_soc_wdt.ko
 nvmem_qfprom.ko
 debug_symbol.ko
 minidump.ko
+qcom_logbuf_vendor_hooks.ko
+qcom_logbuf_boot_log.ko
 qcom-dcvs.ko
 memory_dump_v2.ko
 dcc_v2.ko
@@ -78,7 +80,12 @@ phy-qcom-snps-eusb2.ko
 phy-qcom-qmp-combo.ko
 phy-nxp-ptn3222.ko
 phy-qcom-qmp-usb.ko
+phy-qcom-ufs.ko
+phy-qcom-ufs-qmp-v4-kalama.ko
+qcom_ice.ko
 dwc3-msm.ko
+ufs-qcom.ko
+ufshcd-crypto-qti.ko
 videocc-sm8550.ko
 camcc-x1e80100.ko
 debugcc-x1e80100.ko
@@ -87,3 +94,4 @@ i2c-msm-geni.ko
 msm_gpi.ko
 spi-msm-geni.ko
 wcd_usbss_i2c.ko
+qcom-reboot-reason.ko

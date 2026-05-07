@@ -13,11 +13,13 @@
 #include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/panic_notifier.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_wakeirq.h>
+#include <linux/reboot.h>
 #include <linux/soc/qcom/geni-se.h>
 #include <linux/serial.h>
 #include <linux/serial_core.h>
@@ -167,6 +169,8 @@ struct qcom_geni_serial_port {
 	struct qcom_geni_private_data private_data;
 	const struct qcom_geni_device_data *dev_data;
 	struct dev_pm_domain_list *pd_list;
+	struct notifier_block reboot_nb;
+	struct notifier_block panic_nb;
 };
 
 static const struct uart_ops qcom_geni_console_pops;
@@ -242,13 +246,14 @@ static void qcom_geni_serial_config_port(struct uart_port *uport, int cfg_flags)
 static unsigned int qcom_geni_serial_get_mctrl(struct uart_port *uport)
 {
 	unsigned int mctrl = TIOCM_DSR | TIOCM_CAR;
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
 	u32 geni_ios = 0;
 
 	if (uart_console(uport)) {
 		mctrl |= TIOCM_CTS;
 	} else {
 		geni_ios = readl(uport->membase + SE_GENI_IOS);
-		if (!(geni_ios & IO2_DATA_IN))
+		if (!(geni_ios & IO2_DATA_IN) || port->loopback)
 			mctrl |= TIOCM_CTS;
 	}
 
@@ -272,7 +277,21 @@ static void qcom_geni_serial_set_mctrl(struct uart_port *uport,
 	if (!(mctrl & TIOCM_RTS) && !uport->suspended)
 		uart_manual_rfr = UART_MANUAL_RFR_EN | UART_RFR_NOT_READY;
 	writel(uart_manual_rfr, uport->membase + SE_UART_MANUAL_RFR);
-	serial_trace_log(uport->dev, "%s: uart_manual_rfr: %0x%x\n", __func__, uart_manual_rfr);
+	if (port->loopback) {
+		u32 val;
+
+		if (uart_manual_rfr & UART_MANUAL_RFR_EN) {
+			/* RTS deasserted — wait for CTS HIGH */
+			readl_poll_timeout_atomic(uport->membase + SE_GENI_IOS,
+					val, (val & IO2_DATA_IN), 2, 50);
+		} else {
+			/* RTS asserted — wait for CTS LOW */
+			readl_poll_timeout_atomic(uport->membase + SE_GENI_IOS,
+					val, !(val & IO2_DATA_IN), 2, 50);
+		}
+	}
+	serial_trace_log(uport->dev, "%s: uart_manual_rfr: 0x%x loopback:%d\n", __func__,
+			 uart_manual_rfr, port->loopback);
 }
 
 static const char *qcom_geni_serial_get_type(struct uart_port *uport)
@@ -877,6 +896,9 @@ static void qcom_geni_serial_start_rx_dma(struct uart_port *uport)
 	if (qcom_geni_serial_secondary_active(uport))
 		qcom_geni_serial_stop_rx_dma(uport);
 
+	/* Clear manual RFR control to allow hardware flow control */
+	writel(0, uport->membase + SE_UART_MANUAL_RFR);
+
 	geni_se_setup_s_cmd(&port->se, UART_START_READ, UART_PARAM_RFR_OPEN);
 
 	ret = geni_se_rx_dma_prep(&port->se, port->rx_buf,
@@ -1254,7 +1276,6 @@ static int qcom_geni_serial_startup(struct uart_port *uport)
 			return ret;
 	}
 
-	qcom_geni_serial_start_rx(uport);
 	enable_irq(uport->irq);
 
 	return 0;
@@ -1440,6 +1461,7 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 	u32 stop_bit_len;
 	int ret = 0;
 
+	qcom_geni_serial_stop_rx(uport);
 	/* baud rate */
 	baud = uart_get_baud_rate(uport, termios, old, 300, 4000000);
 
@@ -1448,7 +1470,7 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 		dev_err(port->se.dev,
 			"%s: Failed to set  baud: %u  ret: %d\n",
 			__func__, baud, ret);
-		return;
+		goto out_restart_rx;
 	}
 
 	/* parity */
@@ -1518,6 +1540,8 @@ static void qcom_geni_serial_set_termios(struct uart_port *uport,
 	writel(bits_per_char, uport->membase + SE_UART_TX_WORD_LEN);
 	writel(bits_per_char, uport->membase + SE_UART_RX_WORD_LEN);
 	writel(stop_bit_len, uport->membase + SE_UART_TX_STOP_BIT_LEN);
+out_restart_rx:
+	qcom_geni_serial_start_rx(uport);
 }
 
 #ifdef CONFIG_SERIAL_QCOM_GENI_CONSOLE
@@ -1803,6 +1827,45 @@ static int geni_serial_resource_init(struct uart_port *uport)
 
 	return 0;
 }
+
+static int qcom_geni_gvm_reboot_cb(struct notifier_block *nb,
+			unsigned long action, void *data)
+{
+	struct qcom_geni_serial_port *port = container_of(nb, struct qcom_geni_serial_port,
+							  reboot_nb);
+	struct uart_port *uport = &port->uport;
+
+	switch (action) {
+	case SYS_RESTART:
+	case SYS_POWER_OFF:
+	case SYS_HALT:
+		if (pm_runtime_status_suspended(uport->dev))
+			return NOTIFY_OK;
+
+		qcom_geni_serial_shutdown(uport);
+		break;
+	default:
+		dev_err(uport->dev, "GVM: Invalid request\n");
+	}
+
+	return NOTIFY_OK;
+}
+
+static int qcom_geni_gvm_panic_cb(struct notifier_block *nb,
+		       unsigned long event, void *ptr)
+{
+	struct qcom_geni_serial_port *port = container_of(nb, struct qcom_geni_serial_port,
+							  panic_nb);
+	struct uart_port *uport = &port->uport;
+
+	if (pm_runtime_status_suspended(uport->dev))
+		return NOTIFY_OK;
+
+	qcom_geni_serial_shutdown(uport);
+
+	return NOTIFY_OK;
+}
+
 static void qcom_geni_serial_pm(struct uart_port *uport,
 		unsigned int new_state, unsigned int old_state)
 {
@@ -1977,6 +2040,25 @@ static int qcom_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		goto error;
 
+	if (!uart_console(uport)) {
+		/* Register reboot notifier */
+		port->reboot_nb.notifier_call = qcom_geni_gvm_reboot_cb;
+		ret = register_reboot_notifier(&port->reboot_nb);
+		if (ret) {
+			dev_err(uport->dev, "Failed to register reboot notifier: %d\n", ret);
+			goto error;
+		}
+
+		/* Register panic notifier */
+		port->panic_nb.notifier_call = qcom_geni_gvm_panic_cb;
+		ret = atomic_notifier_chain_register(&panic_notifier_list, &port->panic_nb);
+		if (ret) {
+			dev_err(uport->dev, "Failed to register panic notifier: %d\n", ret);
+			unregister_reboot_notifier(&port->reboot_nb);
+			goto error;
+		}
+	}
+
 	return 0;
 
 error:
@@ -1989,6 +2071,15 @@ static void qcom_geni_serial_remove(struct platform_device *pdev)
 {
 	struct qcom_geni_serial_port *port = platform_get_drvdata(pdev);
 	struct uart_driver *drv = port->private_data.drv;
+	struct uart_port *uport = &port->uport;
+
+	if (!uart_console(uport)) {
+		/* Unregister panic notifier */
+		atomic_notifier_chain_unregister(&panic_notifier_list, &port->panic_nb);
+
+		/* Unregister reboot notifier */
+		unregister_reboot_notifier(&port->reboot_nb);
+	}
 
 	pm_runtime_disable(port->se.dev);
 	uart_remove_one_port(drv, &port->uport);

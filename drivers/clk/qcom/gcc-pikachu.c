@@ -847,8 +847,6 @@ static struct clk_rcg2 gcc_pcie_1_phy_rchng_clk_src = {
 	.hid_width = 5,
 	.parent_map = gcc_parent_map_0,
 	.freq_tbl = ftbl_gcc_pcie_0_phy_rchng_clk_src,
-	.enable_safe_config = true,
-	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "gcc_pcie_1_phy_rchng_clk_src",
 		.parent_data = gcc_parent_data_0,
@@ -1111,6 +1109,28 @@ static struct clk_rcg2 gcc_qupv3_wrap1_s0_clk_src = {
 	},
 };
 
+static const struct freq_tbl ftbl_gcc_qupv3_wrap1_s1_clk_src[] = {
+	F(7372800, P_GCC_GPLL0_OUT_EVEN, 1, 384, 15625),
+	F(14745600, P_GCC_GPLL0_OUT_EVEN, 1, 768, 15625),
+	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(29491200, P_GCC_GPLL0_OUT_EVEN, 1, 1536, 15625),
+	F(32000000, P_GCC_GPLL0_OUT_EVEN, 1, 8, 75),
+	F(48000000, P_GCC_GPLL0_OUT_EVEN, 1, 4, 25),
+	F(51200000, P_GCC_GPLL0_OUT_EVEN, 1, 64, 375),
+	F(64000000, P_GCC_GPLL0_OUT_EVEN, 1, 16, 75),
+	F(75000000, P_GCC_GPLL0_OUT_EVEN, 4, 0, 0),
+	F(80000000, P_GCC_GPLL0_OUT_EVEN, 1, 4, 15),
+	F(96000000, P_GCC_GPLL0_OUT_EVEN, 1, 8, 25),
+	F(100000000, P_GCC_GPLL0_OUT_MAIN, 6, 0, 0),
+	F(102400000, P_GCC_GPLL0_OUT_EVEN, 1, 128, 375),
+	F(112000000, P_GCC_GPLL0_OUT_EVEN, 1, 28, 75),
+	F(117964800, P_GCC_GPLL0_OUT_EVEN, 1, 6144, 15625),
+	F(120000000, P_GCC_GPLL0_OUT_MAIN, 5, 0, 0),
+	F(128000000, P_GCC_GPLL2_OUT_MAIN, 3, 0, 0),
+	F(150000000, P_GCC_GPLL0_OUT_EVEN, 2, 0, 0),
+	{ }
+};
+
 static struct clk_init_data gcc_qupv3_wrap1_s1_clk_src_init = {
 	.name = "gcc_qupv3_wrap1_s1_clk_src",
 	.parent_data = gcc_parent_data_6,
@@ -1124,7 +1144,7 @@ static struct clk_rcg2 gcc_qupv3_wrap1_s1_clk_src = {
 	.mnd_width = 16,
 	.hid_width = 5,
 	.parent_map = gcc_parent_map_6,
-	.freq_tbl = ftbl_gcc_qupv3_wrap0_s0_clk_src,
+	.freq_tbl = ftbl_gcc_qupv3_wrap1_s1_clk_src,
 	.enable_safe_config = true,
 	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &gcc_qupv3_wrap1_s1_clk_src_init,
@@ -1918,21 +1938,6 @@ static struct clk_branch gcc_disp_0_hf_axi_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gcc_disp_0_hf_axi_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch gcc_disp_sf_axi_clk = {
-	.halt_reg = 0x27024,
-	.halt_check = BRANCH_HALT_SKIP,
-	.hwcg_reg = 0x27024,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x27024,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_disp_sf_axi_clk",
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -3677,7 +3682,6 @@ static struct clk_regmap *gcc_pikachu_clocks[] = {
 	[GCC_CNOC_PCIE_SF_AXI_CLK] = &gcc_cnoc_pcie_sf_axi_clk.clkr,
 	[GCC_DDRSS_PCIE_SF_QTB_CLK] = &gcc_ddrss_pcie_sf_qtb_clk.clkr,
 	[GCC_DISP_0_HF_AXI_CLK] = &gcc_disp_0_hf_axi_clk.clkr,
-	[GCC_DISP_SF_AXI_CLK] = &gcc_disp_sf_axi_clk.clkr,
 	[GCC_DISP_TSCTR_CLK] = &gcc_disp_tsctr_clk.clkr,
 	[GCC_EVA_AXI0_CLK] = &gcc_eva_axi0_clk.clkr,
 	[GCC_EVA_AXI0C_CLK] = &gcc_eva_axi0c_clk.clkr,

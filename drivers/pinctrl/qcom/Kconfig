@@ -61,6 +61,18 @@ config PINCTRL_RAVELIN
 	  If you compile this driver as a module, it will be called
 	  pinctrl-ravelin.
 
+config PINCTRL_BOURTZI
+	tristate "Qualcomm Technologies Inc BOURTZI pin controller driver"
+	depends on GPIOLIB && OF
+	select PINCTRL_MSM
+	help
+	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+	  Qualcomm Technologies Inc TLMM block found on the Qualcomm
+	  Technologies Inc SM4875 (Bourtzi) platform.
+
+	  If you compile this driver as a module, it will be called
+	  pinctrl-bourtzi.
+
 config PINCTRL_SA8797P
 	tristate "Qualcomm Technologies Inc SA8797P pin controller driver"
 	depends on ARM64 || COMPILE_TEST

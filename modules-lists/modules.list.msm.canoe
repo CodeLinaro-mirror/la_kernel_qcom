@@ -71,6 +71,7 @@ qcom_logbuf_vendor_hooks.ko
 qcom_logbuf_boot_log.ko
 pinctrl-msm.ko
 pinctrl-alor.ko
+pinctrl-bourtzi.ko
 pinctrl-canoe.ko
 pinctrl-chora.ko
 pinctrl-ravelin.ko

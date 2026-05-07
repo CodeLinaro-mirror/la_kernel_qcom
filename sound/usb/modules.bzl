@@ -12,6 +12,7 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/usb/host/xhci-sideband",
+            "drivers/usb/dwc3/dwc3-msm",
             "drivers/soc/qcom/qmi_helpers",
             "kernel/trace/qcom_ipc_logging",
             "drivers/soc/qcom/minidump",

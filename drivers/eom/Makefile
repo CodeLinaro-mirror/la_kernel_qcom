@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0
+
+ccflags-y += -I$(src)
+
+obj-$(CONFIG_EOM_MSM) += eom_driver.o
+eom_driver-objs += phy_core.o eom_driver.o buffer_manager.o
+eom_driver-$(CONFIG_ARCH_CANOE) += pcie_eom_canoe_phy.o
+eom_driver-$(CONFIG_ARCH_SERAPH) += pcie_eom_seraph_phy.o
+
