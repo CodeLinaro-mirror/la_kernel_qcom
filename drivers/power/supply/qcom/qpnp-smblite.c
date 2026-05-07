@@ -19,6 +19,7 @@
 #include <linux/iio/consumer.h>
 #include <linux/pmic-voter.h>
 #include <linux/suspend.h>
+#include <linux/thermal.h>
 #include <linux/usb/typec.h>
 #include <linux/nvmem-consumer.h>
 #include "smblite-reg.h"
@@ -151,6 +152,7 @@ struct smblite {
 	unsigned int		nchannels;
 	struct iio_channel	*iio_chans;
 	struct iio_chan_spec	*iio_chan_ids;
+	struct thermal_cooling_device *battery_tcd;
 };
 
 static int __debug_mask;
@@ -651,6 +653,89 @@ static int smblite_init_usb_psy(struct smblite *chip)
 		pr_err("Couldn't register USB power supply\n");
 		return PTR_ERR(chg->usb_psy);
 	}
+
+	return 0;
+}
+
+static int
+smblite_chg_get_max_charge_cntl_limit(struct thermal_cooling_device *tcd,
+				  unsigned long *state)
+{
+	struct smb_charger *chg = tcd->devdata;
+	union power_supply_propval val = { 0, };
+	int rc;
+
+	rc = smblite_lib_get_prop_system_temp_level_max(chg, &val);
+	if (rc < 0)
+		return rc;
+
+	*state = val.intval;
+	return 0;
+}
+
+static int
+smblite_chg_get_cur_charge_cntl_limit(struct thermal_cooling_device *tcd,
+				  unsigned long *state)
+{
+	struct smb_charger *chg = tcd->devdata;
+	union power_supply_propval val = { 0, };
+	int rc;
+
+	rc = smblite_lib_get_prop_system_temp_level(chg, &val);
+	if (rc < 0)
+		return rc;
+
+	*state = val.intval;
+	return 0;
+}
+
+static int
+smblite_set_cur_charge_cntl_limit(struct thermal_cooling_device *tcd,
+			  unsigned long state)
+{
+	struct smb_charger *chg = tcd->devdata;
+	union power_supply_propval val = { .intval = state };
+
+	return smblite_lib_set_prop_system_temp_level(chg, &val);
+}
+
+static const struct thermal_cooling_device_ops smblite_battery_tcd_ops = {
+	.get_max_state = smblite_chg_get_max_charge_cntl_limit,
+	.get_cur_state = smblite_chg_get_cur_charge_cntl_limit,
+	.set_cur_state = smblite_set_cur_charge_cntl_limit,
+};
+
+static int smblite_register_thermal_cooling_device(struct smblite *chip)
+{
+	struct smb_charger *chg = &chip->chg;
+	struct thermal_cooling_device *tcd;
+	int i, rc;
+
+	/* Skip registering thermal cooling device if thermal levels are not defined */
+	if (!chg->thermal_levels)
+		return 0;
+
+	if (chip->battery_tcd)
+		return 0;
+
+	for (i = 0; i < chg->thermal_levels - 1; i++) {
+		if (chg->thermal_mitigation[i + 1] > chg->thermal_mitigation[i]) {
+			dev_err(chg->dev, "Thermal levels should be in descending order\n");
+			return -EINVAL;
+		}
+	}
+
+	tcd = devm_thermal_of_cooling_device_register(chg->dev, chg->dev->of_node,
+					      (char *)chg->batt_psy->desc->name,
+					      chg, &smblite_battery_tcd_ops);
+	if (IS_ERR_OR_NULL(tcd)) {
+		rc = PTR_ERR_OR_ZERO(tcd);
+		dev_err(chg->dev,
+			"Failed to register thermal cooling device rc=%d\n", rc);
+		return rc;
+	}
+
+	chip->battery_tcd = tcd;
 
 	return 0;
 }
@@ -2262,6 +2347,12 @@ static int smblite_probe(struct platform_device *pdev)
 	rc = smblite_lib_get_prop_usb_present(chg, &pval);
 	if (rc < 0)
 		pr_err("Couldn't read usb present rc=%d\n", rc);
+
+	rc = smblite_register_thermal_cooling_device(chip);
+	if (rc < 0) {
+		pr_err("Couldn't register thermal cooling device rc=%d\n", rc);
+		goto disable_irq;
+	}
 
 	pr_info("%s charger probed successfully, charger_present=%d\n",
 			chg->name, pval.intval);
