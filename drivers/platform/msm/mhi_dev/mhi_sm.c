@@ -17,6 +17,9 @@
 #define MHI_SM_DBG(vf_id, fmt, args...) \
 	mhi_log(vf_id, MHI_MSG_DBG, fmt, ##args)
 
+#define MHI_SM_INFO(vf_id, fmt, args...) \
+	mhi_log(vf_id, MHI_MSG_INFO, fmt, ##args)
+
 #define MHI_SM_CONSOLE_DBG(vf_id, fmt, args...) \
 	mhi_log(vf_id, MHI_MSG_NOTICE, fmt, ##args)
 
@@ -1651,7 +1654,7 @@ void mhi_dev_sm_pcie_handler(struct ep_pcie_notify *notify)
 	MHI_SM_FUNC_ENTRY(mhi->vf_id);
 
 	event = notify->event;
-	MHI_SM_DBG(mhi->vf_id, "received: %s\n",
+	MHI_SM_INFO(mhi->vf_id, "received: %s\n",
 		mhi_sm_pcie_event_str(event));
 
 	dstate_change_evt = kzalloc(sizeof(*dstate_change_evt), GFP_ATOMIC);
