@@ -1055,7 +1055,6 @@ static int __init qcom_lpm_governor_init(void)
 
 	register_pm_notifier(&suspend_lpm_nb);
 
-	cpu_idle_poll_ctrl(false);
 	return 0;
 
 cpuhp_setup_fail:
