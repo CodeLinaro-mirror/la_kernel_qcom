@@ -41,3 +41,13 @@ def register_modules(registry):
             "drivers/regulator/debug-regulator",
         ],
     )
+
+    registry.register(
+        name = "drivers/power/supply/max1720x_battery",
+        out = "max1720x_battery.ko",
+        config = "CONFIG_BATTERY_MAX1720X",
+        srcs = [
+            # do not sort
+            "drivers/power/supply/max1720x_battery.c",
+        ],
+    )
