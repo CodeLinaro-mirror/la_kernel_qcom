@@ -15,6 +15,7 @@ autogvm_perf_config = {
     "CONFIG_ARM_SMMU_V3_QCOM_VIRTIO": "y",
     "CONFIG_BOOTMARKER_PROXY": "m",
     "CONFIG_CFG80211": "m",
+    "CONFIG_CFG80211_CRDA_SUPPORT": "n",
     "CONFIG_COMMON_CLK_QCOM": "m",
     "CONFIG_CRYPTO_DEV_QCOM_RNG": "m",
     "CONFIG_DWMAC_QCOM_ETHQOS": "m",
