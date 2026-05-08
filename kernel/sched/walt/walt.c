@@ -6189,8 +6189,6 @@ static void walt_init(struct work_struct *work)
 	topology_clear_scale_freq_source(SCALE_FREQ_SOURCE_ARCH, cpu_online_mask);
 
 	walt_stats_sysctl_init();
-	cpu_has_amu_support =  cpuid_feature_extract_unsigned_field(read_cpuid(ID_AA64PFR0_EL1),
-			ID_AA64PFR0_EL1_AMU_SHIFT) > 0;
 }
 
 static DECLARE_WORK(walt_init_work, walt_init);
