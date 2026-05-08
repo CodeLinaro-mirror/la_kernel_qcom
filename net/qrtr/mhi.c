@@ -11,15 +11,9 @@
 #include <linux/platform_device.h>
 #include <linux/skbuff.h>
 #include <linux/of.h>
-#include <linux/ipc_logging.h>
 #include <net/sock.h>
 
 #include "qrtr.h"
-#define QRTR_MHI_LOG_PAGE_CNT 8
-#define QRTR_MHI_INFO(ctx, x, ...)				\
-	ipc_log_string(ctx, x, ##__VA_ARGS__)
-
-static void *qrtr_mhi_ilc;
 
 struct qrtr_mhi_dev {
 	struct qrtr_endpoint ep;
@@ -61,9 +55,6 @@ static void qcom_mhi_qrtr_ul_callback(struct mhi_device *mhi_dev,
 	consume_skb(skb);
 
 	complete_all(&qdev->ringfull);
-	QRTR_MHI_INFO(qrtr_mhi_ilc,
-			"QRTR MHI UL callback: completed skb %p, bytes %zu\n",
-			skb, mhi_res->bytes_xferd);
 }
 
 static void qcom_mhi_qrtr_status_cb(struct mhi_device *mhi_dev,
@@ -122,8 +113,7 @@ static int qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 		kfree_skb(skb);
 		return -EIO;
 	}
-	QRTR_MHI_INFO(qrtr_mhi_ilc,
-		"QRTR MHI sending skb %p len %u\n", skb, skb->len);
+
 	do {
 		reinit_completion(&qdev->ringfull);
 		rc = __qcom_mhi_qrtr_send(ep, skb);
@@ -134,11 +124,7 @@ static int qcom_mhi_qrtr_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 				kfree_skb(skb);
 				return -EIO;
 			}
-			QRTR_MHI_INFO(qrtr_mhi_ilc,
-				"QRTR MHI ring full, waiting for UL callback\n");
 			wait_for_completion(&qdev->ringfull);
-			QRTR_MHI_INFO(qrtr_mhi_ilc,
-				"QRTR MHI resuming after UL callback\n");
 		}
 	} while (rc == -EAGAIN);
 
@@ -199,7 +185,6 @@ static int qcom_mhi_qrtr_probe(struct mhi_device *mhi_dev,
 	if (rc)
 		return rc;
 
-	QRTR_MHI_INFO(qrtr_mhi_ilc, "QRTR MHI endpoint registered\n");
 	/* start channels */
 	rc = mhi_prepare_for_transfer_autoqueue(mhi_dev);
 	if (rc) {
@@ -207,8 +192,6 @@ static int qcom_mhi_qrtr_probe(struct mhi_device *mhi_dev,
 		return rc;
 	}
 	complete_all(&qdev->prepared);
-	qrtr_mhi_ilc = ipc_log_context_create(QRTR_MHI_LOG_PAGE_CNT,
-						"qrtr_mhi", 0);
 
 	dev_dbg(qdev->dev, "Qualcomm MHI QRTR driver probed\n");
 
