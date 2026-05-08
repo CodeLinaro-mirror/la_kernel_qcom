@@ -5,6 +5,8 @@
 import argparse
 import errno
 import glob
+import hashlib
+import json
 import logging
 import os
 import re
@@ -26,6 +28,9 @@ if not os.path.exists(DEFAULT_CACHE_DIR):
    os.makedirs(DEFAULT_CACHE_DIR)
 
 os.environ['TEST_TMPDIR'] = DEFAULT_CACHE_DIR
+
+# Version token — bump whenever the query cache format changes
+_QUERY_CACHE_VERSION = 1
 
 class Target:
     def __init__(self, workspace, target, variant, bazel_label, out_dir=None):
@@ -82,6 +87,9 @@ class BazelBuilder:
                 logging.error("invalid target_variant combo \"%s_%s\"", t, v)
                 sys.exit(1)
 
+        self.output_user_root = "--output_user_root=" + os.path.join(cache_dir, "bazel-cache")
+        self.output_root = "--output_root=" + cache_dir
+        self.cache_dir = cache_dir
         self.bazel_cache = "--output_user_root=" + cache_dir
         self.target_list = target_list
         self.skip_list = skip_list
@@ -128,8 +136,84 @@ class BazelBuilder:
                 else:
                     raise e
 
+    def _build_files_hash(self):
+        """Hash every BUILD/bzl file under kernel_dir.
+
+        Any change that affects the dist-target set — a BUILD rule edit, a new
+        target added, or a target removed — will change this hash and force a
+        fresh Bazel query on the next run.
+        """
+        kernel_path = os.path.join(self.workspace, self.kernel_dir)
+        h = hashlib.sha256()
+        seen = set()
+        for root, dirs, files in os.walk(kernel_path, followlinks=True):
+            dirs.sort()
+            for fname in sorted(files):
+                if fname not in ("BUILD", "BUILD.bazel") and not fname.endswith(".bzl"):
+                    continue
+                fpath = os.path.join(root, fname)
+                real = os.path.realpath(fpath)
+                if real in seen:
+                    continue
+                seen.add(real)
+                rel = os.path.relpath(fpath, kernel_path)
+                h.update(rel.encode())
+                try:
+                    with open(fpath, "rb") as f:
+                        h.update(f.read())
+                except OSError:
+                    pass
+        # Also hash the extension bzl files (and their symlink targets)
+        # since they live outside kernel_dir and may be replaced or broken
+        for ext in (MSM_EXTENSIONS, ABL_EXTENSIONS):
+            ext_path = os.path.join(self.workspace, ext)
+            real_path = os.path.realpath(ext_path)
+            # Hash both path strings for cache sensitivity to symlink changes
+            for candidate in (ext_path, real_path):
+                rel = os.path.relpath(candidate, self.workspace)
+                h.update(rel.encode())
+            # Read file content only once (via the real path)
+            if real_path not in seen:
+                seen.add(real_path)
+                try:
+                    with open(real_path, "rb") as f:
+                        h.update(f.read())
+                except OSError:
+                    h.update(b"missing")
+        return h.hexdigest()[:16]
+
+    def _query_cache_key(self):
+        """Stable key over the inputs that determine the target list."""
+        content = "{}:{}:{}:{}:{}".format(
+            _QUERY_CACHE_VERSION,
+            self.kernel_dir,
+            ",".join("{}:{}".format(t, v) for t, v in sorted(self.target_list)),
+            ",".join(sorted(self.skip_list)),
+            self._build_files_hash(),
+        )
+        return hashlib.sha256(content.encode()).hexdigest()[:16]
+
     def get_build_targets(self):
-        """Query for build targets"""
+        """Query for build targets, using a disk cache to avoid repeated Bazel queries."""
+        cache_file = os.path.join(
+            self.cache_dir, "target_query_cache_{}.json".format(self._query_cache_key())
+        )
+
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file) as f:
+                    cached = json.load(f)
+                if cached.get("version") == _QUERY_CACHE_VERSION:
+                    logging.info("Using cached build targets (skipping Bazel query).")
+                    targets = [
+                        Target(t["workspace"], t["target"], t["variant"], t["bazel_label"])
+                        for t in cached["targets"]
+                    ]
+                    targets.sort()
+                    return targets
+            except Exception as e:
+                logging.debug("Query cache read failed (%s); re-running query.", e)
+
         logging.info("Querying build targets...")
 
         targets = []
@@ -208,6 +292,21 @@ class BazelBuilder:
         # Sort build targets by label string length to guarantee the base target goes
         # first when copying to output directory
         targets.sort()
+
+        # Persist the query result so subsequent runs skip this Bazel query entirely.
+        try:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            with open(cache_file, "w") as f:
+                json.dump({
+                    "version": _QUERY_CACHE_VERSION,
+                    "targets": [
+                        {"workspace": t.workspace, "target": t.target,
+                         "variant": t.variant, "bazel_label": t.bazel_label}
+                        for t in targets
+                    ],
+                }, f)
+        except Exception as e:
+            logging.debug("Query cache write failed (%s); continuing without cache.", e)
 
         return targets
 
