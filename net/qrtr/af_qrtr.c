@@ -25,8 +25,6 @@
 #include "qrtr.h"
 
 #define QRTR_LOG_PAGE_CNT 16
-#define QRTR_DEBUG_LOG_PAGE_CNT 16
-
 #define QRTR_INFO(ctx, x, ...)				\
 	ipc_log_string(ctx, x, ##__VA_ARGS__)
 
@@ -143,11 +141,6 @@ static unsigned int qrtr_wakeup_ms = CONFIG_QRTR_WAKEUP_MS;
 
 /* For local IPC logging context*/
 static void *qrtr_local_ilc;
-static void *qrtr_debug;
-
-#define MAX_QRTR_NODES 10
-struct qrtr_node *qrtr_node_ptrs[MAX_QRTR_NODES];
-int qrtr_node_count;
 
 /* for node ids */
 static RADIX_TREE(qrtr_nodes, GFP_ATOMIC);
@@ -917,7 +910,6 @@ static void qrtr_node_assign(struct qrtr_node *node, unsigned int nid)
 
 	if (node->nid == QRTR_EP_NID_AUTO)
 		node->nid = nid;
-	QRTR_INFO(qrtr_debug, "QRTR: node assigned id %u\n", nid);
 	spin_unlock_irqrestore(&qrtr_nodes_lock, flags);
 }
 
@@ -1287,9 +1279,6 @@ static int qrtr_sock_queue_ctrl_skb(struct qrtr_sock *ipc, struct sk_buff *skb)
 			reinit_completion(&ipc->rx_queue_has_space);
 			ipc->signal_on_recv = true;
 			spin_unlock_irqrestore(&ipc->signal_lock, flags);
-			QRTR_INFO(qrtr_debug,
-				  "%s: qrtr ctrl pkt dropped, waiting for space rc[%d]\n",
-				  __func__, rc);
 			wait_for_completion(&ipc->rx_queue_has_space);
 		} else {
 			return rc;
@@ -1308,11 +1297,9 @@ static void qrtr_sock_queue_skb(struct qrtr_node *node, struct sk_buff *skb,
 	/* Don't queue HELLO if control port already received */
 	if (cb->type == QRTR_TYPE_HELLO) {
 		if (atomic_read(&node->hello_rcvd)) {
-			pr_err("QRTR: Dropping Duplicate HELLO from node %d\n", node->nid);
 			kfree_skb(skb);
 			return;
 		}
-		pr_err("QRTR: Received HELLO from node %d\n", node->nid);
 		atomic_inc(&node->hello_rcvd);
 	}
 
@@ -1457,15 +1444,6 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 
 	down_write(&qrtr_epts_lock);
 	list_add(&node->item, &qrtr_all_epts);
-	if (qrtr_node_count < MAX_QRTR_NODES) {
-		for (i = 0; i < MAX_QRTR_NODES; i++) {
-			if (!qrtr_node_ptrs[i]) {
-				qrtr_node_ptrs[i] = node;
-				qrtr_node_count++;
-				break;
-			}
-		}
-	}
 	up_write(&qrtr_epts_lock);
 	ep->node = node;
 
@@ -1576,16 +1554,6 @@ void qrtr_endpoint_unregister(struct qrtr_endpoint *ep)
 		wake_up_interruptible_all(&flow->resume_tx);
 	}
 	mutex_unlock(&node->qrtr_tx_lock);
-
-	down_write(&qrtr_epts_lock);
-	for (int i = 0; i < MAX_QRTR_NODES; ++i) {
-		if (qrtr_node_ptrs[i] == node) {
-			qrtr_node_ptrs[i] = NULL;
-			qrtr_node_count--;
-			break;
-		}
-	}
-	up_write(&qrtr_epts_lock);
 
 	qrtr_node_release(node);
 	ep->node = NULL;
@@ -1969,12 +1937,8 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 
 	down_read(&qrtr_epts_lock);
 	list_for_each_entry(node, &qrtr_all_epts, item) {
-		if (node->nid == QRTR_EP_NID_AUTO && type != QRTR_TYPE_HELLO) {
-			QRTR_INFO(qrtr_debug,
-				  "BCAST ENQUEUE: skipping auto node for cmd:0x%x src[0x%x:0x%x]\n",
-				  type, from->sq_node, from->sq_port);
+		if (node->nid == QRTR_EP_NID_AUTO && type != QRTR_TYPE_HELLO)
 			continue;
-		}
 
 		skbn = pskb_copy(skb, GFP_KERNEL);
 		if (!skbn)
@@ -2198,8 +2162,6 @@ out:
 		if (ipc->signal_on_recv) {
 			complete_all(&ipc->rx_queue_has_space);
 			ipc->signal_on_recv = false;
-			QRTR_INFO(qrtr_debug,
-				  "QRTR CTRL socket rx space available signal sent\n");
 		}
 		spin_unlock_irqrestore(&ipc->signal_lock, lock_flags);
 	}
@@ -2482,11 +2444,6 @@ static int __init qrtr_proto_init(void)
 
 	qrtr_local_ilc = ipc_log_context_create(QRTR_LOG_PAGE_CNT,
 						"qrtr_local", 0);
-
-	qrtr_debug = ipc_log_context_create(QRTR_DEBUG_LOG_PAGE_CNT,
-					    "qrtr_debug", 0);
-	if (!qrtr_debug)
-		pr_err("Debug: QRTR debug ipc buff failure.\n");
 
 	rc = proto_register(&qrtr_proto, 1);
 	if (rc)
