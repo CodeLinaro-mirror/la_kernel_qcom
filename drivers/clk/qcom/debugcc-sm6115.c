@@ -444,8 +444,6 @@ static const char *const lpass_aon_cc_debug_mux_parent_names[] = {
 	"lpass_aon_cc_vs_vddcx_clk",
 	"lpass_aon_cc_vs_vddmx_clk",
 	"lpass_audio_cc_debug_mux",
-	"measure_only_lpass_aon_cc_q6_ahbm_clk",
-	"measure_only_lpass_aon_cc_q6_ahbs_clk",
 };
 
 static int lpass_aon_cc_debug_mux_sels[] = {
@@ -470,8 +468,6 @@ static int lpass_aon_cc_debug_mux_sels[] = {
 	0x23,		/* lpass_aon_cc_vs_vddcx_clk */
 	0x22,		/* lpass_aon_cc_vs_vddmx_clk */
 	0x3F,		/* lpass_audio_cc_debug_mux */
-	0x10,		/* measure_only_lpass_aon_cc_q6_ahbm_clk */
-	0x11,		/* measure_only_lpass_aon_cc_q6_ahbs_clk */
 };
 
 static struct clk_debug_mux lpass_aon_cc_debug_mux = {
@@ -638,22 +634,6 @@ static struct clk_dummy measure_only_gcc_lpass_sway_clk = {
 	},
 };
 
-static struct clk_dummy measure_only_lpass_aon_cc_q6_ahbm_clk = {
-	.rrate = 1000,
-	.hw.init = &(const struct clk_init_data){
-		.name = "measure_only_lpass_aon_cc_q6_ahbm_clk",
-		.ops = &clk_dummy_ops,
-	},
-};
-
-static struct clk_dummy measure_only_lpass_aon_cc_q6_ahbs_clk = {
-	.rrate = 1000,
-	.hw.init = &(const struct clk_init_data){
-		.name = "measure_only_lpass_aon_cc_q6_ahbs_clk",
-		.ops = &clk_dummy_ops,
-	},
-};
-
 struct clk_hw *debugcc_bengal_hws[] = {
 	&measure_only_cnoc_clk.hw,
 	&measure_only_ipa_2x_clk.hw,
@@ -662,8 +642,6 @@ struct clk_hw *debugcc_bengal_hws[] = {
 	&measure_only_perf_clk.hw,
 	&measure_only_pwclk_clk.hw,
 	&measure_only_gcc_lpass_sway_clk.hw,
-	&measure_only_lpass_aon_cc_q6_ahbm_clk.hw,
-	&measure_only_lpass_aon_cc_q6_ahbs_clk.hw,
 };
 
 static const struct of_device_id clk_debug_match_table[] = {
