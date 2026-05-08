@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
  * Copyright (c) 2019, 2020, Linaro Ltd.
- * Copyright (c) 2021-2024, 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/debugfs.h>
@@ -736,7 +736,7 @@ static int tsens_set_trips(struct thermal_zone_device *tz, int low, int high)
 	struct tsens_sensor *s = thermal_zone_device_priv(tz);
 	struct tsens_priv *priv = s->priv;
 	struct device *dev = priv->dev;
-	struct tsens_irq_data d;
+	struct tsens_irq_data d = {};
 	unsigned long flags;
 	int high_val, low_val, cl_high, cl_low;
 	u32 hw_id = s->hw_id;
