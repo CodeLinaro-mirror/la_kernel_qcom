@@ -12,8 +12,12 @@ import os
 import re
 import sys
 import subprocess
+import concurrent.futures
+import shutil
+import threading
 
 HOST_TARGETS = ["dtc"]
+PHONY_TARGETS = ["16k"]
 DEFAULT_SKIP_LIST = ["abi"]
 MSM_EXTENSIONS = "build/msm_kernel_extensions.bzl"
 ABL_EXTENSIONS = "build/abl_extensions.bzl"
@@ -30,6 +34,11 @@ os.environ['TEST_TMPDIR'] = DEFAULT_CACHE_DIR
 
 # Version token - bump whenever the query cache format changes
 _QUERY_CACHE_VERSION = 1
+
+# Max parallel workers for the dist phase.  Dist scripts just copy files from
+# the Bazel output tree, so this is I/O-bound; 8 is a safe default that keeps
+# throughput high without saturating the disk or /tmp.
+_MAX_DIST_WORKERS = 8
 
 class Target:
     def __init__(self, workspace, target, variant, bazel_label, out_dir=None):
@@ -354,30 +363,126 @@ class BazelBuilder:
         """Run "bazel build" on all targets in parallel"""
         self.bazel("build", targets, extra_options=self.user_opts)
 
+
+    def _get_bazel_bin(self):
+        """Return the bazel-bin path by querying the warm Bazel server (~1s)."""
+        try:
+            out = subprocess.check_output(
+                [self.bazel_bin, self.bazel_cache, "info", "bazel-bin"],
+                cwd=self.workspace, stderr=subprocess.DEVNULL,
+            )
+            return out.decode().strip()
+        except subprocess.CalledProcessError as e:
+            logging.error("bazel info bazel-bin failed: %s", e)
+            sys.exit(1)
+
     def run_targets(self, targets):
-        """Run "bazel run" on all dist targets serially (bazel run is single-target only)."""
+        """Run dist targets in parallel by executing the built scripts directly.
+
+        After bazel build the dist executables already exist under bazel-bin.
+        Running them directly avoids spawning N cold Bazel servers and the
+        I/O contention and /tmp exhaustion that caused the parallel-server
+        approach to regress build time by 3-15x.
+        """
+        bazel_bin = self._get_bazel_bin()
         opts_content = ("\n".join(self.user_opts) + "\n") if self.user_opts else "\n"
-        for target in targets:
-            # Set the output directory based on if it's a host target
+
+        def _get_out_dir(target):
             if any(
                 re.match(r"//{}:.*_{}_dist".format(self.kernel_dir, h), target.bazel_label)
-                    for h in HOST_TARGETS
+                for h in HOST_TARGETS
             ):
-                out_dir = target.get_out_dir("host")
-            else:
-                out_dir = target.get_out_dir("dist")
-            self.bazel(
-                "run",
-                [target],
-                extra_options=self.user_opts,
-                bazel_target_opts=["--dist_dir", out_dir]
+                return target.get_out_dir("host")
+            elif any(
+                re.match(r"//{}:.*{}.*_dist".format(self.kernel_dir, t), target.bazel_label)
+                for t in PHONY_TARGETS
+            ):
+                return os.path.join(target.get_out_dir() + "16k", "dist")
+            return target.get_out_dir("dist")
+
+        def _run_one(target):
+            pkg  = target.bazel_label[2:].split(":")[0]
+            name = target.bazel_label.split(":")[1]
+            script = os.path.join(bazel_bin, pkg, name)
+
+            if not os.path.isfile(script):
+                result = subprocess.run(
+                    ["find", bazel_bin, "-maxdepth", "5",
+                     "-name", name, "-type", "f"],
+                    capture_output=True, text=True,
+                )
+                found = result.stdout.strip().split("\n")[0]
+                if found and os.path.isfile(found):
+                    script = found
+
+            if not os.path.isfile(script):
+                return _run_via_bazel(target)
+
+            out_dir = _get_out_dir(target)
+            os.makedirs(out_dir, exist_ok=True)
+
+            env = os.environ.copy()
+            runfiles_dir = script + ".runfiles"
+            if os.path.isdir(runfiles_dir):
+                env["RUNFILES_DIR"] = runfiles_dir
+
+            with _dir_locks_lock:
+                if out_dir not in _dir_locks:
+                    _dir_locks[out_dir] = threading.Lock()
+                _out_dir_lock = _dir_locks[out_dir]
+            with _out_dir_lock:
+                proc = subprocess.Popen(
+                    [script, "--dist_dir", out_dir],
+                    cwd=bazel_bin, env=env,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                )
+                stdout, _ = proc.communicate()
+                for line in stdout.decode("utf-8", errors="replace").splitlines():
+                    logging.info(line)
+                return proc.returncode, target, out_dir
+
+        _bazel_lock = threading.Lock()
+        _dir_locks = {}
+        _dir_locks_lock = threading.Lock()
+
+        def _run_via_bazel(target):
+            """Warm-server bazel run for alias targets that have no own executable."""
+            out_dir = _get_out_dir(target)
+            os.makedirs(out_dir, exist_ok=True)
+            cmdline = (
+                [self.bazel_bin, self.bazel_cache, "run"]
+                + self.user_opts
+                + [target.bazel_label, "--", "--dist_dir", out_dir]
             )
+            with _bazel_lock:
+                proc = subprocess.Popen(
+                    cmdline, cwd=self.workspace,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                )
+                stdout, _ = proc.communicate()
+            for line in stdout.decode("utf-8", errors="replace").splitlines():
+                logging.info(line)
+            return proc.returncode, target, out_dir
+
+        workers = min(len(targets), _MAX_DIST_WORKERS)
+        logging.info(
+            "Running %d dist targets in parallel (%d workers).", len(targets), workers)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(_run_one, targets))
+
+        failed = [(t, rc) for rc, t, _ in results if rc != 0]
+        if failed:
+            for t, rc in failed:
+                logging.error("Dist target failed (rc=%d): %s", rc, t.bazel_label)
+            sys.exit(failed[0][1])
+
+        for _, target, out_dir in results:
             self.write_opts(out_dir, opts_content)
             if out_dir == target.get_out_dir("dist"):
                 self.setup_kbdev_symlinks(out_dir)
 
     def setup_kbdev_symlinks(self, out_dir):
-        """Setup k*.img sylinks needed for test builds"""
+        """Setup k*.img symlinks needed for test builds"""
         images = [
             "abl.elf", "boot.img", "dtbo.img",
             "init_boot.img", "super.img", "vendor_boot.img",
