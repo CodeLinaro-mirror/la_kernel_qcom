@@ -577,6 +577,16 @@ config CCI_UTIL
 	   performs LT7911 firmware upgrade when a new version of the firmware
 	   is available.
 
+config LONTIUM_LT7911UXC
+        tristate "Lontium LT7911UXC DP to CSI Bridge chip driver"
+        help
+	  The driver manages the chip power sequence (VDD regulator,
+	  reset, 1.1 V and 3.3 V enable GPIOs), handles DP Alt-Mode
+	  connect/disconnect events from the Qualcomm altmode-glink
+	  framework, and routes stream-state change interrupts (GPIO0)
+	  to a drain-loop work queue that reads video/audio metadata
+	  over the camera CCI bus and notifies userspace via uevents.
+
 source "drivers/misc/rtimd-i2c/Kconfig"
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
