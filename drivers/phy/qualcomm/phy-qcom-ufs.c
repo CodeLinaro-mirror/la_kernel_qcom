@@ -543,8 +543,15 @@ static int ufs_qcom_phy_enable_ref_clk(struct ufs_qcom_phy *phy)
 	}
 
 	/* qref clk signal is optional */
-	if (phy->qref_clk)
-		clk_prepare_enable(phy->qref_clk);
+	if (phy->qref_clk) {
+		ret = clk_prepare_enable(phy->qref_clk);
+		if (ret) {
+			dev_err(phy->dev, "%s: qref_clk enable failed %d\n",
+				 __func__, ret);
+			goto out_disable_ref_clk_pad;
+		}
+	}
+
 	/*
 	 * reference clock is propagated in a daisy-chained manner from
 	 * source to phy, so ungate them at each stage.
@@ -553,7 +560,7 @@ static int ufs_qcom_phy_enable_ref_clk(struct ufs_qcom_phy *phy)
 	if (ret) {
 		dev_err(phy->dev, "%s: ref_clk_src enable failed %d\n",
 				__func__, ret);
-		goto out_disable_ref_clk_pad;
+		goto out_disable_qref_clk;
 	}
 
 	/*
@@ -607,6 +614,10 @@ out_disable_parent:
 		clk_disable_unprepare(phy->ref_clk_parent);
 out_disable_src:
 	clk_disable_unprepare(phy->ref_clk_src);
+
+out_disable_qref_clk:
+	if (phy->qref_clk)
+		clk_disable_unprepare(phy->qref_clk);
 
 out_disable_ref_clk_pad:
 	if (phy->ref_clk_pad_en)

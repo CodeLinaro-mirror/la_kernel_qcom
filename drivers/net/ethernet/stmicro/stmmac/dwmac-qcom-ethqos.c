@@ -183,6 +183,51 @@ struct qcom_ethqos {
 	struct dev_pm_domain_list *pd_list;
 };
 
+static int phytype = BOARD_UNKNOWN;
+static int boardtype = PHY_UNKNOWN;
+
+#ifdef MODULE
+static char *board;
+module_param(board, charp, 0640);
+MODULE_PARM_DESC(board, "board type of the device");
+
+static char *enet;
+module_param(enet, charp, 0640);
+MODULE_PARM_DESC(enet, "enet value for the phy connection");
+#endif
+
+static int set_board_type(char *board_params)
+{
+	pr_info("qcom-ethqos: %s Board Param in command line: %s\n", __func__, board_params);
+	if (!strcmp(board_params, "Air"))
+		boardtype = AIR_BOARD;
+	else if (!strcmp(board_params, "Star"))
+		boardtype = STAR_BOARD;
+	else
+		return -EINVAL;
+	return 0;
+}
+
+static int set_phy_type(char *enet_params)
+{
+	pr_info("qcom-ethqos: %s Enet Param in command line: %s\n", __func__, enet_params);
+	if (!strcmp(enet_params, "1") || !strcmp(enet_params, "2"))
+		phytype = PHY_1G;
+	else if (!strcmp(enet_params, "3") || !strcmp(enet_params, "6"))
+		phytype = PHY_25G;
+	else if (!strcmp(enet_params, "4") || !strcmp(enet_params, "5"))
+		phytype = SWITCH;
+	else
+		return -EINVAL;
+	return 0;
+}
+
+#ifndef MODULE
+__setup("dwmac_qcom_eth.board=", set_board_type);
+
+__setup("dwmac_qcom_eth.enet=", set_phy_type);
+#endif
+
 static int rgmii_readl(struct qcom_ethqos *ethqos, unsigned int offset)
 {
 	return readl(ethqos->rgmii_base + offset);
@@ -1492,8 +1537,45 @@ static void ethqos_ptp_clk_freq_config(struct stmmac_priv *priv)
 	netdev_dbg(priv->dev, "PTP rate %d\n", plat_dat->clk_ptp_rate);
 }
 
-static void qcom_ethqos_hdma_cfg(struct plat_stmmacenet_data *plat)
+static void qcom_ethqos_get_queue_and_tc_from_vdma(struct stmmac_priv *priv,
+						   u32 vdma_ch,
+						   unsigned long *queue_mask,
+						   u32 *tc)
 {
+	u32 tx_queues_cnt = priv->plat->tx_queues_to_use;
+	int i;
+
+	*queue_mask = 0;
+
+	if (vdma_ch >= MTL_MAX_TX_QUEUES) {
+		netdev_err(priv->dev, "VDMA channel %u out of range\n", vdma_ch);
+		return;
+	}
+
+	/* Look up the TC this VDMA channel is mapped to */
+	*tc = priv->plat->dma_cfg->tx_vdma_map[vdma_ch];
+
+	/* Find all PDMA channels mapped to the same TC as the VDMA channel.
+	 * A TC can map to multiple PDMA channels (1:many). Since PDMA channels
+	 * and TX queues have a 1:1 correspondence, each matching PDMA channel
+	 * index is set as a bit in queue_mask.
+	 */
+	for (i = 0; i < tx_queues_cnt; i++) {
+		if (priv->plat->dma_cfg->tx_pdma_map[i] == *tc)
+			*queue_mask |= BIT(i);
+	}
+
+	if (!*queue_mask)
+		netdev_warn(priv->dev, "No PDMA channel found for VDMA %u (TC %u)\n",
+			    vdma_ch, *tc);
+}
+
+static int qcom_ethqos_hdma_cfg(struct platform_device *pdev, struct plat_stmmacenet_data *plat)
+{
+	struct device_node *np = pdev->dev.of_node;
+	u32 map[STMMAC_CH_MAX];
+	int count, i;
+
 	plat->dma_cfg->orrq = 15;
 	plat->dma_cfg->owrq = 15;
 	plat->dma_cfg->txdcsz = 4;
@@ -1501,33 +1583,51 @@ static void qcom_ethqos_hdma_cfg(struct plat_stmmacenet_data *plat)
 	plat->dma_cfg->rxdcsz = 4;
 	plat->dma_cfg->rdps = 1;
 
-	plat->dma_cfg->tx_pdma_custom_map = true;
-	plat->dma_cfg->tx_pdma_map[0] = 0;
-	plat->dma_cfg->tx_pdma_map[1] = 1;
-	plat->dma_cfg->tx_pdma_map[2] = 2;
-	plat->dma_cfg->tx_pdma_map[3] = 3;
-	plat->dma_cfg->tx_pdma_map[4] = 4;
-	plat->dma_cfg->tx_pdma_map[5] = 5;
-	plat->dma_cfg->tx_pdma_map[6] = 5;
-	plat->dma_cfg->tx_pdma_map[7] = 6;
-	plat->dma_cfg->tx_pdma_map[8] = 6;
-	plat->dma_cfg->tx_pdma_map[9] = 6;
-	plat->dma_cfg->tx_pdma_map[10] = 7;
-	plat->dma_cfg->tx_pdma_map[11] = 7;
+	count = of_property_count_u32_elems(np, "qcom,tx-pdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,tx-pdma-map", map, count)) {
+		plat->dma_cfg->tx_pdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->tx_pdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Tx PDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
 
-	plat->dma_cfg->rx_pdma_custom_map = true;
-	plat->dma_cfg->rx_pdma_map[0] = 0;
-	plat->dma_cfg->rx_pdma_map[1] = 1;
-	plat->dma_cfg->rx_pdma_map[2] = 2;
-	plat->dma_cfg->rx_pdma_map[3] = 3;
-	plat->dma_cfg->rx_pdma_map[4] = 4;
-	plat->dma_cfg->rx_pdma_map[5] = 5;
-	plat->dma_cfg->rx_pdma_map[6] = 5;
-	plat->dma_cfg->rx_pdma_map[7] = 6;
-	plat->dma_cfg->rx_pdma_map[8] = 6;
-	plat->dma_cfg->rx_pdma_map[9] = 6;
-	plat->dma_cfg->rx_pdma_map[10] = 7;
-	plat->dma_cfg->rx_pdma_map[11] = 7;
+	count = of_property_count_u32_elems(np, "qcom,rx-pdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,rx-pdma-map", map, count)) {
+		plat->dma_cfg->rx_pdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->rx_pdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Rx PDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	count = of_property_count_u32_elems(np, "qcom,tx-vdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,tx-vdma-map", map, count)) {
+		plat->dma_cfg->tx_vdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->tx_vdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Tx VDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	count = of_property_count_u32_elems(np, "qcom,rx-vdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,rx-vdma-map", map, count)) {
+		plat->dma_cfg->rx_vdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->rx_vdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Rx VDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static struct phylink_pcs *ethqos_select_xpcs(struct stmmac_priv *priv,
@@ -1558,6 +1658,125 @@ static void ethqos_xpcs_safety_stats(struct stmmac_priv *priv, unsigned long *pt
 {
 	if (priv->sfty_irq > 0)
 		qcom_xpcs_get_err_stats(priv->hw->phylink_pcs, ptr);
+}
+
+static int qcom_ethqos_update_dt_string(struct device_node *node, const char *name,
+					const char *value)
+{
+	struct property *prop;
+	int ret = 0;
+
+	prop = kzalloc(sizeof(*prop), GFP_KERNEL);
+	if (!prop)
+		return -ENOMEM;
+
+	prop->name = kstrdup(name, GFP_KERNEL);
+	if (!prop->name) {
+		ret = -ENOMEM;
+		goto err_name;
+	}
+
+	prop->value = kstrdup(value, GFP_KERNEL);
+	if (!prop->value) {
+		ret = -ENOMEM;
+		goto err_value;
+	}
+
+	prop->length = strlen(value) + 1;
+
+	if (of_update_property(node, prop)) {
+		ret = -ENOMEM;
+		goto err_update;
+	}
+
+	return ret;
+err_update:
+	kfree(prop->value);
+err_value:
+	kfree(prop->name);
+err_name:
+	kfree(prop);
+	return ret;
+}
+
+static int qcom_ethqos_set_fixed_link(struct platform_device *pdev,
+				      struct plat_stmmacenet_data *plat)
+{
+	struct device_node *fixed_link_node;
+	struct device *dev = &pdev->dev;
+	int ret = 0;
+
+	fixed_link_node = of_get_child_by_name(dev->of_node, "fixed-link");
+	if (!fixed_link_node)
+		return 0;
+
+	ret = qcom_ethqos_update_dt_string(fixed_link_node, "status", "okay");
+	if (ret == 0) {
+		dev_info(dev, "qcom-ethqos: %s Fixed-link forced to 'okay'\n", __func__);
+
+		/*
+		 * As we are using fixed-link there is no need of MDIO bus data.
+		 * must use devm_kfree because it was allocated with devm_kzalloc.
+		 */
+		if (plat->mdio_bus_data) {
+			devm_kfree(dev, plat->mdio_bus_data);
+			plat->mdio_bus_data = NULL;
+			dev_info(dev, "qcom-ethqos: %s mdio_bus_data freed\n", __func__);
+		}
+	} else {
+		dev_err(dev, "qcom-ethqos: Failed to update fixed-link status\n");
+	}
+
+	of_node_put(fixed_link_node);
+	return ret;
+}
+
+static int qcom_ethqos_check_mdio_and_fix_link(struct platform_device *pdev,
+					       struct plat_stmmacenet_data *plat)
+{
+	struct device *dev = &pdev->dev;
+	struct device_node *fixed_link_node;
+
+	plat->board_type = boardtype;
+	plat->phy_type = phytype;
+	plat->mdio_node = NULL;
+
+	if (phytype == SWITCH) {
+		dev_info(dev, "Switch detected, Enabling fixed-link\n");
+		return qcom_ethqos_set_fixed_link(pdev, plat);
+	}
+
+	fixed_link_node = of_get_child_by_name(dev->of_node, "fixed-link");
+	if (fixed_link_node) {
+		if (of_device_is_available(fixed_link_node)) {
+			dev_info(dev, "Fixed link already enabled, not using MDIO\n");
+
+			if (plat->mdio_bus_data) {
+				devm_kfree(dev, plat->mdio_bus_data);
+				plat->mdio_bus_data = NULL;
+			}
+			of_node_put(fixed_link_node);
+			return 0;
+		}
+
+		of_node_put(fixed_link_node);
+	}
+
+	/*
+	 * If we are here, we are in a PHY or UNKNOWN case without a fixed-link.
+	 * Ensure mdio_bus_data is allocated for MDIO bus registration.
+	 */
+	if (!plat->mdio_bus_data) {
+		plat->mdio_bus_data = devm_kzalloc(dev,
+						   sizeof(*plat->mdio_bus_data),
+						   GFP_KERNEL);
+		if (!plat->mdio_bus_data)
+			return -ENOMEM;
+
+		plat->mdio_bus_data->needs_reset = true;
+	}
+
+	return 0;
 }
 
 static int qcom_ethqos_hib_restore(struct device *dev)
@@ -1704,6 +1923,14 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	struct qcom_ethqos *ethqos;
 	int ret, i;
 
+#ifdef MODULE
+	if (enet)
+		ret = set_phy_type(enet);
+
+	if (board)
+		ret = set_board_type(board);
+#endif
+
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return dev_err_probe(dev, ret,
@@ -1752,6 +1979,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ethqos->pdev = pdev;
 	ethqos->speed = SPEED_1000;
+
+	qcom_ethqos_check_mdio_and_fix_link(pdev, plat_dat);
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
 	if (IS_ERR(ethqos->rgmii_base))
@@ -1812,15 +2041,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		if (IS_ERR(ethqos->link_clk))
 			return dev_err_probe(dev, PTR_ERR(ethqos->link_clk),
 						 "Failed to get link_clk\n");
+
+		ret = ethqos_clks_config(ethqos, true);
+		if (ret)
+			return ret;
+
+		ret = devm_add_action_or_reset(dev, ethqos_clks_disable, ethqos);
+		if (ret)
+			return ret;
 	}
-
-	ret = ethqos_clks_config(ethqos, true);
-	if (ret)
-		return ret;
-
-	ret = devm_add_action_or_reset(dev, ethqos_clks_disable, ethqos);
-	if (ret)
-		return ret;
 
 	ethqos->serdes_phy = devm_phy_optional_get(dev, "serdes");
 	if (IS_ERR(ethqos->serdes_phy))
@@ -1829,7 +2058,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ethqos->serdes_speed = SPEED_1000;
 	ethqos_update_link_clk(ethqos, SPEED_1000);
-	ethqos_set_func_clk_en(ethqos);
+	if (!ethqos->use_domains)
+		ethqos_set_func_clk_en(ethqos);
 
 	plat_dat->bsp_priv = ethqos;
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
@@ -1849,8 +2079,13 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->dwxgmac_addrs = &data->dwxgmac_addrs;
 		plat_dat->has_hdma = data->has_hdma;
 		plat_dat->insert_ts_pktid = true;
-		if (plat_dat->has_hdma)
-			qcom_ethqos_hdma_cfg(plat_dat);
+		if (plat_dat->has_hdma) {
+			ret = qcom_ethqos_hdma_cfg(pdev, plat_dat);
+			if (ret)
+				return ret;
+			plat_dat->get_queue_and_tc_from_vdma =
+				qcom_ethqos_get_queue_and_tc_from_vdma;
+		}
 	}
 	if (of_property_present(dev->of_node, "qcom-xpcs-handle")) {
 		plat_dat->select_pcs = ethqos_select_xpcs;
@@ -1871,6 +2106,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->flags |= data->has_flags;
 	if (data->dma_addr_width)
 		plat_dat->host_dma_width = data->dma_addr_width;
+
+	if (stmmac_res.tx_rx_irq[0] > 0 ||
+	    (stmmac_res.rx_irq[0] > 0 && stmmac_res.tx_irq[0] > 0))
+		plat_dat->flags |= STMMAC_FLAG_MULTI_IRQ_EN;
 
 	if (ethqos->serdes_phy) {
 		plat_dat->serdes_powerup = qcom_ethqos_serdes_powerup;

@@ -22,8 +22,9 @@ enum bridge_owner {
 };
 
 int32_t qcom_tzmem_query(phys_addr_t paddr);
-int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 vmid,
-						enum bridge_owner owner, u64 *handle);
+int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 *ns_vmid_list,
+					   u32 *ns_vm_perm_list, u32 ns_vmid_num, u32 tz_perm,
+					   enum bridge_owner owner, u64 *handle);
 int qcom_tzmem_pm_freeze(void);
 int qcom_tzmem_pm_restore(void);
 int qcom_tzmem_pm_thaw(void);
@@ -33,8 +34,8 @@ static inline int32_t qcom_tzmem_query(phys_addr_t paddr)
 	return 0;
 }
 static inline int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size,
-							 u32 vmid, enum bridge_owner owner,
-							 u64 *handle)
+		u32 *ns_vmid_list, u32 *ns_vm_perm_list, u32 ns_vmid_num, u32 tz_perm,
+		enum bridge_owner owner, u64 *handle)
 {
 	return 0;
 }

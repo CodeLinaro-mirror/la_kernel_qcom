@@ -3,6 +3,7 @@
 qcom-scm.ko
 arm_smmu.ko
 arm_smmu_v3.ko
+gic_intr_routing.ko
 smem.ko
 qcom_iommu_util.ko
 qcom_iommu_debug.ko
@@ -37,6 +38,8 @@ gh_virt_wdt.ko
 nvmem_qfprom.ko
 debug_symbol.ko
 minidump.ko
+qcom_logbuf_vendor_hooks.ko
+qcom_logbuf_boot_log.ko
 qcom-dcvs.ko
 memory_dump_v2.ko
 dcc_v2.ko
@@ -102,3 +105,5 @@ qcom_dpd_proxy_iommu.ko
 qcom_scm_smci.ko
 pkvm-geni.ko
 pkvm-smc-filter.ko
+wcd_usbss_i2c.ko
+pkvm-secure-memory-manager.ko

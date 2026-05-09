@@ -64,8 +64,8 @@ void __fetch__async_reqs(struct si_object_invoke_ctx *oic);
 
 #ifdef CONFIG_QCOM_SI_CORE_MEM_FFA
 
-int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle);
-int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle);
+int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, u8 attrs, uint64_t *ffa_handle);
+int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, u8 attrs, uint64_t *ffa_handle);
 int qtee_ffa_mem_reclaim(uint64_t ffa_handle);
 
 int qtee_ffa_shm_alloc(size_t in_size, size_t out_size,
@@ -81,13 +81,13 @@ void si_core_ffa_driver_unregister(void);
 #else
 
 static inline int qtee_ffa_mem_share(struct sg_table *sgt,
-				     uint64_t tag, uint64_t *ffa_handle)
+				     uint64_t tag, u8 attrs, uint64_t *ffa_handle)
 {
 	return -EOPNOTSUPP;
 }
 
 static inline int qtee_ffa_mem_lend(struct sg_table *sgt,
-				    uint64_t tag, uint64_t *ffa_handle)
+				    uint64_t tag, u8 attrs, uint64_t *ffa_handle)
 {
 	return -EOPNOTSUPP;
 }

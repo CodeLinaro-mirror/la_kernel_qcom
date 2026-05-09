@@ -188,6 +188,8 @@ static const struct pmic_pon_trigger_mapping pmic_pon_pon_trigger_map[] = {
 	/* PMX75 USB PON trigger */
 	{0x18A0, "USB_CHARGER"},
 	{0x18C0, "PMIC_SID1_GPIO5"},
+	{0x18F0, "PON_PBS_CBLPWR1_RSN"},
+	{0x1910, "PON_PBS_CBLPWR2_RSN"},
 	/* PMI632 USB PON trigger */
 	{0x2763, "USB_CHARGER"},
 	/* PM8350B USB PON trigger */
@@ -196,6 +198,7 @@ static const struct pmic_pon_trigger_mapping pmic_pon_pon_trigger_map[] = {
 	/* PM7550BA USB PON trigger */
 	{0x71C2, "USB_CHARGER"},
 	/* PM7250B USB PON trigger */
+	{0x81C2, "PON_PBS_SYS_OK_RSN_PORT2"},
 	{0x8732, "USB_CHARGER"},
 };
 
@@ -208,6 +211,7 @@ static const struct pmic_pon_trigger_mapping pmic_pon_reset_trigger_map[] = {
 	{0x0085, "SW_RESET"},
 	{0x0086, "RESIN_N_DEBOUNCE"},
 	{0x0087, "KPDPWR_N_DEBOUNCE"},
+	{0x01A4, "PON_PBS_LANDO_OCP_RSN"},
 	{0x21E3, "PMIC_SID2_BCL_ALARM"},
 	{0x31F5, "PMIC_SID3_BCL_ALARM"},
 	{0x11D0, "PMIC_SID1_OCP"},

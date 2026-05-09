@@ -250,3 +250,17 @@ def register_modules(registry):
             "drivers/soc/qcom/dcvs/qcom-dcvs",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/dcvs/cpufreq_stats_scmi_v2",
+        out = "cpufreq_stats_scmi_v2.ko",
+        config = "CONFIG_QTI_CPUFREQ_STATS_SCMI_V2",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/cpufreq_stats_scmi_v2.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/dcvs/qcom_scmi_client",
+        ],
+    )

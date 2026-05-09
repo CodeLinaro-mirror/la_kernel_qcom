@@ -616,18 +616,6 @@ int walt_giant_tasks(int cpu)
 	return wrq->walt_stats.nr_giant_tasks;
 }
 
-bool trailblazer_on_prime(void)
-{
-	int cpu;
-
-	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
-		if (walt_trailblazer_tasks(cpu))
-			return true;
-	}
-
-	return false;
-}
-
 static void clear_walt_request(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
@@ -1262,9 +1250,31 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 	long pstate;
 	struct walt_rq *src_wrq = &per_cpu(walt_rq, cpu_of(src_rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
-	bool double_migrate = false;
+	bool double_migrate = false, in_proxy_migration;
 
-	if (!p->on_rq && READ_ONCE(p->__state) != TASK_WAKING) {
+	/*
+	 * IDLE task during it's initialization migrates to it's target CPU skip migration
+	 * accounting for idle task.
+	 */
+	if (cpu_rq(task_cpu(p))->idle == p)
+		return;
+
+	/*
+	 * skip migration accounting for task which are not yet initialized and configured by
+	 * WALT
+	 */
+	if (!wts->window_start)
+		return;
+
+	pstate = READ_ONCE(p->__state);
+	if (!(pstate == TASK_WAKING) && !READ_ONCE(p->on_rq) && !task_is_blocked(p))
+		return;
+
+	/*
+	 * only BUG if task is not blocked, a blocked task can migrate to owner's CPU
+	 * and in that case task's state is SLEEP and on_rq can be 0 during migration.
+	 */
+	if (!task_is_blocked(p) && !p->on_rq && READ_ONCE(p->__state) != TASK_WAKING) {
 		WALT_BUG(WALT_BUG_WALT, p,
 				"CPU%d: %s task %s(%d)'s state=0x%x src_rq=%d p->on_rq=%d",
 				raw_smp_processor_id(), __func__, p->comm, p->pid,
@@ -1273,9 +1283,8 @@ static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
 		return;
 	}
 
-	pstate = READ_ONCE(p->__state);
-
-	if (pstate == TASK_WAKING)
+	in_proxy_migration = !READ_ONCE(p->on_rq) && task_is_blocked(p);
+	if (pstate == TASK_WAKING || in_proxy_migration)
 		raw_spin_rq_lock(src_rq);
 
 	walt_lockdep_assert_rq(src_rq, p);
@@ -1404,7 +1413,7 @@ skip_src_rq_sub:
 
 	wts->prev_cpu = task_cpu(p);
 
-	if (pstate == TASK_WAKING)
+	if (pstate == TASK_WAKING || in_proxy_migration)
 		raw_spin_rq_unlock(src_rq);
 }
 
@@ -5143,13 +5152,19 @@ static void android_rvh_sched_cpu_dying(void *unused, int cpu)
 
 static void android_rvh_set_task_cpu(void *unused, struct task_struct *p, unsigned int new_cpu)
 {
+	struct walt_task_struct *wts = (struct walt_task_struct *)android_task_vendor_data(p);
+
 	if (unlikely(walt_disabled))
+		return;
+
+	if (unlikely(!wts->mark_start))
 		return;
 
 	get_entry_instr(SET_TASK_CPU);
 	migrate_busy_time_subtraction(p, (int) new_cpu);
 
-	if (!cpumask_test_cpu(new_cpu, p->cpus_ptr))
+	/* a blocked task can move to owner's cpu(which may not be in it's affinity mask) */
+	if (!task_is_blocked(p) && !cpumask_test_cpu(new_cpu, p->cpus_ptr))
 		WALT_BUG(WALT_BUG_WALT, p, "selecting unaffined cpu=%d comm=%s(%d) affinity=0x%lx",
 			 new_cpu, p->comm, p->pid, (*(cpumask_bits(p->cpus_ptr))));
 
@@ -6026,7 +6041,7 @@ static void register_walt_hooks(void)
 	register_trace_android_rvh_update_cpu_capacity(android_rvh_update_cpu_capacity, NULL);
 	register_trace_android_rvh_sched_cpu_starting(android_rvh_sched_cpu_starting, NULL);
 	register_trace_android_rvh_sched_cpu_dying(android_rvh_sched_cpu_dying, NULL);
-	register_trace_android_rvh_set_task_cpu(android_rvh_set_task_cpu, NULL);
+	register_trace_android_rvh___set_task_cpu(android_rvh_set_task_cpu, NULL);
 	register_trace_android_rvh_new_task_stats(android_rvh_new_task_stats, NULL);
 	register_trace_android_rvh_account_irq(android_rvh_account_irq, NULL);
 	register_trace_android_rvh_flush_task(android_rvh_flush_task, NULL);

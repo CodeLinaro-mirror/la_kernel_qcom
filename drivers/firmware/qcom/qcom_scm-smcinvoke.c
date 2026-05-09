@@ -9,6 +9,11 @@
 
 #include "qcom_scm_smcinvoke.h"
 
+static struct si_object *g_gpu_instance;
+static struct si_object *g_dcvs_instance;
+static DEFINE_MUTEX(g_gpu_mutex);
+static DEFINE_MUTEX(g_dcvs_mutex);
+
 bool qcom_scm_pas_supported(u32 peripheral)
 {
 	struct si_object *pil_image_service = NULL;
@@ -223,6 +228,125 @@ void qcom_scm_pas_store_memoryinfo(u32 peripheral, phys_addr_t addr,
 }
 EXPORT_SYMBOL_GPL(qcom_scm_pas_store_memoryinfo);
 
+static int qcom_smci_get_instance(struct si_object *service, uint32_t instance_id,
+				  unsigned long op, struct si_object **instance)
+{
+	struct si_arg args[3] = { 0 };
+	int ret, result;
+
+	args[0].b = (struct si_buffer) { .addr = &instance_id, .size = sizeof(instance_id) };
+	args[0].type = SI_AT_IB;
+	args[1].type = SI_AT_OO;
+	args[2].type = SI_AT_END;
+
+	ret = qcom_smci_call(service, op, args, &result);
+	if (ret)
+		return ret;
+
+	if (result == 0 && args[1].o != NULL_SI_OBJECT) {
+		*instance = args[1].o;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static struct si_object *get_gpu_instance(u32 instance_id)
+{
+	struct si_object *kgsl_service = NULL;
+	int ret;
+
+	if (instance_id != 0)
+		return ERR_PTR(-EINVAL);
+
+	mutex_lock(&g_gpu_mutex);
+	if (!g_gpu_instance) {
+		ret = qcom_smci_init_client_service(SMCI_GPUOBJECT_UID, &kgsl_service);
+		if (ret) {
+			mutex_unlock(&g_gpu_mutex);
+			return ERR_PTR(ret);
+		}
+
+		ret = qcom_smci_get_instance(kgsl_service, instance_id,
+					     SMCI_GPU_OP_INIT_INSTANCE,
+					     &g_gpu_instance);
+		if (ret) {
+			mutex_unlock(&g_gpu_mutex);
+			return ERR_PTR(ret);
+		}
+	}
+	mutex_unlock(&g_gpu_mutex);
+
+	return g_gpu_instance;
+}
+
+static struct si_object *get_dcvs_instance(u32 instance_id)
+{
+	struct si_object *dcvs_service = NULL;
+	int ret;
+
+	if (instance_id != 0)
+		return ERR_PTR(-EINVAL);
+
+	mutex_lock(&g_dcvs_mutex);
+	if (!g_dcvs_instance) {
+		ret = qcom_smci_init_client_service(SMCI_DCVSOBJECT_UID, &dcvs_service);
+		if (ret) {
+			mutex_unlock(&g_dcvs_mutex);
+			return ERR_PTR(ret);
+		}
+
+		ret = qcom_smci_get_instance(dcvs_service, instance_id,
+					     SMCI_DCVS_OP_INIT_INSTANCE,
+					     &g_dcvs_instance);
+		if (ret) {
+			mutex_unlock(&g_dcvs_mutex);
+			return ERR_PTR(ret);
+		}
+	}
+	mutex_unlock(&g_dcvs_mutex);
+
+	return g_dcvs_instance;
+}
+
+int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
+				   u32 cp_nonpixel_start,
+				   u32 cp_nonpixel_size)
+{
+	struct si_object *video_var_service = NULL;
+	int ret = 0, result = 0;
+
+	struct {
+		uint32_t m_cp_start;
+		uint32_t m_cp_size;
+		uint32_t m_nonpixel_start;
+		uint32_t m_nonpixel_size;
+	} __packed buf = {cp_start, cp_size, cp_nonpixel_start, cp_nonpixel_size};
+
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &buf, .size = sizeof(buf) },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	ret = qcom_smci_init_client_service(SMCI_VIDEOVAROBJECT_UID, &video_var_service);
+	if (ret) {
+		pr_err("Failed to initialize video var service: %d\n", ret);
+		return ret;
+	}
+
+	ret = qcom_smci_call(video_var_service, SMCI_SET_VIDEO_VAR, args, &result);
+	if (ret)
+		pr_err("Setting video vars failed with result %d: ret %d\n", result, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_mem_protect_video_var);
+
 int qcom_scm_assign_dump_table_region(bool __always_unused is_assign,
 				      phys_addr_t addr, size_t size)
 {
@@ -256,3 +380,268 @@ int qcom_scm_assign_dump_table_region(bool __always_unused is_assign,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_assign_dump_table_region);
+
+int qcom_scm_kgsl_dcvs_tuning(u32 mingap, u32 penalty, u32 numbusy)
+{
+	struct si_object *dcvs_instance = NULL;
+	int ret, result = 0;
+
+	struct tuning_data {
+		uint32_t m_req_mingap;
+		uint32_t m_req_penality;
+		uint32_t m_req_numbusy;
+	} __packed buf;
+
+	buf.m_req_mingap = mingap;
+	buf.m_req_penality = penalty;
+	buf.m_req_numbusy = numbusy;
+
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &buf, .size = sizeof(buf) },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	dcvs_instance = get_dcvs_instance(0);
+	if (IS_ERR(dcvs_instance))
+		return PTR_ERR(dcvs_instance);
+
+	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_TUNING, args, &result);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_dcvs_tuning);
+
+int _dcvs_update(int level, s64 total_time, s64 busy_time, int context_count)
+{
+	struct si_object *dcvs_instance = NULL;
+	int ret, result = 0, scale_up = 0;
+
+	struct dcvs_update {
+		uint32_t m_active_pwrlevel;
+		uint32_t m_total;
+		uint32_t m_inBusy;
+		uint32_t m_context_count;
+	} __packed buf;
+
+	buf.m_active_pwrlevel = level;
+	buf.m_total = total_time;
+	buf.m_inBusy = busy_time;
+	buf.m_context_count = context_count;
+
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &buf, .size = sizeof(buf) },
+		},
+		{
+			.type = SI_AT_OB,
+			.b = { .addr = &scale_up, .size = sizeof(scale_up) },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	dcvs_instance = get_dcvs_instance(0);
+	if (IS_ERR(dcvs_instance))
+		return PTR_ERR(dcvs_instance);
+
+	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_UPDATE, args, &result);
+	if (ret) {
+		pr_err("DCVS update failed: %d\n", ret);
+		return ret;
+	}
+
+	return scale_up;
+}
+
+int qcom_scm_dcvs_update_v2(int level, s64 total_time, s64 busy_time)
+{
+	/* sending an invalid value, for update_v2 we don't use context_count */
+	return _dcvs_update(level, total_time, busy_time, 0);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update_v2);
+
+int qcom_scm_dcvs_update_ca_v2(int level, s64 total_time, s64 busy_time,
+			       int context_count)
+{
+	return _dcvs_update(level, total_time, busy_time, context_count);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update_ca_v2);
+
+/*
+ * qcom_scm_dcvs_reset()
+ */
+int qcom_scm_dcvs_reset(void)
+{
+	struct si_object *dcvs_instance = NULL;
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_END,
+		}
+	};
+	int result = 0;
+
+	dcvs_instance = get_dcvs_instance(0);
+	if (IS_ERR(dcvs_instance))
+		return PTR_ERR(dcvs_instance);
+
+	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_RESET, args, &result);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_reset);
+
+int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
+{
+	struct si_object *dcvs_instance = NULL;
+	int result = 0;
+	void *virt_src = NULL;
+	struct dcvs_init_ca {
+		uint32_t ctxt_aware_target_pwrlevel;
+		uint32_t ctxt_aware_busy_penalty;
+	} __packed cmd_buf = { 0 };
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &cmd_buf, .size = sizeof(cmd_buf) },
+		},
+		{
+			.type = SI_AT_END,
+		},
+	};
+
+	if (size > sizeof(cmd_buf))
+		return -EINVAL;
+
+	virt_src = memremap(addr, size, MEMREMAP_WB);
+	if (!virt_src)
+		return -ENOMEM;
+
+	memcpy(&cmd_buf, virt_src, size);
+	memunmap(virt_src);
+
+	dcvs_instance = get_dcvs_instance(0);
+	if (IS_ERR(dcvs_instance))
+		return PTR_ERR(dcvs_instance);
+
+	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT_CA, args, &result);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_ca_v2);
+
+int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
+{
+	struct si_object *dcvs_instance = NULL;
+	int result = 0;
+	void *virt_src = NULL;
+	uint32_t size_val = size;
+	struct dcvs_req {
+		uint32_t nlevels;
+		uint32_t freq[32];
+	} __packed cmd_buf = { 0 };
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &cmd_buf, .size = sizeof(cmd_buf) },
+		},
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &size_val, .size = sizeof(size_val) },
+		},
+		{
+			.type = SI_AT_OB,
+			.b = { .addr = version, .size = sizeof(*version) },
+		},
+		{
+			.type = SI_AT_END,
+		},
+	};
+
+	if (size > sizeof(cmd_buf))
+		return -EINVAL;
+
+	virt_src = memremap(addr, size, MEMREMAP_WB);
+	if (!virt_src)
+		return -ENOMEM;
+
+	memcpy(&cmd_buf, virt_src, size);
+	memunmap(virt_src);
+
+	/*
+	 * We are re-initializing, so even if the instance exists, we
+	 * want to call INIT on it to update the params.
+	 * get_dcvs_instance(0) will create it if it doesn't exist.
+	 */
+	dcvs_instance = get_dcvs_instance(0);
+	if (IS_ERR(dcvs_instance))
+		return PTR_ERR(dcvs_instance);
+
+	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT, args, &result);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_v2);
+
+int qcom_scm_dcvs_update(int level, s64 total_time, s64 busy_time)
+{
+	return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_update);
+
+bool qcom_scm_dcvs_core_available(void)
+{
+	struct si_object *dcvs_service = NULL;
+
+	/*
+	 * qcom_scmci_init_client_serive() return 0 if the service is there,
+	 * So !0 will be become True.
+	 */
+	return !qcom_smci_init_client_service(SMCI_DCVSOBJECT_UID, &dcvs_service);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_core_available);
+
+/*
+ * qcom_scm_dcvs_ca_available() - check if context aware DCVS operations are
+ *				  available
+ */
+bool qcom_scm_dcvs_ca_available(void)
+{
+	return qcom_scm_dcvs_core_available();
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcvs_ca_available);
+
+int qcom_scm_kgsl_init_regs(u32 gpu_req)
+{
+	struct si_object *kgsl_instance = NULL;
+	int ret, result = 0;
+
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &gpu_req, .size = sizeof(u32) },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	kgsl_instance = get_gpu_instance(0);
+	if (IS_ERR(kgsl_instance))
+		return PTR_ERR(kgsl_instance);
+
+	ret = qcom_smci_call(kgsl_instance, SMCI_GPU_OP_REG_SETUP, args, &result);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
+
+int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
+{
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture);
+
+int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
+{
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_lpac_aperture);

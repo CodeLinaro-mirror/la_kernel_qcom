@@ -77,6 +77,23 @@
 #define GSI_CPHA		BIT(4)
 #define GSI_CPOL		BIT(5)
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/qup_spi_trace.h>
+
+void spi_trace_log(struct device *dev, const char *fmt, ...)
+{
+	struct va_format vaf = {
+		.fmt = fmt,
+	};
+
+	va_list args;
+
+	va_start(args, fmt);
+	vaf.va = &args;
+	trace_spi_log_info(dev_name(dev), &vaf);
+	va_end(args);
+}
+
 #define DOMAIN_IDX_POWER	0
 #define DOMAIN_IDX_PERF		1
 
@@ -148,6 +165,9 @@ static int get_spi_clk_cfg(unsigned int speed_hz,
 	*clk_div = DIV_ROUND_UP(sclk_freq, mas->oversampling * speed_hz);
 	actual_hz = sclk_freq / (mas->oversampling * *clk_div);
 
+	spi_trace_log(mas->dev, "clk_cfg: req=%u actual=%u sclk=%lu idx=%d div=%d\n",
+		      speed_hz, actual_hz, sclk_freq, *clk_idx, *clk_div);
+
 	dev_dbg(mas->dev, "req %u=>%u sclk %lu, idx %d, div %d\n", speed_hz,
 				actual_hz, sclk_freq, *clk_idx, *clk_div);
 	ret = dev_pm_opp_set_rate(mas->dev, sclk_freq);
@@ -166,6 +186,8 @@ static void handle_se_timeout(struct spi_controller *spi,
 	unsigned long time_left;
 	struct geni_se *se = &mas->se;
 	const struct spi_transfer *xfer;
+
+	spi_trace_log(mas->dev, "mode=%d\n", mas->cur_xfer_mode);
 
 	spin_lock_irq(&mas->lock);
 	if (mas->cur_xfer_mode == GENI_SE_FIFO)
@@ -417,6 +439,9 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 	struct geni_se *se = &mas->se;
 	u32 loopback_cfg = 0, cpol = 0, cpha = 0, demux_output_inv = 0;
 	u32 demux_sel;
+
+	spi_trace_log(mas->dev, "mode=0x%x bpw=%d speed=%u\n",
+		      spi_slv->mode, spi_slv->bits_per_word, spi_slv->max_speed_hz);
 
 	if (mas->last_mode != spi_slv->mode) {
 		if (spi_slv->mode & SPI_LOOP)
@@ -854,6 +879,10 @@ static int setup_se_xfer(struct spi_transfer *xfer,
 	struct geni_se *se = &mas->se;
 	int ret;
 
+	spi_trace_log(mas->dev, "len=%u bpw=%d speed=%u tx_buf=%p rx_buf=%p\n"
+		      , xfer->len, xfer->bits_per_word, xfer->speed_hz,
+		      xfer->tx_buf, xfer->rx_buf);
+
 	/*
 	 * Ensure that our interrupt handler isn't still running from some
 	 * prior command before we start messing with the hardware behind
@@ -911,6 +940,11 @@ static int setup_se_xfer(struct spi_transfer *xfer,
 		mas->cur_xfer_mode = GENI_SE_FIFO;
 	} else
 		mas->cur_xfer_mode = GENI_SE_DMA;
+
+	spi_trace_log(mas->dev, "xfer_mode selected: %s (tx_nents=%d rx_nents=%d)\n",
+		      mas->cur_xfer_mode == GENI_SE_FIFO ? "FIFO" : "DMA",
+		      xfer->tx_sg.nents, xfer->rx_sg.nents);
+
 	geni_se_select_mode(se, mas->cur_xfer_mode);
 
 	/*
@@ -942,6 +976,9 @@ static int spi_geni_transfer_one(struct spi_controller *spi,
 {
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
 	int ret;
+
+	spi_trace_log(mas->dev, "transfer_one: start len=%u mode=%d\n",
+		      xfer->len, mas->cur_xfer_mode);
 
 	if (spi_geni_is_abort_still_pending(mas))
 		return -EBUSY;

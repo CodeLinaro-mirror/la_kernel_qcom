@@ -654,6 +654,7 @@ struct gpii {
 	bool is_resumed;
 	bool is_multi_desc;
 	int num_msgs;
+	cpumask_t cpu_affinity_mask; /* saved CPU affinity for IRQ, re-applied after deep sleep */
 };
 
 struct gpi_desc {
@@ -2488,7 +2489,7 @@ static void gpi_process_xfer_compl_event(struct gpii_chan *gpii_chan,
 {
 	struct gpii *gpii = gpii_chan->gpii;
 	struct gpi_ring *ch_ring = gpii_chan->ch_ring;
-	void *ev_rp = to_virtual(ch_ring, compl_event->ptr);
+	void *ev_rp;
 	struct virt_dma_desc *vd;
 	struct msm_gpi_dma_async_tx_cb_param *tx_cb_param;
 	struct gpi_desc *gpi_desc;
@@ -2505,6 +2506,29 @@ static void gpi_process_xfer_compl_event(struct gpii_chan *gpii_chan,
 				      __LINE__);
 		return;
 	}
+
+	/* Validate TRE address belongs to this channel before converting to virtual */
+	if (compl_event->ptr < ch_ring->phys_addr ||
+	    compl_event->ptr >= ch_ring->phys_addr + ch_ring->len) {
+		struct gpi_ere *gpi_ere;
+
+		GPII_ERR(gpii, gpii_chan->chid,
+			 "TRE address 0x%llx not in channel ring! ring:[0x%llx-0x%llx]\n",
+			 compl_event->ptr, ch_ring->phys_addr,
+			 ch_ring->phys_addr + ch_ring->len);
+		gpi_ere = (struct gpi_ere *)compl_event;
+		GPII_ERR(gpii, gpii_chan->chid, "Event: %08x %08x %08x %08x\n",
+			 gpi_ere->dword[0], gpi_ere->dword[1],
+			 gpi_ere->dword[2], gpi_ere->dword[3]);
+
+		/* Don't update ring pointers with invalid TRE address */
+		gpi_generate_cb_event(gpii_chan, MSM_GPI_QUP_EOT_DESC_MISMATCH,
+				      __LINE__);
+		return;
+	}
+
+	/* Safe to convert: TRE address validated */
+	ev_rp = to_virtual(ch_ring, compl_event->ptr);
 
 	spin_lock_irqsave(&gpii_chan->vc.lock, flags);
 	vd = vchan_next_desc(&gpii_chan->vc);
@@ -3351,22 +3375,27 @@ int gpi_terminate_all(struct dma_chan *chan)
 		gpi_dump_debug_reg(gpii);
 		gpii->reg_table_dump = true;
 	}
-	ch_state = gpi_read_ch_state(gpii_chan);
-	GPII_ERR(gpii, gpii_chan->chid, "CH state state:%s\n", TO_GPI_CH_STATE_STR(ch_state));
 	for (i = schid; i < echid; i++) {
 		gpii_chan = &gpii->gpii_chan[i];
-		ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
-		if (ret) {
-			GPII_ERR(gpii, gpii_chan->chid, "Error resetting channel: %d\n", ret);
-			gpi_dump_debug_reg(gpii);
-			goto terminate_exit;
-		}
+		ch_state = gpi_read_ch_state(gpii_chan);
+		GPII_ERR(gpii, gpii_chan->chid, "CH state state:%s\n",
+			 TO_GPI_CH_STATE_STR(ch_state));
+		if (ch_state != CH_STATE_STOPPED) {
+			ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
+			if (ret) {
+				GPII_ERR(gpii, gpii_chan->chid, "Error resetting channel: %d\n",
+					 ret);
+				gpi_dump_debug_reg(gpii);
+				goto terminate_exit;
+			}
 
-		/* reprogram channel CNTXT */
-		ret = gpi_alloc_chan(gpii_chan, false);
-		if (ret) {
-			GPII_ERR(gpii, gpii_chan->chid, "Error allocating channel: %d\n", ret);
-			goto terminate_exit;
+			/* reprogram channel CNTXT */
+			ret = gpi_alloc_chan(gpii_chan, false);
+			if (ret) {
+				GPII_ERR(gpii, gpii_chan->chid, "Error allocating channel: %d\n",
+					 ret);
+				goto terminate_exit;
+			}
 		}
 	}
 
@@ -3899,6 +3928,19 @@ static int gpi_deep_sleep_exit_config(struct dma_chan *chan)
 		}
 	}
 
+	/* Re-apply CPU affinity for the GPII IRQ if it was previously configured */
+	if (!cpumask_empty(&gpii->cpu_affinity_mask)) {
+		ret = irq_set_affinity_hint(gpii->irq, &gpii->cpu_affinity_mask);
+		if (ret)
+			GPII_CRITIC(gpii, GPI_DBG_COMMON,
+				    "CPU affinity re-apply failed after deep sleep irq:%d ret:%d\n",
+				    gpii->irq, ret);
+		else
+			GPII_INFO(gpii, GPI_DBG_COMMON,
+				  "CPU affinity re-applied after deep sleep irq:%d CPUs:%*pbl\n",
+				  gpii->irq, cpumask_pr_args(&gpii->cpu_affinity_mask));
+	}
+
 	return ret;
 
 error_start_chan:
@@ -4030,6 +4072,23 @@ static int gpi_config(struct dma_chan *chan,
 			  "sending UART RFR READY NOT READY cmd\n");
 		ret = gpi_send_cmd(gpii, gpii_chan,
 				   GPI_CH_CMD_UART_RFR_NOT_READY);
+		break;
+	case MSM_GPI_SET_CPU_AFFINITY:
+		if (!cpumask_empty(&gpi_ctrl->cpu_affinity.cpu_mask)) {
+			ret = irq_set_affinity_hint(gpii->irq, &gpi_ctrl->cpu_affinity.cpu_mask);
+			if (ret) {
+				GPII_CRITIC(gpii, GPI_DBG_COMMON,
+					    "CPU affinity set failed irq:%d ret:%d\n",
+					    gpii->irq, ret);
+				ret = -EINVAL;
+				break;
+			}
+			/* Save mask so it can be re-applied after deep sleep resume */
+			cpumask_copy(&gpii->cpu_affinity_mask, &gpi_ctrl->cpu_affinity.cpu_mask);
+			GPI_LOG(gpii->gpi_dev, "gpii:%d CPU affinity set: irq:%d CPUs:%*pbl\n",
+				gpii->gpii_id, gpii->irq,
+				cpumask_pr_args(&gpi_ctrl->cpu_affinity.cpu_mask));
+		}
 		break;
 	default:
 		GPII_ERR(gpii, gpii_chan->chid,

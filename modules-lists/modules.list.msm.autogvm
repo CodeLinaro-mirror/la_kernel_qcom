@@ -25,6 +25,7 @@ gh_ctrl.ko
 gh_dbl.ko
 gh_rm_drv.ko
 gh_virt_wdt.ko
+bootmarker_proxy.ko
 qcom_dma_heaps.ko
 virtio_clk_monaco.ko
 virtio_clk_lemans.ko
@@ -45,6 +46,7 @@ viospmi-pmic-arb.ko
 qcom-spmi-pmic.ko
 pinctrl-spmi-gpio.ko
 pinctrl-spmi-mpp.ko
+power_mode.ko
 qcom_wdt_core.ko
 smem.ko
 deferred-free-helper.ko

@@ -165,8 +165,10 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/interconnect/qcom/x1p42100.c",
+            "drivers/interconnect/qcom/x1p42100.h",
             "drivers/interconnect/qcom/icc-rpmh.h",
             "drivers/interconnect/qcom/qnoc-qos.h",
+            "drivers/interconnect/qcom/bcm-voter.h",
         ],
         deps = [
             # do not sort
