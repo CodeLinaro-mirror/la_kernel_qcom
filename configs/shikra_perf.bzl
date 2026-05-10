@@ -84,6 +84,7 @@ shikra_perf_config = {
     "CONFIG_NOP_USB_XCEIV": "m",
     "CONFIG_NVMEM_QCOM_QFPROM": "m",
     "CONFIG_NVMEM_SPMI_SDAM": "m",
+    "CONFIG_PCI_MSM": "m",
     "CONFIG_PDR_INDICATION_NOTIF_TIMEOUT": "9000",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
