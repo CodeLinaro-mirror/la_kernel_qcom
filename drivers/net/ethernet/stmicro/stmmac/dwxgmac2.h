@@ -253,10 +253,15 @@
 #define XGMAC_TIMESTAMP_BASE_ADDR	0x00000d00
 #define XGMAC_PPS_BASE_ADDR		0x00000d80
 
+/* MAC extended config 0 (MAC_Extended_Configuration, offset 0x140) */
+#define XGMAC_EXT_CFG0			0x140
+#define XGMAC_EXT_CFG0_VPRE		BIT(8)
+
 /* MAC extended config 1 */
 #define XGMAC_EXT_CFG1			0x144
 #define XGMAC_CONFIG1_SAVE_EN		BIT(24)
 #define XGMAC_CONFIG1_SPLM(v)		FIELD_PREP(GENMASK(9, 8), v)
+#define XGMAC_SPLM_L2			0x1
 
 static inline u32 xgmac_timestamp_base_addr(const struct dwxgmac_addrs *addrs)
 {
