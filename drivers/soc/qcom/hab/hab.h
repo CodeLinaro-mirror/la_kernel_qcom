@@ -969,7 +969,6 @@ static inline void hab_write_unlock(rwlock_t *lock, int no_touch_bh)
 }
 
 
-
 int dump_hab_get_file_name(char *file_time, int ft_size);
 int dump_hab_open(void);
 void dump_hab_close(void);
