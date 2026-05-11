@@ -26,6 +26,16 @@ static void tmc_etr_read_bytes(struct byte_cntr *byte_cntr_data, long offset,
 	struct etr_buf *etr_buf = tmcdrvdata->sysfs_buf;
 	size_t actual;
 
+	/*
+	 * sysfs_buf can be freed and set to NULL concurrently by the ETR
+	 * disable path (tmc_etr_sync_sysfs_buf).  Signal the caller by
+	 * zeroing *len so the read path can propagate the error.
+	 */
+	if (!etr_buf) {
+		*len = 0;
+		return;
+	}
+
 	if (*len >= bytes)
 		*len = bytes;
 	else if (((uint32_t)offset % bytes) + *len > bytes)
@@ -76,6 +86,12 @@ static long tmc_etr_flush_remaining_bytes(struct tmc_drvdata *tmcdrvdata, long o
 		return -EINVAL;
 
 	etr_buf = tmcdrvdata->sysfs_buf;
+	/*
+	 * sysfs_buf may have been freed and NULL'd by tmc_etr_sync_sysfs_buf
+	 * before we get here.  Treat this as no data available.
+	 */
+	if (!etr_buf)
+		return -EINVAL;
 
 	req_size = ((byte_cntr_data->rwp_offset < offset) ? tmcdrvdata->size : 0) +
 		byte_cntr_data->rwp_offset - offset;
@@ -242,6 +258,8 @@ static ssize_t tmc_etr_byte_cntr_read(struct file *fp, char __user *data,
 		 */
 		tmc_etr_read_bytes(byte_cntr_data, byte_cntr_data->offset,
 				   byte_cntr_data->block_size, &len, &bufp);
+		if (!len)
+			goto err;
 		goto copy;
 	}
 
