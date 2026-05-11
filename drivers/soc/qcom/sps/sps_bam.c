@@ -255,8 +255,9 @@ static irqreturn_t bam_isr(int irq, void *ctxt)
 					BAM_ID(dev), irq);
 			}
 		} else {
-			SPS_ERR(dev,
-				"sps: Client of BAM %pa requires confirmation but does not register callback\n",
+			sps_bam_check_irq(dev);
+			SPS_DBG1(dev,
+				"sps: Client of BAM %pa requires confirmation but does not register callback. Using default one.\n",
 				BAM_ID(dev));
 		}
 	} else {
