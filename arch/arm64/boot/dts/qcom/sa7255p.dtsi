@@ -386,8 +386,13 @@
 			no-map;
 		};
 
-		audio_mdf_mem: audio-mdf-region@ae000000 {
-			reg = <0x0 0xae000000 0x0 0x2000000>;
+		gptp_timedata: gptp-timedata-region@acdff000 {
+			reg = <0x0 0xacdff000 0x0 0x1000>;
+			no-map;
+		};
+
+		audio_mdf_mem: audio-mdf-region@ad000000 {
+			reg = <0x0 0xad000000 0x0 0x2000000>;
 			no-map;
 		};
 
