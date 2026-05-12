@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -375,6 +374,11 @@
 		video_mem: video-region@9be82000 {
 			no-map;
 			reg = <0x0 0x9be82000 0x0 0x700000>;
+		};
+
+		audio_config: audio-config-region@ac600000 {
+			reg = <0x0 0xac600000 0x0 0x0a00000>;
+			no-map;
 		};
 
 		audio_mdf_mem: audio-mdf-region@ae000000 {

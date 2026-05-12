@@ -21,6 +21,7 @@ struct cpu_mpam_partition {
 	struct mpam_config_val *val;
 	int pid_num;
 	struct task_struct *task;
+	int cpu_num;
 };
 
 struct cpu_mpam_msc {
@@ -296,6 +297,7 @@ static ssize_t cpu_mpam_tasks_store(struct config_item *item,
 			put_task_struct(partition->task);
 		partition->pid_num = pid_input;
 		partition->task = task;
+		partition->cpu_num = -1;
 	}
 
 	return count;
@@ -304,6 +306,62 @@ err:
 	return ret;
 }
 CONFIGFS_ATTR(cpu_mpam_, tasks);
+
+static ssize_t cpu_mpam_cpu_num_show(struct config_item *item, char *page)
+{
+	ssize_t len = 0;
+	struct cpu_mpam_partition *partition = to_partition(item);
+
+	len += scnprintf(page + len, PAGE_SIZE - len, "%d\n", partition->cpu_num);
+
+	return len;
+}
+
+static ssize_t cpu_mpam_cpu_num_store(struct config_item *item,
+		const char *page, size_t count)
+{
+	int ret;
+	unsigned int cpu_num_input;
+	char *kbuf;
+	struct cpu_mpam_partition *partition = to_partition(item);
+	struct cpu_mpam_partition *node;
+
+	kbuf = (char *)page;
+	ret = kstrtouint(kbuf, 10, &cpu_num_input);
+	if (ret < 0) {
+		pr_err("invalid argument\n");
+		goto out;
+	}
+	if (cpu_num_input >= num_possible_cpus()) {
+		pr_err("invalid cpu_num: %d\n", cpu_num_input);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* Check if another partition is already assigned to this CPU */
+	spin_lock(&mpam.lock);
+	list_for_each_entry(node, &mpam.partition_head, list) {
+		if (node != partition && node->cpu_num == cpu_num_input) {
+			spin_unlock(&mpam.lock);
+			pr_warn("CPU %d already assigned to another partition\n", cpu_num_input);
+			ret = -EBUSY;
+			goto out;
+		}
+	}
+	spin_unlock(&mpam.lock);
+
+	partition->cpu_num = cpu_num_input;
+	partition->pid_num = -1;
+	if (partition->task)
+		put_task_struct(partition->task);
+	partition->task = NULL;
+
+	return count;
+
+out:
+	return ret;
+}
+CONFIGFS_ATTR(cpu_mpam_, cpu_num);
 
 static void cpu_mpam_enable_monitor(int monitor_id, int part_id,
 		enum mpam_monitor_type type)
@@ -435,6 +493,7 @@ static struct configfs_attribute *cpu_mpam_attrs[] = {
 	&cpu_mpam_attr_part_id,
 	&cpu_mpam_attr_schemata,
 	&cpu_mpam_attr_tasks,
+	&cpu_mpam_attr_cpu_num,
 	&cpu_mpam_attr_enable_monitor,
 	&cpu_mpam_attr_monitor_data,
 	NULL,
@@ -519,6 +578,8 @@ static struct config_group *cpu_mpam_make_group(
 	bitmap_set(mpam.part_id_free_bitmap, part_id, 1);
 	partition->part_id = part_id;
 	partition->monitor_id = INT_MAX;
+	partition->pid_num = -1;
+	partition->cpu_num = -1;
 
 	partition->val = kcalloc(mpam.mpam_msc_cnt, sizeof(struct mpam_config_val), GFP_KERNEL);
 	if (!partition->val) {
@@ -599,6 +660,12 @@ static void cpu_mpam_switch_task(struct task_struct *task)
 
 	list_for_each_entry_safe(node, tmp, &mpam.partition_head, list) {
 		if (node->task && node->task == task) {
+			part_id = node->part_id;
+			break;
+		}
+
+		if (node->pid_num < 0 && node->cpu_num >= 0 &&
+				smp_processor_id() == node->cpu_num) {
 			part_id = node->part_id;
 			break;
 		}

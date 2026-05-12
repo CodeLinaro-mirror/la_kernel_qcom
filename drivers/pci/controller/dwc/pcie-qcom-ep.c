@@ -7,6 +7,8 @@
  *
  * Copyright (c) 2021, Linaro Ltd.
  * Author: Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org
+ *
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -60,6 +62,7 @@
 #define PARF_DEVICE_TYPE			0x1000
 #define PARF_BDF_TO_SID_CFG			0x2c00
 #define PARF_INT_ALL_5_MASK			0x2dcc
+#define PARF_INT_ALL_3_MASK			0x2e18
 
 /* PARF_INT_ALL_{STATUS/CLEAR/MASK} register fields */
 #define PARF_INT_ALL_LINK_DOWN			BIT(1)
@@ -132,6 +135,9 @@
 /* PARF_INT_ALL_5_MASK fields */
 #define PARF_INT_ALL_5_MHI_RAM_DATA_PARITY_ERR	BIT(0)
 
+/* PARF_INT_ALL_3_MASK fields */
+#define PARF_INT_ALL_3_PTM_UPDATING		BIT(4)
+
 /* ELBI registers */
 #define ELBI_SYS_STTS				0x08
 #define ELBI_CS2_ENABLE				0xa4
@@ -166,9 +172,11 @@ enum qcom_pcie_ep_link_status {
  * @disable_mhi_ram_parity_check: Disable MHI RAM data parity error check
  */
 struct qcom_pcie_ep_cfg {
-	bool hdma_support;
-	bool override_no_snoop;
-	bool disable_mhi_ram_parity_check;
+	bool	hdma_support;
+	u32	hdma_rd_channels;
+	u32	hdma_wr_channels;
+	bool	override_no_snoop;
+	bool	disable_mhi_ram_parity_check;
 };
 
 /**
@@ -492,6 +500,10 @@ static int qcom_pcie_perst_deassert(struct dw_pcie *pci)
 		val &= ~PARF_INT_ALL_5_MHI_RAM_DATA_PARITY_ERR;
 		writel_relaxed(val, pcie_ep->parf + PARF_INT_ALL_5_MASK);
 	}
+
+	val = readl_relaxed(pcie_ep->parf + PARF_INT_ALL_3_MASK);
+	val &= ~PARF_INT_ALL_3_PTM_UPDATING;
+	writel_relaxed(val, pcie_ep->parf + PARF_INT_ALL_3_MASK);
 
 	ret = dw_pcie_ep_init_registers(&pcie_ep->pci.ep);
 	if (ret) {
@@ -853,8 +865,15 @@ static int qcom_pcie_ep_probe(struct platform_device *pdev)
 
 	pcie_ep->cfg = of_device_get_match_data(dev);
 	if (pcie_ep->cfg && pcie_ep->cfg->hdma_support) {
-		pcie_ep->pci.edma.ll_wr_cnt = 8;
-		pcie_ep->pci.edma.ll_rd_cnt = 8;
+		if (pcie_ep->cfg->hdma_wr_channels)
+			pcie_ep->pci.edma.ll_wr_cnt = pcie_ep->cfg->hdma_wr_channels;
+		else
+			pcie_ep->pci.edma.ll_wr_cnt = 8;
+		if (pcie_ep->cfg->hdma_rd_channels)
+			pcie_ep->pci.edma.ll_rd_cnt = pcie_ep->cfg->hdma_rd_channels;
+		else
+			pcie_ep->pci.edma.ll_rd_cnt = 8;
+
 		pcie_ep->pci.edma.mf = EDMA_MF_HDMA_NATIVE;
 	}
 
@@ -912,6 +931,8 @@ static void qcom_pcie_ep_remove(struct platform_device *pdev)
 
 static const struct qcom_pcie_ep_cfg cfg_1_34_0 = {
 	.hdma_support = true,
+	.hdma_rd_channels = 1,
+	.hdma_wr_channels = 1,
 	.override_no_snoop = true,
 	.disable_mhi_ram_parity_check = true,
 };

@@ -3,6 +3,7 @@
  * Universal Flash Storage Host controller driver
  * Copyright (C) 2011-2013 Samsung India Software Operations
  * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -663,12 +664,6 @@ enum ufshcd_quirks {
 	 */
 	UFSHCD_QUIRK_MCQ_BROKEN_RTC			= 1 << 21,
 
-	/*
-	 * This quirk indicates that UFS will be using HW wrapped keys
-	 * when using inline encryption.
-	 */
-	UFSHCD_QUIRK_USES_WRAPPED_CRYPTO_KEYS		= 1 << 22,
-
 	/* This quirk needs to be enabled if the host controller supports inline
 	 * encryption but it needs to initialize the crypto capabilities in a
 	 * nonstandard way and/or needs to override blk_crypto_ll_ops.  If
@@ -706,6 +701,12 @@ enum ufshcd_quirks {
 	 * because it causes link startup to become unreliable.
 	 */
 	UFSHCD_QUIRK_PERFORM_LINK_STARTUP_ONCE		= 1 << 26,
+
+	/*
+	 * This quirk indicates that UFS will be using HW wrapped keys
+	 * when using inline encryption.
+	 */
+	UFSHCD_QUIRK_USES_WRAPPED_CRYPTO_KEYS		= 1 << 27,
 };
 
 enum ufshcd_caps {

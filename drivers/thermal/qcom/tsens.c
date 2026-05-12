@@ -1163,6 +1163,18 @@ static const struct of_device_id tsens_table[] = {
 	}, {
 		.compatible = "qcom,tsens-v2",
 		.data = &data_tsens_v2,
+	}, {
+		.compatible = "qcom,sa8775p-tsens",
+		.data = &data_sa8775p,
+	}, {
+		.compatible = "qcom,sa7255p-tsens",
+		.data = &data_sa8775p,
+	}, {
+		.compatible = "qcom,sa8797p-tsens",
+		.data = &data_sa8775p,
+	}, {
+		.compatible = "qcom,sa8255p-tsens",
+		.data = &data_sa8775p,
 	},
 	{}
 };
@@ -1314,7 +1326,7 @@ static int tsens_nvmem_trip_update(struct thermal_zone_device *tz)
 	num_trips = thermal_zone_get_num_trips(tz);
 	/* First trip is for userspace, update all other trips. */
 	for (i = 1; i < num_trips; i++)
-		thermal_zone_device_exec(tz, tsens_thermal_zone_trip_update, i);
+		tsens_thermal_zone_trip_update(tz, i);
 
 	return 0;
 }
@@ -1455,7 +1467,7 @@ static int tsens_probe(struct platform_device *pdev)
 	}
 	priv->feat = data->feat;
 	priv->fields = data->fields;
-
+	priv->tsens_disable_on_suspend = data->tsens_disable_on_suspend;
 	platform_set_drvdata(pdev, priv);
 
 	if (!priv->ops || !priv->ops->init || !priv->ops->get_temp)

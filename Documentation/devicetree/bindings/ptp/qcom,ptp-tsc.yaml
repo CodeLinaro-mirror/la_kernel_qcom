@@ -19,29 +19,33 @@ properties:
     const: "qcom,tsc"
 
   reg:
-    maxItems: 2
+    maxItems: 3
 
   reg-names:
     items:
       - const: tsc
       - const: timer
+      - const: etu
 
   clocks:
     items:
       - description: TSC AHB clock
       - description: TSC cntr clock
+      - description: TSC ETU clock
 
   clock-names:
     items:
       - const: cfg_ahb
       - const: cntr
+      - const: etu
 
   interrupts:
-    maxItems: 1
+    maxItems: 2
 
   interrupt-names:
     items:
       - const: tscss_fusa_irq
+      - const: etu_summary_irq
 
   qcom,tsc-nsec-update:
      description:
@@ -61,6 +65,23 @@ properties:
        use cases and requires additional safety handling.
      type: boolean
 
+patternProperties:
+  "^slice[0-9]+$":
+    type: object
+    description: ETU slice configuration
+    properties:
+      qcom,etu-event-sel:
+        $ref: /schemas/types.yaml#/definitions/uint32
+      qcom,etu-slice:
+        $ref: /schemas/types.yaml#/definitions/uint32
+      qcom,etu-event-name:
+        $ref: /schemas/types.yaml#/definitions/string
+    required:
+      - qcom,etu-event-sel
+      - qcom,etu-slice
+      - qcom,etu-event-name
+    additionalProperties: false
+
 required:
   - compatible
   - reg
@@ -74,10 +95,33 @@ examples:
   - |
     tsc: tsc@1c80000 {
       compatible = "qcom,tsc";
-      reg = <0x01c80000 0x2000>,
-            <0x01c87000 0x1000>;
-      reg-names = "tsc", "timer";
-      clocks = <&tscss_ahb_clock>, <&tscss_cntr_clock>;
-      clock-names = "cfg_ahb", "cntr";
+      reg = <0x0 0x01c80000 0x0 0x2000>,
+            <0x0 0x01c87000 0x0 0x1000>,
+            <0x0 0x01ca0000 0x0 0x20000>;
+      reg-names = "tsc", "timer", "etu";
+      clocks = <&tscss_ahb_clock>,
+	       <&tscss_cntr_clock>,
+	       <&tscss_cntr_clock>;
+      clock-names = "cfg_ahb",
+		    "cntr",
+                    "etu";
       qcom,tsc-nsec-update;
+
+      slice@1 {
+         qcom,etu-event-sel = <1>;
+         qcom,etu-slice = <1>;
+         qcom,etu-event-name = "timer0";
+      };
+
+      slice@2{
+         qcom,etu-event-sel = <2>;
+         qcom,etu-slice = <2>;
+         qcom,etu-event-name = "timer1";
+      };
+
+      slice@3 {
+         qcom,etu-event-sel = <3>;
+         qcom,etu-slice = <3>;
+         qcom,etu-event-name = "timer2";
+      };
     };
