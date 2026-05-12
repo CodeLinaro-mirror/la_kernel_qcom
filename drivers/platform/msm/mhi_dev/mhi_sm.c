@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-//Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <linux/kernel.h>
 #include <linux/export.h>
@@ -584,6 +584,23 @@ static int mhi_sm_prepare_resume(struct mhi_sm_dev *mhi_sm_ctx)
 		goto exit;
 	}
 
+	/**
+	 * To ensure host has restored config space fully and to avoid implementation of LTR
+	 * notification interrupt we are sending LTR message from M0 instead of D0 or from LTR
+	 * enable interrupt handler. Currently we have no LTR latency requirement, so sending a
+	 * LTR message with requirement bit set to 0.
+	 */
+	if (mhi->ltr_configured) {
+		MHI_SM_DBG(mhi->vf_id, "Using cached LTR values: req_bit=%d, ltr_val=0x%x\n",
+			mhi->cached_ltr_req_bit, mhi->cached_ltr_val);
+		ep_pcie_send_ltr_msg(mhi->mhi_hw_ctx->phandle,
+				      mhi->cached_ltr_req_bit,
+				      mhi->cached_ltr_val);
+	} else {
+		MHI_SM_DBG(mhi->vf_id, "Using default LTR values: req_bit=0, ltr_val=0\n");
+		ep_pcie_send_ltr_msg(mhi->mhi_hw_ctx->phandle, 0, 0);
+	}
+
 	mhi_sm_mmio_set_mhistatus(mhi_sm_ctx, MHI_DEV_M0_STATE);
 
 	/* Enable MHI DMA */
@@ -782,6 +799,8 @@ static int mhi_sm_prepare_suspend(struct mhi_sm_dev *mhi_sm_ctx, enum mhi_dev_st
 	}
 
 	if (new_state == MHI_DEV_M3_STATE) {
+		MHI_SM_DBG(mhi->vf_id, "Clearing default LTR values: req_bit=0, ltr_val=0\n");
+		ep_pcie_send_ltr_msg(mhi->mhi_hw_ctx->phandle, 0, 0);
 		mhi_sm_mmio_set_mhistatus(mhi_sm_ctx, new_state);
 		/* Notify host on device transitioning to M3 state */
 		res = mhi_dev_send_state_change_event(mhi_sm_ctx->mhi_dev,

@@ -347,11 +347,13 @@ int qcom_xpcs_config_eee(struct dw_xpcs_qcom *xpcs, int mult_fact_100ns, int ena
 	if (enable)
 		ret = DW_VR_MII_EEE_LTX_EN | DW_VR_MII_EEE_TX_EN_CTRL |
 			DW_VR_MII_EEE_LRX_EN | DW_VR_MII_EEE_RX_EN_CTRL |
-			mult_fact_100ns << DW_VR_MII_EEE_MULT_FACT_100NS_SHIFT;
+			mult_fact_100ns << DW_VR_MII_EEE_MULT_FACT_100NS_SHIFT |
+			DW_VR_MII_EEE_CLKSTOP << DW_VR_MII_EEE_CLKSTOP_SHIFT;
 	else
 		ret &= ~(DW_VR_MII_EEE_LTX_EN | DW_VR_MII_EEE_TX_EN_CTRL |
 			DW_VR_MII_EEE_LRX_EN | DW_VR_MII_EEE_RX_EN_CTRL |
-			mult_fact_100ns << DW_VR_MII_EEE_MULT_FACT_100NS_SHIFT);
+			mult_fact_100ns << DW_VR_MII_EEE_MULT_FACT_100NS_SHIFT |
+			DW_VR_MII_EEE_CLKSTOP << DW_VR_MII_EEE_CLKSTOP_SHIFT);
 
 	ret = qcom_xpcs_write(xpcs, DW_VR_XS_PCS_EEE_MCTRL0, ret);
 

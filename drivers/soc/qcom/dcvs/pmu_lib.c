@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "qcom-pmu: " fmt
@@ -100,6 +100,7 @@ static struct kobject pmu_kobj;
 static bool pmu_counters_enabled = true;
 static unsigned int pmu_enable_trace;
 static bool llcc_ignore_setup;
+static bool is_kobj_init;
 
 /*
  * is_amu_valid: Check if AMUs are supported and if the id corresponds to the
@@ -1241,18 +1242,28 @@ skip_pmu:
 	}
 
 	dev_root = bus_get_dev_root(&cpu_subsys);
-	if (dev_root) {
-		ret = kobject_init_and_add(&pmu_kobj, &pmu_settings_ktype,
-						&dev_root->kobj, "pmu_lib");
-		put_device(dev_root);
-	} else {
+	if (!dev_root) {
 		dev_err(dev, "failed to get cpu_subsys dev_root\n");
 		return -ENODEV;
 	}
-	if (ret < 0) {
-		dev_err(dev, "failed to init pmu counters kobj: %d\n", ret);
-		kobject_put(&pmu_kobj);
-		return ret;
+	if (!is_kobj_init) {
+		ret = kobject_init_and_add(&pmu_kobj, &pmu_settings_ktype,
+						&dev_root->kobj, "pmu_lib");
+		put_device(dev_root);
+		if (ret < 0) {
+			dev_err(dev, "failed to init pmu kobj: %d\n", ret);
+			kobject_put(&pmu_kobj);
+			return ret;
+		}
+		is_kobj_init = true;
+	} else {
+		ret = kobject_add(&pmu_kobj, &dev_root->kobj, "%s", "pmu_lib");
+		put_device(dev_root);
+		if (ret < 0) {
+			dev_err(dev, "failed to add kobj: %d\n", ret);
+			kobject_put(&pmu_kobj);
+			return ret;
+		}
 	}
 
 	ret = setup_events();
