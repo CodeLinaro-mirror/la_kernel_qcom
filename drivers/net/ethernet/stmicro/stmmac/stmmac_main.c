@@ -528,9 +528,6 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 	if (!priv->dma_cap.eee)
 		return false;
 
-	if (priv->plat->phy_interface == PHY_INTERFACE_MODE_SGMII)
-		return false;
-
 	mutex_lock(&priv->lock);
 
 	/* Check if it needs to be deactivated */
@@ -4415,10 +4412,10 @@ bool stmmac_check_l4_proto_info(struct l4_filter_info  *l4_filter)
 
 bool stmmac_is_ipv4_filter_valid(struct l3_l4_ipv4_filter *filter)
 {
-	if (filter->src_addr != 0 && filter->src_addr_mask >= 32)
+	if (filter->src_addr != 0 && (filter->src_addr_mask < 0 || filter->src_addr_mask > 32))
 		return false;
 
-	if (filter->dest_addr != 0 && filter->dest_addr_mask >= 32)
+	if (filter->dest_addr != 0 && (filter->dest_addr_mask < 0 || filter->dest_addr_mask > 32))
 		return false;
 
 	return
@@ -4435,7 +4432,7 @@ bool stmmac_is_ipv6_addr_valid(struct l3_l4_ipv6_filter *filter)
 			check = true;
 	}
 
-	if (check && filter->src_or_dest_addr_mask < 128)
+	if (check && filter->src_or_dest_addr_mask >= 0 && filter->src_or_dest_addr_mask <= 128)
 		return true;
 
 	return false;
@@ -4484,6 +4481,7 @@ static int STMMAC_handle_prv_ioctl_filter_ipv4(struct net_device *dev,
 	struct stmmac_priv *priv;
 	u32 value = 0;
 	bool udp = false;
+	u8 hw_src_mask = 0, hw_dest_mask = 0;
 
 	priv = netdev_priv(dev);
 
@@ -4537,8 +4535,17 @@ static int STMMAC_handle_prv_ioctl_filter_ipv4(struct net_device *dev,
 	if (filter->src_addr) {
 		/*enable L3 src addr */
 		value |= GMAC_L3SAM0;
+
+		if (filter->src_addr_mask == 0) {
+			/* Match all bits */
+			hw_src_mask = 0;
+		} else {
+			/* Convert prefix to hardware mask */
+			hw_src_mask = (u8)(32 - filter->src_addr_mask);
+		}
+
 		/* enable L3 src mask */
-		value |= (GMAC_L3HSBM & (filter->src_addr_mask << 6));
+		value |= (GMAC_L3HSBM & (hw_src_mask << 6));
 		/* write L3 src addr */
 		writel_relaxed(filter->src_addr, priv->ioaddr + GMAC_L3_ADDR0((cur_filter_num)));
 	}
@@ -4546,8 +4553,16 @@ static int STMMAC_handle_prv_ioctl_filter_ipv4(struct net_device *dev,
 	if (filter->dest_addr) {
 		/*enable L3 dest addr */
 		value |= GMAC_L3DAM0;
+
+		if (filter->dest_addr_mask == 0) {
+			hw_dest_mask = 0;
+		} else {
+			/* Convert prefix to hardware mask */
+			hw_dest_mask = (u8)(32 - filter->dest_addr_mask);
+		}
+
 		/* enable  L3 dest mask */
-		value |= (GMAC_L3HDBM & (filter->dest_addr_mask << 11));
+		value |= (GMAC_L3HDBM & (hw_dest_mask << 11));
 		/* write L3 dest addr */
 		writel_relaxed(filter->dest_addr, priv->ioaddr + GMAC_L3_ADDR1(cur_filter_num));
 	}
@@ -4573,6 +4588,7 @@ static int STMMAC_handle_prv_ioctl_filter_ipv6(struct net_device *dev,
 	struct stmmac_priv *priv;
 	u32 value = 0;
 	bool udp = false;
+	u8 hw_mask = 0;
 
 	priv = netdev_priv(dev);
 
@@ -4631,11 +4647,18 @@ static int STMMAC_handle_prv_ioctl_filter_ipv6(struct net_device *dev,
 			/* enable L3 dest addr */
 			value |= GMAC_L3DAM0;
 
-		/* enableL3 src mask */
-		value |= (GMAC_L3HSBM & ((filter->src_or_dest_addr_mask & 0x1f) << 6));
+		if (filter->src_or_dest_addr_mask == 0) {
+			hw_mask = 0;
+		} else {
+			/* Convert prefix to hardware mask */
+			hw_mask = (u8)(128 - filter->src_or_dest_addr_mask);
+		}
 
-		/* continue writing L3 mask */
-		value |= (GMAC_L3HDBM & ((filter->src_or_dest_addr_mask & 0x60) << 6));
+		/* program lower 5 bits of hw_mask into GMAC_L3HSBM field */
+		value |= (GMAC_L3HSBM & ((hw_mask & 0x1f) << 6));
+
+		/* program upper 2 bits of hw_mask into GMAC_L3HDBM field */
+		value |= (GMAC_L3HDBM & ((hw_mask & 0x60) << 6));
 
 		/*write to GMAC_L3_L4_Control register*/
 		writel_relaxed(value, priv->ioaddr + GMAC_L3L4_CTRL(cur_filter_num));

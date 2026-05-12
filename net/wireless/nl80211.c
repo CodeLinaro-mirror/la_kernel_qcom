@@ -3750,7 +3750,8 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 		if (!(rdev->wiphy.features & NL80211_FEATURE_VIF_TXPOWER))
 			txp_wdev = NULL;
 
-		if (!rdev->ops->set_tx_power) {
+		if (!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+		    !rdev->ops->set_tx_power) {
 			result = -EOPNOTSUPP;
 			goto out;
 		}
@@ -3769,10 +3770,12 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 			mbm = nla_get_u32(info->attrs[idx]);
 		}
 
-		if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT))
+		if (IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT) &&
+		    rdev->ops->set_tx_power_link)
 			result = rdev_set_tx_power_mlo(rdev, txp_wdev, type, mbm, link_id);
 		else
 			result = rdev_set_tx_power(rdev, txp_wdev, type, mbm);
+
 		if (result)
 			goto out;
 	}
@@ -7442,9 +7445,15 @@ static int nl80211_parse_sta_txpower_setting(struct genl_info *info,
 	int idx;
 
 	if (info->attrs[NL80211_ATTR_STA_TX_POWER_SETTING]) {
-		if (!rdev->ops->set_tx_power ||
+		if ((!IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT)) &&
+		    (!rdev->ops->set_tx_power ||
 		    !wiphy_ext_feature_isset(&rdev->wiphy,
-					 NL80211_EXT_FEATURE_STA_TX_PWR))
+					     NL80211_EXT_FEATURE_STA_TX_PWR)))
+			return -EOPNOTSUPP;
+		else if ((IS_ENABLED(CONFIG_CFG80211_PROP_SINGLE_WIPHY_SUPPORT)) &&
+			 (!rdev->ops->set_tx_power_link ||
+			  !wiphy_ext_feature_isset(&rdev->wiphy,
+						   NL80211_EXT_FEATURE_STA_TX_PWR)))
 			return -EOPNOTSUPP;
 
 		idx = NL80211_ATTR_STA_TX_POWER_SETTING;

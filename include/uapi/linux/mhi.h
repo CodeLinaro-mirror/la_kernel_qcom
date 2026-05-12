@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
-/*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
- */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #ifndef _UAPI_MHI_H
 #define _UAPI_MHI_H
@@ -34,10 +32,16 @@ struct ep_info {
 
 };
 
+struct mhi_ltr_config {
+	__u8				req_bit;
+	__u32				ltr_us;
+};
+
 #define MHI_UCI_IOCTL_MAGIC	'm'
 
 #define MHI_UCI_EP_LOOKUP _IOR(MHI_UCI_IOCTL_MAGIC, 2, struct ep_info)
 #define MHI_UCI_DPL_EP_LOOKUP _IOR(MHI_UCI_IOCTL_MAGIC, 3, struct ep_info)
 #define MHI_UCI_CV2X_EP_LOOKUP _IOR(MHI_UCI_IOCTL_MAGIC, 4, struct ep_info)
+#define MHI_CONFIGURE_LTR _IOW(MHI_UCI_IOCTL_MAGIC, 5, struct mhi_ltr_config)
 
 #endif /* _UAPI_MHI_H */

@@ -4130,6 +4130,10 @@ struct mgmt_frame_regs {
 	u32 global_mcast_stypes, interface_mcast_stypes;
 };
 
+#define CFG80211_PER_LINK_TX_POWER 1
+#define CFG80211_SET_PER_LINK_TX_POWER 1
+#define CFG80211_PER_LINK_TXQ_STATS 1
+
 /**
  * struct cfg80211_link_reconfig_removal_params - Contains params needed for
  * link reconfig removal

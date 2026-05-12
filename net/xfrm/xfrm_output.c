@@ -586,17 +586,9 @@ int xfrm_output_resume(struct sock *sk, struct sk_buff *skb, int err)
 	while (likely((err = xfrm_output_one(skb, err)) == 0)) {
 		nf_reset_ct(skb);
 
-		if (skb_dst(skb)->ops->family != AF_INET && ip_hdr(skb)->version == 4) {
-			memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
-			IPCB(skb)->flags |= IPSKB_XFRM_TRANSFORMED;
-			err = ip_output(net, skb->sk, skb);
-			if (unlikely(err != 1))
-				goto out;
-		} else {
-			err = skb_dst(skb)->ops->local_out(net, sk, skb);
-			if (unlikely(err != 1))
-				goto out;
-		}
+		err = skb_dst(skb)->ops->local_out(net, sk, skb);
+		if (unlikely(err != 1))
+			goto out;
 
 		if (!skb_dst(skb)->xfrm)
 			return dst_output(net, sk, skb);
@@ -632,10 +624,21 @@ static int xfrm_dev_direct_output(struct sock *sk, struct xfrm_state *x,
 	skb_dst_set(skb, dst);
 	nf_reset_ct(skb);
 
-	err = skb_dst(skb)->ops->local_out(net, sk, skb);
-	if (unlikely(err != 1)) {
-		kfree_skb(skb);
-		return err;
+	if (skb_dst(skb)->ops->family != AF_INET &&
+	    pskb_may_pull(skb, sizeof(struct iphdr)) &&
+	    ip_hdr(skb)->version == 4) {
+		memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
+		IPCB(skb)->flags |= IPSKB_XFRM_TRANSFORMED;
+		err = ip_output(net, skb->sk, skb);
+		/* ip_output may consume skb on error; do not kfree_skb here */
+		if (unlikely(err != 1))
+			return err;
+	} else {
+		err = skb_dst(skb)->ops->local_out(net, sk, skb);
+		if (unlikely(err != 1)) {
+			kfree_skb(skb);
+			return err;
+		}
 	}
 
 	/* In transport mode, network destination is
