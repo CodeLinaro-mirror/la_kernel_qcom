@@ -146,7 +146,6 @@ shikra_perf_config = {
     "CONFIG_QCOM_RAMDUMP": "m",
     "CONFIG_QCOM_RPROC_COMMON": "m",
     "CONFIG_QCOM_SCM": "m",
-    "CONFIG_QCOM_SCM_INVOKE_LEGACY": "y",
     "CONFIG_QCOM_SECURE_BUFFER": "m",
     "CONFIG_QCOM_SHOW_RESUME_IRQ": "m",
     "CONFIG_QCOM_SI_CORE": "m",
