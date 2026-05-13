@@ -281,7 +281,15 @@ static void stmmac_service_event_schedule(struct stmmac_priv *priv)
 		queue_work(priv->wq, &priv->service_task);
 }
 
-static void stmmac_global_err(struct stmmac_priv *priv)
+/**
+ * stmmac_global_err - Schedule a global device reset
+ * @priv: driver private structure
+ *
+ * Signals a reset request by setting STMMAC_RESET_REQUESTED and schedules
+ * the service task. The reset is performed asynchronously. The caller must
+ * not assume the device is ready until the service task completes.
+ */
+void stmmac_global_err(struct stmmac_priv *priv)
 {
 	netif_carrier_off(priv->dev);
 	set_bit(STMMAC_RESET_REQUESTED, &priv->state);
