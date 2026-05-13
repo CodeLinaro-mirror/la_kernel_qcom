@@ -2437,6 +2437,31 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/clk/qcom/audiocorecc-shikra",
+        out = "audiocorecc-shikra.ko",
+        config = "CONFIG_CLK_SHIKRA_AUDIOCORECC",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-alpha-pll.h",
+            "drivers/clk/qcom/clk-branch.h",
+            "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-rcg.h",
+            "drivers/clk/qcom/clk-regmap-divider.h",
+            "drivers/clk/qcom/clk-regmap-mux.h",
+            "drivers/clk/qcom/clk-regmap.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/audiocorecc-shikra.c",
+            "drivers/clk/qcom/reset.h",
+            "drivers/clk/qcom/vdd-class.h",
+            "drivers/clk/qcom/vdd-level-monaco.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-qcom",
+        ],
+    )
+
+    registry.register(
         name = "drivers/clk/qcom/gcc-shikra",
         out = "gcc-shikra.ko",
         config = "CONFIG_CLK_SHIKRA_GCC",
