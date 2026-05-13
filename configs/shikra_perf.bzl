@@ -8,6 +8,7 @@ shikra_perf_config = {
     "CONFIG_ARM_SMMU_QCOM": "m",
     "CONFIG_ARM_SMMU_SELFTEST": "n",
     "CONFIG_CFG80211": "m",
+    "CONFIG_CLK_SHIKRA_AUDIOCORECC": "m",
     "CONFIG_CLK_SHIKRA_DEBUGCC": "m",
     "CONFIG_CLK_SHIKRA_DISPCC": "m",
     "CONFIG_CLK_SHIKRA_GCC": "m",
