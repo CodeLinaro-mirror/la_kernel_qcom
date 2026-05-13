@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2019, 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -255,8 +255,9 @@ static irqreturn_t bam_isr(int irq, void *ctxt)
 					BAM_ID(dev), irq);
 			}
 		} else {
-			SPS_ERR(dev,
-				"sps: Client of BAM %pa requires confirmation but does not register callback\n",
+			sps_bam_check_irq(dev);
+			SPS_DBG1(dev,
+				"sps: Client of BAM %pa requires confirmation but does not register callback. Using default one.\n",
 				BAM_ID(dev));
 		}
 	} else {
