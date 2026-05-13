@@ -6833,6 +6833,10 @@ out:
 		 * dtsi will overwrite configuration from emac partition
 		 */
 		plat_dat->plat_wait_for_emac_rx_clk_en = mparams.wait_switch_rdy;
+		if (of_property_present(pdev->dev.of_node, "wait_for_rx_clk_rdy"))
+			plat_dat->plat_wait_for_emac_rx_clk_en = of_property_read_bool
+								 (pdev->dev.of_node,
+								  "wait_for_rx_clk_rdy");
 		plat_dat->fixed_phy_mode_needs_mdio = of_property_read_bool(pdev->dev.of_node,
 									    "fixed-link-needs-mdio-bus");
 	}
