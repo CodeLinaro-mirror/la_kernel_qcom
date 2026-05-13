@@ -192,6 +192,30 @@ def define_common_upstream_files():
             out = file,
         )
 
+    copy_file(
+        name = "copied-arm-smmuv2-defs",
+        src = "drivers/iommu/arm/arm-smmu-v3/pkvm/arm-smmuv2-defs.h",
+        out = "drivers/iommu/arm/arm-smmu-v3/arm-smmuv2-defs.h",
+    )
+
+    copy_file(
+        name = "copied-smmuv2_nesting",
+        src = "drivers/iommu/arm/arm-smmu-v3/pkvm/smmuv2_nesting.h",
+        out = "drivers/iommu/arm/arm-smmu-v3/smmuv2_nesting.h",
+    )
+
+    copy_file(
+        name = "copied-arm_smmu_v3_nested",
+        src = "drivers/iommu/arm/arm-smmu-v3/pkvm/arm_smmu_v3_nested.h",
+        out = "drivers/iommu/arm/arm-smmu-v3/arm_smmu_v3_nested.h",
+    )
+
+    copy_file(
+        name = "copied-arm-smmu-v3",
+        src = "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h",
+        out = "drivers/iommu/arm/arm-smmu-v3/pkvm/arm-smmu-v3.h",
+    )
+
     # TODO: Use hermetic_genrule when prebuilt `patch` tool is available.
     native.genrule(
         name = "patched-drivers/regulator/qti_fixed_regulator.c",
