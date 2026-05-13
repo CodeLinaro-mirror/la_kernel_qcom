@@ -75,6 +75,7 @@ shikra_perf_config = {
     "CONFIG_MPM_LEGACY": "m",
     "CONFIG_MSM_BAM_DMUX": "m",
     "CONFIG_MSM_BAM_DMUX_DEBUG": "y",
+    "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_MSM_GPI_DMA": "m",
     "CONFIG_MSM_HAB": "n",
     "CONFIG_MSM_PERFORMANCE": "m",
