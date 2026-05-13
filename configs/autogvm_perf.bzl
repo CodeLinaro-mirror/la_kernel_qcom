@@ -144,6 +144,7 @@ autogvm_perf_config = {
     "CONFIG_REGULATOR_DEBUG_CONTROL": "m",
     "CONFIG_REGULATOR_STUB": "m",
     "CONFIG_RENAME_DEVICES": "m",
+    "CONFIG_RPMSG_GLINK_DS_QB": "m",
     "CONFIG_RPMSG_QCOM_GLINK": "m",
     "CONFIG_RPMSG_QCOM_GLINK_CMA": "m",
     "CONFIG_RTC_DRV_PM8XXX": "m",
