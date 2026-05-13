@@ -12,6 +12,7 @@ targets = [
     "monaco",
     "seraph",
     "shikra",
+    "shikra_auto",
     "shikra_tiny",
     "sun",
     "vienna",
