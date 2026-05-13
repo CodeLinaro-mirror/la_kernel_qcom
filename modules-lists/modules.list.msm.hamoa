@@ -34,6 +34,7 @@ icc-rpmh.ko
 icc-clk.ko
 qcom-pdc.ko
 qcom_wdt_core.ko
+qcom_soc_wdt.ko
 gh_virt_wdt.ko
 nvmem_qfprom.ko
 debug_symbol.ko
