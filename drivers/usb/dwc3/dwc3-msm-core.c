@@ -691,6 +691,7 @@ struct dwc3_msm {
 	bool			dis_role_switch;
 
 	struct typec_retimer	*retimer;
+	bool			disable_xhci_runtime_pm;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -6845,6 +6846,9 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 	mdwc->disable_force_pull_up_down_quirk = of_property_read_bool(node,
 					"qcom,disable-force-pull-up-down-quirk");
 
+	mdwc->disable_xhci_runtime_pm = of_property_read_bool(node,
+			"qcom,disable-xhci-runtime-pm");
+
 	ret = dwc3_msm_interconnect_vote_populate(mdwc);
 	dev_err(dev, "Using default bus votes ret:%d\n", ret);
 
@@ -7702,10 +7706,13 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 			flush_work(&dwc->drd_work);
 		dwc3_msm_override_pm_ops(&dwc->xhci->dev, mdwc->xhci_pm_ops, true);
 		mdwc->in_host_mode = true;
-		pm_runtime_use_autosuspend(&dwc->xhci->dev);
-		pm_runtime_set_autosuspend_delay(&dwc->xhci->dev, 0);
-		pm_runtime_allow(&dwc->xhci->dev);
-		pm_runtime_mark_last_busy(&dwc->xhci->dev);
+
+		if (!mdwc->disable_xhci_runtime_pm) {
+			pm_runtime_use_autosuspend(&dwc->xhci->dev);
+			pm_runtime_set_autosuspend_delay(&dwc->xhci->dev, 0);
+			pm_runtime_allow(&dwc->xhci->dev);
+			pm_runtime_mark_last_busy(&dwc->xhci->dev);
+		}
 
 		dwc3_msm_write_reg_field(mdwc->base, DWC3_GUSB3PIPECTL(0),
 				DWC3_GUSB3PIPECTL_SUSPHY, 1);
