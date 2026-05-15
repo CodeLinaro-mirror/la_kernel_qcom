@@ -3083,6 +3083,9 @@ static struct nvme_dev *nvme_pci_alloc_dev(struct pci_dev *pdev,
 			 "platform quirk: setting simple suspend\n");
 		quirks |= NVME_QUIRK_SIMPLE_SUSPEND;
 	}
+
+	quirks |= NVME_QUIRK_SIMPLE_SUSPEND;
+
 	ret = nvme_init_ctrl(&dev->ctrl, &pdev->dev, &nvme_pci_ctrl_ops,
 			     quirks);
 	if (ret)
