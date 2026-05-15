@@ -1365,6 +1365,7 @@ struct msm_pcie_dev_t {
 	u32 l1ss_sleep_disable;
 	u32 clkreq_gpio;
 	struct pcie_i2c_ctrl i2c_ctrl;
+	struct i2c_driver *i2c_drv;
 	bool fmd_enable;
 	bool no_client_based_bw_voting;
 	int tc2bdf_tc_count;
@@ -1414,6 +1415,11 @@ static struct pcie_drv_sta {
 
 /* msm pcie device data */
 static struct msm_pcie_dev_t *msm_pcie_dev[MAX_RC_NUM];
+
+/* Per-RC i2c driver state — persists across probe retries */
+static struct i2c_driver *msm_pcie_i2c_drv[MAX_RC_NUM];
+static char msm_pcie_i2c_drv_name[MAX_RC_NUM][32];
+static bool msm_pcie_i2c_drv_registered[MAX_RC_NUM];
 
 /* regulators */
 static struct msm_pcie_vreg_info_t msm_pcie_vreg_info[MSM_PCIE_MAX_VREG] = {
@@ -9883,18 +9889,10 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client)
 	return 0;
 }
 
-static struct i2c_driver pcie_i2c_ctrl_driver = {
-	.driver = {
-		.name = "pcie-i2c-ctrl",
-		.of_match_table = of_match_ptr(of_i2c_id_table),
-	},
-	.probe = pcie_i2c_ctrl_probe,
-};
-
 static int msm_pcie_probe(struct platform_device *pdev)
 {
 	int ret = 0;
-	int rc_idx = -1;
+	int i2c_ret = 0, rc_idx = -1;
 	struct msm_pcie_dev_t *pcie_dev;
 	struct device_node *of_node;
 	struct pci_host_bridge *bridge;
@@ -9960,15 +9958,40 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	pcie_dev->save_sid_config = NULL;
 	dev_set_drvdata(&pdev->dev, pcie_dev);
 
-	ret = i2c_add_driver(&pcie_i2c_ctrl_driver);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to add i2c ctrl driver: %d\n", ret);
-		goto decrease_rc_num;
+	pcie_dev->i2c_drv = NULL;
+	if (of_property_present(of_node, "pcie-i2c-phandle")) {
+		if (!msm_pcie_i2c_drv[rc_idx]) {
+			msm_pcie_i2c_drv[rc_idx] = kzalloc(sizeof(*msm_pcie_i2c_drv[rc_idx]),
+							   GFP_KERNEL);
+			if (!msm_pcie_i2c_drv[rc_idx]) {
+				ret = -ENOMEM;
+				goto decrease_rc_num;
+			}
+		}
+		pcie_dev->i2c_drv = msm_pcie_i2c_drv[rc_idx];
+		snprintf(msm_pcie_i2c_drv_name[rc_idx], sizeof(msm_pcie_i2c_drv_name[rc_idx]),
+			 "pcie-i2c-ctrl-%d", rc_idx);
+		pcie_dev->i2c_drv->driver.name = msm_pcie_i2c_drv_name[rc_idx];
+		pcie_dev->i2c_drv->driver.of_match_table = of_match_ptr(of_i2c_id_table);
+		pcie_dev->i2c_drv->probe = pcie_i2c_ctrl_probe;
+
+		if (!msm_pcie_i2c_drv_registered[rc_idx]) {
+			ret = i2c_add_driver(pcie_dev->i2c_drv);
+			if (ret) {
+				PCIE_ERR(pcie_dev,
+					 "PCIe: RC%d: Failed to add i2c ctrl driver: %d\n",
+					 rc_idx, ret);
+				goto decrease_rc_num;
+			}
+			msm_pcie_i2c_drv_registered[rc_idx] = true;
+		}
 	}
 
-	ret = msm_pcie_i2c_ctrl_init(pcie_dev);
-	if (ret)
+	i2c_ret = msm_pcie_i2c_ctrl_init(pcie_dev);
+	if (i2c_ret) {
+		ret = i2c_ret;
 		goto decrease_rc_num;
+	}
 
 	ret = msm_pcie_get_resources(pcie_dev, pcie_dev->pdev);
 	if (ret)
@@ -10053,7 +10076,23 @@ decrease_rc_num:
 	PCIE_ERR(pcie_dev, "PCIe: RC%d: Driver probe failed. ret: %d\n",
 		pcie_dev->rc_idx, ret);
 
-	i2c_del_driver(&pcie_i2c_ctrl_driver);
+	/*
+	 * Skip i2c_del_driver() on EPROBE_DEFER: the I2C client probe may
+	 * still be in flight and removing the driver now would leave the
+	 * I2C subsystem with a dangling reference.  The driver will be
+	 * unregistered on the next successful probe or on module removal.
+	 */
+	if (i2c_ret != -EPROBE_DEFER) {
+		if (msm_pcie_i2c_drv_registered[rc_idx]) {
+			i2c_del_driver(msm_pcie_i2c_drv[rc_idx]);
+			msm_pcie_i2c_drv_registered[rc_idx] = false;
+		}
+
+		kfree(msm_pcie_i2c_drv[rc_idx]);
+		msm_pcie_i2c_drv[rc_idx] = NULL;
+		pcie_dev->i2c_drv = NULL;
+	}
+
 	msm_pcie_gdsc_genpd_detach(msm_pcie_dev[rc_idx]);
 
 	if (cpu_latency_qos_request_active(&pcie_dev->pcie_pm_qos))
@@ -10098,6 +10137,14 @@ static void msm_pcie_remove(struct platform_device *pdev)
 	/* Use CESTA to turn off the resources */
 	if (msm_pcie_dev[rc_idx]->pcie_sm)
 		msm_pcie_cesta_map_apply(msm_pcie_dev[rc_idx], D3COLD_STATE);
+
+	if (msm_pcie_i2c_drv_registered[rc_idx]) {
+		i2c_del_driver(msm_pcie_i2c_drv[rc_idx]);
+		kfree(msm_pcie_i2c_drv[rc_idx]);
+		msm_pcie_i2c_drv[rc_idx] = NULL;
+		msm_pcie_dev[rc_idx]->i2c_drv = NULL;
+		msm_pcie_i2c_drv_registered[rc_idx] = false;
+	}
 
 	msm_pcie_irq_deinit(msm_pcie_dev[rc_idx]);
 	msm_pcie_vreg_deinit(msm_pcie_dev[rc_idx]);
@@ -11030,8 +11077,6 @@ static void __exit pcie_exit(void)
 	int i;
 
 	pr_info("PCIe: %s\n", __func__);
-
-	i2c_del_driver(&pcie_i2c_ctrl_driver);
 
 	if (mpcie_wq)
 		destroy_workqueue(mpcie_wq);
