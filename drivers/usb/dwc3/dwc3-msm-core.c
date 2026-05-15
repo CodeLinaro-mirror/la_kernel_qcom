@@ -6371,6 +6371,7 @@ static void dwc3_msm_override_pm_ops(struct device *dev, struct dev_pm_ops *pm_o
 static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 {
 	struct device_node *node = mdwc->dev->of_node, *dwc3_node;
+	bool wakeup_source;
 	struct dwc3	*dwc;
 	int ret = 0;
 	u32 val;
@@ -6470,6 +6471,12 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 		goto depopulate;
 
 	dwc3_msm_override_pm_ops(dwc->dev, mdwc->dwc3_pm_ops, false);
+
+	// Set device wakeupable to avoid DWC3 core core exit routine in
+	// dwc3_suspend_common() while operating in host mode.
+	wakeup_source = of_property_read_bool(node, "wakeup-source");
+	device_init_wakeup(mdwc->dev, wakeup_source);
+	device_init_wakeup(dwc->dev, wakeup_source);
 
 	mdwc->xhci_pm_ops = kzalloc(sizeof(struct dev_pm_ops), GFP_ATOMIC);
 	if (!mdwc->xhci_pm_ops)
@@ -8479,7 +8486,7 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 	dev_dbg(dev, "DWC3-msm runtime suspend\n");
 	dbg_event(0xFF, "RT Sus", 0);
 
-	if (dwc)
+	if (dwc && !mdwc->force_suspend)
 		device_init_wakeup(dwc->dev, false);
 
 	if (dev->pm_domain) {
