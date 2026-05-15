@@ -34,6 +34,7 @@
 #include <linux/pci.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
+#include <linux/pm_qos.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_wakeup.h>
 #include <linux/remoteproc/qcom_rproc.h>
@@ -1347,6 +1348,9 @@ struct msm_pcie_dev_t {
 
 	u32 dbi_debug_reg_len;
 	u32 *dbi_debug_reg;
+
+	/* CPU latency QoS request — voted at max perf during probe */
+	struct pm_qos_request pcie_pm_qos;
 
 	/* CESTA related structs */
 	/* Device handler when using the crm driver APIs */
@@ -9928,6 +9932,14 @@ static int msm_pcie_probe(struct platform_device *pdev)
 
 	PCIE_DBG(pcie_dev, "PCIe: RC index is %d.\n", pcie_dev->rc_idx);
 
+	/*
+	 * Vote for max CPU QoS (zero latency tolerance) during probe,
+	 * to prevent deep idle states that could impact PCIe link
+	 * training and enumeration latency.
+	 */
+	cpu_latency_qos_add_request(&pcie_dev->pcie_pm_qos, 0);
+	PCIE_INFO(pcie_dev, "PCIe: RC%d: voted for max CPU QoS\n", pcie_dev->rc_idx);
+
 	msm_pcie_read_dt(pcie_dev, rc_idx, pdev, of_node);
 
 	memcpy(pcie_dev->vreg, msm_pcie_vreg_info, sizeof(msm_pcie_vreg_info));
@@ -10009,6 +10021,8 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		PCIE_DBG(pcie_dev,
 			"PCIe: RC%d will be enumerated by client or endpoint.\n",
 			pcie_dev->rc_idx);
+		if (cpu_latency_qos_request_active(&pcie_dev->pcie_pm_qos))
+			cpu_latency_qos_remove_request(&pcie_dev->pcie_pm_qos);
 		mutex_unlock(&pcie_drv.drv_lock);
 		return 0;
 	}
@@ -10024,6 +10038,9 @@ static int msm_pcie_probe(struct platform_device *pdev)
 
 	PCIE_DBG(pcie_dev, "PCIe probed %s\n", dev_name(&pdev->dev));
 
+	if (cpu_latency_qos_request_active(&pcie_dev->pcie_pm_qos))
+		cpu_latency_qos_remove_request(&pcie_dev->pcie_pm_qos);
+
 	mutex_unlock(&pcie_drv.drv_lock);
 	return 0;
 
@@ -10034,6 +10051,9 @@ decrease_rc_num:
 
 	i2c_del_driver(&pcie_i2c_ctrl_driver);
 	msm_pcie_gdsc_genpd_detach(msm_pcie_dev[rc_idx]);
+
+	if (cpu_latency_qos_request_active(&pcie_dev->pcie_pm_qos))
+		cpu_latency_qos_remove_request(&pcie_dev->pcie_pm_qos);
 
 out:
 	if (rc_idx < 0 || rc_idx >= MAX_RC_NUM)
@@ -10630,6 +10650,7 @@ static struct platform_driver msm_pcie_driver = {
 	.driver	= {
 		.name		= "pci-msm",
 		.of_match_table	= msm_pcie_match,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		.pm		= pm_sleep_ptr(&qcom_pcie_pm_ops),
 	},
 };
