@@ -36,6 +36,9 @@
 #define PIPE_UTMI_CLK_SEL			BIT(0)
 #define PIPE3_PHYSTATUS_SW			BIT(3)
 #define PIPE_UTMI_CLK_DIS			BIT(8)
+#define PIPE_1_UTMI_CLK_SEL			BIT(16)
+#define PIPE3_1_PHYSTATUS_SW			BIT(19)
+#define PIPE_1_UTMI_CLK_DIS			BIT(24)
 
 #define PWR_EVNT_LPM_IN_L2_MASK			BIT(4)
 #define PWR_EVNT_LPM_OUT_L2_MASK		BIT(5)
@@ -90,6 +93,7 @@ struct dwc3_qcom {
 	bool			pm_suspended;
 	struct icc_path		*icc_path_ddr;
 	struct icc_path		*icc_path_apps;
+	unsigned int is_mp;
 };
 
 static inline void dwc3_qcom_setbits(void __iomem *base, u32 offset, u32 val)
@@ -529,6 +533,20 @@ static void dwc3_qcom_select_utmi_clk(struct dwc3_qcom *qcom)
 
 	dwc3_qcom_clrbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
 			  PIPE_UTMI_CLK_DIS);
+	if (qcom->is_mp) {
+		dwc3_qcom_setbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
+			  PIPE_1_UTMI_CLK_DIS);
+
+		usleep_range(100, 1000);
+
+		dwc3_qcom_setbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
+					PIPE_1_UTMI_CLK_SEL | PIPE3_1_PHYSTATUS_SW);
+
+		usleep_range(100, 1000);
+
+		dwc3_qcom_clrbits(qcom->qscratch_base, QSCRATCH_GENERAL_CFG,
+					PIPE_1_UTMI_CLK_DIS);
+	}
 }
 
 static int dwc3_qcom_request_irq(struct dwc3_qcom *qcom, int irq,
@@ -788,6 +806,7 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	 * Disable pipe_clk requirement if specified. Used when dwc3
 	 * operates without SSPHY and only HS/FS/LS modes are supported.
 	 */
+	qcom->is_mp = (uintptr_t)of_device_get_match_data(dev);
 	ignore_pipe_clk = device_property_read_bool(dev,
 				"qcom,select-utmi-as-pipe-clk");
 	if (ignore_pipe_clk)
@@ -910,7 +929,8 @@ static const struct dev_pm_ops dwc3_qcom_dev_pm_ops = {
 };
 
 static const struct of_device_id dwc3_qcom_of_match[] = {
-	{ .compatible = "qcom,dwc3-mp" },
+	{ .compatible = "qcom,dwc3-mp", .data = (void *)0UL },
+	{ .compatible = "qcom,x1e80100-dwc3-mp", .data = (void *)1UL },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, dwc3_qcom_of_match);
