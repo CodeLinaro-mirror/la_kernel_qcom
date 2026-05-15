@@ -9990,12 +9990,6 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	pcie_dev->save_sid_config = NULL;
 	dev_set_drvdata(&pdev->dev, pcie_dev);
 
-	ret = i2c_add_driver(&pcie_i2c_ctrl_driver);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to add i2c ctrl driver: %d\n", ret);
-		goto decrease_rc_num;
-	}
-
 	ret = msm_pcie_i2c_ctrl_init(pcie_dev);
 	if (ret)
 		goto decrease_rc_num;
@@ -10983,6 +10977,10 @@ static int __init pcie_init(void)
 	pcie_drv.rc_num = 0;
 	mutex_init(&pcie_drv.drv_lock);
 	mutex_init(&pcie_drv.rpmsg_lock);
+
+	ret = i2c_add_driver(&pcie_i2c_ctrl_driver);
+	if (ret != 0)
+		pr_err("Failed to add i2c ctrl driver: %d\n", ret);
 
 	crc8_populate_msb(msm_pcie_crc8_table, MSM_PCIE_CRC8_POLYNOMIAL);
 
