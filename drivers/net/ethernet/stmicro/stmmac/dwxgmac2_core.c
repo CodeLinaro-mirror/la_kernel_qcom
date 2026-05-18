@@ -384,7 +384,7 @@ static void dwxgmac2_flow_ctrl(struct mac_device_info *hw, unsigned int duplex,
 	if (fc & FLOW_RX)
 		writel(XGMAC_RFE, ioaddr + XGMAC_RX_FLOW_CTRL);
 	if (fc & FLOW_TX) {
-		for (i = 0; i < tx_cnt; i++) {
+		for (i = 0; i < min(tx_cnt, XGMAC_MAX_TC); i++) {
 			u32 value = XGMAC_TFE;
 
 			if (duplex)
@@ -1553,6 +1553,11 @@ static int dwxgmac3_est_configure(void __iomem *ioaddr, struct stmmac_est *cfg,
 {
 	int i, ret = 0x0;
 	u32 ctrl;
+
+        if (!ptp_rate) {
+                pr_warn("Dwxgmac2: Invalid PTP rate");
+                return -EINVAL;
+        }
 
 	ret |= dwxgmac3_est_write(ioaddr, XGMAC_BTR_LOW, cfg->btr[0], false);
 	ret |= dwxgmac3_est_write(ioaddr, XGMAC_BTR_HIGH, cfg->btr[1], false);

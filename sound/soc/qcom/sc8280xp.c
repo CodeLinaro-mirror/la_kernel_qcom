@@ -71,6 +71,7 @@ static struct snd_soc_common qcs6490_priv_data = {
 	.driver_name = "qcs6490",
 	.dapm_widgets = sc8280xp_dapm_widgets,
 	.num_dapm_widgets = ARRAY_SIZE(sc8280xp_dapm_widgets),
+	.jack_enable = true,
 };
 
 static struct snd_soc_common qcs8275_priv_data = {

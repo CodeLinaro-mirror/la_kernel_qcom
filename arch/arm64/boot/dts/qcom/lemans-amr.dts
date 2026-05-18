@@ -671,11 +671,12 @@
 			  "USB2_PWR_EN",
 			  "USB2_FAULT";
 
-	bt_en_state: bt-en-state {
-		pins = "gpio8";
-		function = "normal";
-		output-low;
-		bias-pull-down;
+	bt_en_hog: bt-en-hog {
+		gpio-hog;
+		gpios = <8 GPIO_ACTIVE_HIGH>;
+		output-high;
+		input-disable;
+		line-name = "BT_EN";
 	};
 
 	wlan_en_hog: wlan-en-hog {
@@ -684,6 +685,13 @@
 		output-high;
 		input-disable;
 		line-name = "WLAN_EN";
+	};
+
+	usb2_en_state: usb2-en-state {
+		pins = "gpio9";
+		function = "normal";
+		output-high;
+		power-source = <0>;
 	};
 };
 
@@ -1005,9 +1013,6 @@
 	/* HS UART Instance */
 	bluetooth: bluetooth {
 		compatible = "qcom,wcn6855-bt";
-		pinctrl-names = "default";
-		pinctrl-0 = <&bt_en_state>;
-		enable-gpios = <&pmm8654au_1_gpios 8 GPIO_ACTIVE_HIGH>; /* BT_EN */
 		max-speed = <3200000>;
 	};
 };
@@ -1134,6 +1139,13 @@
 	phys = <&usb_2_hsphy>;
 	phy-names = "usb2-phy";
 	status = "okay";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&usb2_en_state>;
+
+	dr_mode = "host";
+	qcom,enable-rt;
+	wakeup-source;
 };
 
 &usb_2_hsphy {

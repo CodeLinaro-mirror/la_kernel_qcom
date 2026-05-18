@@ -466,6 +466,7 @@ static inline u32 xgmac_mtl_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_TCEIE			BIT(0)
 #define XGMAC_DMA_ECC_INT_STATUS	0x0000306c
 #define XGMAC_DMA_DPP_INT_STATUS	0x00003074
+#define XGMAC_MAX_TC			8
 
 static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 					    const u32 x)

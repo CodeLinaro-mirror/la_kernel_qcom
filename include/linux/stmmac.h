@@ -110,6 +110,10 @@ struct stmmac_dma_cfg {
 	bool rx_pdma_custom_map;
 	u8 tx_pdma_map[MTL_MAX_TX_QUEUES];
 	u8 rx_pdma_map[MTL_MAX_RX_QUEUES];
+	bool tx_vdma_custom_map;
+	bool rx_vdma_custom_map;
+	u8 tx_vdma_map[MTL_MAX_TX_QUEUES];
+	u8 rx_vdma_map[MTL_MAX_RX_QUEUES];
 };
 
 #define AXI_BLEN	7
@@ -309,6 +313,8 @@ struct plat_stmmacenet_data {
 	int (*resume)(struct device *dev, void *priv);
 	void (*safety_irq)(struct stmmac_priv *priv, bool en);
 	void (*safety_pcs_stats)(struct stmmac_priv *priv, unsigned long *ptr);
+	void (*get_queue_and_tc_from_vdma)(struct stmmac_priv *priv, u32 vdma_ch,
+					   unsigned long *queue_mask, u32 *tc);
 	struct mac_device_info *(*setup)(void *priv);
 	int (*clks_config)(void *priv, bool enabled);
 	int (*crosststamp)(ktime_t *device, struct system_counterval_t *system,
@@ -347,7 +353,5 @@ struct plat_stmmacenet_data {
 	const struct dwmac4_addrs *dwmac4_addrs;
 	const struct dwxgmac_addrs *dwxgmac_addrs;
 	unsigned int flags;
-	u32 eeprom_reg;
-	u32 i2c_id;
 };
 #endif

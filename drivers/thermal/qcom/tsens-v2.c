@@ -112,21 +112,31 @@ static const struct tsens_ops ops_generic_v2 = {
 };
 
 struct tsens_plat_data data_tsens_v2 = {
-	.ops		= &ops_generic_v2,
-	.feat		= &tsens_v2_feat,
-	.fields	= tsens_v2_regfields,
+	.ops = &ops_generic_v2,
+	.feat = &tsens_v2_feat,
+	.fields = tsens_v2_regfields,
+	.tsens_disable_on_suspend = false,
+};
+
+struct tsens_plat_data data_sa8775p = {
+	.ops = &ops_generic_v2,
+	.feat = &tsens_v2_feat,
+	.fields = tsens_v2_regfields,
+	.tsens_disable_on_suspend = true,
 };
 
 struct tsens_plat_data data_ipq8074 = {
-	.ops		= &ops_generic_v2,
-	.feat		= &ipq8074_feat,
-	.fields	= tsens_v2_regfields,
+	.ops = &ops_generic_v2,
+	.feat = &ipq8074_feat,
+	.fields = tsens_v2_regfields,
+	.tsens_disable_on_suspend = false,
 };
 
 /* Kept around for backward compatibility with old msm8996.dtsi */
 struct tsens_plat_data data_8996 = {
-	.num_sensors	= 13,
-	.ops		= &ops_generic_v2,
-	.feat		= &tsens_v2_feat,
-	.fields	= tsens_v2_regfields,
+	.num_sensors = 13,
+	.ops = &ops_generic_v2,
+	.feat = &tsens_v2_feat,
+	.fields = tsens_v2_regfields,
+	.tsens_disable_on_suspend = false,
 };

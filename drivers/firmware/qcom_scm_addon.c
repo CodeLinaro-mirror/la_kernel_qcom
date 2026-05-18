@@ -24,8 +24,8 @@
 /* TOS Services and Function IDs */
 #define QCOM_SCM_SVC_QSEELOG            0x01
 #define QCOM_SCM_QSEELOG_REGISTER       0x06
-#define QCOM_SCM_QUERY_ENCR_LOG_FEAT_ID     0x0b
 #define QCOM_SCM_REQUEST_ENCR_LOG_ID        0x0c
+#define QCOM_SCM_QUERY_LOG_STATUS           0x0f
 
 /* Feature IDs for QCOM_SCM_INFO_GET_FEAT_VERSION */
 #define QCOM_SCM_TZ_DBG_ETM_FEAT_ID     0x08
@@ -271,23 +271,23 @@ int qcom_scm_register_qsee_log_buf(phys_addr_t buf, size_t len)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_register_qsee_log_buf);
 
-int qcom_scm_query_encrypted_log_feature(u64 *enabled)
+int qcom_scm_query_log_status(u64 *status)
 {
 	int ret;
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_QSEELOG,
-		.cmd = QCOM_SCM_QUERY_ENCR_LOG_FEAT_ID,
+		.cmd = QCOM_SCM_QUERY_LOG_STATUS,
 		.owner = ARM_SMCCC_OWNER_TRUSTED_OS
 	};
 	struct qcom_scm_res res;
 
 	ret = qcom_scm_call(__scm->dev, &desc, &res);
-	if (enabled)
-		*enabled = res.result[0];
+	if (!ret)
+		*status = res.result[0];
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(qcom_scm_query_encrypted_log_feature);
+EXPORT_SYMBOL_GPL(qcom_scm_query_log_status);
 
 int qcom_scm_request_encrypted_log(phys_addr_t buf,
 					size_t len,

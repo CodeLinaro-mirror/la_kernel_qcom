@@ -38,6 +38,35 @@
 		regulator-max-microvolt = <1800000>;
 	};
 
+	vdc_5v: vdc-5v {
+		compatible = "regulator-fixed";
+		regulator-name = "vdc_5v";
+
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		gpio = <&tlmm 49 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+
+	adv7535_vreg_1v8: adv7535_1v8_regulstor {
+		compatible = "regulator-fixed";
+		regulator-name = "ADV7535_1V8";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	adv7535_vreg_3v3: adv7535_3v3_regulstor {
+		compatible = "regulator-fixed";
+		regulator-name = "ADV7535_3V3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
 	edp-connector {
 		compatible = "dp-connector";
 		label = "EDP";
@@ -48,6 +77,28 @@
 				remote-endpoint = <&mdss_dp_out>;
 			};
 		};
+	};
+
+	hdmi-connector {
+		compatible = "hdmi-connector";
+		label = "hdmi";
+		type = "a";
+
+		port {
+			hdmi_connector_in: endpoint {
+				remote-endpoint = <&adv7535_out>;
+			};
+		};
+	};
+
+	nvme_vreg_en: nvme_vreg_en {
+		compatible = "regulator-fixed";
+		regulator-name = "nvme_vreg_en";
+		gpio = <&tlmm 51 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <10000>;
 	};
 };
 
@@ -201,7 +252,7 @@
 };
 
 &ethernet0 {
-	phy-mode = "sgmii";
+	phy-mode = "2500base-x";
 	phy-handle = <&hsgmii_phy0>;
 
 	pinctrl-0 = <&ethernet0_default>;
@@ -220,7 +271,7 @@
 		hsgmii_phy0: phy@1c {
 			compatible = "ethernet-phy-id004d.d101";
 			reg = <0x1c>;
-			reset-gpios = <&tlmm 31 GPIO_ACTIVE_LOW>;
+			reset-gpios = <&tlmm 50 GPIO_ACTIVE_LOW>;
 			reset-assert-us = <11000>;
 			reset-deassert-us = <70000>;
 		};
@@ -294,6 +345,14 @@
 	status = "okay";
 };
 
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	firmware-name = "qcom/qcs8300/a623_zap.mbn";
+};
+
 &i2c8 {
 	pinctrl-0 = <&qup_i2c8_default>, <&usb0_intr_state>;
 	pinctrl-names = "default";
@@ -332,6 +391,50 @@
 	};
 };
 
+&i2c12 {
+	status = "okay";
+
+	adv7535: hdmi@3d {
+		compatible = "adi,adv7535";
+		reg = <0x3d>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <93 IRQ_TYPE_EDGE_FALLING>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&hdmi_conv_int_pins>;
+
+		adi,dsi-lanes = <4>;
+		avdd-supply = <&adv7535_vreg_1v8>;
+		dvdd-supply = <&adv7535_vreg_1v8>;
+		pvdd-supply = <&adv7535_vreg_1v8>;
+		a2vdd-supply = <&adv7535_vreg_1v8>;
+		v3p3-supply = <&adv7535_vreg_3v3>;
+		v1p2-supply = <&adv7535_vreg_1v8>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				adv7535_in: endpoint {
+					remote-endpoint = <&mdss_dsi0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				adv7535_out: endpoint {
+					remote-endpoint = <&hdmi_connector_in>;
+				};
+			};
+		};
+	};
+};
+
 &ice {
 	status = "okay";
 };
@@ -355,6 +458,21 @@
 	remote-endpoint = <&edp_connector_in>;
 };
 
+&mdss_dsi0 {
+	status = "okay";
+	vdda-supply = <&vreg_l1c>;
+};
+
+&mdss_dsi0_out {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&adv7535_in>;
+};
+
+&mdss_dsi0_phy {
+	status = "okay";
+	vdds-supply = <&vreg_l4a>;
+};
+
 &mdss_edp_phy {
 	status = "okay";
 };
@@ -362,6 +480,15 @@
 &pcie0 {
 	perst-gpios = <&tlmm 2 GPIO_ACTIVE_LOW>;
 	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
+
+	iommu-map = <0x0 &pcie_smmu 0x0000 0x1>,
+		    <0x100 &pcie_smmu 0x0001 0x1>,
+		    <0x200 &pcie_smmu 0x0002 0x1>,
+		    <0x208 &pcie_smmu 0x0003 0x1>,
+		    <0x210 &pcie_smmu 0x0004 0x1>,
+		    <0x218 &pcie_smmu 0x0005 0x1>,
+		    <0x300 &pcie_smmu 0x0006 0x1>,
+		    <0x400 &pcie_smmu 0x0007 0x1>;
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_default_state>;
@@ -377,6 +504,7 @@
 };
 
 &pcie1 {
+	vdda-supply = <&nvme_vreg_en>;
 	perst-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
 	wake-gpios = <&tlmm 21 GPIO_ACTIVE_HIGH>;
 
@@ -388,7 +516,7 @@
 
 &pcie1_phy {
 	vdda-phy-supply = <&vreg_l6a>;
-	vdda-pll-supply = <&vreg_l5a>;
+	vdda-pll-supply = <&vreg_l4a>;
 
 	status = "okay";
 };
@@ -400,6 +528,11 @@
 	       output-high;
 	       power-source = <0>;
 	};
+};
+
+&qup_i2c12_data_clk {
+	drive-strength = <2>;
+	bias-pull-up;
 };
 
 &qupv3_id_0 {
@@ -470,17 +603,17 @@
 };
 
 &tlmm {
-	edp0-pwr-en-hog {
-		gpio-hog;
-		gpios = <81 GPIO_ACTIVE_HIGH>;
-		output-high;
-		line-name = "edp0-pwr-en-hog";
-	};
-
 	dp_hot_plug_det: dp-hot-plug-det-state {
 		pins = "gpio94";
 		function = "edp0_hot";
 		bias-disable;
+	};
+
+	hdmi_conv_int_pins: hdmi-conv-int-pins {
+		pins = "gpio93";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
 	};
 
 	ethernet0_default: ethernet0-default-state {

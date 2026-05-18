@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+
+/dts-v1/;
+/plugin/;
+
+&remoteproc_gpdsp {
+	iommus = <&apps_smmu 0x28a0 0x0>;
+};
+
+&remoteproc_adsp {
+	iommus = <&apps_smmu 0x2000 0x0>;
+};
+
+&remoteproc_cdsp {
+	iommus = <&apps_smmu 0x19c0 0x0400>;
+};
+

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -533,7 +532,6 @@
 };
 
 &sound {
-	compatible = "qcom,qcs6490-rb3gen2-ia-sndcard";
 	model = "qcs6490-rb3gen2-ia-snd-card";
 	audio-routing =
 		"SpkrLeft IN", "WSA_SPK1 OUT",

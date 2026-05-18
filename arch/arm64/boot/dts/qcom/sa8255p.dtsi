@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -397,6 +396,11 @@
 			no-map;
 		};
 
+		mm_dspq: mm_dspq_region@abbfe000 {
+			reg = <0x0 0xabbfe000 0x0 0x200000>;
+			no-map;
+		};
+
 		audio_config: audio-config-region@ac600000 {
 			reg = <0x0 0xac600000 0x0 0x0a00000>;
 			no-map;
@@ -412,8 +416,8 @@
 			no-map;
 		};
 
-		hyptz_reserved_mem: hyptz-reserved@beb00000 {
-			reg = <0x0 0xbeb00000 0x0 0x11500000>;
+		hyptz_reserved_mem: hyptz-reserved@bc900000 {
+			reg = <0x0 0xbc900000 0x0 0x13700000>;
 			no-map;
 		};
 
@@ -457,8 +461,8 @@
 			no-map;
 		};
 
-		trusted_apps_mem: trusted-apps@d1900000 {
-			reg = <0x0 0xd1900000 0x0 0x3800000>;
+		trusted_apps_mem: trusted-apps@d1a00000 {
+			reg = <0x0 0xd1a00000 0x0 0x3800000>;
 			no-map;
 		};
 
@@ -491,8 +495,8 @@
 		dcc: dma@40ff000 {
 			compatible = "qcom,dcc-v3", "qcom,dcc";
 			reg = <0x0 0x040ff000 0x0 0x1000>,
-			      <0x0 0x040b8800 0x0 0x6000>;
-			qcom,dcc-offset = <0x38800>;
+			      <0x0 0x040a3000 0x0 0x1b800>;
+			qcom,dcc-offset = <0x23000>;
 		};
 
 		ipcc0: mailbox@408000 {

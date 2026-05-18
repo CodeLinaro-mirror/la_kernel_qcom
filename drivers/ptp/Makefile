@@ -21,3 +21,4 @@ obj-$(CONFIG_PTP_1588_CLOCK_VMW)	+= ptp_vmw.o
 obj-$(CONFIG_PTP_1588_CLOCK_OCP)	+= ptp_ocp.o
 obj-$(CONFIG_PTP_DFL_TOD)		+= ptp_dfl_tod.o
 obj-$(CONFIG_PTP_QCOM_CLOCK_TSC)	+= ptp_qcom_tsc.o
+obj-$(CONFIG_PTP_QCOM_CLOCK_TSC_V1)	+= ptp_qcom_tsc_v1.o

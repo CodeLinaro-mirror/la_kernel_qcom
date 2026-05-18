@@ -1060,7 +1060,7 @@ static int bcm2835_pinconf_set(struct pinctrl_dev *pctldev,
 			break;
 
 		/* Set output-high or output-low */
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			bcm2835_gpio_set_bit(pc, arg ? GPSET0 : GPCLR0, pin);
 			break;
 
@@ -1132,7 +1132,7 @@ static int bcm2711_pinconf_set(struct pinctrl_dev *pctldev,
 			break;
 
 		/* Set output-high or output-low */
-		case PIN_CONFIG_OUTPUT:
+		case PIN_CONFIG_LEVEL:
 			bcm2835_gpio_set_bit(pc, arg ? GPSET0 : GPCLR0, pin);
 			break;
 
