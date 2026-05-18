@@ -489,7 +489,7 @@ static int dpd_memory_reclaim(struct dpd_mem_ops_args *args, struct sg_table *sg
 	if (!args->iommu_bypass && val) {
 		dpd_args_show(args, true, "Mapped by service\n");
 		return -EINVAL;
-	} else if (args->iommu_bypass && val != 1) {
+	} else if (args->iommu_bypass && val != dpd_args_len(args)) {
 		dpd_args_show(args, true, "Unexpected mapcount %ld for iommu bypass\n", val);
 		return -EINVAL;
 	}
