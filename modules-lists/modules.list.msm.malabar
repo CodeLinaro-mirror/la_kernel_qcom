@@ -105,3 +105,4 @@ arm_smmu_pmu.ko
 deferred-free-helper.ko
 i2c-msm-geni.ko
 msm_gpi.ko
+crypto-qti.ko

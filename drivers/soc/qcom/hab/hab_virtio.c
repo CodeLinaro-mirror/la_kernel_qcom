@@ -29,6 +29,7 @@
 #define HAB_VIRTIO_DEVICE_ID_SOCCP	99
 #define HAB_VIRTIO_DEVICE_ID_DPRX	100
 #define HAB_VIRTIO_DEVICE_ID_EVA	101
+#define HAB_VIRTIO_DEVICE_ID_HSI2S	102
 
 /* all probed virtio_hab stored in this list */
 static struct list_head vhab_list = LIST_HEAD_INIT(vhab_list);
@@ -55,6 +56,7 @@ static struct virtio_device_tbl {
 	{ MM_SOCCP_1, HAB_VIRTIO_DEVICE_ID_SOCCP, NULL },
 	{ MM_DPRX_1, HAB_VIRTIO_DEVICE_ID_DPRX, NULL },
 	{ MM_EVA_1, HAB_VIRTIO_DEVICE_ID_EVA, NULL },
+	{ MM_HSI2S_1, HAB_VIRTIO_DEVICE_ID_HSI2S, NULL },
 };
 
 enum pool_type_t {
@@ -869,6 +871,10 @@ INIT_DONE:
 		mmid_start = MM_EVA_1;
 		mmid_range = MM_EVA_END - MM_EVA_START - 1;
 		virthab_store_vdev(MM_EVA_1, vdev);
+	} else if (vdev->id.device == HAB_VIRTIO_DEVICE_ID_HSI2S) {
+		mmid_start = MM_HSI2S_1;
+		mmid_range = MM_HSI2S_END - MM_HSI2S_START - 1;
+		virthab_store_vdev(MM_HSI2S_1, vdev);
 	} else {
 		pr_err("unknown virtio device is detected %d\n",
 			vdev->id.device);
@@ -999,6 +1005,7 @@ static struct virtio_device_id id_table[] = {
 	{ HAB_VIRTIO_DEVICE_ID_SOCCP, VIRTIO_DEV_ANY_ID }, /* virtio soccp */
 	{ HAB_VIRTIO_DEVICE_ID_DPRX, VIRTIO_DEV_ANY_ID }, /* virtio dprx */
 	{ HAB_VIRTIO_DEVICE_ID_EVA, VIRTIO_DEV_ANY_ID }, /* virtio eva */
+	{ HAB_VIRTIO_DEVICE_ID_HSI2S, VIRTIO_DEV_ANY_ID }, /* virtio hsi2s */
 	{ 0 },
 };
 

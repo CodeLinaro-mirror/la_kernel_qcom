@@ -88,6 +88,8 @@ static irqreturn_t smmuv2_cb_fault_handler(int irq, void *dev)
 	return IRQ_HANDLED;
 }
 
+static struct platform_driver smmuv2_nesting_driver;
+
 int smmuv2_post_boot_init(void)
 {
 	struct device_node *np;
@@ -195,6 +197,11 @@ int smmuv2_post_boot_init(void)
 		pr_info("SMMU GR1 mapped: PA=0x%llx, VA=0x%llx, size=0x%x\n",
 			gr1_base_pa, (u64)gr1_base, cb_size);
 	}
+
+	/* Needed to let the EL1 drivers to bind later */
+	platform_driver_unregister(&smmuv2_nesting_driver);
+	(void)bus_rescan_devices(&platform_bus_type);
+
 	return 0;
 }
 
@@ -265,6 +272,25 @@ int smmuv2_describe_smmuv2(void)
 	return total_smmus;
 }
 
+static void smmuv2_nesting_remove(struct platform_device *pdev)
+{
+	arm_smmu_power_off(NULL, pdev->dev.platform_data);
+}
+
+static int smmuv2_nesting_probe(struct platform_device *pdev)
+{
+	int ret;
+	struct arm_smmu_power_resources *pwr;
+
+	pwr = arm_smmu_init_power_resources(&pdev->dev);
+	ret = arm_smmu_power_on(pwr);
+
+	//Required for remove
+	pdev->dev.platform_data = pwr;
+
+	return ret;
+}
+
 int __maybe_unused smmuv2_nesting_init(void)
 {
 	int nr_smmus;
@@ -274,8 +300,28 @@ int __maybe_unused smmuv2_nesting_init(void)
 	if (nr_smmus == 0)
 		return 0;
 
+	ret = platform_driver_probe(&smmuv2_nesting_driver, smmuv2_nesting_probe);
+	if (ret) {
+		pr_err("%s smmuv2 probe failed (ret = %d)\n", __func__, ret);
+		return ret;
+	}
+
+	pr_info("%s smmuv2 probe successful\n", __func__);
+
 	return ret;
 }
 
+static const struct of_device_id smmuv2_nested_of_match[] = {
+	{ .compatible = "qcom,qsmmu-v500", },
+	{ },
+};
+
+static struct platform_driver smmuv2_nesting_driver = {
+	.driver = {
+		.name = "smmuv2-nesting",
+		.of_match_table = smmuv2_nested_of_match,
+	},
+	.remove_new = smmuv2_nesting_remove,
+};
 MODULE_LICENSE("GPL");
 

@@ -29,6 +29,7 @@ def define_malabar():
                 "console=ttyMSM0,115200n8",
                 "qcom_geni_serial.con_enabled=1",
                 "earlycon",
+                "ufshcd_core.uic_cmd_timeout=2000",
             ]
 
             consolidate_build_img_opts = boot_image_opts(

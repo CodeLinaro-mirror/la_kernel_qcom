@@ -1588,6 +1588,7 @@ static void register_pstore_info(void)
 		paddr += size;
 	}
 
+#ifndef CONFIG_QCOM_MINIDUMP_FTRACE
 	ret = of_property_read_u32(node, "ftrace-size", &size);
 	if (!ret && size > 0) {
 		strscpy(md_entry.name, "KFTRACE", sizeof(md_entry.name));
@@ -1600,6 +1601,7 @@ static void register_pstore_info(void)
 
 		paddr += size;
 	}
+#endif /* CONFIG_QCOM_MINIDUMP_FTRACE */
 
 	ret = of_property_read_u32(node, "pmsg-size", &size);
 	if (!ret && size > 0) {

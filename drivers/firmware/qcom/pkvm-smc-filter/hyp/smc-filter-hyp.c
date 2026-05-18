@@ -70,10 +70,8 @@ static bool forward_smc_ext_args(phys_addr_t buf, struct user_pt_regs *regs)
 	}
 
 	/* Forward the SMC to TZ */
-	/* TODO: uncomment hyp_exit() and hyp_entry() for proper tracing and other handling */
-	// m_ops->hyp_exit();
+	/* TODO: use arm_smccc_1_2_smc() module API once available upstream */
 	__forward_smc(regs);
-	// m_ops->hyp_enter();
 
 	/* Undo the memory sharing and pinning */
 	for (pfn = pfn_start; pfn <= pfn_end; pfn++) {
@@ -103,9 +101,6 @@ static bool handle_scm_extended_abi(struct user_pt_regs *regs)
 		const phys_addr_t ext_arg_buf = regs->regs[SCM_SMC_LAST_REG_IDX];
 
 		if (forward_smc_ext_args(ext_arg_buf, regs)) {
-			// TODO: revert to printf usage once pKVM common changes can be used.
-			// m_ops->printf("ERROR: qcom SMC filter Extended ABI handling, ID 0x%x\n",
-			//		(u32)regs->regs[SMCCC_FUNC_ID_REG_IDX]);
 			m_ops->puts("[pKVM EL2] ERROR: qcom SMC filter Extended ABI, ID:");
 			m_ops->putx64(regs->regs[SMCCC_FUNC_ID_REG_IDX]);
 			regs->regs[SMCCC_EC_REG_IDX] = SMCCC_RET_INVALID_PARAMETER;
@@ -131,11 +126,13 @@ static bool smc_filter_host_sip_handler(u32 func_id)
 	 */
 	switch (svc_cmd) {
 	case SMC_SIP_CONFIG_HW_FOR_RAM_DUMP_ID:
+	case SMC_SIP_SUBSYS_SET_STATE_ID:
 	case SMC_SIP_INFO_IS_CALL_AVAIL:
 	case SMC_SIP_INFO_GET_FEAT_VERSION:
 	case SMC_SIP_INFO_GET_SECURE_STATE:
 	case SMC_SIP_IO_READ:
 	case SMC_SIP_IO_WRITE:
+	case SMC_SIP_GIC_SET_CPUCLASS:
 		blocked = false;
 		break;
 	default:
@@ -222,8 +219,6 @@ bool smc_filter_host_handler(struct user_pt_regs *regs)
 	return false;
 
 terminate_smc:
-	// TODO: revert to printf usage once pKVM common changes in module API-s can be used.
-	// m_ops->printf("WARNING: qcom SMC filter blocking Function ID 0x%x\n", func_id);
 	m_ops->puts("[pKVM EL2] WARNING: qcom SMC filter blocking Function ID:");
 	m_ops->putx64(func_id);
 	regs->regs[SMCCC_EC_REG_IDX] = SMCCC_RET_NOT_SUPPORTED;

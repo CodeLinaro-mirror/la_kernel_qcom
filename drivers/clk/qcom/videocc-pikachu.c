@@ -462,44 +462,6 @@ static struct clk_branch video_cc_mvs0_vpp0_freerun_clk = {
 	},
 };
 
-static struct clk_branch video_cc_mvs0_vpp1_clk = {
-	.halt_reg = 0x8108,
-	.halt_check = BRANCH_HALT_VOTED,
-	.hwcg_reg = 0x8108,
-	.hwcg_bit = 1,
-	.clkr = {
-		.enable_reg = 0x8108,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "video_cc_mvs0_vpp1_clk",
-			.parent_hws = (const struct clk_hw*[]) {
-				&video_cc_mvs0_clk_src.clkr.hw,
-			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch video_cc_mvs0_vpp1_freerun_clk = {
-	.halt_reg = 0x8118,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x8118,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "video_cc_mvs0_vpp1_freerun_clk",
-			.parent_hws = (const struct clk_hw*[]) {
-				&video_cc_mvs0_clk_src.clkr.hw,
-			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch video_cc_mvs0b_clk = {
 	.halt_reg = 0x80bc,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -609,19 +571,6 @@ static struct gdsc video_cc_mvs0_vpp0_gdsc = {
 	.supply = "vdd_mm",
 };
 
-static struct gdsc video_cc_mvs0_vpp1_gdsc = {
-	.gdscr = 0x80f4,
-	.en_rest_wait_val = 0x2,
-	.en_few_wait_val = 0x2,
-	.clk_dis_wait_val = 0xf,
-	.pd = {
-		.name = "video_cc_mvs0_vpp1_gdsc",
-	},
-	.pwrsts = PWRSTS_OFF_ON,
-	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_mm",
-};
-
 static struct gdsc video_cc_mvs0c_gdsc = {
 	.gdscr = 0x814c,
 	.en_rest_wait_val = 0x2,
@@ -657,8 +606,6 @@ static struct clk_regmap *video_cc_pikachu_clocks[] = {
 	[VIDEO_CC_MVS0_SHIFT_CLK] = &video_cc_mvs0_shift_clk.clkr,
 	[VIDEO_CC_MVS0_VPP0_CLK] = &video_cc_mvs0_vpp0_clk.clkr,
 	[VIDEO_CC_MVS0_VPP0_FREERUN_CLK] = &video_cc_mvs0_vpp0_freerun_clk.clkr,
-	[VIDEO_CC_MVS0_VPP1_CLK] = &video_cc_mvs0_vpp1_clk.clkr,
-	[VIDEO_CC_MVS0_VPP1_FREERUN_CLK] = &video_cc_mvs0_vpp1_freerun_clk.clkr,
 	[VIDEO_CC_MVS0B_CLK] = &video_cc_mvs0b_clk.clkr,
 	[VIDEO_CC_MVS0B_CLK_SRC] = &video_cc_mvs0b_clk_src.clkr,
 	[VIDEO_CC_MVS0B_FREERUN_CLK] = &video_cc_mvs0b_freerun_clk.clkr,
@@ -675,7 +622,6 @@ static struct clk_regmap *video_cc_pikachu_clocks[] = {
 static struct gdsc *video_cc_pikachu_gdscs[] = {
 	[VIDEO_CC_MVS0_GDSC] = &video_cc_mvs0_gdsc,
 	[VIDEO_CC_MVS0_VPP0_GDSC] = &video_cc_mvs0_vpp0_gdsc,
-	[VIDEO_CC_MVS0_VPP1_GDSC] = &video_cc_mvs0_vpp1_gdsc,
 	[VIDEO_CC_MVS0C_GDSC] = &video_cc_mvs0c_gdsc,
 };
 
@@ -684,7 +630,6 @@ static const struct qcom_reset_map video_cc_pikachu_resets[] = {
 	[VIDEO_CC_MVS0_BCR] = { 0x80a4 },
 	[VIDEO_CC_MVS0_FREERUN_CLK_ARES] = { 0x80e0, 2 },
 	[VIDEO_CC_MVS0_VPP0_BCR] = { 0x811c },
-	[VIDEO_CC_MVS0_VPP1_BCR] = { 0x80f0 },
 	[VIDEO_CC_MVS0C_CLK_ARES] = { 0x8164, 2 },
 	[VIDEO_CC_MVS0C_BCR] = { 0x8148 },
 	[VIDEO_CC_MVS0C_FREERUN_CLK_ARES] = { 0x8174, 2 },
@@ -739,14 +684,18 @@ static int video_cc_pikachu_probe(struct platform_device *pdev)
 	clk_taycan_eko_t_pll_configure(&video_cc_pll2, regmap, &video_cc_pll2_config);
 
 	/*
+	 * Update VIDEO_CC_SPARE1 to have same clk_on for video_cc_mvs0_clk,
+	 * video_cc_mvs0_vpp0_clk, video_cc_mvs0_vpp1_clk during core reset by default.
+	 */
+	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
+
+	/*
 	 *	Maximize ctl data download delay and enable memory redundancy:
 	 *	MVS0 CFG3
-	 *	MVS0 VPP1 CFG3
 	 *	MVS0 VPP0 CFG3
 	 *	MVS0C CFG3
 	 */
 	regmap_update_bits(regmap, 0x80b4, ACCU_CFG_MASK, ACCU_CFG_MASK);
-	regmap_update_bits(regmap, 0x8100, ACCU_CFG_MASK, ACCU_CFG_MASK);
 	regmap_update_bits(regmap, 0x812c, ACCU_CFG_MASK, ACCU_CFG_MASK);
 	regmap_update_bits(regmap, 0x8158, ACCU_CFG_MASK, ACCU_CFG_MASK);
 

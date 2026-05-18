@@ -142,7 +142,7 @@ static int ffa_mem_share_list_del(uint64_t ffa_handle)
 	return rc;
 }
 
-int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
+int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, u8 attrs, uint64_t *ffa_handle)
 {
 	int rc = 0;
 
@@ -151,7 +151,7 @@ int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 
 	struct ffa_mem_region_attributes mem_attr = {
 		.receiver = qtee_ffa_dev->vm_id,
-		.attrs = FFA_MEM_RW,
+		.attrs = attrs,
 		.flag = 0,
 	};
 
@@ -172,7 +172,7 @@ int qtee_ffa_mem_share(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 
 	rc = qtee_ffa_dev->ops->mem_ops->memory_share(&mem_args);
 	if (rc) {
-		pr_err("memory_share failed: %d\n", rc);
+		pr_err("memory_share failed: %d, attrs: %x, tag: %llx\n", rc, attrs, tag);
 		goto exit;
 	}
 
@@ -190,7 +190,7 @@ exit:
 	return rc;
 }
 
-int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
+int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, u8 attrs, uint64_t *ffa_handle)
 {
 	int rc = 0;
 
@@ -199,7 +199,7 @@ int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 
 	struct ffa_mem_region_attributes mem_attr = {
 		.receiver = qtee_ffa_dev->vm_id,
-		.attrs = FFA_MEM_RW,
+		.attrs = attrs,
 		.flag = 0,
 	};
 
@@ -214,7 +214,7 @@ int qtee_ffa_mem_lend(struct sg_table *sgt, uint64_t tag, uint64_t *ffa_handle)
 
 	rc = qtee_ffa_dev->ops->mem_ops->memory_lend(&mem_args);
 	if (rc) {
-		pr_err("memory_lend failed: %d\n", rc);
+		pr_err("memory_lend failed: %d, attrs: %x, tag: %llx\n", rc, attrs, tag);
 		return rc;
 	}
 
@@ -400,7 +400,7 @@ int qtee_ffa_shm_init(struct platform_device *pdev)
 	if (rc)
 		goto err_gen_pool_add_virt;
 
-	rc = qtee_ffa_mem_share(&sgt, 0, &ffa_pool.ffa_handle);
+	rc = qtee_ffa_mem_share(&sgt, 0, FFA_MEM_RW, &ffa_pool.ffa_handle);
 	sg_free_table(&sgt);
 	if (rc) {
 		pr_err("qtee_ffa_mem_share() failed, rc = %d\n", rc);

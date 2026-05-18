@@ -247,7 +247,10 @@ int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 	bool coherent = smmu->features & ARM_SMMU_FEAT_COHERENCY;
 
 	/* IDR0 */
-	reg = readl_relaxed(smmu->base + ARM_SMMU_IDR0);
+	if (smmu->impl_ops && smmu->impl_ops->read_idr)
+		reg = smmu->impl_ops->read_idr(smmu, ARM_SMMU_IDR0);
+	else
+		reg = readl_relaxed(smmu->base + ARM_SMMU_IDR0);
 
 	smmu->features |= smmu_idr0_features(reg);
 	if (FIELD_GET(IDR0_TTENDIAN, reg) == IDR0_TTENDIAN_RESERVED) {
@@ -337,7 +340,10 @@ int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 		smmu->features &= ~ARM_SMMU_FEAT_2_LVL_STRTAB;
 
 	/* IDR3 */
-	reg = readl_relaxed(smmu->base + ARM_SMMU_IDR3);
+	if (smmu->impl_ops && smmu->impl_ops->read_idr)
+		reg = smmu->impl_ops->read_idr(smmu, ARM_SMMU_IDR3);
+	else
+		reg = readl_relaxed(smmu->base + ARM_SMMU_IDR3);
 	smmu->features |= smmu_idr3_features(reg);
 
 	/* IDR5 */

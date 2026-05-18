@@ -11,6 +11,8 @@
 #include <linux/atomic.h>
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/mutex.h>
+#include <linux/mutex.h>
 #include <linux/types.h>
 /* Global region offsets */
 #define ARM_SMMU_GLOBAL_REGION0_OFFSET 0x0U // global 0
@@ -122,6 +124,8 @@
 
 #define ARM_SMMU_GR0_S2CR(n) (0xc00 + ((n) << 2))
 #define ARM_SMMU_S2CR_PRIVCFG GENMASK(25, 24)
+
+#define QCOM_DUMMY_VAL	-1
 
 enum arm_smmu_s2cr_privcfg {
 	S2CR_PRIVCFG_DEFAULT,
@@ -290,7 +294,8 @@ enum arm_smmu_cbar_type {
 #define ARM_SMMU_RESUME_TERMINATE BIT(0)
 
 #define TLB_LOOP_TIMEOUT 1000000 /* 1s! */
-#define TLB_SPIN_COUNT 10
+#define TLB_SPIN_COUNT   10
+#define TLB_LOOP_INC_MAX 1000    /* 1ms */
 
 /* Helper Function definitions */
 struct smmu_v2_nested; /* forward */
@@ -344,4 +349,31 @@ static inline void arm_smmu_writeq(struct smmu_v2_nested *s, int page, int offse
 #define arm_smmu_cb_writeq(s, n, o, v) \
 	arm_smmu_writeq((s), ARM_SMMU_CB((s), (n)), (o), (v))
 
+struct arm_smmu_device {};
+
+/*
+ ** Describes resources required for on/off power operation.
+ ** Separate reference count is provided for atomic/nonatomic
+ ** operations.
+ ** gdscs - on kernel 6.6, power domains are used instead. This
+ ** field can be removed once no legacy targets using it remain.
+ **/
+struct arm_smmu_power_resources {
+	struct device	*dev;
+	struct clk	**clocks;
+	int		num_clocks;
+	struct regulator_bulk_data	*gdscs;
+	int				num_gdscs;
+	struct icc_path			*icc_path;
+	/* Protects power_count */
+	struct mutex			power_lock;
+	int				power_count;
+	int (*resume)(struct arm_smmu_power_resources *pwr);
+	void (*suspend)(struct arm_smmu_power_resources *pwr);
+};
+
+int arm_smmu_power_on(struct arm_smmu_power_resources *pwr);
+void arm_smmu_power_off(struct arm_smmu_device *smmu,
+			struct arm_smmu_power_resources *pwr);
+struct arm_smmu_power_resources *arm_smmu_init_power_resources(struct device *dev);
 #endif /* _ARM_SMMUV2_DEFS_H */

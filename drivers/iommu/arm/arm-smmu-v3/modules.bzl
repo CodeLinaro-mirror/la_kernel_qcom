@@ -9,6 +9,7 @@ def register_modules(registry):
             "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3-common-lib.c",
             "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3-common.c",
             "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h",
+            "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3-qcom-pm.c",
         ],
         conditional_srcs = {
             "CONFIG_ARM_SMMU_V3_QCOM_VIRTIO": {

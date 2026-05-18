@@ -17,6 +17,7 @@
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
 #include <linux/remoteproc.h>
+#include <linux/kobject.h>
 #include <linux/delay.h>
 #include <asm/timex.h>
 #include <linux/rbtree.h>
@@ -32,6 +33,49 @@
 
 #define Q6V5_LOAD_STATE_MSG_LEN	64
 #define Q6V5_PANIC_DELAY_MS	200
+#define Q6V5_UEVENT_KEY_LEN	96
+
+static void qcom_q6v5_send_modem_crash_uevent(struct qcom_q6v5 *q6v5,
+					      const char *crash_type,
+					      unsigned long long cycle)
+{
+	enum q6v5_uevent_idx {
+		Q6V5_UEVENT_EVENT,
+		Q6V5_UEVENT_RPROC,
+		Q6V5_UEVENT_RECOVERY,
+		Q6V5_UEVENT_CRASH_TYPE,
+		Q6V5_UEVENT_CYCLE,
+		Q6V5_UEVENT_MAX,
+	};
+	char envbuf[Q6V5_UEVENT_MAX][Q6V5_UEVENT_KEY_LEN] = {
+		[Q6V5_UEVENT_EVENT] = "QCOM_Q6V5_EVENT=MODEM_CRASH",
+	};
+	char *envp[Q6V5_UEVENT_MAX + 1] = {
+		envbuf[Q6V5_UEVENT_EVENT],
+		envbuf[Q6V5_UEVENT_RPROC],
+		envbuf[Q6V5_UEVENT_RECOVERY],
+		envbuf[Q6V5_UEVENT_CRASH_TYPE],
+		envbuf[Q6V5_UEVENT_CYCLE],
+		NULL,
+	};
+
+	if (!q6v5 || !q6v5->dev || !q6v5->rproc || !q6v5->rproc->name ||
+	    !strstr(q6v5->rproc->name, "remoteproc-mss"))
+		return;
+
+	scnprintf(envbuf[Q6V5_UEVENT_RPROC], sizeof(envbuf[Q6V5_UEVENT_RPROC]),
+		  "QCOM_Q6V5_RPROC=%s", q6v5->rproc->name);
+	scnprintf(envbuf[Q6V5_UEVENT_RECOVERY], sizeof(envbuf[Q6V5_UEVENT_RECOVERY]),
+		  "QCOM_Q6V5_RECOVERY=%s",
+		  q6v5->rproc->recovery_disabled ? "disabled" : "enabled");
+	scnprintf(envbuf[Q6V5_UEVENT_CRASH_TYPE], sizeof(envbuf[Q6V5_UEVENT_CRASH_TYPE]),
+		  "QCOM_Q6V5_CRASH_TYPE=%s", crash_type ? crash_type : "unknown");
+	scnprintf(envbuf[Q6V5_UEVENT_CYCLE], sizeof(envbuf[Q6V5_UEVENT_CYCLE]),
+		  "QCOM_Q6V5_CYCLE=%llu", cycle);
+
+	if (kobject_uevent_env(&q6v5->dev->kobj, KOBJ_CHANGE, envp))
+		dev_warn(q6v5->dev, "failed to emit modem crash uevent\n");
+}
 
 #define MAX_FW_FILE_SIZE (4 * 1024)
 #define NAME_LEN 64
@@ -388,6 +432,8 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	if (q6v5->ssr_subdev)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
 
+	qcom_q6v5_send_modem_crash_uevent(q6v5, "watchdog", get_cycles());
+
 	if (q6v5->rproc->recovery_disabled) {
 		queue_work(system_unbound_wq, &q6v5->crash_handler);
 	} else {
@@ -443,6 +489,8 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 
 	if (q6v5->ssr_subdev)
 		qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
+
+	qcom_q6v5_send_modem_crash_uevent(q6v5, "fatal", get_cycles());
 
 	if (q6v5->rproc->recovery_disabled) {
 		queue_work(system_unbound_wq, &q6v5->crash_handler);

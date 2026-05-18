@@ -113,6 +113,8 @@ malabar_perf_config = {
     "CONFIG_MHI_UCI": "m",
     "CONFIG_MINIDUMP_MAX_ENTRIES": "200",
     "CONFIG_MMC_CQHCI": "m",
+    "CONFIG_MMC_CRYPTO": "y",
+    "CONFIG_MMC_CRYPTO_QTI": "m",
     "CONFIG_MMC_SDHCI_MSM": "m",
     "CONFIG_MODULE_SIG_ALL": "n",
     "CONFIG_MPM_LEGACY": "m",

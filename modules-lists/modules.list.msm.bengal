@@ -30,8 +30,6 @@ socinfo.ko
 icc-bcm-voter.ko
 icc-clk.ko
 icc-debug.ko
-qcom_scmi_vendor.ko
-qcom_scmi_client.ko
 qcom-dcvs.ko
 qcom-pmu-lib.ko
 proxy-consumer.ko
@@ -40,6 +38,7 @@ stub-regulator.ko
 clk-smd-rpm.ko
 gcc-khaje.ko
 gcc-sm6115.ko
+gcc-qcm2290.ko
 icc-rpm.ko
 qnoc-qos-rpm.ko
 qnoc-bengal.ko
@@ -90,7 +89,6 @@ gh_dbl.ko
 gh_msgq.ko
 gh_rm_drv.ko
 qcom_wdt_core.ko
-qcom_sdei.ko
 qcom_tzmem.ko
 deferred-free-helper.ko
 cqhci.ko

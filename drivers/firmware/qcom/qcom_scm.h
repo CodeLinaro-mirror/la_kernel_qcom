@@ -277,6 +277,10 @@ int qcom_scm_call(struct device *dev, const struct qcom_scm_desc *desc,
 #define QCOM_SCM_WAITQ_SLEEP	2
 #define QCOM_SCM_WAITQ_WAKE	3
 
+int qcom_scm_call_atomic(struct device *dev,
+				const struct qcom_scm_desc *desc,
+				struct qcom_scm_res *res);
+
 static inline int qcom_scm_remap_error(int err)
 {
 	switch (err) {

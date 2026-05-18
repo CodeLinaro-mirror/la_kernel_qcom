@@ -3581,10 +3581,18 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 
 	arm_smmu_probe_irq(pdev, smmu);
 
+	smmu->pwr = arm_smmu_init_power_resources(dev);
+	if (IS_ERR(smmu->pwr))
+		return PTR_ERR(smmu->pwr);
+
+	ret = arm_smmu_power_on(smmu->pwr);
+	if (ret)
+		return ret;
+
 	/* Probe the h/w */
 	ret = arm_smmu_device_hw_probe(smmu);
 	if (ret)
-		return ret;
+		goto out_power_off;
 
 	if (arm_smmu_sva_supported(smmu))
 		smmu->features |= ARM_SMMU_FEAT_SVA;
@@ -3620,6 +3628,8 @@ err_disable:
 	arm_smmu_device_disable(smmu);
 err_free_iopf:
 	iopf_queue_free(smmu->evtq.iopf);
+out_power_off:
+	arm_smmu_power_off(smmu, smmu->pwr);
 	return ret;
 }
 

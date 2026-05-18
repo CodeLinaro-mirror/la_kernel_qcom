@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -14,6 +14,8 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+
+#include <linux/gunyah/gh_msgq.h>
 #include <soc/qcom/secure_buffer.h>
 #include <linux/gunyah_deprecated.h>
 
@@ -105,6 +107,11 @@ static void gh_notif_vm_exited(struct gh_vm *vm,
 	case GH_RM_VM_EXIT_TYPE_WDT_BITE:
 	case GH_RM_VM_EXIT_TYPE_HYP_ERROR:
 	case GH_RM_VM_EXIT_TYPE_ASYNC_EXT_ABORT:
+		/*
+		 * Due to module circular dependency, msgq requires
+		 * an direct callback from this driver.
+		 */
+		gh_msgq_vm_exit_notify(vm->vmid, vm->exit_type);
 		gh_notify_clients(vm, GH_VM_CRASH);
 		break;
 	}

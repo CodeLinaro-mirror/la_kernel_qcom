@@ -1124,6 +1124,9 @@ static bool check_for_higher_capacity(int cpu1, int cpu2)
 	return capacity_orig_of(cpu1) > capacity_orig_of(cpu2);
 }
 
+extern void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
+		     u64 *scaled_prime_demand);
+
 static inline bool task_fits_capacity(struct task_struct *p,
 					int dst_cpu)
 {
@@ -1134,6 +1137,8 @@ static inline bool task_fits_capacity(struct task_struct *p,
 	unsigned long capacity = capacity_orig_of(dst_cpu);
 	bool down = check_for_higher_capacity(task_cpu(p), dst_cpu);
 	int id, cgroup_type = 0;
+	unsigned long util = 0;
+	u64 demand, other_demand;
 
 	rcu_read_lock();
 	css = task_css(p, cpu_cgrp_id);
@@ -1164,7 +1169,15 @@ finish:
 			margin = max(margin, sched_capacity_margin_up[ANDROID_CGROUP_TOPAPP][id]);
 	}
 
-	return capacity * 1024 > uclamp_task_util(p) * margin;
+	demand = task_util_est(p);
+
+	if (walt_pipeline_low_latency_task(p))
+		pipeline_demand(((struct walt_task_struct *)android_task_vendor_data(p)),
+				&demand, &other_demand);
+
+	util = clamp(demand, uclamp_eff_value(p, UCLAMP_MIN), uclamp_eff_value(p, UCLAMP_MAX));
+
+	return capacity * 1024 > util * margin;
 }
 
 extern int pipeline_fits_smaller_cpus(struct task_struct *p);
@@ -1734,8 +1747,6 @@ DECLARE_PER_CPU(unsigned int, walt_yield_to_sleep);
 extern unsigned int walt_sched_yield_counter;
 extern unsigned int sysctl_force_frequent_yielder;
 void account_yields(u64 window_start);
-extern void pipeline_demand(struct walt_task_struct *wts, u64 *scaled_gold_demand,
-		     u64 *scaled_prime_demand);
 extern unsigned int sysctl_pipeline_force_config;
 extern unsigned long walt_cpu_energy(int cpu,
 				     unsigned long max_util, unsigned long sum_util);

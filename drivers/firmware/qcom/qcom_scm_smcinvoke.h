@@ -15,6 +15,9 @@
 
 #define SMCI_DT_UID 445
 #define SMCI_PILOBJECT_UID 446
+#define SMCI_GPUOBJECT_UID 470
+#define SMCI_DCVSOBJECT_UID 472
+#define SMCI_VIDEOVAROBJECT_UID 474
 
 #define SMCI_DT_OP_SET 0
 #define SMCI_PIL_OP_INITIMAGE 0
@@ -22,6 +25,22 @@
 #define SMCI_PILIMAGE_OP_SETUPMEMAREA 1
 #define SMCI_PILIMAGE_OP_AUTHRESET 2
 #define SMCI_PILIMAGE_OP_UNLOCKAREA 3
+
+/* Service Operations (IGPU/IGFXDCVS OP_init) */
+#define SMCI_GPU_OP_INIT_INSTANCE  0
+#define SMCI_DCVS_OP_INIT_INSTANCE 0
+
+/* GPU Control Operations (IGPUControl OP_regSetup) */
+#define SMCI_GPU_OP_REG_SETUP 0
+
+/* GPU DCVS Control Operations (IGFXDCVSControl OPs) */
+#define SMCI_DCVS_OP_RESET 0
+#define SMCI_DCVS_OP_INIT 1
+#define SMCI_DCVS_OP_INIT_CA 2
+#define SMCI_DCVS_OP_UPDATE 3
+#define SMCI_DCVS_OP_TUNING 4
+
+#define SMCI_SET_VIDEO_VAR 0
 
 struct smci_image_service_info {
 	struct list_head list;
@@ -85,6 +104,18 @@ int32_t qcom_smci_init_smobject(dma_addr_t dma_addr, void *vaddr, size_t size,
 #define QCOM_SCMI_AC_UNLOCK_AREA_FAILED		22
 #define QCOM_SCMI_LEAKING_MEM_INTENTIONALLY	23
 #define QCOM_SCMI_INVALID_NUM_REGION_INFO	24
+
+/* GPU and DCVS Error Codes */
+#define GPU_DCVS_ERROR_INVALID_ARG       10
+#define GPU_ERROR_CMD_DB_FAIL            10
+#define GPU_ERROR_CMD_DB_INVALID_PARAM   11
+#define GPU_ERROR_CMD_DB_NOT_FOUND       12
+
+/*
+ * Note: Error codes 10-12 are shared between standard QCOM SCMI errors
+ * and GPU/DCVS specific errors. They are mapped to common Linux error codes
+ * that are appropriate for both contexts where possible.
+ */
 
 static inline int qcom_scmi_remap_error(int err)
 {

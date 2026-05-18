@@ -41,7 +41,7 @@ def define_seraph():
 
         else:
             board_kernel_cmdline_extras += ["nosoftlockup console=ttynull qcom_geni_serial.con_enabled=0"]
-            kernel_vendor_cmdline_extras += ["earlycon=qcom_geni,qcom_geni,0xa94000 console=ttyMSM0,115200n8 qcom_geni_serial.con_enabled=1"]
+            kernel_vendor_cmdline_extras += ["nosoftlockup console=ttynull qcom_geni_serial.con_enabled=0"]
             board_bootconfig_extras += ["androidboot.serialconsole=0"]
 
             perf_build_img_opts = boot_image_opts(

@@ -869,6 +869,12 @@ static int msm_ssphy_qmp_set_suspend(struct usb_phy *uphy, int suspend)
 		return 0;
 	}
 
+	if (phy->fw_managed_pwr && suspend == PHY_FORCE_SUSPEND) {
+		pm_runtime_force_suspend(phy->pd_devs[UTXR]);
+		pm_runtime_force_suspend(phy->pd_devs[UCORE]);
+		return 0;
+	}
+
 	if (suspend) {
 		if (phy->cable_connected) {
 			msm_ssusb_qmp_enable_autonomous(phy, 1);

@@ -909,6 +909,12 @@ static int msm_eusb2_phy_set_suspend(struct usb_phy *uphy, int suspend)
 		return 0;
 	}
 
+	if (phy->fw_managed_pwr && suspend == PHY_FORCE_SUSPEND) {
+		pm_runtime_force_suspend(phy->pd_devs[UTXR]);
+		pm_runtime_force_suspend(phy->pd_devs[UCORE]);
+		return 0;
+	}
+
 	dev_dbg(uphy->dev, "phy->flags:0x%x\n", phy->phy.flags);
 	if (suspend) {
 		/* Bus suspend handling */

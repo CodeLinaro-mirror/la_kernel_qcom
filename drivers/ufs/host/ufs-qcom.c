@@ -2601,7 +2601,8 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 	if (host->disable_lpm || host->broken_ahit_wa)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
 
-	if (of_device_is_compatible(hba->dev->of_node, "qcom,sm8550-ufshc"))
+	if (host->hw_ver.major == 5 &&
+	   (host->hw_ver.minor == 1 || host->hw_ver.minor == 0))
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_LSDBS_CAP;
 
 #if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI)

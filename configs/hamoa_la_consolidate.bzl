@@ -6,4 +6,5 @@ hamoa_la_consolidate_config = {
     "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_SCHED_WALT": "m",
     "CONFIG_SCHED_WALT_DEBUG": "m",
+    "CONFIG_UFS_DBG": "y",
 }
