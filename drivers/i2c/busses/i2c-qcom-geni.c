@@ -34,6 +34,8 @@
 #define SE_I2C_RX_TRANS_LEN		0x270
 #define SE_I2C_SCL_COUNTERS		0x278
 
+#define I2C_SE_CLK			19200000UL
+
 #define SE_I2C_ERR  (M_CMD_OVERRUN_EN | M_ILLEGAL_CMD_EN | M_CMD_FAILURE_EN |\
 			M_GP_IRQ_1_EN | M_GP_IRQ_3_EN | M_GP_IRQ_4_EN)
 #define SE_I2C_ABORT		BIT(1)
@@ -116,6 +118,7 @@ struct geni_i2c_dev {
 	bool gpi_mode;
 	bool abort_done;
 	bool is_shared;
+	unsigned int clk_idx;
 };
 
 struct geni_i2c_desc {
@@ -209,7 +212,7 @@ static void qcom_geni_i2c_conf(struct geni_i2c_dev *gi2c)
 	const struct geni_i2c_clk_fld *itr = gi2c->clk_fld;
 	u32 val;
 
-	writel_relaxed(0, gi2c->se.base + SE_GENI_CLK_SEL);
+	writel_relaxed(gi2c->clk_idx & CLK_SEL_MSK, gi2c->se.base + SE_GENI_CLK_SEL);
 
 	val = (itr->clk_div << CLK_DIV_SHFT) | SER_CLK_EN;
 	writel_relaxed(val, gi2c->se.base + GENI_SER_M_CLK_CFG);
@@ -858,6 +861,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	int ret;
 	struct device *dev = &pdev->dev;
 	const struct geni_i2c_desc *desc = NULL;
+	unsigned long clk_rate;
 
 	gi2c = devm_kzalloc(dev, sizeof(*gi2c), GFP_KERNEL);
 	if (!gi2c)
@@ -898,6 +902,10 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	ret = geni_i2c_clk_map_idx(gi2c);
 	if (ret)
 		return dev_err_probe(dev, ret, "Invalid clk frequency %d Hz\n", gi2c->clk_freq_out);
+
+	ret = geni_se_clk_freq_match(&gi2c->se, I2C_SE_CLK, &gi2c->clk_idx, &clk_rate, true);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to find %lu Hz src clk\n", I2C_SE_CLK);
 
 	gi2c->adap.algo = &geni_i2c_algo;
 	init_completion(&gi2c->done);
