@@ -617,13 +617,13 @@ static int nft_trigger_init(const struct nft_ctx *ctx,
 	/* As TRIGGER only support TCP/UDP, use nat port length directly */
 	plen = sizeof_field(struct nf_nat_range, min_proto.all);
 	if (tb[NFTA_TRIGGER_TPORTS_MIN]) {
-		err = nft_parse_register_load(tb[NFTA_TRIGGER_TPORTS_MIN],
+		err = nft_parse_register_load(ctx, tb[NFTA_TRIGGER_TPORTS_MIN],
 					      &priv->sreg_tports_min, plen);
 		if (err < 0)
 			return err;
 
 		if (tb[NFTA_TRIGGER_TPORTS_MAX]) {
-			err = nft_parse_register_load(tb[NFTA_TRIGGER_TPORTS_MAX],
+			err = nft_parse_register_load(ctx, tb[NFTA_TRIGGER_TPORTS_MAX],
 						      &priv->sreg_tports_max, plen);
 
 			if (err < 0)
@@ -634,13 +634,13 @@ static int nft_trigger_init(const struct nft_ctx *ctx,
 	}
 
 	if (tb[NFTA_TRIGGER_FPORTS_MIN]) {
-		err = nft_parse_register_load(tb[NFTA_TRIGGER_FPORTS_MIN],
+		err = nft_parse_register_load(ctx, tb[NFTA_TRIGGER_FPORTS_MIN],
 					      &priv->sreg_fports_min, plen);
 		if (err < 0)
 			return err;
 
 		if (tb[NFTA_TRIGGER_FPORTS_MAX]) {
-			err = nft_parse_register_load(tb[NFTA_TRIGGER_FPORTS_MAX],
+			err = nft_parse_register_load(ctx, tb[NFTA_TRIGGER_FPORTS_MAX],
 						      &priv->sreg_fports_max, plen);
 
 			if (err < 0)
