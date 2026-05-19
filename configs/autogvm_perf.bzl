@@ -71,6 +71,8 @@ autogvm_perf_config = {
     "CONFIG_NET_SCH_PRIO": "y",
     "CONFIG_NL80211_TESTMODE": "y",
     "CONFIG_NOP_USB_XCEIV": "m",
+    "CONFIG_NVMEM_LAYOUT_QCOM_ETH_MAC": "m",
+    "CONFIG_NVMEM_QCOM_QFPROM": "m",
     "CONFIG_PCIE_QCOM_ECAM": "m",
     "CONFIG_PCI_MSM": "m",
     "CONFIG_PCS_QCOM": "m",
