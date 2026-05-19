@@ -709,7 +709,7 @@ static void handle_bam_mux_cmd(struct work_struct *work)
 		spin_unlock_irqrestore(&bam_ch[rx_hdr->ch_id].lock, flags);
 		platform_device_unregister(bam_ch[rx_hdr->ch_id].pdev);
 		bam_ch[rx_hdr->ch_id].pdev =
-			platform_device_alloc(bam_ch[rx_hdr->ch_id].name, 2);
+			platform_device_alloc(bam_ch[rx_hdr->ch_id].name, PLATFORM_DEVID_NONE);
 		if (!bam_ch[rx_hdr->ch_id].pdev)
 			pr_err("%s: platform_device_alloc failed\n", __func__);
 		mutex_unlock(&bam_pdev_mutexlock);
@@ -2232,7 +2232,7 @@ static int restart_notifier_cb(struct notifier_block *this,
 		if (temp_remote_status) {
 			platform_device_unregister(bam_ch[i].pdev);
 			bam_ch[i].pdev = platform_device_alloc(
-						bam_ch[i].name, 2);
+						bam_ch[i].name, PLATFORM_DEVID_NONE);
 		}
 	}
 	mutex_unlock(&bam_pdev_mutexlock);
@@ -2284,7 +2284,8 @@ static int bam_init(void)
 	a2_props.virt_addr = a2_virt_addr;
 	a2_props.virt_size = a2_phys_size;
 	a2_props.irq = a2_bam_irq;
-	a2_props.options = SPS_BAM_OPT_IRQ_WAKEUP | SPS_BAM_HOLD_MEM;
+	a2_props.options = SPS_BAM_OPT_IRQ_WAKEUP | SPS_BAM_HOLD_MEM
+				| SPS_BAM_RES_CONFIRM;
 	a2_props.num_pipes = A2_NUM_PIPES;
 	a2_props.summing_threshold = A2_SUMMING_THRESHOLD;
 	a2_props.constrained_logging = true;
@@ -2772,7 +2773,7 @@ static int bam_dmux_probe(struct platform_device *pdev)
 		scnprintf(bam_ch[i].name, BAM_DMUX_CH_NAME_MAX_LEN,
 					"bam_dmux_ch_%d", i);
 		/* bus 2, ie a2 stream 2 */
-		bam_ch[i].pdev = platform_device_alloc(bam_ch[i].name, 2);
+		bam_ch[i].pdev = platform_device_alloc(bam_ch[i].name, PLATFORM_DEVID_NONE);
 		if (!bam_ch[i].pdev) {
 			rc = -ENOMEM;
 			pr_err("%s: platform device alloc failed\n", __func__);

@@ -1,7 +1,6 @@
 hamoa_la_perf_config = {
     # keep sorted
     "CONFIG_ARCH_X1E80100": "y",
-    "CONFIG_ARCH_X1P42100": "y",
     "CONFIG_ARM_SMMU": "m",
     "CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT": "y",
     "CONFIG_ARM_SMMU_QCOM": "m",
@@ -145,6 +144,7 @@ hamoa_la_perf_config = {
     "CONFIG_QCOM_GLINK_PKT": "m",
     "CONFIG_QCOM_HUNG_TASK_ENH": "m",
     "CONFIG_QCOM_INLINE_CRYPTO_ENGINE": "m",
+    "CONFIG_QCOM_IOMMU_DEBUG": "m",
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_IPCC": "m",
     "CONFIG_QCOM_LAZY_MAPPING": "m",
@@ -233,6 +233,7 @@ hamoa_la_perf_config = {
     "CONFIG_QTI_DYNPF_SCMI": "n",
     "CONFIG_QTI_FCTL_SCMI": "n",
     "CONFIG_QTI_GLINK_ADC": "m",
+    "CONFIG_QTI_IOMMU_SUPPORT": "m",
     "CONFIG_QTI_MPAM": "n",
     "CONFIG_QTI_PMIC_GLINK": "m",
     "CONFIG_QTI_PMIC_GLINK_DEBUG": "m",

@@ -356,11 +356,27 @@ class BazelBuilder:
             self.run_targets(targets_to_build)
 
 def build_gvm_image(variant):
-    VM_BOOTLOADER_SRC = None
-    for root, dirs, files in os.walk('.'):
-        for file in files:
-            if file == "gvm-pilsplitter.sh":
-                VM_BOOTLOADER_SRC= os.path.join(root, file)
+    workspace = os.path.realpath(
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
+    )
+    VM_BOOTLOADER_SRC = os.path.join(
+        workspace,
+        "prebuilts",
+        "qcom_boot_artifacts",
+        "vm-bootloader",
+        "gvm-pilsplitter.sh",
+    )
+
+    if not os.path.exists(VM_BOOTLOADER_SRC):
+        logging.info("gvm-pilsplitter.sh not found at prebuilts path")
+        VM_BOOTLOADER_SRC = None
+        for root, dirs, files in os.walk('.'):
+            for file in files:
+                if file == "gvm-pilsplitter.sh":
+                    VM_BOOTLOADER_SRC = os.path.join(root, file)
+                    break
+            if VM_BOOTLOADER_SRC:
+                break
 
     if VM_BOOTLOADER_SRC != None:
         if variant == "ALL":

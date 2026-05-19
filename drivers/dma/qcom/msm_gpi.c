@@ -654,6 +654,7 @@ struct gpii {
 	bool is_resumed;
 	bool is_multi_desc;
 	int num_msgs;
+	cpumask_t cpu_affinity_mask; /* saved CPU affinity for IRQ, re-applied after deep sleep */
 };
 
 struct gpi_desc {
@@ -3927,6 +3928,19 @@ static int gpi_deep_sleep_exit_config(struct dma_chan *chan)
 		}
 	}
 
+	/* Re-apply CPU affinity for the GPII IRQ if it was previously configured */
+	if (!cpumask_empty(&gpii->cpu_affinity_mask)) {
+		ret = irq_set_affinity_hint(gpii->irq, &gpii->cpu_affinity_mask);
+		if (ret)
+			GPII_CRITIC(gpii, GPI_DBG_COMMON,
+				    "CPU affinity re-apply failed after deep sleep irq:%d ret:%d\n",
+				    gpii->irq, ret);
+		else
+			GPII_INFO(gpii, GPI_DBG_COMMON,
+				  "CPU affinity re-applied after deep sleep irq:%d CPUs:%*pbl\n",
+				  gpii->irq, cpumask_pr_args(&gpii->cpu_affinity_mask));
+	}
+
 	return ret;
 
 error_start_chan:
@@ -4058,6 +4072,23 @@ static int gpi_config(struct dma_chan *chan,
 			  "sending UART RFR READY NOT READY cmd\n");
 		ret = gpi_send_cmd(gpii, gpii_chan,
 				   GPI_CH_CMD_UART_RFR_NOT_READY);
+		break;
+	case MSM_GPI_SET_CPU_AFFINITY:
+		if (!cpumask_empty(&gpi_ctrl->cpu_affinity.cpu_mask)) {
+			ret = irq_set_affinity_hint(gpii->irq, &gpi_ctrl->cpu_affinity.cpu_mask);
+			if (ret) {
+				GPII_CRITIC(gpii, GPI_DBG_COMMON,
+					    "CPU affinity set failed irq:%d ret:%d\n",
+					    gpii->irq, ret);
+				ret = -EINVAL;
+				break;
+			}
+			/* Save mask so it can be re-applied after deep sleep resume */
+			cpumask_copy(&gpii->cpu_affinity_mask, &gpi_ctrl->cpu_affinity.cpu_mask);
+			GPI_LOG(gpii->gpi_dev, "gpii:%d CPU affinity set: irq:%d CPUs:%*pbl\n",
+				gpii->gpii_id, gpii->irq,
+				cpumask_pr_args(&gpi_ctrl->cpu_affinity.cpu_mask));
+		}
 		break;
 	default:
 		GPII_ERR(gpii, gpii_chan->chid,

@@ -68,3 +68,13 @@ def register_modules(registry):
             "arch/arm64/gunyah/gh_arm_drv",
         ],
     )
+
+    registry.register(
+        name = "drivers/powercap/qcom/qpt_rpmsg_powercap",
+        out = "qpt_rpmsg_powercap.ko",
+        config = "CONFIG_QCOM_QPT_RPMSG_POWERCAP",
+        srcs = [
+            # do not sort
+            "drivers/powercap/qcom/qpt_rpmsg_powercap.c",
+        ],
+    )

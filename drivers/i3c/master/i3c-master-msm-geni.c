@@ -2643,6 +2643,9 @@ geni_i3c_master_priv_xfers(struct i3c_dev_desc *dev, struct i3c_priv_xfer *xfers
 	if (num_xfers <= 0)
 		return 0;
 
+	if (gi3c->pm_ctrl_client && !gi3c->is_aon_client_probe_done)
+		gi3c->is_aon_client_probe_done = true;
+
 	ret = i3c_geni_runtime_get_mutex_lock(gi3c);
 	if (ret) {
 		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
@@ -2670,9 +2673,6 @@ geni_i3c_master_priv_xfers(struct i3c_dev_desc *dev, struct i3c_priv_xfer *xfers
 	else
 		ret = geni_i3c_master_fifo_dma_priv_xfers(gi3c, xfers, dev->info.dyn_addr,
 							  num_xfers);
-
-	if (gi3c->pm_ctrl_client && !gi3c->is_aon_client_probe_done)
-		gi3c->is_aon_client_probe_done = true;
 
 	I3C_LOG_DBG(gi3c->ipcl, false, gi3c->se.dev, "%s ret:%d\n", __func__, ret);
 	i3c_geni_runtime_put_mutex_unlock(gi3c);
@@ -4547,12 +4547,9 @@ static int geni_i3c_probe(struct platform_device *pdev)
 		I3C_LOG_ERR(gi3c->ipcl, true, gi3c->se.dev,
 			    "%s: geni_icc_disable failed%d\n", __func__, ret);
 
-	if (!gi3c->pm_ctrl_client) {
-		//For NAON case (driver controlled PM) go for autosuspend.
-		pm_runtime_set_suspended(gi3c->se.dev);
-		pm_runtime_set_autosuspend_delay(gi3c->se.dev, I3C_AUTO_SUSPEND_DELAY);
-		pm_runtime_use_autosuspend(gi3c->se.dev);
-	}
+	pm_runtime_set_suspended(gi3c->se.dev);
+	pm_runtime_set_autosuspend_delay(gi3c->se.dev, I3C_AUTO_SUSPEND_DELAY);
+	pm_runtime_use_autosuspend(gi3c->se.dev);
 	pm_runtime_enable(gi3c->se.dev);
 
 	ret = i3c_master_register(&gi3c->ctrlr, &pdev->dev,

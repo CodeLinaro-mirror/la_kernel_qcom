@@ -280,6 +280,7 @@ enum msm_gpi_ctrl_cmd {
 	MSM_GPI_CMD_UART_RFR_READY,
 	MSM_GPI_CMD_UART_RFR_NOT_READY,
 	MSM_GPI_DEEP_SLEEP_INIT,
+	MSM_GPI_SET_CPU_AFFINITY,
 };
 
 enum msm_gpi_cb_event {
@@ -352,6 +353,11 @@ struct gpi_client_info {
 	void *cb_param;
 };
 
+/* CPU affinity configuration for GPI IRQ (shared by TX and RX channels) */
+struct gpi_cpu_affinity {
+	struct cpumask cpu_mask;
+};
+
 /*
  * control structure to config gpi dma engine via dmaengine_slave_config()
  * dma_chan.private should point to msm_gpi_ctrl structure
@@ -360,6 +366,7 @@ struct msm_gpi_ctrl {
 	enum msm_gpi_ctrl_cmd cmd;
 	union {
 		struct gpi_client_info init;
+		struct gpi_cpu_affinity cpu_affinity;
 	};
 };
 

@@ -65,15 +65,22 @@
 
 struct q6_subdev {
 	const char *firmware_name;
+	const char *dtb_firmware_name;
 	int pas_id;
+	int dtb_pas_id;
 	char *ssr_name;
-	bool is_dtb;
 	const struct firmware *firmware;
+	const struct firmware *dtb_firmware;
 	phys_addr_t mem_phys;
+	phys_addr_t dtb_mem_phys;
 	phys_addr_t mem_reloc;
+	phys_addr_t dtb_mem_reloc;
 	void *mem_region;
+	void *dtb_mem_region;
 	size_t mem_size;
+	size_t dtb_mem_size;
 	struct qcom_scm_pas_metadata pas_metadata;
+	struct qcom_scm_pas_metadata dtb_pas_metadata;
 	struct device *dev;
 	struct list_head dump_segments;
 };
@@ -386,9 +393,15 @@ static int adsp_unprepare(struct rproc *rproc)
 	qcom_scm_pas_metadata_release(&adsp->pas_metadata, dev);
 	if (adsp->dtb_pas_id)
 		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
-	if (adsp->q6_subdev)
-		for (i = 0; i < adsp->q6_subdev_count; i++)
-			qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata, dev);
+	if (adsp->q6_subdev) {
+		for (i = 0; i < adsp->q6_subdev_count; i++) {
+			qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata,
+						      dev);
+			if (adsp->q6_subdev[i].dtb_firmware_name)
+				qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].dtb_pas_metadata,
+							      dev);
+		}
+	}
 
 	return 0;
 }
@@ -450,37 +463,107 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 
 	if (adsp->q6_subdev) {
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
+			if (adsp->q6_subdev[i].dtb_firmware_name) {
+				ret = request_firmware(&adsp->q6_subdev[i].dtb_firmware,
+					adsp->q6_subdev[i].dtb_firmware_name, adsp->dev);
+				if (ret) {
+					dev_err(adsp->dev, "request_firmware failed for %s: %d\n",
+						adsp->q6_subdev[i].dtb_firmware_name, ret);
+					goto release_q6_subdev_all_previous;
+				}
+				ret = qcom_mdt_pas_init(adsp->dev, adsp->q6_subdev[i].dtb_firmware,
+							adsp->q6_subdev[i].dtb_firmware_name,
+							adsp->q6_subdev[i].dtb_pas_id,
+							adsp->q6_subdev[i].dtb_mem_phys,
+							&adsp->q6_subdev[i].dtb_pas_metadata,
+							adsp->dma_phys_below_32b);
+				if (ret)
+					goto release_q6_subdev_dtb_firmware_current;
+
+				ret = qcom_mdt_load_no_init(adsp->dev,
+							    adsp->q6_subdev[i].dtb_firmware,
+							    adsp->q6_subdev[i].dtb_firmware_name,
+							    adsp->q6_subdev[i].dtb_pas_id,
+							    adsp->q6_subdev[i].dtb_mem_region,
+							    adsp->q6_subdev[i].dtb_mem_phys,
+							    adsp->q6_subdev[i].dtb_mem_size,
+							    &adsp->q6_subdev[i].dtb_mem_reloc);
+				if (ret)
+					goto release_q6_subdev_dtb_metadata_current;
+			}
+
 			ret = request_firmware(&adsp->q6_subdev[i].firmware,
 				adsp->q6_subdev[i].firmware_name, adsp->dev);
 			if (ret) {
 				dev_err(adsp->dev, "request_firmware failed for %s: %d\n",
 					adsp->q6_subdev[i].firmware_name, ret);
-				goto release_dtb_metadata;
+				goto release_q6_subdev_dtb_metadata_current;
 			}
 			ret = qcom_mdt_pas_init(adsp->dev, adsp->q6_subdev[i].firmware,
 				adsp->q6_subdev[i].firmware_name, adsp->q6_subdev[i].pas_id,
 				adsp->q6_subdev[i].mem_phys, &adsp->q6_subdev[i].pas_metadata,
 				adsp->dma_phys_below_32b);
 			if (ret)
-				goto release_q6_subdev_firmware;
+				goto release_q6_subdev_firmware_current;
 
-			ret = qcom_mdt_load_no_init(adsp->dev, adsp->q6_subdev[i].firmware,
-					adsp->q6_subdev[i].firmware_name, adsp->q6_subdev[i].pas_id,
-					adsp->q6_subdev[i].mem_region, adsp->q6_subdev[i].mem_phys,
-					adsp->q6_subdev[i].mem_size, &adsp->q6_subdev[i].mem_reloc);
+			ret = qcom_mdt_load_no_init(adsp->dev,
+						    adsp->q6_subdev[i].firmware,
+						    adsp->q6_subdev[i].firmware_name,
+						    adsp->q6_subdev[i].pas_id,
+						    adsp->q6_subdev[i].mem_region,
+						    adsp->q6_subdev[i].mem_phys,
+						    adsp->q6_subdev[i].mem_size,
+						    &adsp->q6_subdev[i].mem_reloc);
 			if (ret)
-				goto release_q6_subdev_metadata;
+				goto release_q6_subdev_metadata_current;
 		}
 	}
 	goto exit_load;
 
-release_q6_subdev_metadata:
-	if (adsp->q6_subdev)
-		for (idx = 0; idx <= i; idx++)
-			qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata, dev);
-release_q6_subdev_firmware:
-	for (idx = 0; idx <= i; idx++)
+/* Clean up the failing subdev's resources */
+release_q6_subdev_metadata_current:
+	qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata, dev);
+
+release_q6_subdev_firmware_current:
+	if (adsp->q6_subdev[i].firmware) {
 		release_firmware(adsp->q6_subdev[i].firmware);
+		adsp->q6_subdev[i].firmware = NULL;
+	}
+
+release_q6_subdev_dtb_metadata_current:
+	if (adsp->q6_subdev[i].dtb_firmware_name)
+		qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].dtb_pas_metadata, dev);
+
+release_q6_subdev_dtb_firmware_current:
+	if (adsp->q6_subdev[i].dtb_firmware_name && adsp->q6_subdev[i].dtb_firmware) {
+		release_firmware(adsp->q6_subdev[i].dtb_firmware);
+		adsp->q6_subdev[i].dtb_firmware = NULL;
+	}
+
+/* Clean up resources for all successful subdev */
+release_q6_subdev_all_previous:
+	if (adsp->q6_subdev) {
+		for (idx = 0; idx < i; idx++) {
+			qcom_scm_pas_metadata_release(&adsp->q6_subdev[idx].pas_metadata, dev);
+
+			if (adsp->q6_subdev[idx].firmware) {
+				release_firmware(adsp->q6_subdev[idx].firmware);
+				adsp->q6_subdev[idx].firmware = NULL;
+			}
+
+			if (adsp->q6_subdev[idx].dtb_firmware_name)
+				qcom_scm_pas_metadata_release(
+						&adsp->q6_subdev[idx].dtb_pas_metadata,
+						dev);
+
+			if (adsp->q6_subdev[idx].dtb_firmware_name &&
+			    adsp->q6_subdev[idx].dtb_firmware) {
+				release_firmware(adsp->q6_subdev[idx].dtb_firmware);
+				adsp->q6_subdev[idx].dtb_firmware = NULL;
+			}
+		}
+	}
+
 release_dtb_metadata:
 	if (adsp->dtb_pas_id && adsp->dma_phys_below_32b)
 		qcom_scm_pas_shutdown(adsp->dtb_pas_id);
@@ -488,7 +571,8 @@ release_dtb_metadata:
 	if (adsp->dtb_pas_id)
 		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
 release_dtb_firmware:
-	release_firmware(adsp->dtb_firmware);
+	if (adsp->dtb_firmware)
+		release_firmware(adsp->dtb_firmware);
 
 exit_load:
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "exit");
@@ -723,6 +807,14 @@ static int adsp_start(struct rproc *rproc)
 
 	if (adsp->q6_subdev) {
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
+			if (adsp->q6_subdev[i].dtb_firmware_name) {
+				ret = qcom_scm_pas_auth_and_reset(adsp->q6_subdev[i].dtb_pas_id);
+				if (ret)
+					panic(
+					      "Panicking, auth and reset failed for subdev %s ret=%d\n",
+					      adsp->q6_subdev[i].dtb_firmware_name, ret);
+			}
+
 			ret = qcom_scm_pas_auth_and_reset(adsp->q6_subdev[i].pas_id);
 			if (ret)
 				panic("Panicking, auth and reset failed for subdev %s ret=%d\n",
@@ -818,6 +910,13 @@ exit_start:
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
 			qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata, dev);
 			release_firmware(adsp->q6_subdev[i].firmware);
+
+			if (adsp->q6_subdev[i].dtb_firmware_name) {
+				qcom_scm_pas_metadata_release(
+						&adsp->q6_subdev[i].dtb_pas_metadata,
+						dev);
+				release_firmware(adsp->q6_subdev[i].dtb_firmware);
+			}
 		}
 	}
 
@@ -1198,6 +1297,12 @@ static int adsp_stop(struct rproc *rproc)
 			if (ret)
 				panic("Panicking, remoteproc %s subdev fw failed to shutdown.\n",
 						adsp->q6_subdev[i].firmware_name);
+			if (adsp->q6_subdev[i].dtb_firmware_name) {
+				ret = qcom_scm_pas_shutdown(adsp->q6_subdev[i].dtb_pas_id);
+				if (ret)
+					panic("Panicking, remoteproc %s subdev fw failed to shutdown.\n",
+							adsp->q6_subdev[i].dtb_firmware_name);
+			}
 		}
 	}
 
@@ -1536,7 +1641,8 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 {
 	struct reserved_mem *rmem;
 	struct device_node *node;
-	int i;
+	int i, mem_idx;
+	bool has_dtb = false;
 
 	node = of_parse_phandle(adsp->dev->of_node, "memory-region", 0);
 	if (!node) {
@@ -1585,14 +1691,19 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 		return -EBUSY;
 	}
 
-	if (!adsp->q6_subdev)
+	if (!adsp->q6_subdev || !adsp->q6_subdev_count)
 		return 0;
 
-	for (i = 0; i < adsp->q6_subdev_count; i++) {
-		node = of_parse_phandle(adsp->dev->of_node, "subdev-memory-region", i);
+	if (adsp->q6_subdev[0].dtb_firmware_name)
+		has_dtb = true;
 
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		mem_idx = has_dtb ? (i * 2) : i;
+		node = of_parse_phandle(adsp->dev->of_node, "subdev-memory-region", mem_idx);
 		if (!node) {
-			dev_err(adsp->dev, "no subdev-memory-region specified for offset %d\n", i);
+			dev_err(adsp->dev,
+				"no subdev-memory-region at index %d for subdev %d\n",
+				mem_idx, i);
 			return -EINVAL;
 		}
 		rmem = of_reserved_mem_lookup(node);
@@ -1601,8 +1712,8 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 			dev_err(adsp->dev, "unable to resolve subdev-memory-region\n");
 			return -EINVAL;
 		}
-		adsp->q6_subdev[i].mem_phys = rmem->base;
 
+		adsp->q6_subdev[i].mem_phys = rmem->base;
 		adsp->q6_subdev[i].mem_size = rmem->size;
 		adsp->q6_subdev[i].mem_region = devm_ioremap_wc(adsp->dev,
 			adsp->q6_subdev[i].mem_phys, adsp->q6_subdev[i].mem_size);
@@ -1610,6 +1721,38 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 			dev_err(adsp->dev, "unable to map subdev-memory region: %pa+%zx\n",
 				&rmem->base, adsp->q6_subdev[i].mem_size);
 			return -EBUSY;
+		}
+
+		if (has_dtb) {
+			mem_idx = (i * 2) + 1;
+			node = of_parse_phandle(adsp->dev->of_node,
+						"subdev-memory-region",
+						mem_idx);
+
+			if (!node) {
+				dev_err(adsp->dev,
+					"no subdev-memory-region at index %d for subdev %d\n",
+					mem_idx, i);
+				return -EINVAL;
+			}
+
+			rmem = of_reserved_mem_lookup(node);
+			of_node_put(node);
+			if (!rmem) {
+				dev_err(adsp->dev, "unable to resolve subdev-memory-region\n");
+				return -EINVAL;
+			}
+			adsp->q6_subdev[i].dtb_mem_phys = rmem->base;
+			adsp->q6_subdev[i].dtb_mem_size = rmem->size;
+			adsp->q6_subdev[i].dtb_mem_region = devm_ioremap_wc(adsp->dev,
+					adsp->q6_subdev[i].dtb_mem_phys,
+					adsp->q6_subdev[i].dtb_mem_size);
+			if (!adsp->q6_subdev[i].dtb_mem_region) {
+				dev_err(adsp->dev,
+					"unable to map subdev-memory region: %pa+%zx\n",
+					&rmem->base, adsp->q6_subdev[i].dtb_mem_size);
+				return -EBUSY;
+			}
 		}
 	}
 
@@ -1675,7 +1818,10 @@ EXPORT_SYMBOL_GPL(qcom_rproc_update_recovery_status);
 static void adsp_parse_subdev_fw(struct qcom_adsp *adsp)
 {
 	const char *subdev_fw_name = NULL;
-	int i, count, ret;
+
+	int i, count, ret, fw_idx;
+	int fw_count = 0, dtb_fw_count = 0;
+	bool has_dtb = false;
 
 	if (!adsp->q6_subdev || !adsp->q6_subdev_count)
 		return;
@@ -1684,16 +1830,54 @@ static void adsp_parse_subdev_fw(struct qcom_adsp *adsp)
 	if (count <= 0)
 		return;
 
-	adsp->q6_subdev_count = min_t(int, adsp->q6_subdev_count, count);
-	for (i = 0; i < adsp->q6_subdev_count; i++) {
+	for (i = 0; i < count; i++) {
 		ret = of_property_read_string_index(adsp->dev->of_node,
 			"subdev-firmware-name", i, &subdev_fw_name);
 		if (ret < 0) {
-			dev_err(adsp->dev, "Failed to read subdev firmware: %d\n", ret);
+			dev_err(adsp->dev, "Failed to read subdev firmware at index %d: %d\n",
+				i, ret);
+			return;
+		}
+
+		if (strstr(subdev_fw_name, "_dtb"))
+			dtb_fw_count++;
+		else
+			fw_count++;
+	}
+
+	if (dtb_fw_count > 0) {
+		if (dtb_fw_count != fw_count) {
+			dev_err(adsp->dev,
+				"Invalid firmware count: %d firmware, %d DTB\n", fw_count,
+				dtb_fw_count);
+			return;
+		}
+		has_dtb = true;
+	}
+
+	adsp->q6_subdev_count = min_t(int, fw_count, adsp->q6_subdev_count);
+
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		fw_idx = has_dtb ? (i * 2) : i;
+		ret = of_property_read_string_index(adsp->dev->of_node,
+			"subdev-firmware-name", fw_idx, &subdev_fw_name);
+		if (ret < 0) {
+			dev_err(adsp->dev, "Failed to read firmware for subdev[%d]: %d\n", i, ret);
 			return;
 		}
 		adsp->q6_subdev[i].firmware_name = subdev_fw_name;
-		subdev_fw_name = NULL;
+
+		if (has_dtb) {
+			fw_idx = (i * 2) + 1;
+			ret = of_property_read_string_index(adsp->dev->of_node,
+				"subdev-firmware-name", fw_idx, &subdev_fw_name);
+			if (ret < 0) {
+				dev_err(adsp->dev, "Failed to read DTB for subdev[%d]: %d\n",
+					i, ret);
+				return;
+			}
+			adsp->q6_subdev[i].dtb_firmware_name = subdev_fw_name;
+		}
 	}
 }
 
@@ -2780,8 +2964,16 @@ static const struct adsp_data pineapple_mpss_resource = {
 };
 
 static struct q6_subdev vienna_adsp_subdev[] = {
-	{ "lpai_wm.mdt", 0x4F, "lpai_wm"},
-	{ "lpai_am.mdt", 0x4E, "lpai_am"},
+	{
+		.firmware_name = "lpai_wm.mdt",
+		.pas_id = 0x4F,
+		.ssr_name = "lpai_wm",
+	},
+	{
+		.firmware_name = "lpai_am.mdt",
+		.pas_id = 0x4E,
+		.ssr_name = "lpai_am",
+	},
 };
 
 static const struct adsp_data vienna_adsp_resource = {
@@ -3194,10 +3386,22 @@ static const struct adsp_data seraph_soccp_resource = {
 	.auto_boot = true,
 };
 
+static struct q6_subdev pikachu_adsp_subdev[] = {
+	{
+		.firmware_name = "lpaicp.mdt",
+		.dtb_firmware_name = "lpaicp_dtb.mdt",
+		.pas_id = 86,
+		.dtb_pas_id = 87,
+		.ssr_name = "lpaicp",
+	},
+};
+
 static const struct adsp_data pikachu_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
 	.dtb_firmware_name = "adsp_dtb.mdt",
+	.q6_subdev = pikachu_adsp_subdev,
+	.q6_subdev_count = ARRAY_SIZE(pikachu_adsp_subdev),
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
 	.minidump_id = 5,

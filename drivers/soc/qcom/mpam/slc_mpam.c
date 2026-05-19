@@ -77,10 +77,10 @@ static ssize_t slc_mpam_schemata_show(struct config_item *item,
 
 	ret = msc_system_get_partition(SLC, &query, &gear_config);
 	if (ret)
-		return scnprintf(page, PAGE_SIZE,
+		return scnprintf(page, SZ_4K,
 			"failed to get schemata %d\n", ret);
 
-	return scnprintf(page, PAGE_SIZE, "gear=%d\n",
+	return scnprintf(page, SZ_4K, "gear=%d\n",
 		gear_config.gear_val);
 }
 
@@ -124,25 +124,25 @@ static ssize_t slc_mpam_monitor_schemata_show(struct config_item *item,
 	struct slc_mpam_item *pm_item = get_pm_item(item);
 
 	if (pm_item->cap_mon_support)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"cap=%d,", pm_item->cap_mon_enabled);
 	if (pm_item->miss_mon_support)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"miss=%d,", pm_item->miss_mon_enabled);
 	if (pm_item->fe_mon_support)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"fe=%d,", pm_item->fe_mon_enabled);
 	if (pm_item->be_mon_support)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"be=%d,", pm_item->be_mon_enabled);
 	if (pm_item->total_fe_mon_support)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"fe=%d,", pm_item->total_fe_mon_enabled);
 	if (pm_item->total_be_mon_support)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"be=%d,", pm_item->total_be_mon_enabled);
 	if (len)
-		len += scnprintf(page + len - 1, PAGE_SIZE - len, "\n");
+		len += scnprintf(page + len - 1, SZ_4K - len, "\n");
 
 	return len;
 }
@@ -251,23 +251,23 @@ static ssize_t slc_mpam_monitor_data_show(struct config_item *item,
 
 	msc_system_mon_stats_read(SLC, &query, &mon_data);
 
-	len = scnprintf(page, PAGE_SIZE,
+	len = scnprintf(page, SZ_4K,
 			"timestamp=%llu,", mon_data.mon_stats.last_capture_time);
 	if (pm_item->cap_mon_enabled)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"cap_cnt=%u,", mon_data.mon_stats.num_cache_lines);
 	if (pm_item->miss_mon_enabled)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"miss_cnt=%llu,", mon_data.mon_stats.num_rd_misses);
 	if (pm_item->fe_mon_enabled || pm_item->total_fe_mon_enabled)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"fe_bytes=%llu,", mon_data.mon_stats.slc_fe_bytes);
 	if (pm_item->be_mon_enabled || pm_item->total_be_mon_enabled)
-		len += scnprintf(page + len, PAGE_SIZE - len,
+		len += scnprintf(page + len, SZ_4K - len,
 			"be_bytes=%llu,", mon_data.mon_stats.slc_be_bytes);
 
 	len -= 1;
-	len += scnprintf(page + len, PAGE_SIZE - len, "\n");
+	len += scnprintf(page + len, SZ_4K - len, "\n");
 
 	return len;
 }
@@ -285,13 +285,13 @@ static ssize_t slc_mpam_available_gear_show(struct config_item *item,
 
 	ret = msc_system_get_device_capability(SLC, &query, &partid_cap);
 	if (ret)
-		return scnprintf(page, PAGE_SIZE,
+		return scnprintf(page, SZ_4K,
 			"failed to get available gear %d\n", ret);
 
 	if (slc_firmware_ver == SLC_MPAM_VERSION_0) {
 		for (i = 0; i < partid_cap.v0_cap.num_gears; i++) {
 			gear_num = partid_cap.v0_cap.part_id_gears[i];
-			len += scnprintf(page + len, PAGE_SIZE - len,
+			len += scnprintf(page + len, SZ_4K - len,
 				"%d - %s\n", gear_num, gear_index[gear_num]);
 		}
 	} else {
@@ -300,7 +300,7 @@ static ssize_t slc_mpam_available_gear_show(struct config_item *item,
 			if (((1 << i) & partid_cap.v1_cap.cap_cfg.gear_flds_bitmap) == 0)
 				continue;
 
-			len += scnprintf(page + len, PAGE_SIZE - len,
+			len += scnprintf(page + len, SZ_4K - len,
 					"%d - %d\n", gear_num++,
 					i * partid_cap.v1_cap.cap_cfg.slc_bitfield_capacity);
 		}
@@ -499,7 +499,7 @@ static int slc_config_fs_register(struct  device *dev)
 		}
 	}
 
-	if (slc_firmware_ver == SLC_MPAM_VERSION_1_0)
+	if (slc_firmware_ver >= SLC_MPAM_VERSION_0_3)
 		create_config_node("total", dev, 0, 0, root_group, &slc_mpam_total_type);
 
 	return 0;

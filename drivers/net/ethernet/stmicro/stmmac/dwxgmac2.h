@@ -60,6 +60,13 @@
 #define XGMAC_HASH_TABLE(x)		(0x00000010 + (x) * 4)
 #define XGMAC_MAX_HASH_TABLE		8
 #define XGMAC_VLAN_TAG			0x00000050
+/* MAC VLAN Tag Control */
+#define VLAN_TAG_CTRL_EVLS_MASK		GENMASK(22, 21)
+#define VLAN_TAG_CTRL_EVLRXS		BIT(24)
+#define VLAN_TAG_STRIP_NONE		FIELD_PREP(VLAN_TAG_CTRL_EVLS_MASK, 0x0)
+#define VLAN_TAG_STRIP_PASS		FIELD_PREP(VLAN_TAG_CTRL_EVLS_MASK, 0x1)
+#define VLAN_TAG_STRIP_FAIL		FIELD_PREP(VLAN_TAG_CTRL_EVLS_MASK, 0x2)
+#define VLAN_TAG_STRIP_ALL		FIELD_PREP(VLAN_TAG_CTRL_EVLS_MASK, 0x3)
 #define XGMAC_VLAN_EDVLP		BIT(26)
 #define XGMAC_VLAN_VTHM			BIT(25)
 #define XGMAC_VLAN_DOVLTC		BIT(20)
@@ -246,10 +253,15 @@
 #define XGMAC_TIMESTAMP_BASE_ADDR	0x00000d00
 #define XGMAC_PPS_BASE_ADDR		0x00000d80
 
+/* MAC extended config 0 (MAC_Extended_Configuration, offset 0x140) */
+#define XGMAC_EXT_CFG0			0x140
+#define XGMAC_EXT_CFG0_VPRE		BIT(8)
+
 /* MAC extended config 1 */
 #define XGMAC_EXT_CFG1			0x144
 #define XGMAC_CONFIG1_SAVE_EN		BIT(24)
 #define XGMAC_CONFIG1_SPLM(v)		FIELD_PREP(GENMASK(9, 8), v)
+#define XGMAC_SPLM_L2			0x1
 
 static inline u32 xgmac_timestamp_base_addr(const struct dwxgmac_addrs *addrs)
 {
@@ -450,6 +462,7 @@ static inline u32 xgmac_mtl_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_TCEIE			BIT(0)
 #define XGMAC_DMA_ECC_INT_STATUS	0x0000306c
 #define XGMAC_DMA_DPP_INT_STATUS	0x00003074
+#define XGMAC_MAX_TC			8
 
 static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 					    const u32 x)
@@ -522,6 +535,7 @@ static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 					 XGMAC_DMA_STATUS_MSK_COMMON)
 
 /* Descriptors */
+#define XGMAC_RDES0_VLAN_TAG_MASK	GENMASK(15, 0)
 #define XGMAC_TDES0_LTV			BIT(31)
 #define XGMAC_TDES0_LT			GENMASK(7, 0)
 #define XGMAC_TDES0_TTSL		GENMASK(9, 0)
@@ -569,6 +583,15 @@ static inline u32 xgmac_dma_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_RDES3_RSV			BIT(26)
 #define XGMAC_RDES3_L34T		GENMASK(23, 20)
 #define XGMAC_RDES3_L2T			GENMASK(19, 16)
+
+/* Error Type or L2 Type(ET/LT) Field Number */
+#define XGMAC_ET_LT_VLAN_STAG		8
+#define XGMAC_ET_LT_VLAN_CTAG		9
+#define XGMAC_ET_LT_DVLAN_CTAG_CTAG	10
+#define XGMAC_ET_LT_DVLAN_STAG_STAG	11
+#define XGMAC_ET_LT_DVLAN_CTAG_STAG	12
+#define XGMAC_ET_LT_DVLAN_STAG_CTAG	13
+
 #define XGMAC_RDES3_L34T_SHIFT		20
 #define XGMAC_L34T_IP4TCP		0x1
 #define XGMAC_L34T_IP4UDP		0x2

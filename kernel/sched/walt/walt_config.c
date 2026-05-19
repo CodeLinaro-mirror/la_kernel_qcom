@@ -274,7 +274,7 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "CHORA")) {
+	} else if (!strcmp(name, "CHORA")  || !strcmp(name, "CHORAP")) {
 		soc_sched_lib_name_capacity = 4;
 		/*
 		 * Trailblazer settings
@@ -301,6 +301,7 @@ void walt_config(void)
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 		sysctl_walt_features |= WALT_FEAT_TOPAPP_BASED_HISPEED;
+		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
 		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
