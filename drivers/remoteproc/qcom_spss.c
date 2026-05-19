@@ -51,6 +51,7 @@
 #define MCP_SIZE_MUL_FACTOR (4)
 
 static bool ssr_already_occurred_since_boot;
+static int spss_pil_size_multiplier = MCP_SIZE_MUL_FACTOR;
 
 #define NUM_OF_DEBUG_REGISTERS_READ 0x3
 struct spss_data {
@@ -59,6 +60,7 @@ struct spss_data {
 	const char *ssr_name;
 	bool auto_boot;
 	const char *qmp_name;
+	int pil_size_multiplier;
 };
 
 struct qcom_rproc_glink_spss {
@@ -359,8 +361,13 @@ int get_spss_image_size(phys_addr_t base_addr)
 	pil_size = readl_relaxed(spss_code_size_reg);
 	iounmap(spss_code_size_reg);
 
+	if (spss_pil_size_multiplier <= 0) {
+		pr_err("invalid pil_size_multiplier: %d\n", spss_pil_size_multiplier);
+		return -EINVAL;
+	}
+
 	/* Multiply the value read from code size register by factor to get the actual size. */
-	pil_size *= MCP_SIZE_MUL_FACTOR;
+	pil_size *= spss_pil_size_multiplier;
 
 	if (pil_size % SZ_4K) {
 		pr_err("pil_size [0x%08x] is not 4K aligned.\n", pil_size);
@@ -863,6 +870,9 @@ static int qcom_spss_probe(struct platform_device *pdev)
 	spss->dev = &pdev->dev;
 	spss->rproc = rproc;
 	spss->pas_id = desc->pas_id;
+
+	spss_pil_size_multiplier = desc->pil_size_multiplier;
+
 	init_completion(&spss->start_done);
 	platform_set_drvdata(pdev, spss);
 	rproc->auto_boot = desc->auto_boot;
@@ -960,6 +970,16 @@ static const struct spss_data spss_resource_init = {
 		.ssr_name = "spss",
 		.auto_boot = false,
 		.qmp_name = "spss",
+		.pil_size_multiplier = 4,
+};
+
+static const struct spss_data spss_resource_init_lahaina = {
+		.firmware_name = "spss1t.mdt",
+		.pas_id = 14,
+		.ssr_name = "spss",
+		.auto_boot = false,
+		.qmp_name = "spss",
+		.pil_size_multiplier = 1,
 };
 
 static const struct of_device_id spss_of_match[] = {
@@ -968,7 +988,7 @@ static const struct of_device_id spss_of_match[] = {
 	{ .compatible = "qcom,pineapple-spss-pas", .data = &spss_resource_init},
 	{ .compatible = "qcom,sun-spss-pas", .data = &spss_resource_init},
 	{ .compatible = "qcom,canoe-spss-pas", .data = &spss_resource_init},
-	{ .compatible = "qcom,lahaina-spss-pas", .data = &spss_resource_init},
+	{ .compatible = "qcom,lahaina-spss-pas", .data = &spss_resource_init_lahaina},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, spss_of_match);
