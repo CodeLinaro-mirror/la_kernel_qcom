@@ -100,6 +100,7 @@ struct spi_geni_master {
 	u32 fifo_width_bits;
 	u32 tx_wm;
 	u32 last_mode;
+	u32 last_cs;
 	unsigned long cur_speed_hz;
 	unsigned long cur_sclk_hz;
 	unsigned int cur_bits_per_word;
@@ -422,7 +423,10 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 	u32 loopback_cfg = 0, cpol = 0, cpha = 0, demux_output_inv = 0;
 	u32 demux_sel;
 
-	if (mas->last_mode != spi_slv->mode) {
+	demux_sel = spi_get_chipselect(spi_slv, 0);
+
+	if (mas->last_mode != spi_slv->mode ||
+	    mas->last_cs != demux_sel) {
 		if (spi_slv->mode & SPI_LOOP)
 			loopback_cfg = LOOPBACK_ENABLE;
 
@@ -433,9 +437,8 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 			cpha = CPHA;
 
 		if (spi_slv->mode & SPI_CS_HIGH)
-			demux_output_inv = BIT(spi_get_chipselect(spi_slv, 0));
+			demux_output_inv = BIT(demux_sel);
 
-		demux_sel = spi_get_chipselect(spi_slv, 0);
 		mas->cur_bits_per_word = spi_slv->bits_per_word;
 
 		spi_setup_word_len(mas, spi_slv->mode, spi_slv->bits_per_word);
@@ -444,8 +447,8 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 		writel(cpha, se->base + SE_SPI_CPHA);
 		writel(cpol, se->base + SE_SPI_CPOL);
 		writel(demux_output_inv, se->base + SE_SPI_DEMUX_OUTPUT_INV);
-
 		mas->last_mode = spi_slv->mode;
+		mas->last_cs = demux_sel;
 	}
 
 	spi_trace_log(mas->dev,
