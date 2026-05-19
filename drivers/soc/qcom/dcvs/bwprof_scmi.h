@@ -7,6 +7,8 @@
 #define _QCOM_BWPROF_H
 
 #include <linux/mailbox_client.h>
+#include <linux/atomic.h>
+#include <linux/hrtimer.h>
 
 #define MIN_MS	1
 #define MAX_MS	2000
@@ -105,6 +107,10 @@ struct sample_ms_info {
 	uint16_t sample_ms;
 } __packed;
 
+struct buffer_fill_state {
+	atomic_t state;
+};
+
 struct sampling_mode_info {
 	u16 sampling_ms;
 	u8	enable;
@@ -135,6 +141,7 @@ struct bwprof_dev_data {
 	struct si_object_invoke_ctx oic;
 	struct mbox_client	cl;
 	struct mbox_chan	*ch;
+	struct hrtimer		bwprof_hrtimer;
 	spinlock_t rx_lock;
 	u32	hw_cnt;
 	u32	num_inited_hw;
@@ -147,6 +154,7 @@ struct bwprof_dev_data {
 	bool	is_sampling_enable;
 	bool	is_hist_enable;
 	bool	is_set_config;
+	bool	polling_mode;
 };
 
 #endif /* _QCOM_BWPROF_H */

@@ -43,6 +43,7 @@
 		.intr_target_bit = 8,		\
 		.intr_wakeup_enable_bit = 7,	\
 		.intr_wakeup_present_bit = 6,	\
+		.intr_target_width = 4,         \
 		.intr_target_kpss_val = 3,	\
 		.intr_raw_status_bit = 4,	\
 		.intr_polarity_bit = 1,		\
@@ -262,13 +263,17 @@ static const struct pinctrl_pin_desc shikra_pins[] = {
 	PINCTRL_PIN(159, "GPIO_159"),
 	PINCTRL_PIN(160, "GPIO_160"),
 	PINCTRL_PIN(161, "GPIO_161"),
-	PINCTRL_PIN(162, "SDC1_DATA"),
-	PINCTRL_PIN(163, "SDC1_RCLK"),
-	PINCTRL_PIN(164, "SDC1_CMD"),
-	PINCTRL_PIN(165, "SDC1_CLK"),
-	PINCTRL_PIN(166, "SDC2_CLK"),
-	PINCTRL_PIN(167, "SDC2_CMD"),
-	PINCTRL_PIN(168, "SDC2_DATA"),
+	PINCTRL_PIN(162, "GPIO_162"),
+	PINCTRL_PIN(163, "GPIO_163"),
+	PINCTRL_PIN(164, "GPIO_164"),
+	PINCTRL_PIN(165, "GPIO_165"),
+	PINCTRL_PIN(166, "SDC1_RCLK"),
+	PINCTRL_PIN(167, "SDC1_CLK"),
+	PINCTRL_PIN(168, "SDC1_CMD"),
+	PINCTRL_PIN(169, "SDC1_DATA"),
+	PINCTRL_PIN(170, "SDC2_CLK"),
+	PINCTRL_PIN(171, "SDC2_CMD"),
+	PINCTRL_PIN(172, "SDC2_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -440,13 +445,13 @@ DECLARE_MSM_GPIO_PINS(163);
 DECLARE_MSM_GPIO_PINS(164);
 DECLARE_MSM_GPIO_PINS(165);
 
-static const unsigned int sdc1_data_pins[] = { 162 };
-static const unsigned int sdc1_rclk_pins[] = { 163 };
-static const unsigned int sdc1_cmd_pins[] = { 164 };
-static const unsigned int sdc1_clk_pins[] = { 165 };
-static const unsigned int sdc2_clk_pins[] = { 166 };
-static const unsigned int sdc2_cmd_pins[] = { 167 };
-static const unsigned int sdc2_data_pins[] = { 168 };
+static const unsigned int sdc1_rclk_pins[] = { 166 };
+static const unsigned int sdc1_clk_pins[] = { 167 };
+static const unsigned int sdc1_cmd_pins[] = { 168 };
+static const unsigned int sdc1_data_pins[] = { 169 };
+static const unsigned int sdc2_clk_pins[] = { 170 };
+static const unsigned int sdc2_cmd_pins[] = { 171 };
+static const unsigned int sdc2_data_pins[] = { 172 };
 
 enum shikra_functions {
 	msm_mux_gpio,
@@ -2655,13 +2660,21 @@ static const struct msm_pingroup shikra_groups[] = {
 			 -1),
 	[161] = PINGROUP(161, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			 -1),
-	[162] = SDC_QDSD_PINGROUP(sdc1_data, 0x1AC000, 9, 0),
-	[163] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x1AC004, 0, 0),
-	[164] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x1AC000, 11, 3),
-	[165] = SDC_QDSD_PINGROUP(sdc1_clk, 0x1AC000, 13, 6),
-	[166] = SDC_QDSD_PINGROUP(sdc2_clk, 0x1AA000, 14, 6),
-	[167] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1AA000, 11, 3),
-	[168] = SDC_QDSD_PINGROUP(sdc2_data, 0x1AA000, 9, 0),
+	[162] = PINGROUP(162, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 -1),
+	[163] = PINGROUP(163, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 -1),
+	[164] = PINGROUP(164, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 -1),
+	[165] = PINGROUP(165, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 -1),
+	[166] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x1AC004, 0, 0),
+	[167] = SDC_QDSD_PINGROUP(sdc1_clk, 0x1AC000, 13, 6),
+	[168] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x1AC000, 11, 3),
+	[169] = SDC_QDSD_PINGROUP(sdc1_data, 0x1AC000, 9, 0),
+	[170] = SDC_QDSD_PINGROUP(sdc2_clk, 0x1AA000, 14, 6),
+	[171] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1AA000, 11, 3),
+	[172] = SDC_QDSD_PINGROUP(sdc2_data, 0x1AA000, 9, 0),
 };
 
 static struct pinctrl_qup shikra_qup_regs[] = {

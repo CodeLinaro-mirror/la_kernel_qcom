@@ -89,10 +89,8 @@ dwc3-msm.ko
 videocc-sm8550.ko
 camcc-x1e80100.ko
 debugcc-x1e80100.ko
-msm_geni_serial.ko
 i2c-msm-geni.ko
 msm_gpi.ko
-spi-msm-geni.ko
 arm_ffa.ko
 arm_ffa_transport.ko
 cpu_phys_log_map.ko
@@ -105,3 +103,5 @@ qcom_dpd_proxy_iommu.ko
 qcom_scm_smci.ko
 pkvm-geni.ko
 pkvm-smc-filter.ko
+wcd_usbss_i2c.ko
+pkvm-secure-memory-manager.ko

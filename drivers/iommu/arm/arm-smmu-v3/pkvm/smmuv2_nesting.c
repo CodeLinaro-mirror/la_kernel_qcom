@@ -201,7 +201,9 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	current_type = FIELD_GET(ARM_SMMU_CBAR_TYPE, val);
 
 	/* If type is S1_TRANS_S2_BYPASS, modify hardware value for nested translation */
-	if (current_type == CBAR_TYPE_S1_TRANS_S2_BYPASS) {
+	if (current_type == CBAR_TYPE_S2_TRANS ||
+		current_type == CBAR_TYPE_S1_TRANS_S2_BYPASS ||
+		current_type == CBAR_TYPE_S1_TRANS_S2_TRANS) {
 		/* Clear the TYPE, VMID, and S1-specific fields (bits [8:15]) in hardware value */
 		hw_val &= ~(ARM_SMMU_CBAR_TYPE | ARM_SMMU_CBAR_VMID |
 			    ARM_SMMU_CBAR_S1_MEMATTR | ARM_SMMU_CBAR_S1_BPSHCFG);
@@ -214,10 +216,10 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 
 		/* Set bits [8:15] to host_s2_cb_idx (S2 host context bank) */
 		hw_val |= (smmu->host_s2_cb_idx << 8);
-	}
 
-	/* Write the (possibly modified) value to hardware */
-	arm_smmu_gr1_write(smmu, offset, hw_val);
+		/* Write the (possibly modified) value to hardware */
+		arm_smmu_gr1_write(smmu, offset, hw_val);
+	}
 
 	smmu_v2_debug_print("cbar_write: idx: %d, EL1_val: 0x%x, HW_val: 0x%x, stored: 0x%x\n",
 			    i, val, hw_val, smmu->cbar_pool[i]);
@@ -233,10 +235,13 @@ static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, 
 	/* Use specific log messages for special registers */
 	if (offset == ARM_SMMU_GR0_ID0) {
 		*buf = (*buf & ~ARM_SMMU_ID0_NUMSMRG) | (smmu->num_smr & ARM_SMMU_ID0_NUMSMRG);
+		*buf = (*buf & ~ARM_SMMU_ID0_S2TS);
+		*buf = (*buf & ~ARM_SMMU_ID0_NTS);
 		smmu_v2_debug_print("smmu_v2_id0_read, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
 	} else if (offset == ARM_SMMU_GR0_ID1) {
 		*buf = (*buf & ~ARM_SMMU_ID1_NUMCB) | (smmu->num_cb & ARM_SMMU_ID1_NUMCB);
+		*buf = (*buf & ~ARM_SMMU_ID1_NUMS2CB);
 		smmu_v2_debug_print("smmu_v2_id1_read, addr: %llx, buf: %llx\n",
 				    smmu->base_pa + offset, *buf);
 	} else if (offset >= ARM_SMMU_GR0_SMR(0) &&
@@ -437,11 +442,32 @@ static int take_over_smmus(void)
 	return 0;
 }
 
+static bool is_handoff_smr(struct smmu_v2_nested *smmu, u32 smr_val)
+{
+	u32 k;
+	u32 smr_sid = smr_val & ARM_SMMU_SMR_ID;
+
+	for (k = 0; k < smmu->num_handoff_smrs; k++) {
+		if (smr_sid == (smmu->handoff_smrs[k] & ARM_SMMU_SMR_ID))
+			return true;
+	}
+	return false;
+}
+
 static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 {
-	int i;
+	int i, j;
 	u32 s2cr_val;
 	u32 smr_val;
+	u32 s2cr_reset_val = 0;
+	u32 s2cr_handoff_val = 0;
+
+	s2cr_reset_val = FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_FAULT);
+
+	/* Set PRIVCFG to PRIV, type to TRANS and CBNDX to host_s2_cb_idx */
+	s2cr_handoff_val |= FIELD_PREP(ARM_SMMU_S2CR_PRIVCFG, S2CR_PRIVCFG_PRIV);
+	s2cr_handoff_val |= FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_TRANS);
+	s2cr_handoff_val |= FIELD_PREP(ARM_SMMU_S2CR_CBNDX, smmu->host_s2_cb_idx);
 
 	for (i = smmu->num_s2cr - 1; i >= 0; i--) {
 		s2cr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_S2CR(i));
@@ -452,9 +478,16 @@ static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 				    i, smr_val, s2cr_val);
 	}
 	/* Reset remaining SMRs and S2CRs */
-	for (int j = i; j >= 0; j--) {
-		smr_val  = 0x0;
-		s2cr_val = FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_FAULT);
+	for (j = i; j >= 0; j--) {
+		smr_val  = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(j));
+
+		if (is_handoff_smr(smmu, smr_val)) {
+			s2cr_val = s2cr_handoff_val;
+		} else {
+			smr_val  = 0x0;
+			s2cr_val = s2cr_reset_val;
+		}
+
 		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_S2CR(j), s2cr_val);
 		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_SMR(j), smr_val);
 	}
@@ -592,13 +625,6 @@ static int hw_profile_init(void)
 		u32 id1 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID1);
 		u32 scr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sCR0);
 
-		/* Enable SMMU by default.
-		 * And enable unidentified stream and Stream match conflicts by default
-		 */
-		scr_val &= ~(ARM_SMMU_sCR0_CLIENTPD);
-		scr_val |= FIELD_PREP(ARM_SMMU_sCR0_USFCFG, 1) |
-			   FIELD_PREP(ARM_SMMU_sCR0_SMCFCFG, 1);
-		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sCR0, scr_val);
 
 		smmu->num_smr = id0 & ARM_SMMU_ID0_NUMSMRG;
 		smmu->num_s2cr = smmu->num_smr; /* smr == s2cr */
@@ -613,20 +639,17 @@ static int hw_profile_init(void)
 		smmu_v2_debug_print("SMMU num_cb: %d, pgshift: %d, numpage: %d\n",
 				    smmu->num_cb, smmu->pgshift, smmu->numpage);
 
-		ret = update_s2cr_profile(smmu);
-		if (ret) {
-			smmu_v2_debug_print("Failed to update S2CR profile!\n");
-			return ret;
-		}
-
+		/*
+		 * update_cbar_profile() and reserve_host_s2_context_bank() must
+		 * run before update_s2cr_profile() so that host_s2_cb_idx is
+		 * valid when handoff SMR S2CRs are converted from bypass to
+		 * S2 translation mode.
+		 */
 		ret = update_cbar_profile(smmu);
 		if (ret) {
 			smmu_v2_debug_print("Failed to update CBAR profile!\n");
 			return ret;
 		}
-
-		smmu_v2_debug_print("num_smr: %d, num_cb: %d\n",
-				    smmu->num_smr, smmu->num_cb);
 
 		/* Reserve the bottom available context bank for host S2 */
 		ret = reserve_host_s2_context_bank(smmu);
@@ -635,15 +658,111 @@ static int hw_profile_init(void)
 			return ret;
 		}
 
+		ret = update_s2cr_profile(smmu);
+		if (ret) {
+			smmu_v2_debug_print("Failed to update S2CR profile!\n");
+			return ret;
+		}
+
+		smmu_v2_debug_print("num_smr: %d, num_cb: %d\n",
+				    smmu->num_smr, smmu->num_cb);
+
 		smmu_v2_debug_print("After reservation, available guests' CBs: %d & CBARs: %d\n",
 				    smmu->num_cb, smmu->num_cbar);
+
+		/* Enable SMMU by default.
+		 * And enable unidentified stream and Stream match conflicts by default
+		 */
+		scr_val &= ~(ARM_SMMU_sCR0_CLIENTPD);
+		scr_val |= FIELD_PREP(ARM_SMMU_sCR0_USFCFG, 1) |
+			   FIELD_PREP(ARM_SMMU_sCR0_SMCFCFG, 1);
+		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sCR0, scr_val);
 	}
 
 	return 0;
 }
 
+/* Wait for any pending TLB invalidations to complete */
+static int __arm_smmu_tlb_sync(struct smmu_v2_nested *smmu, int cb,
+				int sync, int status)
+{
+	unsigned int inc, delay;
+	u32 reg;
+
+	arm_smmu_cb_write(smmu, cb, sync, QCOM_DUMMY_VAL);
+
+	for (delay = 1, inc = 1; delay < TLB_LOOP_TIMEOUT; delay += inc) {
+		reg = arm_smmu_cb_read(smmu, cb, status);
+		if (!(reg & ARM_SMMU_sTLBGSTATUS_GSACTIVE))
+			return 0;
+
+		pkvm_udelay(inc);
+
+		if (inc < TLB_LOOP_INC_MAX)
+			inc *= 2;
+	}
+
+	return -EINVAL;
+}
+
+static void arm_smmu_tlb_sync_context(struct smmu_v2_nested *smmu)
+{
+	if (__arm_smmu_tlb_sync(smmu, smmu->host_s2_cb_idx,
+				ARM_SMMU_CB_TLBSYNC,
+				ARM_SMMU_CB_TLBSTATUS)) {
+		/* Fatal assertion in case of TLB sync failure*/
+		BUG_ON(1);
+	}
+}
+
+static void arm_smmu_tlb_inv_range_s2(struct smmu_v2_nested *smmu,
+				      unsigned long iova, size_t size,
+				      size_t granule, void *cookie, int reg)
+{
+	iova >>= PAGE_SHIFT;
+
+	do {
+		arm_smmu_cb_writeq(smmu, smmu->host_s2_cb_idx, reg, iova);
+		iova += granule >> PAGE_SHIFT;
+	} while (size > granule && (size -= granule));
+}
+
+static void arm_smmu_tlb_add_page_s2(struct iommu_iotlb_gather *gather,
+				     unsigned long iova, size_t granule,
+				     void *cookie)
+{
+	struct smmu_v2_nested *smmu;
+
+	for_each_smmu(smmu) {
+		kvm_iommu_lock(&smmu->iommu);
+		arm_smmu_tlb_inv_range_s2(smmu, iova, granule, granule, cookie,
+					  ARM_SMMU_CB_S2_TLBIIPAS2L);
+		arm_smmu_tlb_sync_context(smmu);
+		kvm_iommu_unlock(&smmu->iommu);
+	}
+}
+
+static void arm_smmu_tlb_inv_walk_s2(unsigned long iova, size_t size,
+				     size_t granule, void *cookie)
+{
+	struct smmu_v2_nested *smmu;
+
+	for_each_smmu(smmu) {
+		kvm_iommu_lock(&smmu->iommu);
+		arm_smmu_tlb_inv_range_s2(smmu, iova, size, granule, cookie,
+					  ARM_SMMU_CB_S2_TLBIIPAS2);
+		arm_smmu_tlb_sync_context(smmu);
+		kvm_iommu_unlock(&smmu->iommu);
+	}
+}
+
+static const struct iommu_flush_ops arm_smmu_s2_tlb_ops_v2 = {
+	.tlb_flush_walk	= arm_smmu_tlb_inv_walk_s2,
+	.tlb_add_page	= arm_smmu_tlb_add_page_s2,
+};
+
 const struct smmu_vendor_callbacks v2callbacks = {
-	.tlb_ops = NULL, /* fix me */
+	.tlb_ops = &arm_smmu_s2_tlb_ops_v2,
 	.get_cfg = NULL, /* fix me */
 	.post_init = smmu_attach_stage_2,
 	.dabt_hdl = smmuv2_nesting_dabt_handler,

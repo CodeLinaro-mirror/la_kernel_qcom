@@ -208,6 +208,7 @@ static uint32_t dcc_offset_conv(struct dcc_drvdata *drvdata, uint32_t off)
 		if ((off & 0x7F) >= DCC_MAP_LEVEL2)
 			return (off - DCC_MAP_OFFSET4);
 	}
+
 	return (off);
 }
 

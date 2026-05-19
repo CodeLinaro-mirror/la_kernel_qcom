@@ -514,18 +514,20 @@ static int __maybe_unused gh_vcpu_kthread(void *data)
 	set_freezable();
 
 	while (!kthread_should_stop() && !ret) {
+		u16 vmid;
 		mutex_lock(&vcpu->run_lock);
 		if (vcpu->vcpu_run->immediate_exit) {
 			ret = -EINTR;
 			mutex_unlock(&vcpu->run_lock);
 			break;
 		}
-		android_rvh_gh_before_vcpu_run(NULL, proxy_vcpu->vm->id,
+		vmid = proxy_vcpu->vm->id;
+		android_rvh_gh_before_vcpu_run(NULL, vmid,
 					       vcpu->ticket.label);
 		gunyah_error = gunyah_hypercall_vcpu_run(
 			vcpu->rsc->capid, resume_data, &vcpu_run_resp);
 		android_rvh_gh_after_vcpu_run(
-			NULL, proxy_vcpu->vm->id, vcpu->ticket.label,
+			NULL, vmid, vcpu->ticket.label,
 			gunyah_error,
 			(const struct gunyah_hypercall_vcpu_run_resp
 				 *)&vcpu_run_resp);

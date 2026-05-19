@@ -127,7 +127,8 @@ void walt_config(void)
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
 			|| !strcmp(name, "ALORP")
 			|| !strcmp(name, "WHALE") || !strcmp(name, "WHALEP")
-			|| !strcmp(name, "CANOEPSG") || !strcmp(name, "CANOEP")) {
+			|| !strcmp(name, "CANOEPSG") || !strcmp(name, "CANOEP")
+			|| !strcmp(name, "QCS8845")) {
 		sysctl_sched_suppress_region2		= 1;
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
@@ -186,7 +187,7 @@ void walt_config(void)
 		}
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 		if (strcmp(name, "ALOR_INTERPOSER") && strcmp(name, "ALOR")
-				&& strcmp(name, "ALORP"))
+				&& strcmp(name, "ALORP") && strcmp(name, "QCS8845"))
 			demand_scaling_factor = 70;
 
 		/*
@@ -194,7 +195,7 @@ void walt_config(void)
 		 * for Alor platforms
 		 */
 		if (!strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
-				|| !strcmp(name, "ALORP"))
+				|| !strcmp(name, "ALORP") || !strcmp(name, "QCS8845"))
 			soc_feat_set(SOC_ENABLE_LIMIT_PRIME_USAGE);
 
 	} else if (!strcmp(name, "PINEAPPLE")) {
@@ -273,7 +274,7 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "CHORA")) {
+	} else if (!strcmp(name, "CHORA")  || !strcmp(name, "CHORAP")) {
 		soc_sched_lib_name_capacity = 4;
 		/*
 		 * Trailblazer settings
@@ -289,7 +290,7 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "MALABAR")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP")) {
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
@@ -303,9 +304,9 @@ void walt_config(void)
 		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
-		soc_sched_lib_name_capacity = 4;
 		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
 
+		soc_sched_lib_name_capacity = 2;
 		// Evaluate and change the swap util thres as per need in future.
 		pipeline_swap_util_th = 50;
 
@@ -322,7 +323,7 @@ void walt_config(void)
 		}
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "VIENNA") || !strcmp(name, "VIENNAP")) {
+	} else if (!strcmp(name, "VIENNA") || !strcmp(name, "VIENNAP") || !strcmp(name, "SHIKRA")) {
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
 		 */

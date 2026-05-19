@@ -1575,8 +1575,8 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 		return;
 
 	get_entry_instr(REPLACE_NEXT_TASK_FAIR);
-	if ((*p) && (*p) != prev && ((*p)->on_cpu == 1 || (*p)->on_rq == 0 ||
-				     (*p)->on_rq == TASK_ON_RQ_MIGRATING ||
+	if ((*p) && (*p) != prev && ((((*p)->on_cpu == 1) && task_current_donor(rq, *p)) ||
+				     (*p)->on_rq == 0 || (*p)->on_rq == TASK_ON_RQ_MIGRATING ||
 				     task_thread_info(*p)->cpu != cpu_of(rq)))
 		WALT_BUG(WALT_BUG_UPSTREAM, *p,
 			 "picked %s(%d) on_cpu=%d on_rq=%d p->cpu=%d cpu_of(rq)=%d kthread=%d\n",
@@ -1605,8 +1605,8 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 		wrq->mvp_arrival_time = rq->clock;
 	}
 
-	if ((*p) && (*p) != prev && ((*p)->on_cpu == 1 || (*p)->on_rq == 0 ||
-				     (*p)->on_rq == TASK_ON_RQ_MIGRATING ||
+	if ((*p) && (*p) != prev && ((((*p)->on_cpu == 1) && task_current_donor(rq, *p)) ||
+				     (*p)->on_rq == 0 || (*p)->on_rq == TASK_ON_RQ_MIGRATING ||
 				     task_thread_info(*p)->cpu != cpu_of(rq)))
 		WALT_BUG(WALT_BUG_UPSTREAM, *p,
 			 "picked %s(%d) on_cpu=%d on_rq=%d p->cpu=%d cpu_of(rq)=%d kthread=%d\n",

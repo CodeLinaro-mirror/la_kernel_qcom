@@ -37,7 +37,13 @@ load(
     "define_seraph_tuivm",
 )
 load(":kleaf-scripts/targets/seraph_vms.bzl", "define_seraph_vms")
-load(":kleaf-scripts/targets/shikra.bzl", "define_shikra")
+load(
+    ":kleaf-scripts/targets/shikra.bzl",
+    "define_shikra",
+    "define_shikra_oemvm",
+    "define_shikra_tuivm",
+)
+load(":kleaf-scripts/targets/shikra_vms.bzl", "define_shikra_vms")
 load(
     ":kleaf-scripts/targets/sun.bzl",
     "define_sun",
@@ -370,3 +376,9 @@ define_malabar_vms()
 define_monaco()
 
 define_shikra()
+
+define_shikra_oemvm()
+
+define_shikra_tuivm()
+
+define_shikra_vms()

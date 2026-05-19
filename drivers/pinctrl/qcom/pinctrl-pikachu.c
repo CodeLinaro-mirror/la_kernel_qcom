@@ -41,8 +41,8 @@
 		.intr_polarity_bit = 1,                               \
 		.intr_detection_bit = 2,                              \
 		.intr_detection_width = 2,                            \
-		.wake_reg = REG_BASE + wake_off,	              \
-		.wake_bit = bit,       				      \
+		.wake_reg = REG_BASE + wake_off,                      \
+		.wake_bit = bit,                                      \
 		.funcs = (int[]){                                     \
 			msm_mux_gpio, /* gpio mode */                 \
 			msm_mux_##f1,                                 \
@@ -1713,16 +1713,16 @@ static const struct pinfunction pikachu_functions[] = {
  * Clients would not be able to request these dummy pin groups.
  */
 static const struct msm_pingroup pikachu_groups[] = {
-	[0] = PINGROUP(0, qup0_se2_l0, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-		       0x7500C, 0),
-	[1] = PINGROUP(1, qup0_se2_l1, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA,
-		       0x7500C, 1),
-	[2] = PINGROUP(2, qup0_se2_l2, qspi0_cs0_n, pwm_0, NA, NA, NA, NA, NA,
-		       NA, NA, NA, 0x7500C, 2),
-	[3] = PINGROUP(3, qup0_se2_l3, qspi0_cs1_n, pwm_1, NA, NA, NA, NA, NA,
-		       NA, NA, NA, 0x7500C, 3),
-	[4] = PINGROUP(4, qup1_se4_l0, ibi_i3c, i3c_s_sda, pll_clk_aux, NA, NA,
-		       NA, NA, NA, NA, egpio, 0x75000, 0),
+	[0] = PINGROUP(0, qup0_se2_l0, NA, NA, NA, NA, NA, NA, NA, NA,
+			NA, NA, 0x7500C, 0),
+	[1] = PINGROUP(1, qup0_se2_l1, NA, NA, NA, NA, NA, NA, NA, NA,
+			NA, NA, 0x7500C, 1),
+	[2] = PINGROUP(2, qup0_se2_l2, qspi0_cs0_n, pwm_0, NA, NA,
+			NA, NA, NA, NA, NA, NA, 0x7500C, 2),
+	[3] = PINGROUP(3, qup0_se2_l3, qspi0_cs1_n, pwm_1, NA, NA, NA,
+			NA, NA, NA, NA, NA, 0x7500C, 3),
+	[4] = PINGROUP(4, qup1_se4_l0, ibi_i3c, i3c_s_sda, pll_clk_aux,
+			NA, NA, NA, NA, NA, NA, egpio, 0x75000, 0),
 	[5] = PINGROUP(5, qup1_se4_l1, ibi_i3c, i3c_s_scl, NA, NA, NA, NA, NA,
 		       NA, NA, egpio, 0x75000, 1),
 	[6] = PINGROUP(6, qup1_se4_l2, NA, phase_flag11, NA, NA, NA, NA, NA, NA,

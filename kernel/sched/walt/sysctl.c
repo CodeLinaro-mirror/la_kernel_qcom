@@ -14,7 +14,6 @@ static int neg_five = -5;
 static int three = 3;
 static int four = 4;
 static int five = 5;
-static int two_hundred_fifty_five = 255;
 static unsigned int ns_per_sec = NSEC_PER_SEC;
 static unsigned int one_hundred_thousand = 100000;
 static unsigned int two_hundred_million = 200000000;
@@ -24,6 +23,11 @@ static int one_thousand = 1000;
 static int one_thousand_twenty_four = 1024;
 static int two_thousand = 2000;
 static int max_nr_pipeline = MAX_NR_PIPELINE;
+
+/* This is the decimal value of max supported cpus by WALT.
+ * Maximum number of supported cpus are calculated as MAX_CLUSTERS * MAX_CPUS_PER_CLUSTER
+ */
+static u32 max_supported_cpus_value = GENMASK_TYPE(u32, (MAX_CLUSTERS * MAX_CPUS_PER_CLUSTER)-1, 0);
 
 /*
  * CFS task prio range is [100 ... 139]
@@ -1861,7 +1865,7 @@ static struct ctl_table walt_table[] = {
 		.mode		= 0644,
 		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
-		.extra2		= &two_hundred_fifty_five,
+		.extra2		= &max_supported_cpus_value,
 	},
 	{
 		.procname	= "sched_busy_hyst_ns",
@@ -1879,7 +1883,7 @@ static struct ctl_table walt_table[] = {
 		.mode		= 0644,
 		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
-		.extra2		= &two_hundred_fifty_five,
+		.extra2		= &max_supported_cpus_value,
 	},
 	{
 		.procname	= "sched_coloc_busy_hyst_cpu_ns",
@@ -1915,7 +1919,7 @@ static struct ctl_table walt_table[] = {
 		.mode		= 0644,
 		.proc_handler	= sched_busy_hyst_handler,
 		.extra1		= SYSCTL_ZERO,
-		.extra2		= &two_hundred_fifty_five,
+		.extra2		= &max_supported_cpus_value,
 	},
 	{
 		.procname	= "sched_util_busy_hyst_cpu_ns",
@@ -2062,7 +2066,7 @@ static struct ctl_table walt_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_douintvec_minmax,
 		.extra1		= SYSCTL_ZERO,
-		.extra2		= &two_hundred_fifty_five,
+		.extra2		= &max_supported_cpus_value,
 	},
 	{
 		.procname	= "sched_wake_up_idle",
