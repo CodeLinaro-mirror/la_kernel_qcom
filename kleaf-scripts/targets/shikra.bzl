@@ -35,9 +35,9 @@ def define_shikra():
             )
 
         else:
-            board_kernel_cmdline_extras += ["nosoftlockup console=ttyMSM0,115200n8 qcom_geni_serial.con_enabled=1"]
-            kernel_vendor_cmdline_extras += ["nosoftlockup console=ttyMSM0,115200n8 qcom_geni_serial.con_enabled=1"]
-            board_bootconfig_extras += ["androidboot.serialconsole=1"]
+            board_kernel_cmdline_extras += ["nosoftlockup console=ttynull qcom_geni_serial.con_enabled=0"]
+            kernel_vendor_cmdline_extras += ["nosoftlockup console=ttynull qcom_geni_serial.con_enabled=0"]
+            board_bootconfig_extras += ["androidboot.serialconsole=0"]
 
             perf_build_img_opts = boot_image_opts(
                 earlycon_addr = "qcom_geni,0x04a90000",
