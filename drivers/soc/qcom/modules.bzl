@@ -1871,6 +1871,7 @@ def register_modules(registry):
             "drivers/soc/qcom/sps/sps_drv",
             "drivers/soc/qcom/smem",
             "drivers/soc/qcom/debug_symbol",
+            "drivers/firmware/qcom/qcom-scm",
             "drivers/remoteproc/rproc_qcom_common",
             "kernel/trace/qcom_ipc_logging",
         ],
