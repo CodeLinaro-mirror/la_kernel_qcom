@@ -352,7 +352,7 @@ static int cluster_power_cb(struct notifier_block *nb,
 	struct generic_pm_domain *pd = cluster_gov->genpd;
 	struct genpd_power_state *state = &pd->states[pd->state_idx];
 	struct lpm_cpu *cpu_gov;
-	int cpu, ret;
+	int cpu, ret = 0;
 	u32 *suspend_param = state->data;
 	unsigned long flags;
 
@@ -388,7 +388,7 @@ static int cluster_power_cb(struct notifier_block *nb,
 				if (spin_trylock_irqsave(&cpu_gov->lock, flags)) {
 					if (cpu_gov->ipi_pending) {
 						spin_unlock_irqrestore(&cpu_gov->lock, flags);
-						ret = NOTIFY_BAD;
+						return NOTIFY_BAD;
 					}
 					spin_unlock_irqrestore(&cpu_gov->lock, flags);
 				}
