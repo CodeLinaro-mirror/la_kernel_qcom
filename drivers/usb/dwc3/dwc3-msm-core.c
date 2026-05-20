@@ -562,6 +562,7 @@ struct dwc3_msm {
 	struct usb_redriver	*redriver;
 	/* Generic USB Phys */
 	struct phy		*usb2_phy, *usb3_phy;
+	struct device_link	*usb2_phy_link, *usb3_phy_link;
 	unsigned int		phy_flags;
 
 	const struct dbm_reg_data *dbm_reg_table;
@@ -6571,6 +6572,16 @@ static int dwc3_msm_get_phy(struct dwc3_msm *mdwc, struct device_node *dwc3_node
 	    (dwc3_msm_get_max_speed(mdwc) >= USB_SPEED_SUPER &&
 	     (!mdwc->ss_phy && !mdwc->usb3_phy)))
 		return -ENODEV;
+
+	if (mdwc->usb2_phy)
+		mdwc->usb2_phy_link = device_link_add(mdwc->dev,
+				mdwc->usb2_phy->dev.parent,
+				DL_FLAG_AUTOREMOVE_CONSUMER);
+
+	if (mdwc->usb3_phy)
+		mdwc->usb3_phy_link = device_link_add(mdwc->dev,
+				mdwc->usb3_phy->dev.parent,
+				DL_FLAG_AUTOREMOVE_CONSUMER);
 
 	return 0;
 }
