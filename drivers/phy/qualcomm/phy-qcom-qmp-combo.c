@@ -3392,7 +3392,77 @@ static int __maybe_unused qmp_combo_runtime_resume(struct device *dev)
 	return 0;
 }
 
+static int qmp_combo_pm_suspend(struct device *dev)
+{
+	struct qmp_combo *qmp = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd = pd_to_genpd(dev->pm_domain);
+
+	dev_err(dev, "PM SUSPEND: Suspending QMP phy, mode:%d\n", qmp->mode);
+
+	if (!qmp->init_count || pm_runtime_suspended(dev)) {
+		dev_err(dev, "PHY not initialized, bailing out\n");
+		return 0;
+	}
+
+	qmp_combo_enable_autonomous_mode(qmp);
+
+	/* Keep PHY GDSC ON during bus suspend */
+	genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
+	genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+
+	clk_disable_unprepare(qmp->pipe_clk);
+	clk_set_parent(qmp->pipe_clk_mux, qmp->ref_clk_src);
+	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+
+	return 0;
+}
+
+static int qmp_combo_pm_resume(struct device *dev)
+{
+	struct qmp_combo *qmp = dev_get_drvdata(dev);
+	struct generic_pm_domain *genpd = pd_to_genpd(dev->pm_domain);
+	int ret = 0;
+
+	dev_err(dev, "PM RESUME: Resuming QMP phy, mode:%d\n", qmp->mode);
+
+	pm_runtime_disable(dev);
+
+	/* If PM resume fails, let RPM try */
+	ret = pm_runtime_set_active(dev);
+	if (ret)
+		goto out;
+
+	/* Unset the GDSC ON flags upon resume */
+	genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
+	genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+
+	if (!qmp->init_count) {
+		dev_vdbg(dev, "PHY not initialized, bailing out\n");
+		return 0;
+	}
+
+	ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
+	if (ret)
+		return ret;
+
+	clk_set_parent(qmp->pipe_clk_mux, qmp->pipe_clk_ext_src);
+	ret = clk_prepare_enable(qmp->pipe_clk);
+	if (ret) {
+		dev_err(dev, "pipe_clk enable failed, err=%d\n", ret);
+		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+		return ret;
+	}
+
+	qmp_combo_disable_autonomous_mode(qmp);
+
+out:
+	pm_runtime_enable(dev);
+
+	return 0;
+}
+
 static const struct dev_pm_ops qmp_combo_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(qmp_combo_pm_suspend, qmp_combo_pm_resume)
 	SET_RUNTIME_PM_OPS(qmp_combo_runtime_suspend,
 			   qmp_combo_runtime_resume, NULL)
 };
