@@ -695,6 +695,8 @@ struct dwc3_msm {
 
 	struct typec_retimer	*retimer;
 	bool			disable_xhci_runtime_pm;
+
+	bool			wakeup_source;
 };
 
 #define USB_HSPHY_3P3_VOL_MIN		3050000 /* uV */
@@ -6372,7 +6374,6 @@ static void dwc3_msm_override_pm_ops(struct device *dev, struct dev_pm_ops *pm_o
 static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 {
 	struct device_node *node = mdwc->dev->of_node, *dwc3_node;
-	bool wakeup_source;
 	struct dwc3	*dwc;
 	int ret = 0;
 	u32 val;
@@ -6475,9 +6476,9 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 
 	// Set device wakeupable to avoid DWC3 core core exit routine in
 	// dwc3_suspend_common() while operating in host mode.
-	wakeup_source = of_property_read_bool(node, "wakeup-source");
-	device_init_wakeup(mdwc->dev, wakeup_source);
-	device_init_wakeup(dwc->dev, wakeup_source);
+	mdwc->wakeup_source = of_property_read_bool(node, "wakeup-source");
+	device_init_wakeup(mdwc->dev, mdwc->wakeup_source);
+	device_init_wakeup(dwc->dev, mdwc->wakeup_source);
 
 	mdwc->xhci_pm_ops = kzalloc(sizeof(struct dev_pm_ops), GFP_ATOMIC);
 	if (!mdwc->xhci_pm_ops)
@@ -6493,6 +6494,8 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 	return 0;
 
 free_dwc_pm_ops:
+	device_init_wakeup(dwc->dev, false);
+	device_init_wakeup(mdwc->dev, false);
 	kfree(mdwc->dwc3_pm_ops);
 
 depopulate:
@@ -7234,6 +7237,8 @@ static void dwc3_msm_remove(struct platform_device *pdev)
 	pm_runtime_put_sync(mdwc->dev);
 	pm_runtime_set_suspended(mdwc->dev);
 	device_wakeup_disable(mdwc->dev);
+        device_init_wakeup(dwc->dev, false);
+        device_init_wakeup(mdwc->dev, false);
 
 	for (i = 0; i < ARRAY_SIZE(mdwc->icc_paths); i++)
 		icc_put(mdwc->icc_paths[i]);
@@ -8518,9 +8523,16 @@ static int dwc3_msm_runtime_resume(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 	struct generic_pm_domain *genpd;
+	struct dwc3 *dwc = NULL;
 
 	dev_dbg(dev, "DWC3-msm runtime resume\n");
 	dbg_event(0xFF, "RT Res", 0);
+
+	if (mdwc->dwc3)
+		dwc = platform_get_drvdata(mdwc->dwc3);
+
+	if (dwc)
+		device_init_wakeup(dwc->dev, mdwc->wakeup_source);
 
 	if (dev->pm_domain) {
 		genpd = pd_to_genpd(dev->pm_domain);
