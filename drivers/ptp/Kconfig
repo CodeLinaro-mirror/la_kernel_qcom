@@ -212,8 +212,8 @@ config PTP_DFL_TOD
 	  will be called ptp_dfl_tod.
 
 config PTP_QCOM_CLOCK_TSC
-	tristate "QCOM  TSC as PTP clock"
-	depends on COMMON_CLK
+	tristate "QCOM TSC as PTP clock"
+	depends on COMMON_CLK && PTP_1588_CLOCK
 	help
 	  This driver adds support for using the TSC as a PTP clock.
 	  The hardware supports time stamping of PTP packets.
@@ -223,5 +223,18 @@ config PTP_QCOM_CLOCK_TSC
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called ptp_qcom_tsc.
+
+config PTP_QCOM_CLOCK_TSC_V1
+	tristate "QCOM TSC V1 as PTP clock"
+	depends on COMMON_CLK && PTP_1588_CLOCK
+	help
+	  This driver adds support for using the TSC V1 as a PTP clock.
+	  The hardware supports time stamping of PTP packets.
+
+	  This PTP driver also registers interrupts for ETU(Event Timestamp Unit)
+	  and updates the TSC timestamps to PTP clock.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called ptp_qcom_tsc_v1.
 
 endmenu

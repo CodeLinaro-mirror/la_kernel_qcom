@@ -281,3 +281,19 @@
 		};
 	};
 };
+
+&tsens0 {
+	compatible = "qcom,qcs9075-tsens", "qcom,tsens-v2";
+};
+
+&tsens1 {
+	compatible = "qcom,qcs9075-tsens", "qcom,tsens-v2";
+};
+
+&tsens2 {
+	compatible = "qcom,qcs9075-tsens", "qcom,tsens-v2";
+};
+
+&tsens3 {
+	compatible = "qcom,qcs9075-tsens", "qcom,tsens-v2";
+};

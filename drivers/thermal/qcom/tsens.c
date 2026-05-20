@@ -639,7 +639,7 @@ static irqreturn_t tsens_critical_irq_thread(int irq, void *data)
 static irqreturn_t tsens_irq_thread(int irq, void *data)
 {
 	struct tsens_priv *priv = data;
-	struct tsens_irq_data d;
+	struct tsens_irq_data d = {};
 	int i;
 	bool disable = false;
 

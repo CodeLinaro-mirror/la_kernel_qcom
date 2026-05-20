@@ -396,6 +396,11 @@
 			no-map;
 		};
 
+		mm_dspq: mm_dspq_region@abbfe000 {
+			reg = <0x0 0xabbfe000 0x0 0x200000>;
+			no-map;
+		};
+
 		audio_config: audio-config-region@ac600000 {
 			reg = <0x0 0xac600000 0x0 0x0a00000>;
 			no-map;
@@ -490,8 +495,8 @@
 		dcc: dma@40ff000 {
 			compatible = "qcom,dcc-v3", "qcom,dcc";
 			reg = <0x0 0x040ff000 0x0 0x1000>,
-			      <0x0 0x040b8800 0x0 0x6000>;
-			qcom,dcc-offset = <0x38800>;
+			      <0x0 0x040a3000 0x0 0x1b800>;
+			qcom,dcc-offset = <0x23000>;
 		};
 
 		ipcc0: mailbox@408000 {
