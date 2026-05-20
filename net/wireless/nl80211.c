@@ -13188,7 +13188,8 @@ static int nl80211_tx_mgmt(struct sk_buff *skb, struct genl_info *info)
  nla_put_failure:
 	err = -ENOBUFS;
  free_msg:
-	nlmsg_free(msg);
+	if (msg)
+		nlmsg_free(msg);
 	return err;
 }
 
