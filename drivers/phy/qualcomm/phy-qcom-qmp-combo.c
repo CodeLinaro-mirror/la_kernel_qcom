@@ -3438,7 +3438,8 @@ static int qmp_combo_pm_resume(struct device *dev)
 
 	if (!qmp->init_count) {
 		dev_vdbg(dev, "PHY not initialized, bailing out\n");
-		return 0;
+		pm_runtime_set_suspended(dev);
+		goto out;
 	}
 
 	ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
