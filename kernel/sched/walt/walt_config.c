@@ -337,6 +337,7 @@ void walt_config(void)
 		trailblazer_boost_thresh_ipc = 225;
 		trailblazer_floor_freq[0] = 2500000;
 		trailblazer_floor_freq[1] = 2500000;
+		trailblazer_floor_freq[2] = 2500000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
 	} else if (!strcmp(name, "SERAPH") || !strcmp(name, "PIKACHU")) {
