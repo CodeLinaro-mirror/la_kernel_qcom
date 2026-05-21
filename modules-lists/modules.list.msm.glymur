@@ -69,3 +69,4 @@ qcom_dma_heaps.ko
 deferred-free-helper.ko
 msm_dma_iommu_mapping.ko
 nvmem_qfprom.ko
+gic_intr_routing.ko

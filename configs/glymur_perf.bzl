@@ -25,6 +25,7 @@ glymur_perf_config = {
     "CONFIG_CLK_GLYMUR_TCSRCC": "m",
     "CONFIG_CLK_GLYMUR_VIDEOCC": "m",
     "CONFIG_COMMON_CLK_QCOM": "m",
+    "CONFIG_GIC_INTERRUPT_ROUTING": "m",
     "CONFIG_HWSPINLOCK_QCOM": "m",
     "CONFIG_I2C_MSM_GENI": "m",
     "CONFIG_INPUT_PM8941_PWRKEY": "m",
