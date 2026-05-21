@@ -79,6 +79,10 @@ struct dwc3_qcom {
 	struct platform_device	*dwc3;
 	struct clk		**clks;
 	int			num_clocks;
+
+	struct clk		*core_clk;
+	long			core_clk_rate;
+
 	struct reset_control	*resets;
 	struct dwc3_qcom_port	ports[DWC3_QCOM_MAX_PORTS];
 	u8			num_ports;
@@ -472,6 +476,9 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 	for (i = qcom->num_clocks - 1; i >= 0; i--)
 		clk_disable_unprepare(qcom->clks[i]);
 
+	clk_set_rate(qcom->core_clk, 19200000);
+	clk_disable_unprepare(qcom->core_clk);
+
 	ret = dwc3_qcom_interconnect_disable(qcom);
 	if (ret)
 		dev_warn(qcom->dev, "failed to disable interconnect: %d\n", ret);
@@ -516,6 +523,9 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 			return ret;
 		}
 	}
+
+	clk_set_rate(qcom->core_clk, qcom->core_clk_rate);
+	clk_prepare_enable(qcom->core_clk);
 
 	ret = dwc3_qcom_interconnect_enable(qcom);
 	if (ret)
@@ -856,6 +866,22 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 		dev_err_probe(dev, ret, "failed to get clocks\n");
 		return ret;
 	}
+
+	qcom->core_clk = devm_clk_get(qcom->dev, "core");
+	if (IS_ERR(qcom->core_clk)) {
+		dev_err(qcom->dev, "failed to get core_clk\n");
+				ret = PTR_ERR(qcom->core_clk);
+		return ret;
+	}
+
+	qcom->core_clk_rate = clk_round_rate(qcom->core_clk,
+						qcom->core_clk_rate);
+
+	ret = clk_set_rate(qcom->core_clk, qcom->core_clk_rate);
+	if (ret)
+		dev_err(qcom->dev, "fail to set core_clk freq:%d\n", ret);
+
+	clk_prepare_enable(qcom->core_clk);
 
 	qcom->qscratch_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(qcom->qscratch_base)) {
