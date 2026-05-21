@@ -3279,6 +3279,9 @@ static const struct adsp_data malabar_mpss_resource = {
 	.dma_phys_below_32b = true,
 	.decrypt_shutdown = true,
 	.both_dumps = true,
+	.region_assign_idx = 3,
+	.region_assign_count = 1,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
 };
 
 static const struct adsp_data malabar_wpss_resource = {
