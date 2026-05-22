@@ -2601,6 +2601,7 @@ fs/verity/open.c
 fs/verity/read_metadata.c
 fs/verity/verify.c
 fs/xattr.c
+gki/aarch64/afdo/kernel.afdo
 include/acpi/acbuffer.h
 include/acpi/acconfig.h
 include/acpi/acexcep.h

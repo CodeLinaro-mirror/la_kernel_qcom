@@ -27,3 +27,11 @@ config QCOM_POWER_TELEMETRY_DATA_SHARE
 	  data sharing module. It allows sharing of power and energy data collected
 	  by the Power Telemetry Hardware driver with other components via a
 	  dedicated shared memory data structure.
+
+config QCOM_QPT_RPMSG_POWERCAP
+	tristate "Qualcomm Technologies, Inc. QPT RPMSG Powercap driver"
+	help
+	  This enables Qualcomm Technologies, Inc. QPT RPMSG powercap
+	  driver. It provides power capping and power telemetry support
+	  for Qualcomm SoCs using the QPT (Qualcomm Power Telemetry)
+	  interface over the RPMSG transport mechanism.

@@ -28,6 +28,17 @@ config CHARGER_QCOM_SMBB
 	  documentation for more detail.  The base name for this driver is
 	  'pm8941_charger'.
 
+config BATTERY_MAX1720X
+	tristate "Maxim MAX17201/MAX17215 Fuel Gauge"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  MAX1720x is fuel-gauge systems for lithium-ion (Li+) batteries
+	  in handheld and portable equipment.
+
+	  Say Y here to enable support for the MAX17201/MAX17335 standalone
+	  battery gas-gauge.
+
 config QTI_CHARGER_NFC_VREG
 	bool "Allow client to vote on Charger reverse boost regulator"
 	depends on QTI_BATTERY_CHARGER
