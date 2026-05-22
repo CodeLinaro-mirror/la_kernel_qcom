@@ -77,6 +77,7 @@ seraph_perf_config = {
     "CONFIG_LEDS_BYS_AW21104": "m",
     "CONFIG_LEDS_QCOM_LPG": "m",
     "CONFIG_LEDS_USER_AW21104": "m",
+    "CONFIG_LEDS_USER_LP5814": "m",
     "CONFIG_MEM_PROT": "m",
     "CONFIG_MFD_QCOM_PM8008": "m",
     "CONFIG_MFD_SPMI_PMIC": "m",
