@@ -232,4 +232,22 @@ config ARCH_SERAPH
 	  chipset or if you are unsure,
 	  say 'N' here.
 
+config ARCH_GLYMUR
+	bool "Enable support for Qualcomm Technologies, Inc. GLYMUR"
+	depends on ARCH_QCOM
+	help
+	  This enables support for Qualcomm Technologies, Inc. GLYMUR
+	  chipset.
+	  If you do not wish to build a kernel that runs on this
+	  chipset or if you are unsure, say 'N' here.
+
+config ARCH_MAHUA
+	bool "Enable support for Qualcomm Technologies, Inc. MAHUA"
+	depends on ARCH_QCOM
+	help
+	  This enables support for Qualcomm Technologies, Inc. MAHUA
+	  chipset.
+	  If you do not wish to build a kernel that runs on this
+	  chipset or if you are unsure, say 'N' here.
+
 endmenu # "Platform selection"
