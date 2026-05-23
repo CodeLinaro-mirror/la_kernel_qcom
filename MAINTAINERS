@@ -17755,6 +17755,13 @@ L:	netdev@vger.kernel.org
 S:	Maintained
 F:	drivers/net/ethernet/qualcomm/emac/
 
+QUALCOMM ETHERNET MAC NVMEM LAYOUT DRIVER
+M:	Hongmei Xu <hongmeix@qti.qualcomm.com>
+L:	linux-arm-msm@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/nvmem/layouts/qcom,sa8797p-eth-mac.yaml
+F:	drivers/nvmem/layouts/qcom-eth-mac.c
+
 QUALCOMM ETHQOS ETHERNET DRIVER
 M:	Vinod Koul <vkoul@kernel.org>
 R:	Bhupesh Sharma <bhupesh.sharma@linaro.org>
