@@ -262,19 +262,19 @@ static int smmu_tlb_inv_range_smmu(struct hyp_arm_smmu_v3_device *smmu,
 static void smmu_tlb_inv_range(unsigned long iova, size_t size, size_t granule,
 			       bool leaf)
 {
-	struct arm_smmu_cmdq_ent cmd = {
-		.opcode = CMDQ_OP_TLBI_S2_IPA,
-		.tlbi = {
-			.leaf = leaf,
-			.vmid = 0,
-		},
-	};
 	struct arm_smmu_cmdq_ent cmd_s1 = {
 		.opcode = CMDQ_OP_TLBI_NSNH_ALL,
 	};
 	struct hyp_arm_smmu_v3_device *smmu;
 
 	for_each_smmu(smmu) {
+		struct arm_smmu_cmdq_ent cmd = {
+			.opcode = CMDQ_OP_TLBI_S2_IPA,
+			.tlbi = {
+				.leaf = leaf,
+				.vmid = 0,
+			},
+		};
 		hyp_spin_lock(&smmu->lock);
 		/*
 		 * Don't bother if SMMU is disabled, this would be useful for the case
