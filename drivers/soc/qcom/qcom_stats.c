@@ -107,6 +107,9 @@
 #define WM_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 17, \
 				     struct sleep_stats *)
 
+#define LMCU_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 18, \
+				     struct sleep_stats *)
+
 struct subsystem_data {
 	const char *name;
 	u32 smem_item;
@@ -132,6 +135,7 @@ static struct subsystem_data subsystems[] = {
 	{ "dcp", 607, 22 },
 	{ "am", 679, 24 },
 	{ "wm", 678, 23 },
+	{ "lmcu", 607, 2 },
 };
 
 struct stats_config {
@@ -477,6 +481,9 @@ static long qcom_stats_device_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case WM_IOCTL:
 		subsystem = &subsystems[16];
+		break;
+	case LMCU_IOCTL:
+		subsystem = &subsystems[17];
 		break;
 	case AOSD_IOCTL:
 		stats_id = 0;

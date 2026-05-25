@@ -46,6 +46,7 @@ vm_target_bases = [
     "canoe",
     "malabar",
     "seraph",
+    "shikra",
 ]
 
 vm_targets = [

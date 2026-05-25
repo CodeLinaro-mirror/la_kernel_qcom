@@ -24,6 +24,7 @@
 #include <linux/workqueue.h>
 #include <linux/errno.h>
 #include "qcom_glink_cma.h"
+#include <linux/power_mode.h>
 
 #define VIRTIO_GLINK_DEBUG_LOG(ctxt, fmt, ...)	\
 	ipc_log_string(ctxt, "%s: %d" fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
@@ -619,13 +620,16 @@ static int virtio_glink_suspend(struct device *dev)
 	struct virtio_device *vdev = dev_to_virtio(dev);
 	struct virtio_glink_bridge *vgbridge;
 	unsigned long flags;
+	int rc = -1;
 
 	vgbridge = (struct virtio_glink_bridge *)vdev->priv;
 	vgbridge->dsp_count = 0;
 
-	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "\n");
+	rc = qcom_get_power_mode();
+	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "power mode = %d\n", rc);
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
+	/* Cleanup resources only for Deepsleep. Donot tear down channel in STR case. */
+	if (rc == PM_DEEPSLEEP && pm_suspend_target_state == PM_SUSPEND_MEM) {
 		spin_lock_irqsave(&vgbridge->ds_qb_lock, flags);
 		vgbridge->ds_qb_status = DS_DONE;
 		spin_unlock_irqrestore(&vgbridge->ds_qb_lock, flags);

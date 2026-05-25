@@ -142,6 +142,7 @@ def register_modules(registry):
             "kernel/trace/qcom_ipc_logging",
             "drivers/rpmsg/qcom_glink",
             "drivers/remoteproc/rproc_qcom_common",
+            "drivers/soc/qcom/power_mode",
         ],
     )
 

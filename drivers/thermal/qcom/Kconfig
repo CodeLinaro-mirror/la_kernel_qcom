@@ -41,6 +41,15 @@ config QTI_QMI_SENSOR_V2
 	   the remote sensor. These sensors can take thresholds and notify the
 	   thermal framework when the threshold is reached.
 
+config QTI_POLICY_ENGINE_SENSOR
+	tristate "QTI Policy Engine Sensor device"
+	depends on THERMAL
+	help
+	    This enables the QTI Policy Engine sensor device. This driver will
+	    register the policy engine recommendation with thermal framework as
+	    a sensor. This will enable to provide configuration to mitigate
+	    cooling devices when a recommendation is sent from hardware.
+
 config QTI_QMI_COOLING_DEVICE
 	tristate "QTI QMI cooling devices"
 	depends on QCOM_QMI_HELPERS && THERMAL
@@ -117,6 +126,15 @@ config QTI_THERMALZONE_CONFIG_DEBUG
 	   includes passive/polling delay, cooling device upper or lower
 	   level configuration etc. The userspace client can use this
 	   debugfs interface to understand full snapshot of a thermal zone.
+
+config QTI_SDPM_CLOCK_MONITOR
+	tristate "QTI SDPM Clock Monitor"
+	depends on COMMON_CLK && CPU_FREQ
+	help
+	    This enables the QTI SDPM Clock Monitor. This driver can register
+	    for different clock rate change notifications and write the clock
+	    rate into the SDPM CSR register. This driver will receive the clock
+	    list and the CSR details from devicetree.
 
 config QTI_CPU_PAUSE_COOLING_DEVICE
 	tristate "QTI CPU Pause cooling devices"
@@ -204,6 +222,16 @@ config QTI_THERMAL_LIMITS_DCVS
 	  tracking temperatures of the CPUs and taking thermal action in the
 	  hardware without s/w intervention.
 
+config QTI_CPU_VOLTAGE_COOLING_DEVICE
+	tristate "QTI CPU VOLTAGE cooling devices"
+	depends on CPU_FREQ && THERMAL_OF && THERMAL
+	help
+	    This enables the QTI CPU Voltage cooling devices. This cooling
+	    device will allow the CPUs with different frequency plan in a
+	    cluster to be mitigated together based on the voltages. This will
+	    decrease or increase the voltages in a cluster based on thermal
+	    conditions.
+
 config QTI_THERMAL_LMH_STATS
 	tristate "QTI Thermal lmh stats driver"
 	depends on ARM_SCMI_CPUFREQ
@@ -252,3 +280,12 @@ config QTI_QMI_SENSOR
 	   These sensors can take thresholds and notify the thermal
 	   framework when the threshold is reached.
 
+config GENERIC_ADC_THERMAL
+	tristate "Generic ADC based thermal sensor"
+	depends on IIO
+	help
+	   This enabled a thermal sysfs driver for the temperature sensor
+	   which is connected to the General Purpose ADC. The ADC channel
+	   is read via IIO framework and the channel information is provided
+	   to this driver. This driver reports the temperature by reading ADC
+	   channel and converts it to temperature based on lookup table.

@@ -127,7 +127,8 @@ void walt_config(void)
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
 			|| !strcmp(name, "ALORP")
 			|| !strcmp(name, "WHALE") || !strcmp(name, "WHALEP")
-			|| !strcmp(name, "CANOEPSG") || !strcmp(name, "CANOEP")) {
+			|| !strcmp(name, "CANOEPSG") || !strcmp(name, "CANOEP")
+			|| !strcmp(name, "QCS8845")) {
 		sysctl_sched_suppress_region2		= 1;
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
@@ -186,7 +187,7 @@ void walt_config(void)
 		}
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 		if (strcmp(name, "ALOR_INTERPOSER") && strcmp(name, "ALOR")
-				&& strcmp(name, "ALORP"))
+				&& strcmp(name, "ALORP") && strcmp(name, "QCS8845"))
 			demand_scaling_factor = 70;
 
 		/*
@@ -194,7 +195,7 @@ void walt_config(void)
 		 * for Alor platforms
 		 */
 		if (!strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
-				|| !strcmp(name, "ALORP"))
+				|| !strcmp(name, "ALORP") || !strcmp(name, "QCS8845"))
 			soc_feat_set(SOC_ENABLE_LIMIT_PRIME_USAGE);
 
 	} else if (!strcmp(name, "PINEAPPLE")) {
@@ -289,7 +290,7 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "MALABAR")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP")) {
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
@@ -321,7 +322,7 @@ void walt_config(void)
 		}
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "VIENNA") || !strcmp(name, "VIENNAP")) {
+	} else if (!strcmp(name, "VIENNA") || !strcmp(name, "VIENNAP") || !strcmp(name, "SHIKRA")) {
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
 		 */

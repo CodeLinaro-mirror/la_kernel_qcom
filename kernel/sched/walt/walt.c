@@ -616,18 +616,6 @@ int walt_giant_tasks(int cpu)
 	return wrq->walt_stats.nr_giant_tasks;
 }
 
-bool trailblazer_on_prime(void)
-{
-	int cpu;
-
-	for_each_cpu(cpu, &cpu_array[0][num_sched_clusters - 1]) {
-		if (walt_trailblazer_tasks(cpu))
-			return true;
-	}
-
-	return false;
-}
-
 static void clear_walt_request(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);

@@ -106,3 +106,4 @@ qcom_scm_smci.ko
 pkvm-geni.ko
 pkvm-smc-filter.ko
 wcd_usbss_i2c.ko
+pkvm-secure-memory-manager.ko

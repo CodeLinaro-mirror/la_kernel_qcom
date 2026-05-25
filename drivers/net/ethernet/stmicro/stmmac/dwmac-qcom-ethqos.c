@@ -1537,8 +1537,45 @@ static void ethqos_ptp_clk_freq_config(struct stmmac_priv *priv)
 	netdev_dbg(priv->dev, "PTP rate %d\n", plat_dat->clk_ptp_rate);
 }
 
-static void qcom_ethqos_hdma_cfg(struct plat_stmmacenet_data *plat)
+static void qcom_ethqos_get_queue_and_tc_from_vdma(struct stmmac_priv *priv,
+						   u32 vdma_ch,
+						   unsigned long *queue_mask,
+						   u32 *tc)
 {
+	u32 tx_queues_cnt = priv->plat->tx_queues_to_use;
+	int i;
+
+	*queue_mask = 0;
+
+	if (vdma_ch >= MTL_MAX_TX_QUEUES) {
+		netdev_err(priv->dev, "VDMA channel %u out of range\n", vdma_ch);
+		return;
+	}
+
+	/* Look up the TC this VDMA channel is mapped to */
+	*tc = priv->plat->dma_cfg->tx_vdma_map[vdma_ch];
+
+	/* Find all PDMA channels mapped to the same TC as the VDMA channel.
+	 * A TC can map to multiple PDMA channels (1:many). Since PDMA channels
+	 * and TX queues have a 1:1 correspondence, each matching PDMA channel
+	 * index is set as a bit in queue_mask.
+	 */
+	for (i = 0; i < tx_queues_cnt; i++) {
+		if (priv->plat->dma_cfg->tx_pdma_map[i] == *tc)
+			*queue_mask |= BIT(i);
+	}
+
+	if (!*queue_mask)
+		netdev_warn(priv->dev, "No PDMA channel found for VDMA %u (TC %u)\n",
+			    vdma_ch, *tc);
+}
+
+static int qcom_ethqos_hdma_cfg(struct platform_device *pdev, struct plat_stmmacenet_data *plat)
+{
+	struct device_node *np = pdev->dev.of_node;
+	u32 map[STMMAC_CH_MAX];
+	int count, i;
+
 	plat->dma_cfg->orrq = 15;
 	plat->dma_cfg->owrq = 15;
 	plat->dma_cfg->txdcsz = 4;
@@ -1546,33 +1583,51 @@ static void qcom_ethqos_hdma_cfg(struct plat_stmmacenet_data *plat)
 	plat->dma_cfg->rxdcsz = 4;
 	plat->dma_cfg->rdps = 1;
 
-	plat->dma_cfg->tx_pdma_custom_map = true;
-	plat->dma_cfg->tx_pdma_map[0] = 0;
-	plat->dma_cfg->tx_pdma_map[1] = 1;
-	plat->dma_cfg->tx_pdma_map[2] = 2;
-	plat->dma_cfg->tx_pdma_map[3] = 3;
-	plat->dma_cfg->tx_pdma_map[4] = 4;
-	plat->dma_cfg->tx_pdma_map[5] = 5;
-	plat->dma_cfg->tx_pdma_map[6] = 5;
-	plat->dma_cfg->tx_pdma_map[7] = 6;
-	plat->dma_cfg->tx_pdma_map[8] = 6;
-	plat->dma_cfg->tx_pdma_map[9] = 6;
-	plat->dma_cfg->tx_pdma_map[10] = 7;
-	plat->dma_cfg->tx_pdma_map[11] = 7;
+	count = of_property_count_u32_elems(np, "qcom,tx-pdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,tx-pdma-map", map, count)) {
+		plat->dma_cfg->tx_pdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->tx_pdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Tx PDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
 
-	plat->dma_cfg->rx_pdma_custom_map = true;
-	plat->dma_cfg->rx_pdma_map[0] = 0;
-	plat->dma_cfg->rx_pdma_map[1] = 1;
-	plat->dma_cfg->rx_pdma_map[2] = 2;
-	plat->dma_cfg->rx_pdma_map[3] = 3;
-	plat->dma_cfg->rx_pdma_map[4] = 4;
-	plat->dma_cfg->rx_pdma_map[5] = 5;
-	plat->dma_cfg->rx_pdma_map[6] = 5;
-	plat->dma_cfg->rx_pdma_map[7] = 6;
-	plat->dma_cfg->rx_pdma_map[8] = 6;
-	plat->dma_cfg->rx_pdma_map[9] = 6;
-	plat->dma_cfg->rx_pdma_map[10] = 7;
-	plat->dma_cfg->rx_pdma_map[11] = 7;
+	count = of_property_count_u32_elems(np, "qcom,rx-pdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,rx-pdma-map", map, count)) {
+		plat->dma_cfg->rx_pdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->rx_pdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Rx PDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	count = of_property_count_u32_elems(np, "qcom,tx-vdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,tx-vdma-map", map, count)) {
+		plat->dma_cfg->tx_vdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->tx_vdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Tx VDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	count = of_property_count_u32_elems(np, "qcom,rx-vdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,rx-vdma-map", map, count)) {
+		plat->dma_cfg->rx_vdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->rx_vdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Rx VDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static struct phylink_pcs *ethqos_select_xpcs(struct stmmac_priv *priv,
@@ -1986,15 +2041,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		if (IS_ERR(ethqos->link_clk))
 			return dev_err_probe(dev, PTR_ERR(ethqos->link_clk),
 						 "Failed to get link_clk\n");
+
+		ret = ethqos_clks_config(ethqos, true);
+		if (ret)
+			return ret;
+
+		ret = devm_add_action_or_reset(dev, ethqos_clks_disable, ethqos);
+		if (ret)
+			return ret;
 	}
-
-	ret = ethqos_clks_config(ethqos, true);
-	if (ret)
-		return ret;
-
-	ret = devm_add_action_or_reset(dev, ethqos_clks_disable, ethqos);
-	if (ret)
-		return ret;
 
 	ethqos->serdes_phy = devm_phy_optional_get(dev, "serdes");
 	if (IS_ERR(ethqos->serdes_phy))
@@ -2003,7 +2058,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ethqos->serdes_speed = SPEED_1000;
 	ethqos_update_link_clk(ethqos, SPEED_1000);
-	ethqos_set_func_clk_en(ethqos);
+	if (!ethqos->use_domains)
+		ethqos_set_func_clk_en(ethqos);
 
 	plat_dat->bsp_priv = ethqos;
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
@@ -2023,8 +2079,13 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->dwxgmac_addrs = &data->dwxgmac_addrs;
 		plat_dat->has_hdma = data->has_hdma;
 		plat_dat->insert_ts_pktid = true;
-		if (plat_dat->has_hdma)
-			qcom_ethqos_hdma_cfg(plat_dat);
+		if (plat_dat->has_hdma) {
+			ret = qcom_ethqos_hdma_cfg(pdev, plat_dat);
+			if (ret)
+				return ret;
+			plat_dat->get_queue_and_tc_from_vdma =
+				qcom_ethqos_get_queue_and_tc_from_vdma;
+		}
 	}
 	if (of_property_present(dev->of_node, "qcom-xpcs-handle")) {
 		plat_dat->select_pcs = ethqos_select_xpcs;
@@ -2045,6 +2106,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->flags |= data->has_flags;
 	if (data->dma_addr_width)
 		plat_dat->host_dma_width = data->dma_addr_width;
+
+	if (stmmac_res.tx_rx_irq[0] > 0 ||
+	    (stmmac_res.rx_irq[0] > 0 && stmmac_res.tx_irq[0] > 0))
+		plat_dat->flags |= STMMAC_FLAG_MULTI_IRQ_EN;
 
 	if (ethqos->serdes_phy) {
 		plat_dat->serdes_powerup = qcom_ethqos_serdes_powerup;

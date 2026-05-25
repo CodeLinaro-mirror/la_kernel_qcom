@@ -1842,6 +1842,83 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/slate_rsb",
+        out = "slate_rsb.ko",
+        config = "CONFIG_MSM_SLATERSB",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slate_rsb.c",
+            "drivers/soc/qcom/slate_rsb.h",
+            "drivers/soc/qcom/slatersb_rpmsg.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/slatersb_rpmsg",
+            "drivers/remoteproc/rproc_qcom_common",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slatersb_rpmsg",
+        out = "slatersb_rpmsg.ko",
+        config = "CONFIG_MSM_SLATERSB_RPMSG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slatersb_rpmsg.c",
+            "drivers/soc/qcom/slatersb_rpmsg.h",
+            "drivers/soc/qcom/slate_rsb.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slatecom_spi",
+        out = "slatecom_spi.ko",
+        config = "CONFIG_MSM_SLATECOM",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slatecom_spi.c",
+            "drivers/soc/qcom/slatecom.h",
+            "include/linux/soc/qcom/slatecom_interface.h",
+        ],
+        deps = [
+            "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slatecom_interface",
+        out = "slatecom_interface.ko",
+        config = "CONFIG_MSM_SLATECOM_INTERFACE",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slatecom_interface.c",
+            "include/linux/soc/qcom/slatecom_interface.h",
+            "drivers/soc/qcom/slatecom.h",
+            "drivers/soc/qcom/slatecom_rpmsg.h",
+            "include/linux/soc/qcom/slate_events_bridge_intf.h",
+        ],
+        deps = [
+            #do not sort
+            "drivers/soc/qcom/slatecom_spi",
+            "drivers/misc/qseecom_proxy",
+            "drivers/remoteproc/rproc_qcom_common",
+            "drivers/soc/qcom/slate_events_bridge",
+            "drivers/soc/qcom/slatecom_rpmsg",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/slatecom_rpmsg",
+        out = "slatecom_rpmsg.ko",
+        config = "CONFIG_MSM_SLATECOM_RPMSG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/slatecom_rpmsg.c",
+            "drivers/soc/qcom/slatecom_rpmsg.h",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom-pbs",
         out = "qcom-pbs.ko",
         config = "CONFIG_QCOM_PBS",
@@ -1873,5 +1950,15 @@ def register_modules(registry):
             "drivers/soc/qcom/debug_symbol",
             "drivers/remoteproc/rproc_qcom_common",
             "kernel/trace/qcom_ipc_logging",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/power_mode",
+        out = "power_mode.ko",
+        config = "CONFIG_QCOM_POWER_MODE",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/power_mode.c",
         ],
     )

@@ -1102,7 +1102,6 @@ struct msm_pcie_dev_t {
 	struct regulator *gdsc_phy;
 	struct device *gdsc_pd_core;
 	struct device *gdsc_pd_phy;
-	const char *gdsc_pd_name;
 	struct msm_pcie_vreg_info_t vreg[MSM_PCIE_MAX_VREG];
 	struct msm_pcie_gpio_info_t gpio[MSM_PCIE_MAX_GPIO];
 	struct msm_pcie_res_info_t res[MSM_PCIE_MAX_RES];
@@ -1314,6 +1313,7 @@ struct msm_pcie_dev_t {
 	bool no_client_based_bw_voting;
 	int tc2bdf_tc_count;
 	u32 *save_sid_config;
+	u32 num_pd_names;
 };
 
 struct msm_root_dev_t {
@@ -3719,9 +3719,8 @@ static void msm_pcie_iatu_setup_ecam_blocker(struct msm_pcie_dev_t *dev)
 	msm_pcie_write_reg(dev->parf, PCIE20_PARF_BLOCK_SLV_AXI_RD_LIMIT_HI,
 			upper_32_bits(block_end));
 
-	/* Enable ECAM blocker */
-	msm_pcie_write_reg(dev->parf, PCIE20_PARF_SYS_CTRL,
-			PCIE_ECAM_BLOCKER_EN);
+	/* Enable ECAM blocker and - preserve other bits */
+	msm_pcie_write_mask(dev->parf + PCIE20_PARF_SYS_CTRL, 0, PCIE_ECAM_BLOCKER_EN);
 }
 
 static int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
@@ -4319,6 +4318,17 @@ static int msm_pcie_genpd_gdsc_enable(struct msm_pcie_dev_t *dev,
 	genpd->flags |= GENPD_FLAG_ALWAYS_ON;
 
 	return 0;
+}
+
+static void msm_pcie_gdsc_genpd_detach(struct msm_pcie_dev_t *pcie_dev)
+{
+	struct platform_device *pdev = pcie_dev->pdev;
+
+	if (pcie_dev->num_pd_names == 1) {
+		if ((pcie_dev->gdsc_pd_core || pcie_dev->gdsc_pd_phy) &&
+		    pm_runtime_enabled(&pdev->dev))
+			pm_runtime_disable(&pdev->dev);
+	}
 }
 
 static int msm_pcie_genpd_gdsc_disable(struct msm_pcie_dev_t *dev,
@@ -5358,48 +5368,41 @@ static int msm_pcie_get_gdsc_reg(struct msm_pcie_dev_t *pcie_dev)
 	return 0;
 }
 
-static int msm_pcie_genpd_get_dev(struct msm_pcie_dev_t *pcie_dev,
-			const char *name, struct device **gdsc_pd_device)
-{
-	struct platform_device *pdev = pcie_dev->pdev;
-
-	*gdsc_pd_device = dev_pm_domain_attach_by_name(&pdev->dev, name);
-
-	if (IS_ERR_OR_NULL(*gdsc_pd_device)) {
-		PCIE_ERR(pcie_dev, "PCIe: RC%d: Failed to get %s %s:%ld\n",
-			 pcie_dev->rc_idx, pdev->name, name,
-			 PTR_ERR(*gdsc_pd_device));
-		if (PTR_ERR(*gdsc_pd_device) == -EPROBE_DEFER) {
-			PCIE_DBG(pcie_dev, "PCIe: EPROBE_DEFER for %s %s\n",
-				 pdev->name, name);
-			return PTR_ERR(*gdsc_pd_device);
-		}
-		*gdsc_pd_device = NULL;
-	}
-
-	return 0;
-}
-
-static void msm_pcie_gdsc_genpd_detach(struct msm_pcie_dev_t *pcie_dev)
-{
-	struct platform_device *pdev = pcie_dev->pdev;
-
-	/* Clean up check for multiple genpd-gdsc vs one genpd-gdsc */
-	if (pcie_dev->gdsc_pd_core && pcie_dev->gdsc_pd_phy) {
-		dev_pm_domain_detach(pcie_dev->gdsc_pd_core, false);
-		dev_pm_domain_detach(pcie_dev->gdsc_pd_phy, false);
-	} else if (pcie_dev->gdsc_pd_core || pcie_dev->gdsc_pd_phy) {
-		pm_runtime_disable(&pdev->dev);
-	}
-}
-
 static int msm_pcie_get_gdsc_genpd(struct msm_pcie_dev_t *pcie_dev)
 {
 	struct platform_device *pdev = pcie_dev->pdev;
-	int ret;
+	struct device_node *np = pdev->dev.of_node;
+	struct dev_pm_domain_list *list;
+	int ret, i, num_pd_names, ndom;
+	const char *gdsc_pd_name;
+	const char **pd_names;
 
+	pcie_dev->gdsc_pd_core = NULL;
+	pcie_dev->gdsc_pd_phy  = NULL;
 	pcie_dev->gdsc_core = NULL;
 	pcie_dev->gdsc_phy = NULL;
+	pcie_dev->num_pd_names = 0;
+
+	/* Count once, early, and store in pcie_dev for later error/cleanup paths */
+	num_pd_names = of_property_count_strings(np, "power-domain-names");
+	if (num_pd_names <= 0) {
+		PCIE_ERR(pcie_dev, "No power-domain-names in DT\n");
+		return -EINVAL;
+	}
+
+	ndom = of_count_phandle_with_args(np, "power-domains", "#power-domain-cells");
+	if (ndom < 0)
+		return ndom;
+
+	/* Ensure DT entries are aligned: power-domains[i] <-> power-domain-names[i] */
+	if (ndom != num_pd_names) {
+		PCIE_ERR(pcie_dev,
+			 "DT mismatch: power-domains=%d power-domain-names=%d\n",
+			 ndom, num_pd_names);
+		return -EINVAL;
+	}
+
+	pcie_dev->num_pd_names = num_pd_names;
 
 	/*
 	 * If there is only one power domain controlled gdsc supported in the
@@ -5408,15 +5411,14 @@ static int msm_pcie_get_gdsc_genpd(struct msm_pcie_dev_t *pcie_dev)
 	 * care by the GenPD framework. So just enable the gdsc instead of
 	 * trying to attach it.
 	 */
-	if (pdev->dev.pm_domain) {
-		if (of_property_read_string(pdev->dev.of_node,
-				"power-domain-names", &pcie_dev->gdsc_pd_name))
+	if (num_pd_names == 1 && pdev->dev.pm_domain) {
+		if (of_property_read_string(np, "power-domain-names", &gdsc_pd_name))
 			return -EINVAL;
 
-		if (!strcmp(pcie_dev->gdsc_pd_name, "gdsc-core-vdd")) {
+		if (!strcmp(gdsc_pd_name, "gdsc-core-vdd")) {
 			pcie_dev->gdsc_pd_core = &pdev->dev;
 			pcie_dev->gdsc_pd_phy = NULL;
-		} else if (!strcmp(pcie_dev->gdsc_pd_name, "gdsc-phy-vdd")) {
+		} else if (!strcmp(gdsc_pd_name, "gdsc-phy-vdd")) {
 			pcie_dev->gdsc_pd_core = NULL;
 			pcie_dev->gdsc_pd_phy = &pdev->dev;
 		} else {
@@ -5429,21 +5431,65 @@ static int msm_pcie_get_gdsc_genpd(struct msm_pcie_dev_t *pcie_dev)
 		return 0;
 	}
 
-	ret = msm_pcie_genpd_get_dev(pcie_dev, "gdsc-core-vdd",
-						&pcie_dev->gdsc_pd_core);
-	if (ret)
-		return ret;
+	pd_names = kcalloc(num_pd_names, sizeof(*pd_names), GFP_KERNEL);
+	if (!pd_names)
+		return -ENOMEM;
 
-	ret = msm_pcie_genpd_get_dev(pcie_dev, "gdsc-phy-vdd",
-						&pcie_dev->gdsc_pd_phy);
-	if (ret)
-		goto out;
+	ret = of_property_read_string_array(np, "power-domain-names", pd_names, num_pd_names);
+	if (ret < 0) {
+		PCIE_ERR(pcie_dev, "Failed to read power-domain-names: %d\n", ret);
+		goto out_free;
+	}
 
-	return 0;
+	ret = devm_pm_domain_attach_list(&pdev->dev,
+				&(struct dev_pm_domain_attach_data){
+					.pd_names     = (const char * const *)pd_names,
+					.num_pd_names = (u32)num_pd_names,
+				},
+				&list);
 
-out:
-	if (pcie_dev->gdsc_pd_core)
-		dev_pm_domain_detach(pcie_dev->gdsc_pd_core, false);
+	if (ret < 0) {
+		PCIE_ERR(pcie_dev, "Failed to attach PM domains: %d\n", ret);
+		goto out_free;
+	}
+
+	if (!list || !list->pd_devs) {
+		PCIE_ERR(pcie_dev, "PM domain list is NULL\n");
+		ret = -EINVAL;
+		goto out_free;
+	}
+
+	if (list->num_pds != num_pd_names) {
+		PCIE_ERR(pcie_dev, "PM domain count mismatch: expected %d, got %d\n",
+			num_pd_names, list->num_pds);
+		ret = -EINVAL;
+		goto out_free;
+	}
+
+	for (i = 0; i < num_pd_names; i++) {
+
+		if (!strcmp(pd_names[i], "gdsc-core-vdd")) {
+			pcie_dev->gdsc_pd_core = list->pd_devs[i];
+		} else if (!strcmp(pd_names[i], "gdsc-phy-vdd")) {
+			pcie_dev->gdsc_pd_phy = list->pd_devs[i];
+		} else {
+			PCIE_ERR(pcie_dev, "Unknown power-domain-names[%d]=%s\n", i, pd_names[i]);
+			ret = -EINVAL;
+			goto out_free;
+		}
+	}
+
+	if (!pcie_dev->gdsc_pd_core || !pcie_dev->gdsc_pd_phy) {
+		PCIE_ERR(pcie_dev, "Required power domains not found (core=%p, phy=%p)\n",
+			pcie_dev->gdsc_pd_core, pcie_dev->gdsc_pd_phy);
+		ret =  -EINVAL;
+		goto out_free;
+	}
+
+	ret = 0;
+
+out_free:
+	kfree(pd_names);
 	return ret;
 }
 
@@ -5895,7 +5941,6 @@ static int msm_pcie_get_reg(struct msm_pcie_dev_t *pcie_dev)
 
 	return 0;
 }
-
 
 static int msm_pcie_get_resources(struct msm_pcie_dev_t *dev,
 					struct platform_device *pdev)
@@ -6489,7 +6534,7 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 	/* enable power */
 	ret = msm_pcie_vreg_init(dev);
 	if (ret)
-		goto vreg_fail;
+		goto out;
 
 	/* enable core, phy gdsc */
 	ret = msm_pcie_gdsc_init(dev);
@@ -6612,9 +6657,6 @@ clk_fail:
 gdsc_fail:
 
 	msm_pcie_vreg_deinit(dev);
-vreg_fail:
-
-	msm_pcie_gpio_deinit(dev);
 out:
 	mutex_unlock(&dev->setup_lock);
 

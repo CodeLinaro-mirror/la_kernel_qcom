@@ -56,6 +56,13 @@ enum {
 	HW_PLATFORM_CRD = 40,
 	HW_PLATFORM_QAR = 44,
 	HW_PLATFORM_WRD = 45,
+	HW_PLATFORM_COME = 46,
+	HW_PLATFORM_EVK = 47,
+	HW_PLATFORM_TDP = 48,
+	HW_PLATFORM_OMTP = 49,
+	HW_PLATFORM_ITPS = 50,
+	HW_PLATFORM_ITP = 51,
+	HW_PLATFORM_EITP = 52,
 	HW_PLATFORM_INVALID
 };
 
@@ -84,6 +91,13 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_CRD] = "CRD",
 	[HW_PLATFORM_QAR] = "QAR",
 	[HW_PLATFORM_WRD] = "WRD",
+	[HW_PLATFORM_COME] = "COME",
+	[HW_PLATFORM_EVK] = "EVK",
+	[HW_PLATFORM_TDP] = "TDP",
+	[HW_PLATFORM_OMTP] = "OMTP",
+	[HW_PLATFORM_ITPS] = "ITPS",
+	[HW_PLATFORM_ITP] = "ITP",
+	[HW_PLATFORM_EITP] = "EITP",
 };
 
 enum {
@@ -698,6 +712,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(WHALEP) },
 	{ qcom_board_id(CANOEPSG) },
 	{ qcom_board_id(CHORA) },
+	{ qcom_board_id(CHORAP) },
 	{ qcom_board_id(KHAJE) },
 	{ qcom_board_id(KHAJEP) },
 	{ qcom_board_id(KHAJEQ) },
@@ -713,6 +728,8 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(BOURTZIP) },
 	{ qcom_board_id(SM4250P) },
 	{ qcom_board_id(SM6115P) },
+	{ qcom_board_id(DIWALI) },
+	{ qcom_board_id(DIWALIP) },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];
@@ -1130,11 +1147,17 @@ msm_get_hw_platform(struct device *dev,
 		char *buf)
 {
 	uint32_t hw_type;
+	const char *name;
 
 	hw_type = socinfo_get_platform_type();
+	if (hw_type >= ARRAY_SIZE(hw_platform) || !hw_platform[hw_type]) {
+		pr_err("Unknown hardware platform type: %u\n", hw_type);
+		name = hw_platform[HW_PLATFORM_UNKNOWN];
+	} else {
+		name = hw_platform[hw_type];
+	}
 
-	return scnprintf(buf, PAGE_SIZE, "%-.32s\n",
-			hw_platform[hw_type]);
+	return scnprintf(buf, PAGE_SIZE, "%-.32s\n", name);
 }
 ATTR_DEFINE(hw_platform);
 

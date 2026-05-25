@@ -28,9 +28,9 @@
 #define CX_GMU_CBCR_WAKE_MASK		0xf
 #define CX_GMU_CBCR_WAKE_SHIFT		8
 
-static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L1 + 1, 1, vdd_corner);
-static DEFINE_VDD_REGULATORS(vdd_gfx, VDD_HIGH_L1 + 1, 1, vdd_corner);
-static DEFINE_VDD_REGULATORS(vdd_mx, VDD_HIGH_L1 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L2 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_gfx, VDD_HIGH_L2 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_mx, VDD_HIGH_L2 + 1, 1, vdd_corner);
 
 static struct clk_vdd_class *gpu_cc_malabar_regulators[] = {
 	&vdd_cx,
@@ -98,11 +98,11 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 	},
 };
 
-/* 690.0 MHz Configuration */
+/* 1050.0 MHz Configuration */
 static const struct alpha_pll_config gpu_cc_pll1_config = {
-	.l = 0x23,
+	.l = 0x36,
 	.cal_l = 0x44,
-	.alpha = 0xf000,
+	.alpha = 0xb000,
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00182261,
 	.config_ctl_hi1_val = 0x32aa299c,
@@ -213,6 +213,7 @@ static const struct freq_tbl ftbl_gpu_cc_gx_gfx3d_clk_src[] = {
 	F(770000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(840000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(950000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(1050000000, P_GPU_CC_PLL1_OUT_EVEN, 1, 0, 0),
 	{ }
 };
 
@@ -246,7 +247,8 @@ static struct clk_rcg2 gpu_cc_gx_gfx3d_clk_src = {
 			[VDD_NOMINAL] = 650000000,
 			[VDD_NOMINAL_L1] = 770000000,
 			[VDD_HIGH] = 840000000,
-			[VDD_HIGH_L1] = 950000000},
+			[VDD_HIGH_L1] = 950000000,
+			[VDD_HIGH_L2] = 1050000000},
 	},
 };
 

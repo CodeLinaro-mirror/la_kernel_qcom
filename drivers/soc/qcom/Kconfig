@@ -197,6 +197,14 @@ bool "Force staling-mode-capacity when kasan MTE is enabled"
 	  staling mode and uses capacity-based staling whenever hardware
 	  tag-based KASAN (MTE) is in use (kasan_hw_tags_enabled()).
 
+config QCOM_POWER_MODE
+	tristate "Power Mode driver support for Deep Sleep and S2R"
+	help
+	  This option enables Power Mode Driver which creates power mode
+          attribute to distinguish between Suspend-to-RAM (S2R) and Deep
+	  Sleep states and this attribute allows CPMS to write the current
+	  mode based on key events.
+
 config QCOM_SLC_PERFMON
 	tristate "Qualcomm Technologies, Inc. SLC PERFMON Driver"
 	help
@@ -654,6 +662,49 @@ config MSM_SLATECOM_EVENT
          This event driver register for AON event bridge to receive sensor
          up and down and notifies upper layer HAL about sensor stataus
          through uevent via netlink socket.
+
+config MSM_SLATERSB
+        tristate "Provide support for rsb events on Slate"
+        help
+          SLATERSB communicates to SLATE over rpmsg driver for RSB configuration
+          and enable/disable on device power state change.Add slate rsb driver
+          which is use to configure rsb on slate.Slate rsb driver uses glink
+          to communicate with slate
+
+config MSM_SLATERSB_RPMSG
+        tristate "Provide support for slate events to RSB"
+        depends on MSM_SLATERSB
+        help
+          SLATERSB-RPMSG informs SLATERSB driver if GLINK channel has been
+          opened by remote processor. It doesn't maintain state machine
+          and is probed when SLATE opens channel and removed when the
+          channel is closed by remote processor.
+
+config MSM_SLATECOM
+        tristate "Provide APIs to communicate with Slate chipset"
+        help
+          SLATECOM is a thin layer above SPI. It is used within a SoC for
+          communication between G-Link/slate_com_dev and Slate processor over SPI.
+          This handle the interrupts raised by BG and notify the G-link with
+          interrupt event and event data.
+
+config MSM_SLATECOM_INTERFACE
+        tristate "Driver support for Slate Communication"
+        depends on MSM_SLATECOM
+        help
+          Create a slate_com_dev device node for user space communication.
+          Single user space client can open device node for communication
+          from hardware. Hardware will provide access to read
+          registers and read/write AHB memory in the device.
+
+config MSM_SLATECOM_RPMSG
+        tristate "Provide support for slate control GLINK channel"
+        depends on MSM_SLATECOM_INTERFACE
+        help
+          MSM_SLATECOM_RPMSG informs SLATECOM_INTERFACE driver if GLINK channel
+          has been opened by remote processor. It doesn't maintain state machine
+          and is probed when Slate opens channel and removed when the channel is
+          closed by remote processor.
 
 config QCOM_EUD
 	tristate "QTI Embedded USB Debugger (EUD)"

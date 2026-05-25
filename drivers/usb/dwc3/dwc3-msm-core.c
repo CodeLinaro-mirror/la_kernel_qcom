@@ -60,6 +60,7 @@
 #include "drivers/usb/dwc3/debug.h"
 #include "drivers/usb/host/xhci.h"
 #include "debug-ipc.h"
+#include <trace/hooks/usb.h>
 
 #define NUM_LOG_PAGES   12
 
@@ -529,6 +530,7 @@ struct dwc3_msm {
 	void __iomem *base;
 	void __iomem *tcsr_dyn_en_dis;
 	void __iomem *ahb2phy_base;
+	struct qsram_xhci __iomem *qsram;
 	phys_addr_t reg_phys;
 	struct platform_device	*dwc3;
 	struct dma_iommu_mapping *iommu_map;
@@ -4633,6 +4635,10 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 			configure_nonpdc_usb_interrupt(mdwc, uirq, true);
 			uirq = &mdwc->wakeup_irq[SS_PHY_IRQ];
 			configure_nonpdc_usb_interrupt(mdwc, uirq, true);
+			uirq = &mdwc->wakeup_irq[DM_HS_PHY_IRQ];
+			configure_nonpdc_usb_interrupt(mdwc, uirq, true);
+			uirq = &mdwc->wakeup_irq[DP_HS_PHY_IRQ];
+			configure_nonpdc_usb_interrupt(mdwc, uirq, true);
 		}
 		mdwc->lpm_flags |= MDWC3_ASYNC_IRQ_WAKE_CAPABILITY;
 	}
@@ -4859,6 +4865,10 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 			uirq = &mdwc->wakeup_irq[HS_PHY_IRQ];
 			configure_nonpdc_usb_interrupt(mdwc, uirq, false);
 			uirq = &mdwc->wakeup_irq[SS_PHY_IRQ];
+			configure_nonpdc_usb_interrupt(mdwc, uirq, false);
+			uirq = &mdwc->wakeup_irq[DM_HS_PHY_IRQ];
+			configure_nonpdc_usb_interrupt(mdwc, uirq, false);
+			uirq = &mdwc->wakeup_irq[DP_HS_PHY_IRQ];
 			configure_nonpdc_usb_interrupt(mdwc, uirq, false);
 		}
 		mdwc->lpm_flags &= ~MDWC3_ASYNC_IRQ_WAKE_CAPABILITY;
@@ -6731,6 +6741,8 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 		goto err;
 	}
 
+	mdwc->qsram = (struct qsram_xhci __iomem *)(mdwc->base + QSRAM_BASE_OFFSET);
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "tcsr_dyn_en_dis");
 	if (res) {
 		mdwc->tcsr_dyn_en_dis = devm_ioremap(&pdev->dev, res->start,
@@ -7054,7 +7066,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	 */
 	mdwc->lpm_flags = MDWC3_POWER_COLLAPSE | MDWC3_SS_PHY_SUSPEND;
 	atomic_set(&mdwc->in_lpm, 1);
-	pm_runtime_set_autosuspend_delay(mdwc->dev, 1000);
+	pm_runtime_set_autosuspend_delay(mdwc->dev, 2000);
 	pm_runtime_use_autosuspend(mdwc->dev);
 	device_init_wakeup(mdwc->dev, 1);
 
@@ -7984,6 +7996,26 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 
 	return 0;
 }
+
+struct qsram_xhci __iomem *dwc3_msm_get_qsram(struct device *dev)
+{
+	struct platform_device *pdev;
+	struct dwc3_msm *mdwc;
+
+	if (!dev)
+		return NULL;
+
+	pdev = to_platform_device(dev);
+	if (!pdev)
+		return NULL;
+
+	mdwc = platform_get_drvdata(pdev);
+	if (!mdwc)
+		return NULL;
+
+	return mdwc->qsram;
+}
+EXPORT_SYMBOL_GPL(dwc3_msm_get_qsram);
 
 /**
  * dwc3_otg_sm_work - workqueue function.
