@@ -103,6 +103,16 @@ static void smmu_reclaim_pages(u64 phys, size_t size)
 	WARN_ON(__pkvm_hyp_donate_host(phys >> PAGE_SHIFT, size >> PAGE_SHIFT));
 }
 
+static bool is_evtq_enabled(struct hyp_arm_smmu_v3_device *smmu)
+{
+	return FIELD_GET(CR0_EVTQEN, smmu->cr0);
+}
+
+static bool is_priq_enabled(struct hyp_arm_smmu_v3_device *smmu)
+{
+	return FIELD_GET(CR0_PRIQEN, smmu->cr0);
+}
+
 static void smmu_copy_from_host(struct hyp_arm_smmu_v3_device *smmu,
 				void *dst_hyp_va, void *src_hyp_va,
 				size_t size)
@@ -794,6 +804,14 @@ static void smmu_emulate_cmdq_disable(struct hyp_arm_smmu_v3_device *smmu)
 				   cmdq_size(&smmu->cmdq_host)));
 }
 
+static void smmu_emulate_queue(unsigned long q_base, size_t ent_size_shift)
+{
+	phys_addr_t base = q_base & Q_BASE_ADDR_MASK;
+	size_t size = 1UL << (FIELD_GET(Q_BASE_LOG2SIZE, q_base) + ent_size_shift);
+
+	WARN_ON(smmu_share_pages(base, size));
+}
+
 static bool smmu_dabt_device(struct hyp_arm_smmu_v3_device *smmu,
 			     struct user_pt_regs *regs,
 			     u64 esr, u32 off)
@@ -874,12 +892,31 @@ static bool smmu_dabt_device(struct hyp_arm_smmu_v3_device *smmu,
 		if (is_write) {
 			bool last_cmdq_en = is_cmdq_enabled(smmu);
 			bool last_smmu_en = is_smmu_enabled(smmu);
+			bool last_evtq_en = is_evtq_enabled(smmu);
+			bool last_priq_en = is_priq_enabled(smmu);
 
 			smmu->cr0 = val;
 			if (!last_cmdq_en && is_cmdq_enabled(smmu))
 				smmu_emulate_cmdq_enable(smmu);
 			else if (last_cmdq_en && !is_cmdq_enabled(smmu))
 				smmu_emulate_cmdq_disable(smmu);
+
+			/*
+			 * Share PRI and EVTQ to avoid the host using them to write to
+			 * protected memory. However, panic on disable for those queues
+			 * as that is more complicated, unsharing from here can lead to
+			 * use-after-unshare issues, and requires ordering with cr0ack.
+			 * As the host never disable those queues, don't support that.
+			 */
+			if (!last_evtq_en && is_evtq_enabled(smmu))
+				smmu_emulate_queue(smmu->evtq_base, EVTQ_ENT_SZ_SHIFT);
+			else if (last_evtq_en && !is_evtq_enabled(smmu))
+				WARN_ON(1);
+			if (!last_priq_en && is_priq_enabled(smmu))
+				smmu_emulate_queue(smmu->priq_base, PRIQ_ENT_SZ_SHIFT);
+			else if (last_priq_en && !is_priq_enabled(smmu))
+				WARN_ON(1);
+
 			if (!last_smmu_en && is_smmu_enabled(smmu))
 				smmu_emulate_enable(smmu);
 			else if (last_smmu_en && !is_smmu_enabled(smmu))
@@ -903,6 +940,29 @@ static bool smmu_dabt_device(struct hyp_arm_smmu_v3_device *smmu,
 		WARN_ON(len != sizeof(u32));
 		break;
 	}
+	case ARM_SMMU_EVTQ_BASE:
+		if (len != sizeof(u64))
+			break;
+
+		if (is_write) {
+			if (is_evtq_enabled(smmu))
+				break;
+			smmu->evtq_base = val;
+		}
+		mask = read_write;
+		break;
+
+	case ARM_SMMU_PRIQ_BASE:
+		if (len != sizeof(u64))
+			break;
+
+		if (is_write) {
+			if (is_priq_enabled(smmu))
+				break;
+			smmu->priq_base = val;
+		}
+		mask = read_write;
+		break;
 	/*
 	 * These should be safe, just enforce RO or RW and size according to architecture.
 	 * There are some other registers that are not used by Linux as IDR2, IDR4
@@ -926,9 +986,7 @@ static bool smmu_dabt_device(struct hyp_arm_smmu_v3_device *smmu,
 		/* These are 32 bit registers. */
 		WARN_ON(len != sizeof(u32));
 		fallthrough;
-	case ARM_SMMU_EVTQ_BASE:
 	case ARM_SMMU_EVTQ_IRQ_CFG0:
-	case ARM_SMMU_PRIQ_BASE:
 	case ARM_SMMU_PRIQ_IRQ_CFG0:
 	case ARM_SMMU_GERROR_IRQ_CFG0:
 		mask = read_write;
