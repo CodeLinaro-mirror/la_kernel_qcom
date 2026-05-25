@@ -765,6 +765,9 @@ static void smmu_update_ste_shadow(struct hyp_arm_smmu_v3_device *smmu, bool ena
 		strtab_size = strtab_l1_size(smmu);
 		WARN_ON(fmt != STRTAB_BASE_CFG_FMT_2LVL);
 		WARN_ON((strtab_split(smmu) != STRTAB_SPLIT));
+		WARN_ON(strtab_split(smmu) >= strtab_log2size(smmu));
+		WARN_ON(strtab_log2size(smmu) >
+			(ilog2(STRTAB_MAX_L1_ENTRIES) + STRTAB_SPLIT));
 	} else {
 		strtab_size = strtab_size(smmu);
 		WARN_ON(fmt != STRTAB_BASE_CFG_FMT_LINEAR);
