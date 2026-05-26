@@ -296,6 +296,14 @@ void stmmac_global_err(struct stmmac_priv *priv)
 	stmmac_service_event_schedule(priv);
 }
 
+void stmmac_handle_switch_reset(struct stmmac_priv *priv)
+{
+	if (netif_running(priv->dev) &&
+	    !test_bit(STMMAC_RESET_REQUESTED, &priv->state))
+		stmmac_global_err(priv);
+}
+EXPORT_SYMBOL_GPL(stmmac_handle_switch_reset);
+
 /**
  * stmmac_clk_csr_set - dynamically set the MDC clock
  * @priv: driver private structure
