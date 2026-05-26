@@ -1137,6 +1137,7 @@ struct pcie_i2c_ctrl {
 };
 
 enum i2c_client_id {
+	I2C_CLIENT_ID_INVALID = 0xff,
 	I2C_CLIENT_ID_NTN3 = 0,
 	I2C_CLIENT_ID_MAX,
 };
@@ -9826,7 +9827,7 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client)
 	const struct of_device_id *match;
 	struct pcie_i2c_ctrl *i2c_ctrl;
 	struct i2c_driver_data *data;
-	enum i2c_client_id client_id;
+	enum i2c_client_id client_id  = I2C_CLIENT_ID_INVALID;
 	int rc_index = -EINVAL;
 	int ret;
 
