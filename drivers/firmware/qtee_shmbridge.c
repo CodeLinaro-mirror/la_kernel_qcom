@@ -526,7 +526,7 @@ static int qtee_shmbridge_register_v2(void)
 		goto out;
 	}
 	mem_protection_enabled = scm_mem_protection_init_do();
-	pr_err("MEM protection %s, %d\n",
+	pr_debug("MEM protection %s, %d\n",
 		(!mem_protection_enabled ? "Enabled" : "Not enabled"),
 		mem_protection_enabled);
 out:
@@ -660,11 +660,11 @@ static int qtee_shmbridge_remove(struct platform_device *pdev)
 
 static int qtee_shmbridge_freeze(struct device *dev)
 {
-	pr_info("shmbridge: Freeze entry\n");
+	pr_debug("shmbridge: Freeze entry\n");
 
 	qtee_shmbridge_enabled = false;
 
-	pr_info("shmbridge: Freeze Completed.\n");
+	pr_debug("shmbridge: Freeze Completed.\n");
 	return 0;
 }
 
@@ -672,7 +672,7 @@ static int qtee_shmbridge_restore(struct device *dev)
 {
 	int ret = 0;
 
-	pr_info("shmbridge: Restore entry\n");
+	pr_debug("shmbridge: Restore entry\n");
 
 	mutex_lock(&bridge_list_head.lock);
 	qtee_shmbridge_list_clean_locked();
@@ -682,17 +682,17 @@ static int qtee_shmbridge_restore(struct device *dev)
 	if (ret < 0)
 		pr_err("Restore: shmbridge register_v2 failed, ret = %d\n", ret);
 
-	pr_info("shmbridge: Restore completed.\n");
+	pr_debug("shmbridge: Restore completed.\n");
 	return 0;
 }
 
 static int qtee_shmbridge_thaw(struct device *dev)
 {
-	pr_info("shmbridge: Thaw entry\n");
+	pr_debug("shmbridge: Thaw entry\n");
 
 	qtee_shmbridge_enabled = false;
 
-	pr_info("shmbridge: Thaw completed\n");
+	pr_debug("shmbridge: Thaw completed\n");
 	return 0;
 }
 
