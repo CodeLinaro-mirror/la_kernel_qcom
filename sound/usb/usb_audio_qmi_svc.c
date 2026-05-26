@@ -1307,7 +1307,7 @@ skip_sync_ep:
 
 	/* Setup XHCI interrupter */
 	ret = setup_xhci_interrupter(card_num, subs, resp);
-	if (ret < 0)
+	if (ret == -ENODEV || ret == -ENOMEM)
 		goto drop_sync_ep;
 
 	sgt = xhci_sideband_get_event_buffer(uadev[card_num].sb);

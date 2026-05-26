@@ -1625,9 +1625,6 @@ static int lpg_probe(struct platform_device *pdev)
 	lpg->avoid_hi_res_clk_rates =
 		of_property_read_bool(pdev->dev.of_node, "qcom,avoid-hi-res-clk-rates");
 
-	if (lpg->avoid_hi_res_clk_rates)
-		dev_info(&pdev->dev, "Use Max 19.2Mhz clock for PWM frequency generation\n");
-
 	lpg->map = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!lpg->map)
 		return dev_err_probe(&pdev->dev, -ENXIO, "parent regmap unavailable\n");
