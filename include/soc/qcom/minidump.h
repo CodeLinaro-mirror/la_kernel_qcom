@@ -91,6 +91,10 @@ static inline int msm_minidump_remove_region(const struct md_region *entry)
 {
 	return 0;
 }
+static inline int msm_minidump_update_region(int regno, const struct md_region *entry)
+{
+	return 0;
+}
 static inline bool msm_minidump_enabled(void) { return false; }
 static inline struct md_region md_get_region(char *name)
 {
