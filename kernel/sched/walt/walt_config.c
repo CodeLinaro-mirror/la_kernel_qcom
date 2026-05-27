@@ -329,7 +329,7 @@ void walt_config(void)
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
-	} else if (!strcmp(name, "X1E80100")) {
+	} else if (!strcmp(name, "X1E80100") || !strcmp(name, "X1P42100")) {
 		/*
 		 * By default this SOC flag will be disabled. Enable this only
 		 * for X1E80100 platforms
@@ -337,6 +337,7 @@ void walt_config(void)
 		trailblazer_boost_thresh_ipc = 225;
 		trailblazer_floor_freq[0] = 2500000;
 		trailblazer_floor_freq[1] = 2500000;
+		trailblazer_floor_freq[2] = 2500000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
 	} else if (!strcmp(name, "SERAPH") || !strcmp(name, "PIKACHU")) {
