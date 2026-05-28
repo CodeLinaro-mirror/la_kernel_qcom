@@ -11853,6 +11853,12 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 		}
 		mutex_unlock(&pcie_dev->drv_pc_lock);
 		break;
+	case MSM_PCIE_ENABLE_ASPM:
+		mutex_lock(&pcie_dev->drv_pc_lock);
+		msm_pcie_check_l1ss_support_all(pcie_dev);
+		msm_pcie_config_link_pm(pcie_dev, true);
+		mutex_unlock(&pcie_dev->drv_pc_lock);
+		break;
 	default:
 		PCIE_ERR(pcie_dev,
 			 "PCIe: RC%d: unsupported pm operation:%d.\n",
