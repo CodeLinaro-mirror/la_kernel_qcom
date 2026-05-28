@@ -308,6 +308,7 @@ lahaina_perf_config = {
     "CONFIG_QTI_THERMAL_LIMITS_DCVS": "m",
     "CONFIG_QTI_USERSPACE_CDEV": "m",
     "CONFIG_R8712U": "n",
+    "CONFIG_REALTEK_PHY": "m",
     "CONFIG_REBOOT_MODE": "m",
     "CONFIG_REGMAP_QTI_DEBUGFS": "m",
     "CONFIG_REGULATOR_DEBUG_CONTROL": "m",
