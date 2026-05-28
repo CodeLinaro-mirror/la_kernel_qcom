@@ -437,10 +437,10 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 		       ? LOOPBACK_ENABLE : 0, se->base + SE_SPI_LOOPBACK);
 	if (cs_changed)
 		writel(chipselect, se->base + SE_SPI_DEMUX_SEL);
-	if (mode_changed & SE_SPI_CPHA)
+	if (mode_changed & SPI_CPHA)
 		writel((spi_slv->mode & SPI_CPHA)
 		       ? CPHA : 0, se->base + SE_SPI_CPHA);
-	if (mode_changed & SE_SPI_CPOL)
+	if (mode_changed & SPI_CPOL)
 		writel((spi_slv->mode & SPI_CPOL)
 		       ? CPOL : 0, se->base + SE_SPI_CPOL);
 	if ((mode_changed & SPI_CS_HIGH) || (cs_changed && (spi_slv->mode & SPI_CS_HIGH)))
