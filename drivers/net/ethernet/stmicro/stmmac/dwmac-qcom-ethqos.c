@@ -1090,6 +1090,41 @@ static void qcom_ethqos_get_queue_and_tc_from_vdma(struct stmmac_priv *priv,
 			    vdma_ch, *tc);
 }
 
+static void ethqos_report_uevents(struct stmmac_priv *priv, enum stmmac_uevent_type event)
+{
+	char phy_mode[32];
+	char event_type[32];
+	char *envp[3];
+	int i = 0;
+
+	switch (event) {
+	case FUSA_ERROR:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=FUSA_ERROR");
+		break;
+	case MAC_DOWN:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=MAC_DOWN");
+		break;
+	case MAC_UP:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=MAC_UP");
+		break;
+	default:
+		dev_warn(priv->device, "Unknown UMD event %d\n", event);
+		return;
+	}
+
+	envp[i++] = event_type;
+
+	if (event != FUSA_ERROR) {
+		snprintf(phy_mode, sizeof(phy_mode), "PHY_MODE=%s",
+			 phy_modes(priv->plat->phy_interface));
+		envp[i++] = phy_mode;
+	}
+
+	envp[i] = NULL;
+
+	kobject_uevent_env(&priv->device->kobj, KOBJ_CHANGE, envp);
+}
+
 static int qcom_ethqos_hdma_cfg(struct platform_device *pdev, struct plat_stmmacenet_data *plat)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -1292,6 +1327,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ethqos_update_link_clk(ethqos, SPEED_1000);
 	ethqos_set_func_clk_en(ethqos);
 
+	if (stmmac_res.sfty_irq > 0)
+		plat_dat->report_uevents = ethqos_report_uevents;
 	plat_dat->bsp_priv = ethqos;
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
 	plat_dat->dump_debug_regs = rgmii_dump;
