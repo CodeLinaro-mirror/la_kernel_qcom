@@ -38,6 +38,7 @@ COPY_FILES = [
     "drivers/net/phy/qcom/at803x.c",
     "drivers/net/phy/qcom/qcom.h",
     "drivers/net/phy/qcom/qcom-phy-lib.c",
+    "drivers/net/phy/realtek.c",
     "drivers/perf/dwc_pcie_pmu.c",
     "drivers/phy/qualcomm/phy-qcom-sgmii-eth.c",
     "drivers/phy/qualcomm/phy-qcom-qmp-pcs-sgmii.h",
