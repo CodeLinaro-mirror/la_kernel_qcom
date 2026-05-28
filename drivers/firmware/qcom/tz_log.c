@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/of.h>
+#include <linux/of_reserved_mem.h>
 #include <linux/dma-buf.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/firmware/qcom/qcom_tzmem.h>
@@ -437,6 +438,7 @@ struct tzdbg {
 	bool is_full_encrypted_tz_logs_enabled;
 	int tz_diag_minor_version;
 	int tz_diag_major_version;
+	bool reserved_mem_initialized;
 };
 
 struct tzbsp_encr_log_t {
@@ -1804,6 +1806,14 @@ static int tz_log_probe(struct platform_device *pdev)
 	if (!qcom_scm_is_available())
 		return dev_err_probe(&pdev->dev, -EPROBE_DEFER, "qcom_scm is not up!\n");
 
+	/* Allocate from reserved-mem only if TZ-FFI is enabled */
+	ret = of_reserved_mem_device_init(&pdev->dev);
+	if (ret && ret != -ENODEV)
+		return dev_err_probe(&pdev->dev, ret,
+				       "Failed to setup the reserved memory region for TZ log\n");
+
+	tzdbg.reserved_mem_initialized = (ret == 0);
+
 	/*
 	 * By default all nodes will be created.
 	 * Mark avail as false later selectively if there's need to skip proc node creation.
@@ -1813,14 +1823,15 @@ static int tz_log_probe(struct platform_device *pdev)
 
 	ret = tzdbg_get_tz_version();
 	if (ret)
-		return ret;
+		goto exit_of_reserved_mem_device_release;
 
 	/* Get address that stores the physical location diagnostic data */
 	resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!resource) {
 		dev_err(&pdev->dev,
 				"%s: ERROR Missing MEM resource\n", __func__);
-		return -ENXIO;
+		ret = -ENXIO;
+		goto exit_of_reserved_mem_device_release;
 	}
 
 	/* Get the debug buffer size */
@@ -1834,7 +1845,8 @@ static int tz_log_probe(struct platform_device *pdev)
 			"%s: ERROR could not ioremap: start=%pr, len=%u\n",
 			__func__, &resource->start,
 			(unsigned int)(debug_rw_buf_size));
-		return -ENXIO;
+		ret = -ENXIO;
+		goto exit_of_reserved_mem_device_release;
 	}
 
 	if (pdev->dev.of_node) {
@@ -1846,14 +1858,14 @@ static int tz_log_probe(struct platform_device *pdev)
 				dev_err(&pdev->dev,
 					"%s: fail to get hypdbg_base ret %d\n",
 					__func__, ret);
-				return -EINVAL;
+				goto exit_of_reserved_mem_device_release;
 			}
 			ret = __update_rmlog_base(pdev, virt_iobase);
 			if (ret) {
 				dev_err(&pdev->dev,
 					"%s: fail to get rmlog_base ret %d\n",
 					__func__, ret);
-				return -EINVAL;
+				goto exit_of_reserved_mem_device_release;
 			}
 		} else {
 			tzdbg.stat[TZDBG_HYP_LOG].avail = false;
@@ -1887,12 +1899,15 @@ static int tz_log_probe(struct platform_device *pdev)
 				"%s: could not ioremap: start=%pr, len=%u\n",
 				__func__, &tzdiag_phy_iobase,
 				debug_rw_buf_size);
-			return -ENXIO;
+			ret = -ENXIO;
+			goto exit_of_reserved_mem_device_release;
 		}
 		/* allocate diag_buf */
 		ptr = kzalloc(debug_rw_buf_size, GFP_KERNEL);
-		if (ptr == NULL)
-			return -ENOMEM;
+		if (ptr == NULL) {
+			ret = -ENOMEM;
+			goto exit_of_reserved_mem_device_release;
+		}
 		tzdbg.diag_buf = (struct tzdbg_t *)ptr;
 	}
 
@@ -1936,6 +1951,7 @@ static int tz_log_probe(struct platform_device *pdev)
 	/* allocate display_buf */
 	if (UINT_MAX/4 < qseelog_buf_size) {
 		pr_err("display_buf_size integer overflow\n");
+		ret = -ENXIO;
 		goto exit_free_qsee_log_buf;
 	}
 	display_buf_size = qseelog_buf_size * 4;
@@ -1946,21 +1962,27 @@ static int tz_log_probe(struct platform_device *pdev)
 		goto exit_free_encr_log_buf;
 	}
 
-	if (tzdbg_fs_init(pdev))
+	if (tzdbg_fs_init(pdev)) {
+		ret = -ENXIO;
 		goto exit_free_disp_buf;
+	}
 	return 0;
 
 exit_free_disp_buf:
 	dma_free_coherent(&pdev->dev, display_buf_size,
 			(void *)tzdbg.disp_buf, disp_buf_paddr);
 exit_free_encr_log_buf:
-	tzdbg_free_encrypted_log_buf(pdev);
+	if (tzdbg.is_encrypted_log_enabled)
+		tzdbg_free_encrypted_log_buf(pdev);
 exit_free_qsee_log_buf:
 	tzdbg_free_qsee_log_buf(pdev);
 exit_free_diag_buf:
 	if (!tzdbg.tz_qsee_plain_log_enabled)
 		kfree(tzdbg.diag_buf);
-	return -ENXIO;
+exit_of_reserved_mem_device_release:
+	if (tzdbg.reserved_mem_initialized)
+		of_reserved_mem_device_release(&pdev->dev);
+	return ret;
 }
 
 static int tz_log_remove(struct platform_device *pdev)
@@ -1972,6 +1994,11 @@ static int tz_log_remove(struct platform_device *pdev)
 	tzdbg_free_qsee_log_buf(pdev);
 	if (!tzdbg.is_encrypted_log_enabled)
 		kfree(tzdbg.diag_buf);
+
+	/* Release reserved memory if it was initialized */
+	if (tzdbg.reserved_mem_initialized)
+		of_reserved_mem_device_release(&pdev->dev);
+
 	return 0;
 }
 

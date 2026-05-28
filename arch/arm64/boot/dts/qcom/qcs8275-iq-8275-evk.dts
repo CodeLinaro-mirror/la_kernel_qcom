@@ -387,6 +387,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <56 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander0_int_default>;
+		pinctrl-names = "default";
 		reg = <0x38>;
 	};
 
@@ -394,6 +400,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <16 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander1_int_default>;
+		pinctrl-names = "default";
 		reg = <0x39>;
 
 		io-exp-hog3 {
@@ -408,6 +420,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <95 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander2_int_default>;
+		pinctrl-names = "default";
 		reg = <0x3a>;
 	};
 
@@ -415,6 +433,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <24 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander3_int_default>;
+		pinctrl-names = "default";
 		reg = <0x3b>;
 	};
 
@@ -422,6 +446,12 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <96 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander4_int_default>;
+		pinctrl-names = "default";
 		reg = <0x3c>;
 	};
 
@@ -430,6 +460,12 @@
 		#gpio-cells = <2>;
 		gpio-controller;
 		reg = <0x3d>;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander5_int_default>;
+		pinctrl-names = "default";
 		vcc-supply = <&vreg_s4a>;
 
 		io-exp-hog5 {
@@ -444,6 +480,13 @@
 		compatible = "ti,tca9538";
 		#gpio-cells = <2>;
 		gpio-controller;
+		#interrupt-cells = <2>;
+		interrupt-controller;
+		interrupt-parent = <&tlmm>;
+		interrupts = <52 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-0 = <&expander6_int_default>;
+		pinctrl-names = "default";
+		wakeup-source;
 		reg = <0x3e>;
 	};
 };
@@ -613,7 +656,7 @@
 &soc {
 	connector_usb1: connector-usb1 {
 		compatible = "gpio-usb-b-connector";
-		id-gpio = <&tlmm 8 GPIO_ACTIVE_HIGH>;
+		id-gpio = <&tlmm 13 GPIO_ACTIVE_HIGH>;
 		vbus-supply = <&vbus_supply_regulator_1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&usb1_id_det_default>;
@@ -625,25 +668,6 @@
 				reg = <0>;
 				usb1_port_connector: endpoint {
 					remote-endpoint = <&usb1_port>;
-				};
-			};
-		};
-	};
-
-	connector_usb2: connector-usb2 {
-		compatible = "gpio-usb-b-connector";
-		id-gpio = <&pmm8620au_0_gpios 9 GPIO_ACTIVE_HIGH>;
-		vbus-supply = <&vbus_supply_regulator2>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&usb2_id_det_default>;
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				usb2_port_connector: endpoint {
-					remote-endpoint = <&usb2_port>;
 				};
 			};
 		};
@@ -704,6 +728,55 @@
 			drive-strength = <16>;
 			bias-pull-up;
 		};
+	};
+
+	expander0_int_default: expander0-int-default-state {
+		pins = "gpio56";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander1_int_default: expander1-int-default-state {
+		pins = "gpio16";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander2_int_default: expander2-int-default-state {
+		pins = "gpio95";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander3_int_default: expander3-int-default-state {
+		pins = "gpio24";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander4_int_default: expander4-int-default-state {
+		pins = "gpio96";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander5_int_default: expander5-int-default-state {
+		pins = "gpio3";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	expander6_int_default:  expander6-int-default-state {
+		pins = "gpio52";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
 	};
 
 	gpio7_hog: gpio7-hog {
@@ -830,7 +903,7 @@
 	};
 
 	usb1_id_det_default: usb1-id-det-default {
-		pins = "gpio8";
+		pins = "gpio13";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-up;
@@ -899,6 +972,28 @@
 	qcom,enable-rt;
 	wakeup-source;
 	status = "okay";
+
+	connector_usb2: connector-usb2 {
+		compatible = "gpio-usb-b-connector";
+		label = "micro-USB";
+		type = "micro";
+		id-gpio = <&pmm8620au_0_gpios 9 GPIO_ACTIVE_HIGH>;
+		vbus-gpio = <&expander6 7 GPIO_ACTIVE_HIGH>;
+		vbus-supply = <&vbus_supply_regulator2>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb2_id_det_default>;
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				usb2_port_connector: endpoint {
+					remote-endpoint = <&usb2_port>;
+				};
+			};
+		};
+	};
 
 	ports {
 

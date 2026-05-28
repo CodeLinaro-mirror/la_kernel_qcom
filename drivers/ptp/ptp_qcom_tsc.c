@@ -10,6 +10,7 @@
 
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
 #include <linux/init.h>
@@ -52,7 +53,7 @@
 #define TSCSS_ETU_SLICE_FIFO_CLR		0x30
 #define TSCSS_ETU_SLICE_SW_TRIG_CFG		0x34
 #define TSCSS_ETU_SLICE_TIMER_TRIG_PERIOD	0x38
-#define MAX_ETU_SLICE				16
+#define MAX_ETU_SLICE				32
 
 #define TSCSS_TSC_TIMER_TSC_SOF_PERIOD		0x0
 #define TSCSS_TSC_TIMER_PULSE_WIDTH_REG		0x4
@@ -103,6 +104,7 @@ struct qcom_ptp_tsc {
 	void __iomem *baseaddr;
 	void __iomem *etu_baseaddr;
 	void __iomem *timer_baseaddr;
+	void __iomem *mux_addr;
 	struct clk *tsc_cfg_ahb_clk;
 	struct clk *tsc_cntr_clk;
 	struct clk *tsc_etu_clk;
@@ -119,10 +121,11 @@ struct qcom_ptp_tsc {
 	spinlock_t reg_lock;
 	struct delayed_work tsc_preload_poll_work;
 	bool tsc_safety;
+	u32 configured_slice_mask;
 };
 
 /* Write and readback safety critical registers */
-static inline void tsc_write_readback(void __iomem *address, u32 regval)
+static inline void tsc_write_readback(void __iomem *address, u32 regval, u32 rb_mask)
 {
 	int retries = TSC_WRITE_READBACK_RETRIES;
 	u32 readback;
@@ -131,7 +134,7 @@ static inline void tsc_write_readback(void __iomem *address, u32 regval)
 		writel_relaxed(regval, address);
 		readback = readl_relaxed(address);
 
-		if (regval == readback)
+		if ((regval & rb_mask) == (readback & rb_mask))
 			return;
 
 		udelay(1);
@@ -152,7 +155,7 @@ static void tsc_preload_poll(struct work_struct *work)
 	/* Check for the HW_PRELOAD_STATUS and disable HW_PRELOAD */
 	if (!(regval & BIT(14))) {
 		regval &= ~BIT(2);
-		tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval);
+		tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval, BIT(2));
 		pr_info("TSC CNTCR: 0x%x HW_PRELOAD is disabled\n",
 			readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR));
 		return;
@@ -206,7 +209,7 @@ static void qcom_ptp_enable_tsc_hw_preload(struct qcom_ptp_tsc *timer, struct ti
 	/* Enable HW_PRELOAD */
 	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
 	regval |= BIT(2);
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval, BIT(2));
 
 	/* Program PRELOAD registers */
 	writel_relaxed(ts.tv_sec, timer->baseaddr + TSCSS_TSC_HW_PRELOAD_VAL_HI);
@@ -260,7 +263,7 @@ static int qcom_ptp_update_tsc_cntr(struct qcom_ptp_tsc *timer,
 	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
 	regval |= BIT(0);
 
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval, BIT(0));
 
 	return 0;
 }
@@ -301,15 +304,16 @@ static int qcom_ptp_enable_drift_corr(struct qcom_ptp_tsc *timer, bool neg_adj, 
 		timer->is_jump = false;
 	}
 
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION, cfg);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION, cfg, BIT(31));
 
 	writel_relaxed(INCR_VAL, timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_INCR_VAL);
 
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION2, subperiod);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_DURATION2, subperiod,
+			GENMASK(27, 0));
 
 	cmd = readl_relaxed(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD);
 	cmd |= BIT(2);
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD, cmd);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_DRIFT_CORRECT_CMD, cmd, BIT(2));
 
 	pr_debug("is_jump:%d cfg: %u subperiod:%u cmd:%u\n", timer->is_jump, cfg, subperiod, cmd);
 
@@ -427,6 +431,76 @@ static int qcom_ptp_settime(struct ptp_clock_info *ptp, const struct timespec64 
 	return 0;
 }
 
+static void qcom_etu_event_handler(struct qcom_etu_slice *etu, struct qcom_ptp_tsc *timer)
+{
+	struct ptp_clock_event extts_event;
+	u64 ts, temp;
+	u32 regval;
+
+	etu->etu_tsc_sec = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
+				etu->extts_slice_num, TSCSS_ETU_SLICE_TSC_TS_HI));
+
+	etu->etu_tsc_nsec = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
+				etu->extts_slice_num, TSCSS_ETU_SLICE_TSC_TS_LO));
+
+	if (!timer->tsc_nsec_update) {
+		ts = etu->etu_tsc_sec * NSEC + etu->etu_tsc_nsec;
+	} else {
+		temp = etu->etu_tsc_sec;
+		ts = (temp << NSEC_SHFT) | etu->etu_tsc_nsec;
+	}
+
+	if (ts != etu->etu_tsc_timestamp) {
+		extts_event.type = PTP_CLOCK_EXTTS;
+		extts_event.index = etu->extts_index;
+		extts_event.timestamp = ts;
+
+		pr_debug("type:%d index:%d timestamp:%llu\n", extts_event.type,
+				extts_event.index, extts_event.timestamp);
+
+		ptp_clock_event(etu->ptp_clock, &extts_event);
+	}
+	etu->etu_tsc_timestamp = ts;
+
+	pr_debug("etu_tsc_sec:%u etu_tsc_nsec:%u etu_tsc_timestamp:%llu\n",
+			etu->etu_tsc_sec, etu->etu_tsc_nsec, etu->etu_tsc_timestamp);
+
+	etu->etu_gctr_sec = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
+				etu->extts_slice_num, TSCSS_ETU_SLICE_GCTR_TS_HI));
+
+	etu->etu_gctr_nsec = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
+				etu->extts_slice_num, TSCSS_ETU_SLICE_GCTR_TS_LO));
+
+	etu->extts_event_type = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
+				etu->extts_slice_num, TSCSS_ETU_SLICE_TS_EVENT_TYPE));
+
+	/* Concatenate GCTR_TS_HI(31:0) & GCTR_TS_LO(31:8) and divide with 19.2MHz */
+	etu->global_qtimer = (((u64)etu->etu_gctr_sec << 24) |
+			(etu->etu_gctr_nsec >> 8)) / XO_MHZ;
+
+	pr_debug("etu_gctr_sec:%u etu_gctr_nsec:%u global_qtimer:%x extts_event_type %d\n",
+			etu->etu_gctr_sec, etu->etu_gctr_nsec,
+			etu->global_qtimer, etu->extts_event_type);
+
+	regval = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
+				etu->extts_slice_num, TSCSS_TSC_SLICE_ETU_CFG));
+	regval &= ~BIT(17);
+	regval &= ~BIT(16);
+
+	tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr, etu->extts_slice_num,
+				TSCSS_TSC_SLICE_ETU_CFG), regval, GENMASK(17, 16));
+
+	/* FIFO CLR */
+	writel_relaxed(0x7, TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
+				etu->extts_slice_num, TSCSS_ETU_SLICE_FIFO_CLR));
+
+	/* Enable GCTR_TS_EN & TSCTR_TS_EN*/
+	regval |= BIT(16) | BIT(17);
+
+	tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr, etu->extts_slice_num,
+				 TSCSS_TSC_SLICE_ETU_CFG), regval, GENMASK(17, 16));
+}
+
 static irqreturn_t qcom_etu_irq_handler(int irq, void *data)
 {
 	struct qcom_etu_slice *etu = (struct qcom_etu_slice *)data;
@@ -439,71 +513,30 @@ static irqreturn_t qcom_etu_irq_handler(int irq, void *data)
 	pr_debug("Slice %d extts_enable %d status 0%x\n",
 					etu->extts_slice_num, etu->extts_enable, status);
 
-	if (etu->extts_enable && (status & GENMASK(5, 0))) {
-		u64 ts;
+	if (etu->extts_enable && (status & GENMASK(5, 0)))
+		qcom_etu_event_handler(etu, data);
 
-		etu->etu_tsc_sec = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
-					etu->extts_slice_num, TSCSS_ETU_SLICE_TSC_TS_HI));
+	return IRQ_HANDLED;
+}
 
-		etu->etu_tsc_nsec = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
-					etu->extts_slice_num, TSCSS_ETU_SLICE_TSC_TS_LO));
-		ts  = etu->etu_tsc_sec * NSEC + etu->etu_tsc_nsec;
+static irqreturn_t qcom_etu_summary_irq_handler(int irq, void *data)
+{
+	struct qcom_etu_slice *etu;
+	struct qcom_ptp_tsc *timer;
+	unsigned long mask;
+	u32 status;
+	int slice;
 
-		pr_debug("ts:%llu etu->etu_tsc_timestamp:%llu\n", ts, etu->etu_tsc_timestamp);
+	timer = data;
+	mask = timer->configured_slice_mask;
 
-		if (ts != etu->etu_tsc_timestamp) {
-			extts_event.type = PTP_CLOCK_EXTTS;
-			extts_event.index = etu->extts_index;
-			extts_event.timestamp = ts;
+	for_each_set_bit(slice, &mask, MAX_ETU_SLICE) {
+		etu = &timer->etu_slice[slice];
+		status = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
+						slice, TSCSS_TSC_SLICE_ETU_STATUS));
 
-			pr_debug("type:%d index:%d timestamp:%llu\n", extts_event.type,
-					extts_event.index, extts_event.timestamp);
-
-			ptp_clock_event(etu->ptp_clock, &extts_event);
-		}
-		etu->etu_tsc_timestamp = ts;
-
-		pr_debug("etu_tsc_sec:%u etu_tsc_nsec:%u etu_tsc_timestamp:%llu\n",
-				etu->etu_tsc_sec, etu->etu_tsc_nsec, etu->etu_tsc_timestamp);
-
-		etu->etu_gctr_sec = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
-					etu->extts_slice_num, TSCSS_ETU_SLICE_GCTR_TS_HI));
-
-		etu->etu_gctr_nsec = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
-					etu->extts_slice_num, TSCSS_ETU_SLICE_GCTR_TS_LO));
-
-		etu->extts_event_type = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
-					etu->extts_slice_num, TSCSS_ETU_SLICE_TS_EVENT_TYPE));
-
-		/* Concatenate GCTR_TS_HI(31:0) & GCTR_TS_LO(31:8) and divide with 19.2MHz */
-		etu->global_qtimer = (((u64)etu->etu_gctr_sec << 24) |
-				(etu->etu_gctr_nsec >> 8)) / XO_MHZ;
-
-		pr_debug("etu_gctr_sec:%u etu_gctr_nsec:%u global_qtimer:%x extts_event_type %d\n",
-				etu->etu_gctr_sec, etu->etu_gctr_nsec,
-				etu->global_qtimer, etu->extts_event_type);
-
-		regval = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
-					etu->extts_slice_num, TSCSS_TSC_SLICE_ETU_CFG));
-		regval &= ~BIT(17);
-		regval &= ~BIT(16);
-
-		tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr, etu->extts_slice_num,
-			     TSCSS_TSC_SLICE_ETU_CFG), regval);
-		/* FIFO CLR */
-		tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr, etu->extts_slice_num,
-			     TSCSS_ETU_SLICE_FIFO_CLR), 0x7);
-
-		pr_debug("Status %x, sec: %u\n",
-				readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
-					etu->extts_slice_num, TSCSS_TSC_SLICE_ETU_STATUS)),
-				readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr,
-					etu->extts_slice_num, TSCSS_ETU_SLICE_TSC_TS_HI)));
-
-		/* Enable GCTR_TS_EN & TSCTR_TS_EN*/
-		regval |= BIT(16) | BIT(17);
-		tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(etu->etu_baseaddr, etu->extts_slice_num,
-			     TSCSS_TSC_SLICE_ETU_CFG), regval);
+		if (etu->extts_enable && (status & GENMASK(5, 0)))
+			qcom_etu_event_handler(etu, timer);
 	}
 
 	return IRQ_HANDLED;
@@ -520,11 +553,11 @@ static irqreturn_t qcom_fusa_irq_handler(int irq, void *data)
 	/* Check if counter error or valid error */
 	if (regval & BIT(1) || regval & BIT(2)) {
 		regval |= BIT(0);
-		tsc_write_readback(timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT, regval);
+		tsc_write_readback(timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT, regval, BIT(0));
 
 		regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT);
 		regval &= ~BIT(0);
-		tsc_write_readback(timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT, regval);
+		tsc_write_readback(timer->baseaddr + TSCSS_TSC_FUSA_CFG_STAT, regval, BIT(0));
 	}
 
 	/* Check all the timers and clear the error */
@@ -537,11 +570,11 @@ static irqreturn_t qcom_fusa_irq_handler(int irq, void *data)
 					    i, TSCSS_TSC_TIMER_CFG));
 			cfg |= BIT(31);
 			tsc_write_readback(TSCSS_TSC_TIMER_BASE(timer->timer_baseaddr, i,
-				TSCSS_TSC_TIMER_CFG), cfg);
+				TSCSS_TSC_TIMER_CFG), cfg, BIT(31));
 
 			cfg &= ~BIT(31);
 			tsc_write_readback(TSCSS_TSC_TIMER_BASE(timer->timer_baseaddr, i,
-				TSCSS_TSC_TIMER_CFG), cfg);
+				TSCSS_TSC_TIMER_CFG), cfg, BIT(31));
 		}
 	}
 
@@ -557,7 +590,8 @@ static void qcom_tsc_configure_etu(struct qcom_ptp_tsc *timer, int slice)
 	regval = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(base, slice, TSCSS_TSC_SLICE_ETU_CFG));
 	regval |= (timer->etu_slice[slice].extts_event_sel << 4) & GENMASK(9, 4);
 
-	tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(base, slice, TSCSS_TSC_SLICE_ETU_CFG), regval);
+	tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(base, slice, TSCSS_TSC_SLICE_ETU_CFG), regval,
+			GENMASK(9, 4));
 
 	regval = readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(base, slice, TSCSS_TSC_SLICE_ETU_CFG));
 
@@ -568,7 +602,11 @@ static void qcom_tsc_configure_etu(struct qcom_ptp_tsc *timer, int slice)
 
 	/* Enable rising edge config */
 	regval |= BIT(0);
-	tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(base, slice, TSCSS_TSC_SLICE_ETU_CFG), regval);
+	tsc_write_readback(TSCSS_TSC_ETU_SLICE_BASE(base, slice, TSCSS_TSC_SLICE_ETU_CFG), regval,
+			BIT(0));
+
+	/* Bitmask of configured slices.*/
+	timer->configured_slice_mask |= BIT(slice);
 
 	pr_debug("ETU_SLICE#%d: 0x%x\n", slice,
 		readl_relaxed(TSCSS_TSC_ETU_SLICE_BASE(base, slice, TSCSS_TSC_SLICE_ETU_CFG)));
@@ -583,7 +621,7 @@ static void qcom_tsc_set_timer_phase(struct qcom_ptp_tsc *timer,
 	regval = rq->perout.phase.sec * NSEC + rq->perout.phase.nsec;
 	do_div(regval, TSCSS_RESOLUTION);
 	tsc_write_readback(TSCSS_TSC_TIMER_BASE(base, rq->perout.index,
-				TSCSS_TSC_TIMER_PHASE_OFFSET), regval);
+				TSCSS_TSC_TIMER_PHASE_OFFSET), regval, GENMASK(31, 0));
 }
 
 static void qcom_tsc_disable_timer(struct qcom_ptp_tsc *timer,
@@ -595,7 +633,7 @@ static void qcom_tsc_disable_timer(struct qcom_ptp_tsc *timer,
 	regval = readl_relaxed(TSCSS_TSC_TIMER_BASE(base, index,
 				TSCSS_TSC_TIMER_CFG));
 	regval &= ~BIT(0);
-	tsc_write_readback(TSCSS_TSC_TIMER_BASE(base, index, TSCSS_TSC_TIMER_CFG), regval);
+	tsc_write_readback(TSCSS_TSC_TIMER_BASE(base, index, TSCSS_TSC_TIMER_CFG), regval, BIT(0));
 
 	pr_debug("Frame pulse generation for timer%d disabled\n", index);
 }
@@ -623,7 +661,7 @@ static void qcom_tsc_configure_timer(struct qcom_ptp_tsc *timer,
 	/* Configure the delay between 2 frame pulses */
 	regval = rq->perout.period.sec * NSEC + rq->perout.period.nsec;
 	tsc_write_readback(TSCSS_TSC_TIMER_BASE(base, rq->perout.index,
-				TSCSS_TSC_TIMER_TSC_SOF_PERIOD), regval);
+				TSCSS_TSC_TIMER_TSC_SOF_PERIOD), regval, GENMASK(31, 0));
 
 	/* Fractional frame rate */
 	if (rq->perout.period.reserved != 0) {
@@ -637,7 +675,7 @@ static void qcom_tsc_configure_timer(struct qcom_ptp_tsc *timer,
 		regval = rq->perout.on.sec * NSEC + rq->perout.on.nsec;
 		do_div(regval, TSCSS_RESOLUTION);
 		tsc_write_readback(TSCSS_TSC_TIMER_BASE(base, rq->perout.index,
-				TSCSS_TSC_TIMER_PULSE_WIDTH_REG), regval);
+				TSCSS_TSC_TIMER_PULSE_WIDTH_REG), regval, GENMASK(31, 0));
 	}
 
 	/* Propagate the pulses to Camera Subsystem and ETU */
@@ -645,14 +683,14 @@ static void qcom_tsc_configure_timer(struct qcom_ptp_tsc *timer,
 				rq->perout.index, TSCSS_TSC_TIMER_CFG));
 	regval |= BIT(2);
 	tsc_write_readback(TSCSS_TSC_TIMER_BASE(base, rq->perout.index,
-			TSCSS_TSC_TIMER_CFG), regval);
+			TSCSS_TSC_TIMER_CFG), regval, BIT(2));
 
 	/* Enable the timer */
 	regval = readl_relaxed(TSCSS_TSC_TIMER_BASE(base,
 				rq->perout.index, TSCSS_TSC_TIMER_CFG));
 	regval |= BIT(0);
 	tsc_write_readback(TSCSS_TSC_TIMER_BASE(base, rq->perout.index,
-			TSCSS_TSC_TIMER_CFG), regval);
+			TSCSS_TSC_TIMER_CFG), regval, BIT(0));
 
 	spin_lock_irqsave(&timer->reg_lock, flags);
 	timer->pulse_gen_ref_cnt++;
@@ -765,6 +803,48 @@ static struct ptp_clock_info qcom_ptp_clock_info = {
 	.enable   = qcom_ptp_enable,
 };
 
+/* --- Sysfs Interface --- */
+
+static ssize_t tsc_src_ctrl_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct qcom_ptp_tsc *timer = dev_get_drvdata(dev);
+	u32 val;
+
+	val = readl_relaxed(timer->mux_addr);
+
+	return sysfs_emit(buf, "%u\n", val);
+}
+
+static ssize_t tsc_src_ctrl_store(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct qcom_ptp_tsc *timer = dev_get_drvdata(dev);
+	bool val;
+	u32 regval;
+	int ret;
+
+	ret = kstrtobool(buf, &val);
+	if (ret)
+		return ret;
+
+	regval = readl_relaxed(timer->mux_addr);
+
+	/* BIT(0) selects timestamp source:
+	 * 0 = default source (MD)
+	 * 1 = alternate source (SD)
+	 */
+	if (!val)
+		regval &= ~BIT(0);
+	else
+		regval |= BIT(0);
+
+	writel_relaxed(regval, timer->mux_addr);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(tsc_src_ctrl);
+
 /* module operations */
 
 static int qcom_ptp_tsc_remove(struct platform_device *pdev)
@@ -772,6 +852,8 @@ static int qcom_ptp_tsc_remove(struct platform_device *pdev)
 	struct qcom_ptp_tsc *timer = platform_get_drvdata(pdev);
 
 	if (timer->ptp_clock) {
+		if (timer->mux_addr)
+			device_remove_file(&pdev->dev, &dev_attr_tsc_src_ctrl);
 		ptp_clock_unregister(timer->ptp_clock);
 		timer->ptp_clock = NULL;
 	}
@@ -784,8 +866,9 @@ static int qcom_tsc_etu_get_data(struct platform_device *pdev,
 {
 	struct device *dev = &pdev->dev;
 	struct resource *r_mem;
+	struct device_node *child;
 	struct pinctrl *pinctrl;
-	int ret, cnt, i;
+	int ret, summary_irq;
 
 	r_mem = platform_get_resource_byname(pdev, IORESOURCE_MEM, "etu");
 	if (!r_mem) {
@@ -797,59 +880,75 @@ static int qcom_tsc_etu_get_data(struct platform_device *pdev,
 	if (IS_ERR(timer->etu_baseaddr))
 		return PTR_ERR(timer->etu_baseaddr);
 
-	cnt = of_property_count_elems_of_size(dev->of_node, "qcom,etu-event-sel",
-						sizeof(u32));
-	pr_debug("Number of event-sel %d\n", cnt);
+	summary_irq = platform_get_irq_byname(pdev, "etu_summary_irq");
 
-	for (i = 0; i < cnt; i++) {
+	if (summary_irq > 0) {
+		ret = devm_request_irq(dev, summary_irq,
+				qcom_etu_summary_irq_handler, IRQF_TRIGGER_HIGH,
+				"etu_summary_irq", timer);
+		if (ret) {
+			dev_err(&pdev->dev, "Request_summary_irq failed:%d: err:%d\n",
+				summary_irq, ret);
+			return ret;
+		}
+	}
+
+	for_each_available_child_of_node(dev->of_node, child) {
 		const char *name;
 		u32 sel, slice;
 
-		ret = of_property_read_u32_index(dev->of_node, "qcom,etu-event-sel", i, &sel);
-		if (ret)
-			break;
-
-		ret = of_property_read_u32_index(dev->of_node, "qcom,etu-slice", i, &slice);
+		ret = of_property_read_u32(child, "qcom,etu-event-sel", &sel);
 		if (ret) {
-			pr_debug("etu-slice property does not exist, configure using sel value\n");
-			slice = sel;
+			pr_debug("missing qcom,etu-event-sel\n");
+			continue;
+		}
+
+		ret = of_property_read_u32(child, "qcom,etu-slice", &slice);
+		if (ret) {
+			pr_debug("missing qcom,etu-event-slice\n");
+			continue;
+		}
+
+		ret = of_property_read_string(child, "qcom,etu-event-name", &name);
+		if (ret) {
+			pr_debug("missing qcom,etu-event-name\n");
+			continue;
 		}
 
 		timer->etu_slice[slice].etu_baseaddr = timer->etu_baseaddr;
-		timer->etu_slice[slice].extts_index = i;
+		timer->etu_slice[slice].extts_index = slice;
 		timer->etu_slice[slice].extts_event_sel = sel;
 		timer->etu_slice[slice].extts_slice_num = slice;
-		of_property_read_string_index(dev->of_node,
-				"qcom,etu-event-names", i, &name);
+		timer->etu_slice[slice].extts_present = true;
+		timer->etu_slice[slice].ptp_clock = timer->ptp_clock;
 
 		strscpy(timer->etu_slice[slice].name, name, sizeof(timer->etu_slice[slice].name));
-		timer->etu_slice[slice].extts_irq = platform_get_irq_byname(pdev, name);
 
-		pr_debug("sel: %d, index: %d, slice-num:%d slice-name: %s, IRQ: %d\n", sel,
-				timer->etu_slice[slice].extts_index, slice,
-				timer->etu_slice[slice].name, timer->etu_slice[slice].extts_irq);
-
-		if (timer->etu_slice[slice].extts_irq > 0) {
+		if (summary_irq < 0) {
+			timer->etu_slice[slice].extts_irq = of_irq_get_byname(child, name);
 			ret = devm_request_irq(dev, timer->etu_slice[slice].extts_irq,
 					qcom_etu_irq_handler, IRQF_TRIGGER_RISING,
 					timer->etu_slice[slice].name,
 					(void *)&timer->etu_slice[slice]);
-			if (ret)
-				pr_debug("Failed to request IRQ\n");
-			else
-				pr_debug("IRQ registered ret%d\n", ret);
-		}
+			if (ret) {
+				dev_err(&pdev->dev, "Request_irq failed:%d: err:%d\n",
+					timer->etu_slice[slice].extts_irq, ret);
+				return ret;
+			}
+		} else
+			timer->etu_slice[slice].extts_irq = summary_irq;
 
-		timer->etu_slice[slice].extts_present = true;
-		timer->etu_slice[slice].ptp_clock = timer->ptp_clock;
+		pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
+		if (IS_ERR(pinctrl))
+			dev_info(&pdev->dev, "No default pinctrl found\n");
+
+		pr_debug("sel: %d, index: %d, slice-num:%d slice-name: %s, IRQ: %d\n", sel,
+				timer->etu_slice[slice].extts_index, slice,
+				timer->etu_slice[slice].name, timer->etu_slice[slice].extts_irq);
 	}
 
-	timer->total_etu_cnt = cnt;
-	timer->ptp_clock_info.n_ext_ts = cnt;
-
-	pinctrl = devm_pinctrl_get_select_default(&pdev->dev);
-	if (IS_ERR(pinctrl))
-		dev_info(&pdev->dev, "No default pinctrl found\n");
+	timer->total_etu_cnt = MAX_ETU_SLICE;
+	timer->ptp_clock_info.n_ext_ts = MAX_ETU_SLICE;
 
 	return 0;
 }
@@ -861,7 +960,7 @@ static int qcom_tsc_self_test(struct qcom_ptp_tsc *timer)
 	/* Disable the TSC counter. */
 	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
 	regval &= ~BIT(0);
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval, BIT(0));
 
 	/* Initiate the counter with known value.(0x11111111) */
 	writel_relaxed(0x11111111, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_LO);
@@ -871,7 +970,7 @@ static int qcom_tsc_self_test(struct qcom_ptp_tsc *timer)
 	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
 	regval &= ~(GENMASK(11, 8));
 	regval |= (0x1 << 8);
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, regval, GENMASK(11, 8));
 
 	/* Write the STEP_INCR once. */
 	regval = readl_relaxed(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR);
@@ -897,6 +996,30 @@ static int qcom_tsc_self_test(struct qcom_ptp_tsc *timer)
 	/* Reset the counter to 0. */
 	writel_relaxed(0x0, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_LO);
 	writel_relaxed(0x0, timer->baseaddr + TSCSS_TSC_CONTROL_CNTCV_HI);
+
+	return 0;
+}
+
+static int tsc_mux_src_ctrl(struct platform_device *pdev, struct qcom_ptp_tsc *timer)
+{
+	struct resource *r_mem;
+	int ret = 0;
+
+	r_mem = platform_get_resource_byname(pdev, IORESOURCE_MEM, "tsc_src_sel");
+	if (!r_mem) {
+		dev_warn(&pdev->dev, "no tsc mux ctrl resource defined\n");
+		return -ENXIO;
+	}
+
+	timer->mux_addr = devm_ioremap_resource(&pdev->dev, r_mem);
+	if (IS_ERR(timer->mux_addr))
+		return PTR_ERR(timer->mux_addr);
+
+	ret = device_create_file(&pdev->dev, &dev_attr_tsc_src_ctrl);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to create mux_ctrl sysfs attribute: %d\n", ret);
+		return ret;
+	}
 
 	return 0;
 }
@@ -1009,6 +1132,11 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 
 	qcom_tsc_etu_get_data(pdev, timer);
 
+	ret = tsc_mux_src_ctrl(pdev, timer);
+	if (ret)
+		dev_warn(&pdev->dev, "mux control not enabled (%d)\n", ret);
+
+
 	if (!timer->tsc_nsec_update) {
 		cntr_val = (timer->tsc_hw_preload ? 0x1D8 : 0x1CC);
 		writel_relaxed(0x3B9AC9FF, timer->baseaddr + TSCSS_TSC_ROLLOVER_VAL);
@@ -1028,7 +1156,7 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 		}
 	}
 
-	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, cntr_val);
+	tsc_write_readback(timer->baseaddr + TSCSS_TSC_CONTROL_CNTCR, cntr_val, GENMASK(11, 0));
 
 	pr_info("TSC CNTR 0x%x tsc-nsec-update %d tsc-hw-preload %d\n",
 		readl_relaxed(timer->baseaddr), timer->tsc_nsec_update, timer->tsc_hw_preload);

@@ -8,13 +8,9 @@
 #include <linux/phy.h>
 #include <linux/phy/phy.h>
 #include <linux/pcs-xpcs-qcom.h>
-#include <linux/i2c.h>
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
-
-#define EEPROM_STMMAC_READ_BYTE	18
-#define EEPROM_STMMAC_WRITE_OFFSET_BYTE	2
 
 #define RGMII_IO_MACRO_CONFIG		0x0
 #define SDCC_HC_REG_DLL_CONFIG		0x4
@@ -32,6 +28,7 @@
 #define EMAC_WRAPPER_USXGMII_MUX_SEL 0x1D0
 #define RGMII_IO_MACRO_SCRATCH_2		0x44
 #define EMAC_WRAPPER_SGMII_PHY_CNTRL1_V4 0x174
+#define MACSEC_CTRL0_OFFSET			0x0
 
 /* RGMII_IO_MACRO_CONFIG fields */
 #define RGMII_CONFIG_FUNC_CLK_EN		BIT(30)
@@ -113,6 +110,9 @@
 #define RGMII_SCRATCH2_MAX_SPD_PRG_5		GENMASK(9, 6)
 #define RGMII_SCRATCH2_MAX_SPD_PRG_6		GENMASK(13, 10)
 
+/* MACSEC WRAPPER bits */
+#define MACSEC_BIT_DATA_BYPASS		BIT(2)
+
 #define SGMII_10M_RX_CLK_DVDR			0x31
 
 struct ethqos_emac_por {
@@ -133,11 +133,13 @@ struct ethqos_emac_driver_data {
 	struct dwmac4_addrs dwmac4_addrs;
 	bool needs_sgmii_loopback;
 	bool has_hdma;
+	bool has_macsec;
 	bool has_io_macro_ge_4;
 };
 
 struct qcom_ethqos {
 	struct platform_device *pdev;
+	void __iomem *macsec_base;
 	void __iomem *rgmii_base;
 	void __iomem *mac_base;
 	int (*configure_func)(struct qcom_ethqos *ethqos);
@@ -154,6 +156,7 @@ struct qcom_ethqos {
 	bool has_io_macro_ge_4;
 	bool rgmii_config_loopback_en;
 	bool has_emac_ge_3;
+	bool has_macsec;
 	bool needs_sgmii_loopback;
 	bool needs_rx_prog_swap;
 };
@@ -353,6 +356,16 @@ static const struct ethqos_emac_por emac_v6_6_0_por[] = {
 	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
 };
 
+static const struct ethqos_emac_por emac_v6_6_1_por[] = {
+	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0xC04D03 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
+	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040800 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
+	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
+	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x222060},
+	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
+};
+
 static const struct ethqos_emac_driver_data emac_v4_0_0_data = {
 	.por = emac_v4_0_0_por,
 	.num_por = ARRAY_SIZE(emac_v4_0_0_por),
@@ -388,6 +401,33 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.link_clk_name = "phyaux",
 	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
 	.has_hdma = true,
+	.needs_sgmii_loopback = true,
+	.has_io_macro_ge_4 = true,
+	.axi_clk_rate = 380000000,
+	.dwxgmac_addrs = {
+		.dma_even_chan_base  = 0x00008500,
+		.dma_odd_chan_base = 0x00008580,
+		.dma_chan_offset = 0x00001000,
+		.mtl_chan_base = 0x00008000,
+		.mtl_chan_offset =  0x00001000,
+		.timestamp_base = 0x00007000,
+		.pps_base = 0x00007080,
+		.pps_offset = 0x10,
+	},
+};
+
+/* emac_v6_6_1 is added because of the addition of new MACSEC
+ * block and the flags associated with it.
+ */
+static const struct ethqos_emac_driver_data emac_v6_6_1_data = {
+	.por = emac_v6_6_1_por,
+	.num_por = ARRAY_SIZE(emac_v6_6_1_por),
+	.rgmii_config_loopback_en = false,
+	.dma_addr_width = 40,
+	.link_clk_name = "phyaux",
+	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
+	.has_hdma = true,
+	.has_macsec = true,
 	.needs_sgmii_loopback = true,
 	.has_io_macro_ge_4 = true,
 	.axi_clk_rate = 380000000,
@@ -708,6 +748,21 @@ static int ethqos_configure_rgmii(struct qcom_ethqos *ethqos)
 	return 0;
 }
 
+static void ethqos_force_macsec_bypass(struct qcom_ethqos *ethqos)
+{
+	void __iomem *macsec_base = ethqos->macsec_base;
+	u32 val;
+
+	if (!macsec_base)
+		return;
+
+	val = readl_relaxed(macsec_base + MACSEC_CTRL0_OFFSET);
+
+	val |= MACSEC_BIT_DATA_BYPASS;
+
+	writel_relaxed(val, macsec_base + MACSEC_CTRL0_OFFSET);
+}
+
 /* On interface toggle MAC registers gets reset.
  * Configure MAC block for SGMII on ethernet phy link up
  */
@@ -893,6 +948,10 @@ static int ethqos_configure_usxgmii(struct qcom_ethqos *ethqos)
 			"Invalid speed %d\n", ethqos->speed);
 		return -EINVAL;
 	}
+
+	if (ethqos->has_macsec)
+		ethqos_force_macsec_bypass(ethqos);
+
 	return 0;
 }
 
@@ -998,8 +1057,45 @@ static void ethqos_ptp_clk_freq_config(struct stmmac_priv *priv)
 	netdev_dbg(priv->dev, "PTP rate %d\n", plat_dat->clk_ptp_rate);
 }
 
-static void qcom_ethqos_hdma_cfg(struct plat_stmmacenet_data *plat)
+static void qcom_ethqos_get_queue_and_tc_from_vdma(struct stmmac_priv *priv,
+						   u32 vdma_ch,
+						   unsigned long *queue_mask,
+						   u32 *tc)
 {
+	u32 tx_queues_cnt = priv->plat->tx_queues_to_use;
+	int i;
+
+	*queue_mask = 0;
+
+	if (vdma_ch >= MTL_MAX_TX_QUEUES) {
+		netdev_err(priv->dev, "VDMA channel %u out of range\n", vdma_ch);
+		return;
+	}
+
+	/* Look up the TC this VDMA channel is mapped to */
+	*tc = priv->plat->dma_cfg->tx_vdma_map[vdma_ch];
+
+	/* Find all PDMA channels mapped to the same TC as the VDMA channel.
+	 * A TC can map to multiple PDMA channels (1:many). Since PDMA channels
+	 * and TX queues have a 1:1 correspondence, each matching PDMA channel
+	 * index is set as a bit in queue_mask.
+	 */
+	for (i = 0; i < tx_queues_cnt; i++) {
+		if (priv->plat->dma_cfg->tx_pdma_map[i] == *tc)
+			*queue_mask |= BIT(i);
+	}
+
+	if (!*queue_mask)
+		netdev_warn(priv->dev, "No PDMA channel found for VDMA %u (TC %u)\n",
+			    vdma_ch, *tc);
+}
+
+static int qcom_ethqos_hdma_cfg(struct platform_device *pdev, struct plat_stmmacenet_data *plat)
+{
+	struct device_node *np = pdev->dev.of_node;
+	u32 map[STMMAC_CH_MAX];
+	int count, i;
+
 	plat->dma_cfg->orrq = 15;
 	plat->dma_cfg->owrq = 15;
 	plat->dma_cfg->txdcsz = 4;
@@ -1007,33 +1103,51 @@ static void qcom_ethqos_hdma_cfg(struct plat_stmmacenet_data *plat)
 	plat->dma_cfg->rxdcsz = 4;
 	plat->dma_cfg->rdps = 1;
 
-	plat->dma_cfg->tx_pdma_custom_map = true;
-	plat->dma_cfg->tx_pdma_map[0] = 0;
-	plat->dma_cfg->tx_pdma_map[1] = 1;
-	plat->dma_cfg->tx_pdma_map[2] = 2;
-	plat->dma_cfg->tx_pdma_map[3] = 3;
-	plat->dma_cfg->tx_pdma_map[4] = 4;
-	plat->dma_cfg->tx_pdma_map[5] = 5;
-	plat->dma_cfg->tx_pdma_map[6] = 5;
-	plat->dma_cfg->tx_pdma_map[7] = 6;
-	plat->dma_cfg->tx_pdma_map[8] = 6;
-	plat->dma_cfg->tx_pdma_map[9] = 6;
-	plat->dma_cfg->tx_pdma_map[10] = 7;
-	plat->dma_cfg->tx_pdma_map[11] = 7;
+	count = of_property_count_u32_elems(np, "qcom,tx-pdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,tx-pdma-map", map, count)) {
+		plat->dma_cfg->tx_pdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->tx_pdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Tx PDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
 
-	plat->dma_cfg->rx_pdma_custom_map = true;
-	plat->dma_cfg->rx_pdma_map[0] = 0;
-	plat->dma_cfg->rx_pdma_map[1] = 1;
-	plat->dma_cfg->rx_pdma_map[2] = 2;
-	plat->dma_cfg->rx_pdma_map[3] = 3;
-	plat->dma_cfg->rx_pdma_map[4] = 4;
-	plat->dma_cfg->rx_pdma_map[5] = 5;
-	plat->dma_cfg->rx_pdma_map[6] = 5;
-	plat->dma_cfg->rx_pdma_map[7] = 6;
-	plat->dma_cfg->rx_pdma_map[8] = 6;
-	plat->dma_cfg->rx_pdma_map[9] = 6;
-	plat->dma_cfg->rx_pdma_map[10] = 7;
-	plat->dma_cfg->rx_pdma_map[11] = 7;
+	count = of_property_count_u32_elems(np, "qcom,rx-pdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,rx-pdma-map", map, count)) {
+		plat->dma_cfg->rx_pdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->rx_pdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Rx PDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	count = of_property_count_u32_elems(np, "qcom,tx-vdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,tx-vdma-map", map, count)) {
+		plat->dma_cfg->tx_vdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->tx_vdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Tx VDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	count = of_property_count_u32_elems(np, "qcom,rx-vdma-map");
+	if (count > 0 && count <= STMMAC_CH_MAX &&
+	    !of_property_read_u32_array(np, "qcom,rx-vdma-map", map, count)) {
+		plat->dma_cfg->rx_vdma_custom_map = true;
+		for (i = 0; i < count; i++)
+			plat->dma_cfg->rx_vdma_map[i] = map[i];
+	} else {
+		dev_err(&pdev->dev, "Rx VDMA map not defined falling back to default config\n");
+		return -EINVAL;
+	}
+
+	return 0;
 }
 
 static int ethqos_xpcs_init(struct stmmac_priv *priv)
@@ -1058,72 +1172,6 @@ static void ethqos_xpcs_safety_stats(struct stmmac_priv *priv, unsigned long *pt
 {
 	if (priv->sfty_irq > 0)
 		qcom_xpcs_get_err_stats(priv->hw->phylink_pcs, ptr);
-}
-
-static int ethqos_eeprom_readmac(struct plat_stmmacenet_data *plat_dat, struct device *dev,
-				 u8 *mac_addr)
-{
-	static u8 wr_data[EEPROM_STMMAC_WRITE_OFFSET_BYTE] = {0, 0};
-	static u8 rd_data[EEPROM_STMMAC_READ_BYTE];
-	char *temp_mac_addr = NULL, *mac_str = NULL;
-	char *token = NULL, *token_n = NULL;
-	struct i2c_adapter *adapter;
-	struct i2c_msg msg[2];
-	u8 addr[ETH_ALEN];
-	int j = 0, ret;
-	u8 mac_id = 0;
-
-	adapter = i2c_get_adapter(plat_dat->i2c_id);
-	if (!adapter) {
-		/* error, no such I2C adaptor. */
-		dev_err(dev, "Chip at i2c Invalid i2c adapter %d\n", plat_dat->i2c_id);
-		return -ENODEV;
-	}
-
-	msg[0].addr = plat_dat->eeprom_reg;
-	msg[0].len = EEPROM_STMMAC_WRITE_OFFSET_BYTE;
-	msg[0].flags = 0;
-	msg[0].buf = wr_data;
-
-	msg[1].addr = plat_dat->eeprom_reg;
-	msg[1].len = EEPROM_STMMAC_READ_BYTE;
-	msg[1].flags = I2C_M_RD;
-	msg[1].buf = rd_data;
-
-	ret = i2c_transfer(adapter, msg, 2);
-	if (ret != 2) {
-		dev_err(dev, "EEPROM I2C wrong response\n");
-		return ret;
-	}
-
-	mac_str = kmemdup(rd_data, EEPROM_STMMAC_READ_BYTE, GFP_KERNEL);
-	if (!mac_str)
-		return -ENOMEM;
-
-	temp_mac_addr = mac_str;
-
-	token_n = strsep(&temp_mac_addr, "\n");
-	if (!token_n) {
-		kfree(mac_str);
-		return 0;
-	}
-	token = strsep(&token_n, ":");
-	while (token) {
-		if (kstrtou8(token, 16, &mac_id)) {
-			kfree(mac_str);
-			return 0;
-		}
-		addr[j++] = mac_id;
-		token = strsep(&token_n, ":");
-	}
-
-	if (is_valid_ether_addr(addr))
-		memcpy(mac_addr, addr, ETH_ALEN);
-	else
-		dev_err(dev, "invalid mac address from EEPROM\n");
-
-	kfree(mac_str);
-	return 0;
 }
 
 static int qcom_ethqos_probe(struct platform_device *pdev)
@@ -1205,8 +1253,17 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	if (data->has_macsec) {
+		ethqos->macsec_base = devm_platform_ioremap_resource_byname(pdev, "macsec");
+		if (IS_ERR(ethqos->macsec_base)) {
+			return dev_err_probe(dev, PTR_ERR(ethqos->macsec_base),
+					"Failed to map macsec resource\n");
+		}
+	}
+
 	ethqos->por = data->por;
 	ethqos->num_por = data->num_por;
+	ethqos->has_macsec = data->has_macsec;
 	ethqos->has_io_macro_ge_4 = data->has_io_macro_ge_4;
 	ethqos->rgmii_config_loopback_en = data->rgmii_config_loopback_en;
 	ethqos->has_emac_ge_3 = data->has_emac_ge_3;
@@ -1249,8 +1306,13 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->dwxgmac_addrs = &data->dwxgmac_addrs;
 		plat_dat->has_hdma = data->has_hdma;
 		plat_dat->insert_ts_pktid = true;
-		if (plat_dat->has_hdma)
-			qcom_ethqos_hdma_cfg(plat_dat);
+		if (plat_dat->has_hdma) {
+			ret = qcom_ethqos_hdma_cfg(pdev, plat_dat);
+			if (ret)
+				return ret;
+			plat_dat->get_queue_and_tc_from_vdma =
+				qcom_ethqos_get_queue_and_tc_from_vdma;
+		}
 	}
 	if (of_property_present(dev->of_node, "qcom-xpcs-handle")) {
 		plat_dat->pcs_init = ethqos_xpcs_init;
@@ -1276,9 +1338,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->serdes_powerdown  = qcom_ethqos_serdes_powerdown;
 	}
 
-	if (plat_dat->eeprom_reg)
-		ethqos_eeprom_readmac(plat_dat, dev, stmmac_res.mac);
-
 	/* Enable TSO on queue0 and enable TBS on rest of the queues */
 	for (i = 1; i < plat_dat->tx_queues_to_use; i++)
 		plat_dat->tx_queues_cfg[i].tbs_en = 1;
@@ -1295,6 +1354,7 @@ static const struct of_device_id qcom_ethqos_match[] = {
 	{ .compatible = "qcom,sm8150-ethqos", .data = &emac_v2_1_0_data},
 	{ .compatible = "qcom,sa8620p-ethqos", .data = &emac_v4_0_0_data},
 	{ .compatible = "qcom,sa8797p-ethqos", .data = &emac_v6_6_0_data},
+	{ .compatible = "qcom,sa8787p-ethqos", .data = &emac_v6_6_1_data},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_ethqos_match);

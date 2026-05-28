@@ -638,7 +638,7 @@ static irqreturn_t tsens_critical_irq_thread(int irq, void *data)
 static irqreturn_t tsens_irq_thread(int irq, void *data)
 {
 	struct tsens_priv *priv = data;
-	struct tsens_irq_data d;
+	struct tsens_irq_data d = {};
 	int i;
 	bool disable = false;
 
@@ -1162,6 +1162,18 @@ static const struct of_device_id tsens_table[] = {
 	}, {
 		.compatible = "qcom,tsens-v2",
 		.data = &data_tsens_v2,
+	}, {
+		.compatible = "qcom,sa8775p-tsens",
+		.data = &data_sa8775p,
+	}, {
+		.compatible = "qcom,sa7255p-tsens",
+		.data = &data_sa8775p,
+	}, {
+		.compatible = "qcom,sa8797p-tsens",
+		.data = &data_sa8775p,
+	}, {
+		.compatible = "qcom,sa8255p-tsens",
+		.data = &data_sa8775p,
 	},
 	{}
 };
@@ -1237,39 +1249,40 @@ static int tsens_reinit(struct tsens_priv *priv)
 
 int tsens_resume_common(struct tsens_priv *priv)
 {
-	if (pm_suspend_target_state != PM_SUSPEND_MEM)
-		return 0;
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		tsens_reinit(priv);
 
-	tsens_reinit(priv);
+	if ((pm_suspend_target_state == PM_SUSPEND_MEM) ||
+	    priv->tsens_disable_on_suspend) {
 
-	if (priv->uplow_irq > 0) {
-		enable_irq(priv->uplow_irq);
-		enable_irq_wake(priv->uplow_irq);
+		if (priv->uplow_irq > 0) {
+			enable_irq(priv->uplow_irq);
+			enable_irq_wake(priv->uplow_irq);
+		}
+
+		if (priv->feat->crit_int && priv->crit_irq > 0) {
+			enable_irq(priv->crit_irq);
+			enable_irq_wake(priv->crit_irq);
+		}
 	}
-
-	if (priv->feat->crit_int && priv->crit_irq > 0) {
-		enable_irq(priv->crit_irq);
-		enable_irq_wake(priv->crit_irq);
-	}
-
 	return 0;
 }
 
 int tsens_suspend_common(struct tsens_priv *priv)
 {
-	if (pm_suspend_target_state != PM_SUSPEND_MEM)
-		return 0;
+	if ((pm_suspend_target_state == PM_SUSPEND_MEM) ||
+	    priv->tsens_disable_on_suspend) {
 
-	if (priv->uplow_irq > 0) {
-		disable_irq_nosync(priv->uplow_irq);
-		disable_irq_wake(priv->uplow_irq);
+		if (priv->uplow_irq > 0) {
+			disable_irq_nosync(priv->uplow_irq);
+			disable_irq_wake(priv->uplow_irq);
+		}
+
+		if (priv->feat->crit_int && priv->crit_irq > 0) {
+			disable_irq_nosync(priv->crit_irq);
+			disable_irq_wake(priv->crit_irq);
+		}
 	}
-
-	if (priv->feat->crit_int && priv->crit_irq > 0) {
-		disable_irq_nosync(priv->crit_irq);
-		disable_irq_wake(priv->crit_irq);
-	}
-
 	return 0;
 }
 
@@ -1317,7 +1330,7 @@ static int tsens_nvmem_trip_update(struct thermal_zone_device *tz)
 	num_trips = thermal_zone_get_num_trips(tz);
 	/* First trip is for userspace, update all other trips. */
 	for (i = 1; i < num_trips; i++)
-		thermal_zone_device_exec(tz, tsens_thermal_zone_trip_update, i);
+		tsens_thermal_zone_trip_update(tz, i);
 
 	return 0;
 }
@@ -1458,7 +1471,7 @@ static int tsens_probe(struct platform_device *pdev)
 	}
 	priv->feat = data->feat;
 	priv->fields = data->fields;
-
+	priv->tsens_disable_on_suspend = data->tsens_disable_on_suspend;
 	platform_set_drvdata(pdev, priv);
 
 	if (!priv->ops || !priv->ops->init || !priv->ops->get_temp)
