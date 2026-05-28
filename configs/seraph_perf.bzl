@@ -75,6 +75,7 @@ seraph_perf_config = {
     "CONFIG_IPC_LOG_MINIDUMP_BUFFERS": "16",
     "CONFIG_ISL97900_LED": "m",
     "CONFIG_LEDS_BYS_AW21104": "m",
+    "CONFIG_LEDS_ETIRLED_LM3645": "m",
     "CONFIG_LEDS_QCOM_LPG": "m",
     "CONFIG_LEDS_USER_AW21104": "m",
     "CONFIG_MEM_PROT": "m",
