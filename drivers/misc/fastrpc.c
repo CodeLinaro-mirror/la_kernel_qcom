@@ -1004,59 +1004,26 @@ static struct fastrpc_phy_page *fastrpc_phy_page_start(struct fastrpc_invoke_buf
 	return (struct fastrpc_phy_page *)(&buf[len]);
 }
 
-static int fastrpc_flush_args(struct fastrpc_invoke_ctx *ctx,
-	union fastrpc_remote_arg *rpra)
+static int fastrpc_flush_args(struct fastrpc_invoke_ctx *ctx)
 {
-	int oix, inbufs, outbufs;
-	struct device *dev = ctx->fl->sctx->dev;
+	union fastrpc_remote_arg *rpra = ctx->rpra;
+	int i, inbufs, outbufs;
 
 	inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
 	outbufs = REMOTE_SCALARS_OUTBUFS(ctx->sc);
-	for (oix = 0; oix < inbufs+outbufs; ++oix) {
-		int i = ctx->olaps[oix].raix;
-		struct fastrpc_map *map = ctx->maps[i];
 
-		if (i+1 > inbufs)
-			continue;
-		if (!map)
-			continue;
-		if (rpra[i].buf.len && ctx->olaps[oix].mstart) {
-			if (map->buf) {
-				if ((buf_page_size(ctx->olaps[oix].mend -
-				ctx->olaps[oix].mstart)) == map->size ||
-				ctx->olaps[oix].do_cmo) {
-					dma_buf_begin_cpu_access(map->buf, DMA_TO_DEVICE);
-					dma_buf_end_cpu_access(map->buf, DMA_TO_DEVICE);
-				} else {
-					uintptr_t offset;
-					uint64_t flush_len;
-					unsigned long vm_start;
-					struct vm_area_struct *vma;
+	for (i = 0; i < inbufs + outbufs; ++i) {
+		int raix = ctx->olaps[i].raix;
+		struct fastrpc_map *map = ctx->maps[raix];
 
-					mmap_read_lock(current->mm);
-					vma = find_vma(current->mm, rpra[i].buf.pv);
-					if (!vma) {
-						mmap_read_unlock(current->mm);
-						dev_err(dev, "%s: vma not found for pv 0x%llx\n",
-								__func__, rpra[i].buf.pv);
-						return -EFAULT;
-					}
-					vm_start = vma->vm_start;
-					if (ctx->olaps[oix].do_cmo) {
-						offset = rpra[i].buf.pv - vma->vm_start;
-						flush_len = rpra[i].buf.len;
-					} else {
-						offset = ctx->olaps[oix].mstart - vma->vm_start;
-						flush_len =
-						ctx->olaps[oix].mend - ctx->olaps[oix].mstart;
-					}
-					mmap_read_unlock(current->mm);
-					dma_buf_begin_cpu_access_partial(
-						map->buf, DMA_TO_DEVICE, offset, flush_len);
-					dma_buf_end_cpu_access_partial(
-						map->buf, DMA_TO_DEVICE, offset, flush_len);
-				}
-			}
+		if (raix + 1 > inbufs)
+			continue;
+		if (!map || !map->buf)
+			continue;
+
+		if (rpra[raix].buf.len && ctx->olaps[i].mstart) {
+			dma_buf_begin_cpu_access(map->buf, DMA_TO_DEVICE);
+			dma_buf_end_cpu_access(map->buf, DMA_TO_DEVICE);
 		}
 	}
 	return 0;
@@ -1064,64 +1031,34 @@ static int fastrpc_flush_args(struct fastrpc_invoke_ctx *ctx,
 
 static int fastrpc_inv_args(struct fastrpc_invoke_ctx *ctx)
 {
-	int i, inbufs, outbufs;
-	uint32_t sc = ctx->sc;
 	union fastrpc_remote_arg *rpra = ctx->rpra;
-	struct device *dev = ctx->fl->sctx->dev;
+	int i, inbufs, outbufs;
 
-	inbufs = REMOTE_SCALARS_INBUFS(sc);
-	outbufs = REMOTE_SCALARS_OUTBUFS(sc);
-	for (i = 0; i < inbufs+outbufs; ++i) {
-		int over = ctx->olaps[i].raix;
-		struct fastrpc_map *map = ctx->maps[over];
+	inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
+	outbufs = REMOTE_SCALARS_OUTBUFS(ctx->sc);
 
-		if (over + 1 <= inbufs)
+	for (i = 0; i < inbufs + outbufs; ++i) {
+		int raix = ctx->olaps[i].raix;
+		struct fastrpc_map *map = ctx->maps[raix];
+
+		if (raix + 1 <= inbufs)
 			continue;
-		if (!rpra[over].buf.len)
+		if (!rpra[raix].buf.len)
 			continue;
-		if (!map)
+		if (!map || !map->buf)
 			continue;
+
+		/*
+		 * Skip invalidation if the argument overlaps with the
+		 * RPC control header page.
+		 */
 		if (((uintptr_t)rpra & PAGE_MASK) ==
-			((uintptr_t)rpra[over].buf.pv & PAGE_MASK))
+			((uintptr_t)rpra[raix].buf.pv & PAGE_MASK))
 			continue;
+
 		if (ctx->olaps[i].mstart) {
-			if (map->buf) {
-				if (((buf_page_size(ctx->olaps[i].mend -
-					ctx->olaps[i].mstart)) == map->size) ||
-					ctx->olaps[i].do_cmo) {
-					dma_buf_begin_cpu_access(map->buf, DMA_FROM_DEVICE);
-					dma_buf_end_cpu_access(map->buf, DMA_TO_DEVICE);
-				} else {
-					uintptr_t offset;
-					uint64_t inv_len;
-					unsigned long vm_start;
-					struct vm_area_struct *vma;
-
-					mmap_read_lock(current->mm);
-					vma = find_vma(current->mm, rpra[over].buf.pv);
-					if (!vma) {
-						mmap_read_unlock(current->mm);
-						dev_err(dev,
-							"%s: vma not found for pv 0x%llx\n",
-							__func__, rpra[over].buf.pv);
-						return -EFAULT;
-					}
-					vm_start = vma->vm_start;
-					if (ctx->olaps[i].do_cmo) {
-						offset = rpra[over].buf.pv-vma->vm_start;
-						inv_len = rpra[over].buf.len;
-
-					} else {
-						offset = ctx->olaps[i].mstart - vma->vm_start;
-						inv_len = ctx->olaps[i].mend - ctx->olaps[i].mstart;
-					}
-					mmap_read_unlock(current->mm);
-					dma_buf_begin_cpu_access_partial(
-						map->buf, DMA_FROM_DEVICE, offset, inv_len);
-					dma_buf_end_cpu_access_partial(
-						map->buf, DMA_TO_DEVICE, offset, inv_len);
-				}
-			}
+			dma_buf_begin_cpu_access(map->buf, DMA_FROM_DEVICE);
+			dma_buf_end_cpu_access(map->buf, DMA_TO_DEVICE);
 		}
 	}
 	return 0;
@@ -1240,7 +1177,7 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 		}
 	}
 	if (!ctx->fl->sctx->coherent) {
-		err =  fastrpc_flush_args(ctx, rpra);
+		err =  fastrpc_flush_args(ctx);
 		if (err)
 			goto bail;
 	}
