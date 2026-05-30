@@ -14,6 +14,31 @@ static struct si_object *g_dcvs_instance;
 static DEFINE_MUTEX(g_gpu_mutex);
 static DEFINE_MUTEX(g_dcvs_mutex);
 
+/**
+ * qcom_scm_gpu_and_dcvs_remap_error() - remap GPU/DCVS service errors
+ * @ret: return code from SMCInvoke method
+ * @err: service-specific result written by SMCInvoke method
+ *
+ * Handle transport failures via @ret and remap
+ * GPU/DCVS result codes only when invocation itself succeeds.
+ *
+ * Return: 0 on success or a negative errno value.
+ */
+static int qcom_scm_gpu_and_dcvs_remap_error(int ret, int err)
+{
+	if (!ret && !err)
+		return 0;
+
+	if (ret)
+		return ret;
+
+	if (err == GPU_ERROR_OPERATION_FAILED ||
+	    err == GPU_DCVS_ERROR_INVALID_ARG)
+		return -EFAULT;
+
+	return -EINVAL;
+}
+
 bool qcom_scm_pas_supported(u32 peripheral)
 {
 	struct si_object *pil_image_service = NULL;
@@ -100,7 +125,9 @@ int qcom_scm_pas_shutdown(u32 peripheral)
 	 * Shutdown/teardown the specified peripheral and unlock the memory area
 	 * occupied by that region.
 	 */
-	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_UNLOCKAREA, args, &result);
+	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_UNLOCKAREA, args,
+			     &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		return ret;
 
@@ -159,7 +186,9 @@ int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr, phys_addr_t size)
 	if (ret)
 		return ret;
 
-	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_SETUPMEMAREA, args, &result);
+	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_SETUPMEMAREA,
+			     args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		pr_err("memory setup failed with result %d: %d\n", result, ret);
 
@@ -231,15 +260,22 @@ EXPORT_SYMBOL_GPL(qcom_scm_pas_store_memoryinfo);
 static int qcom_smci_get_instance(struct si_object *service, uint32_t instance_id,
 				  unsigned long op, struct si_object **instance)
 {
-	struct si_arg args[3] = { 0 };
 	int ret, result;
-
-	args[0].b = (struct si_buffer) { .addr = &instance_id, .size = sizeof(instance_id) };
-	args[0].type = SI_AT_IB;
-	args[1].type = SI_AT_OO;
-	args[2].type = SI_AT_END;
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &instance_id, .size = sizeof(instance_id) },
+		},
+		{
+			.type = SI_AT_OO,
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
 
 	ret = qcom_smci_call(service, op, args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		return ret;
 
@@ -340,6 +376,7 @@ int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
 	}
 
 	ret = qcom_smci_call(video_var_service, SMCI_SET_VIDEO_VAR, args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		pr_err("Setting video vars failed with result %d: ret %d\n", result, ret);
 
@@ -411,7 +448,7 @@ int qcom_scm_kgsl_dcvs_tuning(u32 mingap, u32 penalty, u32 numbusy)
 		return PTR_ERR(dcvs_instance);
 
 	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_TUNING, args, &result);
-	return ret;
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_dcvs_tuning);
 
@@ -451,8 +488,9 @@ int _dcvs_update(int level, s64 total_time, s64 busy_time, int context_count)
 		return PTR_ERR(dcvs_instance);
 
 	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_UPDATE, args, &result);
+	ret = qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 	if (ret) {
-		pr_err("DCVS update failed: %d\n", ret);
+		pr_err("DCVS update failed (result: %d, ret: %d)\n", result, ret);
 		return ret;
 	}
 
@@ -484,20 +522,21 @@ int qcom_scm_dcvs_reset(void)
 			.type = SI_AT_END,
 		}
 	};
-	int result = 0;
+	int ret, result = 0;
 
 	dcvs_instance = get_dcvs_instance(0);
 	if (IS_ERR(dcvs_instance))
 		return PTR_ERR(dcvs_instance);
 
-	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_RESET, args, &result);
+	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_RESET, args, &result);
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_dcvs_reset);
 
 int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
 {
 	struct si_object *dcvs_instance = NULL;
-	int result = 0;
+	int ret, result = 0;
 	void *virt_src = NULL;
 	struct dcvs_init_ca {
 		uint32_t ctxt_aware_target_pwrlevel;
@@ -527,14 +566,15 @@ int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
 	if (IS_ERR(dcvs_instance))
 		return PTR_ERR(dcvs_instance);
 
-	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT_CA, args, &result);
+	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT_CA, args, &result);
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_ca_v2);
 
 int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
 {
 	struct si_object *dcvs_instance = NULL;
-	int result = 0;
+	int ret, result = 0;
 	void *virt_src = NULL;
 	uint32_t size_val = size;
 	struct dcvs_req {
@@ -578,7 +618,8 @@ int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
 	if (IS_ERR(dcvs_instance))
 		return PTR_ERR(dcvs_instance);
 
-	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT, args, &result);
+	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT, args, &result);
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_v2);
 
@@ -630,7 +671,7 @@ int qcom_scm_kgsl_init_regs(u32 gpu_req)
 		return PTR_ERR(kgsl_instance);
 
 	ret = qcom_smci_call(kgsl_instance, SMCI_GPU_OP_REG_SETUP, args, &result);
-	return ret;
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
 
@@ -666,6 +707,7 @@ int qcom_scm_dcc_fetch_data(void *to, size_t count)
 		return ret;
 
 	ret = qcom_smci_call(dcc_service, SMCI_DCCSRAM_OP_FETCH, args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		pr_err("dcc fetch data failed with result %d: %d\n", result, ret);
 
