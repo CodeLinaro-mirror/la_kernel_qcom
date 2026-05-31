@@ -200,9 +200,13 @@ int qcom_dump(struct list_head *segs, struct device *dev)
 	void __iomem *ptr;
 	size_t data_size = 0;
 	size_t offset = 0;
+	int ret;
 
 	if (!segs || list_empty(segs))
 		return -EINVAL;
+
+	if (!dump_enabled())
+		return 0;
 
 	list_for_each_entry(segment, segs, node) {
 		pr_info("Got segment size %zd\n", segment->size);
@@ -217,20 +221,26 @@ int qcom_dump(struct list_head *segs, struct device *dev)
 		if (segment->va)
 			memcpy(data + offset, segment->va, segment->size);
 		else {
-			ptr = devm_ioremap(dev, segment->da, segment->size);
+			ptr = ioremap(segment->da, segment->size);
 			if (!ptr) {
 				dev_err(dev,
 					"invalid coredump segment (%pad, %zu)\n",
 					&segment->da, segment->size);
 				memset(data + offset, 0xff, segment->size);
-			} else
+			} else {
 				memcpy_fromio(data + offset, ptr,
 					      segment->size);
+				iounmap(ptr);
+			}
 		}
 		offset += segment->size;
 	}
 
-	return qcom_devcd_dump(dev, data, data_size, GFP_KERNEL);
+	ret = qcom_devcd_dump(dev, data, data_size, GFP_KERNEL);
+	if (ret)
+		vfree(data);
+
+	return ret;
 }
 EXPORT_SYMBOL(qcom_dump);
 
@@ -256,10 +266,13 @@ int qcom_elf_dump(struct list_head *segs, struct device *dev, unsigned char clas
 	int phnum = 0;
 	void *data;
 	void __iomem *ptr;
-
+	int ret;
 
 	if (!segs || list_empty(segs))
 		return -EINVAL;
+
+	if (!dump_enabled())
+		return 0;
 
 	if (class == ELFCLASSNONE) {
 		dev_err(dev, "ELF class is not set\n");
@@ -305,22 +318,28 @@ int qcom_elf_dump(struct list_head *segs, struct device *dev, unsigned char clas
 		if (segment->va)
 			memcpy(data + offset, segment->va, segment->size);
 		else {
-			ptr = devm_ioremap(dev, segment->da, segment->size);
+			ptr = ioremap(segment->da, segment->size);
 			if (!ptr) {
 				dev_err(dev,
 					"invalid coredump segment (%pad, %zu)\n",
 					&segment->da, segment->size);
 				memset(data + offset, 0xff, segment->size);
-			} else
+			} else {
 				memcpy_fromio(data + offset, ptr,
 					      segment->size);
+				iounmap(ptr);
+			}
 		}
 
 		offset += segment->size;
 		phdr += sizeof_elf_phdr(class);
 	}
 
-	return qcom_devcd_dump(dev, data, data_size, GFP_KERNEL);
+	ret = qcom_devcd_dump(dev, data, data_size, GFP_KERNEL);
+	if (ret)
+		vfree(data);
+
+	return ret;
 }
 EXPORT_SYMBOL(qcom_elf_dump);
 
@@ -374,6 +393,9 @@ int qcom_elf_dump_using_section(struct list_head *segs, struct device *dev,
 
 	if (!segs || list_empty(segs))
 		return -EINVAL;
+
+	if (!dump_enabled())
+		return 0;
 
 	if (class == ELFCLASSNONE) {
 		dev_err(dev, "ELF class is not set\n");

@@ -357,6 +357,7 @@ def register_modules(registry):
             "drivers/clk/qcom/clk-alpha-pll.h",
             "drivers/clk/qcom/clk-branch.h",
             "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-pm.h",
             "drivers/clk/qcom/clk-rcg.h",
             "drivers/clk/qcom/clk-regmap-divider.h",
             "drivers/clk/qcom/clk-regmap-mux.h",
@@ -1794,6 +1795,7 @@ def register_modules(registry):
             "drivers/clk/qcom/clk-alpha-pll.h",
             "drivers/clk/qcom/clk-branch.h",
             "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-pm.h",
             "drivers/clk/qcom/clk-rcg.h",
             "drivers/clk/qcom/clk-regmap-divider.h",
             "drivers/clk/qcom/clk-regmap-mux.h",
@@ -2155,6 +2157,7 @@ def register_modules(registry):
             "drivers/clk/qcom/clk-alpha-pll.h",
             "drivers/clk/qcom/clk-branch.h",
             "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-pm.h",
             "drivers/clk/qcom/clk-rcg.h",
             "drivers/clk/qcom/clk-regmap-divider.h",
             "drivers/clk/qcom/clk-regmap-mux.h",
@@ -2433,6 +2436,31 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/clk/qcom/audiocorecc-shikra",
+        out = "audiocorecc-shikra.ko",
+        config = "CONFIG_CLK_SHIKRA_AUDIOCORECC",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-alpha-pll.h",
+            "drivers/clk/qcom/clk-branch.h",
+            "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-rcg.h",
+            "drivers/clk/qcom/clk-regmap-divider.h",
+            "drivers/clk/qcom/clk-regmap-mux.h",
+            "drivers/clk/qcom/clk-regmap.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/audiocorecc-shikra.c",
+            "drivers/clk/qcom/reset.h",
+            "drivers/clk/qcom/vdd-class.h",
+            "drivers/clk/qcom/vdd-level-monaco.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-qcom",
         ],
     )
 
@@ -3549,6 +3577,7 @@ def register_modules(registry):
             "drivers/clk/qcom/clk-alpha-pll.h",
             "drivers/clk/qcom/clk-branch.h",
             "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-pm.h",
             "drivers/clk/qcom/clk-rcg.h",
             "drivers/clk/qcom/clk-regmap-divider.h",
             "drivers/clk/qcom/clk-regmap-mux.h",

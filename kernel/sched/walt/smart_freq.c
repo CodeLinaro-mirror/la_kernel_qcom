@@ -821,7 +821,8 @@ void smart_freq_init(const char *name)
 				cluster->smart_freq_info->min_cycles = 7004160;
 			}
 		}
-	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP") ||
+			!strcmp(name, "BOURTZI") || !strcmp(name, "BOURTZIP")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
@@ -1012,7 +1013,7 @@ void smart_freq_init(const char *name)
 					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 			}
 		}
-	} else if (!strcmp(name, "CHORA")) {
+	} else if (!strcmp(name, "CHORA") || !strcmp(name, "CHORAP")) {
 
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {

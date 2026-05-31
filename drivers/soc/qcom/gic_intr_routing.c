@@ -52,6 +52,7 @@ struct gic_intr_routing_data {
 	bool gic_is_virtual;
 	bool gic_supports_1_of_N;
 	bool gic_1_of_N_init_done;
+	bool runtime_cpu_class_en;
 	atomic_t abort_balancing;
 	atomic_t affinity_initialized;
 	void __iomem *rbase;
@@ -228,11 +229,6 @@ static int debugfs_init(struct platform_device *pdev)
 	}
 
 	return 0;
-}
-
-static void debugfs_exit(void)
-{
-	debugfs_remove_recursive(debugfs_dir);
 }
 
 static bool gicd_typer_1_of_N_supported(void __iomem *base)
@@ -791,15 +787,8 @@ void gic_irq_handler_entry_notifer(void *ignore, int irq,
 static int gic_intr_routing_probe(struct platform_device *pdev)
 {
 	struct device_node *dev_phandle;
-	bool runtime_cpu_class_en;
 	int i, cpus_len, cpu;
 	int rc = 0;
-
-	rc = debugfs_init(pdev);
-	if (rc) {
-		pr_err("Failed to initialize debugfs\n");
-		return rc;
-	}
 
 	cpus_len = of_count_phandle_with_args(pdev->dev.of_node, "qcom,gic-class0-cpus", NULL);
 	if (cpus_len <= 0) {
@@ -807,8 +796,7 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 				__func__);
 		return -EINVAL;
 	}
-
-	runtime_cpu_class_en = of_property_read_bool(pdev->dev.of_node,
+	gic_routing_data.runtime_cpu_class_en = of_property_read_bool(pdev->dev.of_node,
 			"qcom,gic-runtime-cpu-class-en");
 
 	for (i = 0; i < cpus_len; i++) {
@@ -816,7 +804,7 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 		if (dev_phandle) {
 			cpu = of_cpu_node_to_id(dev_phandle);
 			if (cpu >= 0) {
-				if (runtime_cpu_class_en) {
+				if (gic_routing_data.runtime_cpu_class_en) {
 					rc = process_cpu_index(pdev->dev.of_node, cpu, 0);
 					if (rc < 0)
 						return rc;
@@ -840,7 +828,7 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 		if (dev_phandle) {
 			cpu = of_cpu_node_to_id(dev_phandle);
 			if (cpu >= 0) {
-				if (runtime_cpu_class_en) {
+				if (gic_routing_data.runtime_cpu_class_en) {
 					rc = process_cpu_index(pdev->dev.of_node, cpu, 1);
 					if (rc < 0)
 						return rc;
@@ -850,6 +838,14 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 			}
 		}
 		of_node_put(dev_phandle);
+	}
+
+	if (gic_routing_data.runtime_cpu_class_en) {
+		rc = debugfs_init(pdev);
+		if (rc) {
+			pr_err("Failed to initialize debugfs_init\n");
+			return rc;
+		}
 	}
 
 	register_trace_android_rvh_gic_v3_set_affinity(
@@ -873,7 +869,8 @@ static int gic_intr_routing_probe(struct platform_device *pdev)
 
 static void gic_intr_routing_remove(struct platform_device *pdev)
 {
-	debugfs_exit();
+	if (gic_routing_data.runtime_cpu_class_en)
+		debugfs_remove_recursive(debugfs_dir);
 }
 
 static const struct of_device_id gic_intr_routing_of_match[] = {

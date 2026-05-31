@@ -66,9 +66,12 @@ static const struct pll_vco brammo_vco[] = {
 	{ 500000000, 1250000000, 0 },
 };
 
+static const struct pll_vco default_vco[] = {
+	{ 500000000, 1000000000, 2 },
+};
+
 static const struct pll_vco spark_vco[] = {
 	{ 750000000, 1500000000, 1 },
-	{ 500000000, 1000000000, 2 },
 };
 
 static const u8 clk_alpha_pll_regs_offset[][PLL_OFF_MAX_REGS] = {
@@ -130,30 +133,6 @@ static struct clk_alpha_pll_postdiv gpll0_out_aux2 = {
 	},
 };
 
-static struct clk_alpha_pll gpll1 = {
-	.offset = 0x1000,
-	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_SPARK],
-	.clkr = {
-		.enable_reg = 0x79000,
-		.enable_mask = BIT(1),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gpll1",
-			.parent_data = &(const struct clk_parent_data) {
-				.fw_name = "bi_tcxo",
-			},
-			.num_parents = 1,
-			.ops = &clk_alpha_pll_fixed_ops,
-		},
-		.vdd_data = {
-			.vdd_class = &vdd_cx,
-			.num_rate_max = VDD_NUM,
-			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_MIN] = 1000000000,
-				[VDD_NOMINAL] = 2000000000},
-		},
-	},
-};
-
 /* 1152.0 MHz Configuration */
 static const struct alpha_pll_config gpll10_config = {
 	.l = 0x3c,
@@ -206,8 +185,8 @@ static const struct alpha_pll_config gpll11_config = {
 
 static struct clk_alpha_pll gpll11 = {
 	.offset = 0xb000,
-	.vco_table = spark_vco,
-	.num_vco = ARRAY_SIZE(spark_vco),
+	.vco_table = default_vco,
+	.num_vco = ARRAY_SIZE(default_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_SPARK],
 	.flags = SUPPORTS_DYNAMIC_UPDATE,
 	.clkr = {
@@ -459,8 +438,8 @@ static const struct alpha_pll_config gpll8_config = {
 
 static struct clk_alpha_pll gpll8 = {
 	.offset = 0x8000,
-	.vco_table = spark_vco,
-	.num_vco = ARRAY_SIZE(spark_vco),
+	.vco_table = default_vco,
+	.num_vco = ARRAY_SIZE(default_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_SPARK],
 	.flags = SUPPORTS_DYNAMIC_UPDATE,
 	.clkr = {
@@ -3582,6 +3561,36 @@ static struct clk_branch gcc_gpu_throttle_core_clk = {
 	},
 };
 
+static struct clk_branch gcc_lpass_config_clk = {
+	.halt_reg = 0x3a00c,
+	.halt_check = BRANCH_HALT_VOTED,
+	.hwcg_reg = 0x3a00c,
+	.hwcg_bit = 1,
+	.clkr = {
+		.enable_reg = 0x3a00c,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "gcc_lpass_config_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
+static struct clk_branch gcc_lpass_core_axim_clk = {
+	.halt_reg = 0x3a008,
+	.halt_check = BRANCH_HALT_VOTED,
+	.hwcg_reg = 0x3a008,
+	.hwcg_bit = 1,
+	.clkr = {
+		.enable_reg = 0x3a008,
+		.enable_mask = BIT(0),
+		.hw.init = &(const struct clk_init_data) {
+			.name = "gcc_lpass_core_axim_clk",
+			.ops = &clk_branch2_ops,
+		},
+	},
+};
+
 static struct clk_branch gcc_mmu_tcu_vote_clk = {
 	.halt_reg = 0x7d06c,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -4706,7 +4715,6 @@ static struct gdsc gcc_usb20_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb30_prim_gdsc = {
@@ -4719,7 +4727,6 @@ static struct gdsc gcc_usb30_prim_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_venus_gdsc = {
@@ -4843,6 +4850,8 @@ static struct clk_regmap *gcc_shikra_clocks[] = {
 	[GCC_GPU_SMMU_VOTE_CLK] = &gcc_gpu_smmu_vote_clk.clkr,
 	[GCC_GPU_SNOC_DVM_GFX_CLK] = &gcc_gpu_snoc_dvm_gfx_clk.clkr,
 	[GCC_GPU_THROTTLE_CORE_CLK] = &gcc_gpu_throttle_core_clk.clkr,
+	[GCC_LPASS_CONFIG_CLK] = &gcc_lpass_config_clk.clkr,
+	[GCC_LPASS_CORE_AXIM_CLK] = &gcc_lpass_core_axim_clk.clkr,
 	[GCC_MMU_TCU_VOTE_CLK] = &gcc_mmu_tcu_vote_clk.clkr,
 	[GCC_PCIE_AUX_CLK] = &gcc_pcie_aux_clk.clkr,
 	[GCC_PCIE_AUX_CLK_SRC] = &gcc_pcie_aux_clk_src.clkr,
@@ -4938,7 +4947,6 @@ static struct clk_regmap *gcc_shikra_clocks[] = {
 	[GCC_VIDEO_VENUS_CTL_CLK] = &gcc_video_venus_ctl_clk.clkr,
 	[GPLL0] = &gpll0.clkr,
 	[GPLL0_OUT_AUX2] = &gpll0_out_aux2.clkr,
-	[GPLL1] = &gpll1.clkr,
 	[GPLL10] = &gpll10.clkr,
 	[GPLL11] = &gpll11.clkr,
 	[GPLL12] = &gpll12.clkr,
@@ -4980,6 +4988,7 @@ static const struct qcom_reset_map gcc_shikra_resets[] = {
 	[GCC_PDM_BCR] = { 0x20000 },
 	[GCC_QUPV3_WRAPPER_0_BCR] = { 0x1f000 },
 	[GCC_QUSB2PHY_PRIM_BCR] = { 0x1c000 },
+	[GCC_QUSB2PHY_SEC_BCR] = {0x1C004},
 	[GCC_SDCC1_BCR] = { 0x38000 },
 	[GCC_SDCC2_BCR] = { 0x1e000 },
 	[GCC_TSCSS_BCR] = { 0xac000 },

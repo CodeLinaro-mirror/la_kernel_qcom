@@ -26,6 +26,7 @@ le_targets = [
     #"sun-allyes",
     "alor-le",
     "autogvm",
+    "bengal-le",
     "vienna-le",
 ]
 
@@ -46,6 +47,7 @@ vm_target_bases = [
     "canoe",
     "malabar",
     "seraph",
+    "shikra",
 ]
 
 vm_targets = [

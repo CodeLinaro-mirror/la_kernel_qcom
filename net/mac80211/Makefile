@@ -8,4 +8,5 @@ mac80211-$(CONFIG_MAC80211_LEDS) += led.o
 mac80211-$(CONFIG_MAC80211_DEBUGFS) += debugfs.o debugfs_sta.o debugfs_netdev.o debugfs_key.o
 mac80211-$(CONFIG_MAC80211_MESH) += mesh.o mesh_pathtbl.o mesh_plink.o mesh_hwmp.o mesh_sync.o mesh_ps.o
 mac80211-$(CONFIG_PM) += pm.o
+mac80211-$(CONFIG_MAC80211_RC_MINSTREL) += rc80211_minstrel_ht.o
 

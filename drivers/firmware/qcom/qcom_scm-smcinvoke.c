@@ -645,3 +645,30 @@ int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_lpac_aperture);
+
+int qcom_scm_dcc_fetch_data(void *to, size_t count)
+{
+	struct si_object *dcc_service = NULL;
+	int ret, result;
+
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_OB,
+			.b = { .addr = to, .size = count },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	ret = qcom_smci_init_client_service(SMCI_DCCSRAM_UID, &dcc_service);
+	if (ret)
+		return ret;
+
+	ret = qcom_smci_call(dcc_service, SMCI_DCCSRAM_OP_FETCH, args, &result);
+	if (ret)
+		pr_err("dcc fetch data failed with result %d: %d\n", result, ret);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_dcc_fetch_data);

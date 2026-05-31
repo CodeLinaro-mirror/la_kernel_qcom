@@ -1052,10 +1052,10 @@ config SXR_DEBUGCC_PIKACHU
 
 config SM_GPUCC_MALABAR
         tristate "Malabar Graphics Clock Controller"
-        select SM_GCC_MALABAR
+        depends on SM_GCC_MALABAR || SM_GCC_4450
         help
           Support for the graphics clock controller on Qualcomm Technologies, Inc
-          Malabar devices.
+          Malabar and Bourtzi devices.
           Say Y if you want to support graphics controller devices and
           functionality such as 3D graphics.
 
@@ -1143,6 +1143,15 @@ config CLK_SHIKRA_DEBUGCC
 	  Shikra devices.
 	  Say Y if you want to support the debug clocks such as clock
 	  measurement functionality.
+
+config CLK_SHIKRA_AUDIOCORECC
+	tristate "Shikra Audiocore Clock Controller"
+	select CLK_SHIKRA_GCC
+	help
+	  Support for the audiocore clock controller on Qualcomm Technologies,
+	  Inc Shikra devices.
+	  Say Y if you want to use AudiocoreCC clocks required to support audio
+	  devices and it's functionality.
 
 config QCM_GCC_2290
 	tristate "QCM2290 Global Clock Controller"
