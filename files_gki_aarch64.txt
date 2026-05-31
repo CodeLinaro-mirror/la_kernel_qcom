@@ -688,7 +688,6 @@ drivers/android/binder/rust_binder.h
 drivers/android/binder/rust_binder_events.c
 drivers/android/binder/rust_binder_events.h
 drivers/android/binder/rust_binder_hooks.c
-drivers/android/binder/rust_binder_hooks.h
 drivers/android/binder/rust_binder_internal.h
 drivers/android/binder/rust_binder_main.rs
 drivers/android/binder/rust_binderfs.c
@@ -4755,6 +4754,7 @@ include/trace/hooks/rcu.h
 include/trace/hooks/reboot.h
 include/trace/hooks/regmap.h
 include/trace/hooks/remoteproc.h
+include/trace/hooks/rust_binder.h
 include/trace/hooks/rwsem.h
 include/trace/hooks/sched.h
 include/trace/hooks/selinux.h
