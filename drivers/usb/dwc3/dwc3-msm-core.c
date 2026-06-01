@@ -6462,16 +6462,6 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 	if (!mdwc->xhci_pm_ops)
 		goto free_dwc_pm_ops;
 
-	if (of_property_read_bool(node, "qcom,enabled-retimer")) {
-		mdwc->retimer = typec_retimer_get(mdwc->dev);
-		if (IS_ERR(mdwc->retimer)) {
-			dev_err(mdwc->dev, "failed to get retimer\n");
-			mdwc->retimer = NULL;
-			ret = -ENODEV;
-			goto free_xhci_pm_ops;
-		}
-	}
-
 	val = dwc3_msm_read_reg(mdwc->base, DWC3_GSNPSID);
 	mdwc->ip = DWC3_GSNPS_ID(val);
 
@@ -6480,8 +6470,6 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 	pm_runtime_allow(dwc->dev);
 
 	return 0;
-free_xhci_pm_ops:
-	kfree(mdwc->xhci_pm_ops);
 
 free_dwc_pm_ops:
 	kfree(mdwc->dwc3_pm_ops);
@@ -7065,6 +7053,24 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto err;
 
+	ret = vbus_regulator_get(mdwc);
+	if (ret < 0)
+		goto err;
+
+	if (of_property_read_bool(node, "qcom,enabled-retimer")) {
+		mdwc->retimer = typec_retimer_get(mdwc->dev);
+		if (IS_ERR_OR_NULL(mdwc->retimer)) {
+			ret = PTR_ERR(mdwc->retimer);
+			if (!ret)
+				ret = -ENODEV;
+
+			mdwc->retimer = NULL;
+			ret = dev_err_probe(mdwc->dev, ret,
+				    "failed to get retimer\n");
+			goto err;
+		}
+	}
+
 	/*
 	 * Clocks and regulators will not be turned on until the first time
 	 * runtime PM resume is called. This is to allow for booting up with
@@ -7075,10 +7081,6 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	pm_runtime_set_autosuspend_delay(mdwc->dev, 2000);
 	pm_runtime_use_autosuspend(mdwc->dev);
 	device_init_wakeup(mdwc->dev, 1);
-
-	ret = vbus_regulator_get(mdwc);
-	if (ret < 0)
-		goto err;
 
 	if (of_property_read_bool(node, "qcom,disable-dev-mode-pm"))
 		pm_runtime_get_noresume(mdwc->dev);
@@ -7117,6 +7119,9 @@ put_dwc3:
 	usb_role_switch_unregister(mdwc->role_switch);
 	for (i = 0; i < ARRAY_SIZE(mdwc->icc_paths); i++)
 		icc_put(mdwc->icc_paths[i]);
+
+	if (mdwc->retimer)
+		typec_retimer_put(mdwc->retimer);
 
 err:
 	destroy_workqueue(mdwc->sm_usb_wq);
