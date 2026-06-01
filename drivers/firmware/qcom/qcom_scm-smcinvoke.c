@@ -7,6 +7,7 @@
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 
+#include "qcom_scm.h"
 #include "qcom_scm_smcinvoke.h"
 
 static struct si_object *g_gpu_instance;
@@ -675,15 +676,92 @@ int qcom_scm_kgsl_init_regs(u32 gpu_req)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
 
+/**
+ * _qcom_scm_kgsl_set_smmu_aperture() - configure GPU SMMU aperture values
+ * @config1: aperture configuration word 1
+ * @config2: aperture configuration word 2
+ * @config3: aperture configuration word 3
+ * @config4: aperture configuration word 4
+ *
+ * Build and invoke the secure GPU request payload used for SMMU aperture
+ * programming.
+ *
+ * Return: 0 on success, or a negative errno value on failure.
+ */
+static int _qcom_scm_kgsl_set_smmu_aperture(u32 config1, u32 config2,
+					    u32 config3, u32 config4)
+{
+	struct si_object *kgsl_instance = NULL;
+	int ret, result = 0;
+	struct {
+		u32 aperture_config1;
+		u32 aperture_config2;
+		u32 aperture_config3;
+		u32 aperture_config4;
+	} __packed buf = {
+		.aperture_config1 = config1,
+		.aperture_config2 = config2,
+		.aperture_config3 = config3,
+		.aperture_config4 = config4,
+	};
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &buf, .size = sizeof(buf) },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	kgsl_instance = get_gpu_instance(0);
+	if (IS_ERR(kgsl_instance))
+		return PTR_ERR(kgsl_instance);
+
+	ret = qcom_smci_call(kgsl_instance,
+			     SMCI_GPU_OP_CONFIG_GPU_SMMU_APERTURE,
+			     args, &result);
+	if (ret) {
+		pr_err("GPU config SMMU aperture failed: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
 int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
 {
-	return 0;
+	int ret;
+
+	ret = _qcom_scm_kgsl_set_smmu_aperture(0xffff0000 |
+						((QCOM_SCM_CP_APERTURE_REG & 0xff) << 8) |
+						(num_context_bank & 0xff),
+						0xffffffff, 0xffffffff,
+						0xffffffff);
+	if (ret) {
+		pr_err("GPU set SMMU aperture failed: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture);
 
 int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
 {
-	return 0;
+	int ret;
+
+	ret = _qcom_scm_kgsl_set_smmu_aperture(0xffff0000 |
+						((QCOM_SCM_CP_LPAC_APERTURE_REG & 0xff) << 8) |
+						(num_context_bank & 0xff),
+						0xffffffff, 0xffffffff,
+						0xffffffff);
+	if (ret) {
+		pr_err("GPU set SMMU LPAC aperture failed: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_lpac_aperture);
 
