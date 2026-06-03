@@ -729,6 +729,11 @@ static const struct llcc_slice_config sun_data[] = {
 						0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 33},
 };
 
+static const struct llcc_slice_config shikra_data[] = {
+	{LLCC_ECC, 23, 256, 3, 1, 0x3, 0x0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 1, 0, 0},
+};
+
 static const struct llcc_slice_config canoe_data[] = {
 	{LLCC_CPUSS,           1, 5120, 1, 0, 0xFFFFFFFF, 0, 0, 0, 0,
 							  0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1,
@@ -1478,6 +1483,16 @@ static const struct qcom_llcc_config sun_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config shikra_cfg[] = {
+	{
+		.sct_data       = shikra_data,
+		.size           = ARRAY_SIZE(shikra_data),
+		.need_llcc_cfg	= true,
+		.reg_offset	= llcc_v2_1_reg_offset,
+		.edac_reg_offset = &llcc_v2_1_edac_reg_offset,
+	},
+};
+
 static const struct qcom_llcc_config canoe_cfg[] = {
 	{
 		.sct_data       = canoe_data,
@@ -1644,6 +1659,11 @@ static const struct qcom_sct_config pineapple_cfgs = {
 static const struct qcom_sct_config sun_cfgs = {
 	.llcc_config	= sun_cfg,
 	.num_config	= ARRAY_SIZE(sun_cfg),
+};
+
+static const struct qcom_sct_config shikra_cfgs = {
+	.llcc_config	= shikra_cfg,
+	.num_config	= ARRAY_SIZE(shikra_cfg),
 };
 
 static const struct qcom_sct_config canoe_cfgs = {
@@ -2935,9 +2955,13 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	ret = regmap_read(regmap, cfg->reg_offset[LLCC_COMMON_STATUS0], &num_banks);
 	if (ret)
 		goto err;
-
 	num_banks &= LLCC_LB_CNT_MASK;
 	num_banks >>= LLCC_LB_CNT_SHIFT;
+	if (!num_banks) {
+		dev_err(dev, "Invalid LLCC bank count in COMMON_STATUS0\n");
+		ret = -EINVAL;
+		goto err;
+	}
 	drv_data->num_banks = num_banks;
 
 	drv_data->regmaps = devm_kcalloc(dev, num_banks, sizeof(*drv_data->regmaps), GFP_KERNEL);
@@ -3014,7 +3038,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 			if (llcc_cfg[i].slice_id > drv_data->max_slices)
 				drv_data->max_slices = llcc_cfg[i].slice_id;
 
-		drv_data->bitmap = devm_bitmap_zalloc(dev, drv_data->max_slices,
+		drv_data->bitmap = devm_bitmap_zalloc(dev, drv_data->max_slices + 1,
 						      GFP_KERNEL);
 		if (!drv_data->bitmap) {
 			ret = -ENOMEM;
@@ -3023,7 +3047,6 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 
 		drv_data->cfg = llcc_cfg;
 		drv_data->cfg_size = sz;
-
 		ret = qcom_llcc_cfg_program(pdev, cfg);
 		if (ret)
 			goto err;
@@ -3087,6 +3110,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,lahaina-llcc", .data = &lahaina_cfgs},
 	{ .compatible = "qcom,vienna-llcc", .data = &vienna_cfgs },
 	{ .compatible = "qcom,alor-llcc", .data = &alor_cfgs },
+	{ .compatible = "qcom,shikra-llcc", .data = &shikra_cfgs },
 	{ .compatible = "qcom,seraph-llcc", .data = &seraph_cfgs},
 	{ .compatible = "qcom,pikachu-llcc", .data = &pikachu_cfgs},
 	{ }
