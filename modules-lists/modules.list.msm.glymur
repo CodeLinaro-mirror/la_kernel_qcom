@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0-only
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 qcom-scm.ko
+cmd-db.ko
+qcom_rpmh.ko
 arm_smmu.ko
 smem.ko
 qcom_iommu_util.ko
 socinfo.ko
 qcom_tzmem.ko
 qcom_hwspinlock.ko
+qcom-pdc.ko
 pinctrl-msm.ko
 pinctrl-glymur.ko
 debug_symbol.ko
