@@ -8,6 +8,7 @@ glymur_perf_config = {
     "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_PINCTRL_GLYMUR": "m",
     "CONFIG_PINCTRL_MSM": "m",
+    "CONFIG_PKVM_SMC_FILTER": "m",
     "CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE": "m",
     "CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE_DEFAULT": "y",
     "CONFIG_QCOM_COMMAND_DB": "m",
@@ -19,6 +20,7 @@ glymur_perf_config = {
     "CONFIG_QCOM_RPMH": "m",
     "CONFIG_QCOM_SCM": "m",
     "CONFIG_QCOM_SMEM": "m",
+    "CONFIG_QCOM_SMMU_V2_V3_DISPATCHER": "m",
     "CONFIG_QCOM_SOCINFO": "m",
     "CONFIG_QCOM_TZMEM": "m",
     "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
@@ -26,4 +28,5 @@ glymur_perf_config = {
     "CONFIG_REGULATOR_PROXY_CONSUMER": "m",
     "CONFIG_REGULATOR_QTI_FIXED_VOLTAGE": "m",
     "CONFIG_REGULATOR_RPMH": "m",
+    "CONFIG_SERIAL_PKVM_GENI": "m",
 }
