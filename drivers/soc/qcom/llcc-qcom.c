@@ -1168,6 +1168,8 @@ static const struct llcc_slice_config alor_data[] = {
 };
 
 static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
+	.trp_ecc_error_inject_0 = 0x20400,
+	.trp_ecc_error_inject_1 = 0x20404,
 	.trp_ecc_error_status0 = 0x20344,
 	.trp_ecc_error_status1 = 0x20348,
 	.trp_ecc_sb_err_syn0 = 0x2304c,
@@ -1183,6 +1185,8 @@ static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
 	.cmn_interrupt_2_enable = 0x3003c,
 
 	/* LLCC DRP registers */
+	.drp_ecc_error_inject_0 = 0x40010,
+	.drp_ecc_error_inject_1 = 0x40014,
 	.drp_ecc_error_cfg = 0x40000,
 	.drp_ecc_error_cntr_clear = 0x40004,
 	.drp_interrupt_status = 0x41000,
@@ -1195,6 +1199,8 @@ static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
 };
 
 static const struct llcc_edac_reg_offset llcc_v2_1_edac_reg_offset = {
+	.trp_ecc_error_inject_0 = 0x20400,
+	.trp_ecc_error_inject_1 = 0x20404,
 	.trp_ecc_error_status0 = 0x20344,
 	.trp_ecc_error_status1 = 0x20348,
 	.trp_ecc_sb_err_syn0 = 0x2034c,
@@ -1210,6 +1216,8 @@ static const struct llcc_edac_reg_offset llcc_v2_1_edac_reg_offset = {
 	.cmn_interrupt_2_enable = 0x3403c,
 
 	/* LLCC DRP registers */
+	.drp_ecc_error_inject_0 = 0x50010,
+	.drp_ecc_error_inject_1 = 0x50014,
 	.drp_ecc_error_cfg = 0x50000,
 	.drp_ecc_error_cntr_clear = 0x50004,
 	.drp_interrupt_status = 0x50020,
@@ -1222,6 +1230,8 @@ static const struct llcc_edac_reg_offset llcc_v2_1_edac_reg_offset = {
 };
 
 static const struct llcc_edac_reg_offset llcc_v6_edac_reg_offset = {
+	.trp_ecc_error_inject_0 = 0x47400,
+	.trp_ecc_error_inject_1 = 0x47404,
 	.trp_ecc_error_status0 = 0x47448,
 	.trp_ecc_error_status1 = 0x47450,
 	.trp_ecc_sb_err_syn0 = 0x47490,
@@ -1237,6 +1247,8 @@ static const struct llcc_edac_reg_offset llcc_v6_edac_reg_offset = {
 	.cmn_interrupt_2_enable = 0x6403c,
 
 	/* LLCC DRP registers */
+	.drp_ecc_error_inject_0 = 0x80010,
+	.drp_ecc_error_inject_1 = 0x80014,
 	.drp_ecc_error_cfg = 0x80000,
 	.drp_ecc_error_cntr_clear = 0x80004,
 	.drp_interrupt_status = 0x80020,
@@ -1970,6 +1982,50 @@ size_t llcc_tcm_get_slice_size(struct llcc_tcm_data *tcm_data)
 	return tcm_data->mem_size;
 }
 EXPORT_SYMBOL_GPL(llcc_tcm_get_slice_size);
+
+int llcc_tcm_trigger_access(struct llcc_tcm_data *tcm_data, size_t len,
+			    u32 pattern)
+{
+	void __iomem *virt_addr, *mapped = NULL;
+	size_t i;
+	u32 val;
+
+	if (IS_ERR(tcm_drv_data) || IS_ERR_OR_NULL(drv_data))
+		return -EPROBE_DEFER;
+
+	if (IS_ERR_OR_NULL(tcm_data))
+		return -EINVAL;
+
+	if (!len)
+		return 0;
+
+	len = min(len, tcm_data->mem_size);
+	if (!len)
+		return -EINVAL;
+
+	virt_addr = tcm_data->virt_addr;
+	if (drv_data->sct_initialized || IS_ERR_OR_NULL(virt_addr)) {
+		mapped = ioremap(tcm_data->phys_addr, len);
+		if (IS_ERR_OR_NULL(mapped))
+			return -ENOMEM;
+		virt_addr = mapped;
+	}
+
+	memset_io(virt_addr, pattern & 0xff, len);
+	for (i = 0; i + sizeof(u32) <= len; i += sizeof(u32)) {
+		val = readl_relaxed(virt_addr + i);
+		writel_relaxed(val ^ pattern ^ i, virt_addr + i);
+	}
+
+	/* To make sure data reflected in memory before unmap. */
+	wmb();
+
+	if (mapped)
+		iounmap(mapped);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(llcc_tcm_trigger_access);
 
 static struct llcc_slice_desc *llcc_slice_getd_sct_initialized(u32 uid)
 {
