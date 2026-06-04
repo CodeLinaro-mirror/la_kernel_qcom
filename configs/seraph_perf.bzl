@@ -126,6 +126,7 @@ seraph_perf_config = {
     "CONFIG_QCOM_DCVS": "m",
     "CONFIG_QCOM_DCVS_FP": "m",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
+    "CONFIG_QCOM_DHMS_RPMSG": "m",
     "CONFIG_QCOM_DMABUF_HEAPS": "m",
     "CONFIG_QCOM_DMABUF_HEAPS_CARVEOUT": "y",
     "CONFIG_QCOM_DMABUF_HEAPS_CMA": "y",
