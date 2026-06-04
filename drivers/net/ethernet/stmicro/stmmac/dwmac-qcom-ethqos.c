@@ -11,6 +11,10 @@
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
+#include <linux/iopoll.h>
+
+#define DMA_BUS_MODE			0x00001000
+#define DMA_BUS_MODE_SFT_RESET		(0x1 << 0)
 
 #define RGMII_IO_MACRO_CONFIG		0x0
 #define SDCC_HC_REG_DLL_CONFIG		0x4
@@ -960,6 +964,28 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 	return ethqos->configure_func(ethqos);
 }
 
+/* QCOM GMAC4 DMA soft reset requires an internal clock reference (SGMII
+ * TX-to-RX loopback) when the external PHY clock is unavailable (e.g. after
+ * a safety error brings the link down). Without this loopback, the DMA
+ * reset bit never auto-clears and the reset times out.
+ */
+static int qcom_ethqos_dma_reset(void *priv, void __iomem *ioaddr)
+{
+	struct plat_stmmacenet_data *plat = priv;
+	struct qcom_ethqos *ethqos = plat->bsp_priv;
+	u32 value;
+
+	ethqos_set_func_clk_en(ethqos);
+
+	value = readl(ioaddr + DMA_BUS_MODE);
+	value |= DMA_BUS_MODE_SFT_RESET;
+	writel(value, ioaddr + DMA_BUS_MODE);
+
+	return readl_poll_timeout(ioaddr + DMA_BUS_MODE, value,
+				  !(value & DMA_BUS_MODE_SFT_RESET),
+				  10000, 1000000);
+}
+
 static void ethqos_safety_feature(struct stmmac_priv *priv, bool en)
 {
 	if (priv->sfty_irq > 0) {
@@ -1351,6 +1377,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 				qcom_ethqos_get_queue_and_tc_from_vdma;
 		}
 	}
+	if (plat_dat->has_gmac4)
+		plat_dat->fix_soc_reset = qcom_ethqos_dma_reset;
 	if (of_property_present(dev->of_node, "qcom-xpcs-handle")) {
 		plat_dat->pcs_init = ethqos_xpcs_init;
 		plat_dat->pcs_exit = ethqos_xpcs_exit;
