@@ -1262,6 +1262,18 @@ static const struct llcc_edac_reg_offset llcc_v2_1_edac_reg_offset = {
 	.drp_ecc_error_status1 = 0x520f8,
 	.drp_ecc_sb_err_syn0 = 0x520fc,
 	.drp_ecc_db_err_syn0 = 0x52120,
+
+	/* LCP/SRP DDR DRAM ECC registers (LLCC broadcast space) */
+	.cmn_interrupt_1_enable    = 0x3402c,
+	.lcp_clock_ctrl            = 0x58004,
+	.lcp_srp_ecc_error_cfg     = 0x59000,
+	.lcp_srp_ecc_error_cntr_clear = 0x59004,
+	.lcp_srp_ecc_error_inject_0 = 0x59008,
+	.lcp_srp_ecc_error_inject_1 = 0x5900c,
+	.lcp_srp_interrupt_clear   = 0x59074,
+	.lcp_srp_interrupt_enable  = 0x59078,
+	.lcp_srp_interrupt_status  = 0x59070,
+	.lcp_srp_ecc_error_status1 = 0x59010,
 };
 
 static const struct llcc_edac_reg_offset llcc_v6_edac_reg_offset = {
@@ -3180,6 +3192,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	}
 
 	drv_data->ecc_irq = platform_get_irq_optional(pdev, 0);
+	drv_data->lcp_irq = platform_get_irq_optional(pdev, 1);
 
 	/*
 	 * On some platforms, the access to EDAC registers will be locked by
