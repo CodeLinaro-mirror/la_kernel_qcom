@@ -1442,8 +1442,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ethqos_update_link_clk(ethqos, SPEED_1000);
 	ethqos_set_func_clk_en(ethqos);
 
-	if (stmmac_res.sfty_irq > 0)
+	if (stmmac_res.sfty_irq > 0) {
 		plat_dat->report_uevents = ethqos_report_uevents;
+		plat_dat->flags |= STMMAC_FLAG_HAS_ERROR_UEVENT;
+	}
 	plat_dat->bsp_priv = ethqos;
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
 	plat_dat->dump_debug_regs = rgmii_dump;
