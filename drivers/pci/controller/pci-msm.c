@@ -3969,6 +3969,16 @@ static int msm_pcie_is_link_up(struct msm_pcie_dev_t *dev)
 			PCIE20_CAP_LINKCTRLSTATUS) & BIT(29);
 }
 
+static inline bool msm_pcie_ltssm_link_up(struct msm_pcie_dev_t *dev)
+{
+	u32 ltssm;
+
+	ltssm = readl_relaxed(dev->parf + PCIE20_PARF_LTSSM) & MSM_PCIE_LTSSM_MASK;
+
+	/* L0 (0x11) through L2_IDLE (0x15) are contiguous stable states */
+	return (ltssm >= MSM_PCIE_LTSSM_L0 && ltssm <= MSM_PCIE_LTSSM_L2_IDLE);
+}
+
 static void msm_pcie_config_bandwidth_int(struct msm_pcie_dev_t *dev,
 						bool enable)
 {
@@ -6919,8 +6929,8 @@ static void msm_pcie_parf_cesta_config(struct msm_pcie_dev_t *dev)
 
 static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 {
+	uint32_t xmlh_link_up = 0, link_status;
 	int ret = 0;
-	uint32_t val = 0, link_status;
 
 	PCIE_DBG(dev, "RC%d: entry\n", dev->rc_idx);
 
@@ -6958,8 +6968,8 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 		goto gpio_fail;
 
 	/* Check for PCIe link up, if link is already up, skip the link initialization */
-	val = readl_relaxed(dev->parf + PCIE20_PARF_PM_STTS);
-	if (val & PARF_XMLH_LINK_UP) {
+	xmlh_link_up = !!(readl_relaxed(dev->parf + PCIE20_PARF_PM_STTS) & PARF_XMLH_LINK_UP);
+	if (xmlh_link_up && msm_pcie_ltssm_link_up(dev)) {
 		link_status = readl_relaxed(dev->dm_core + PCIE20_CAP_LINKCTRLSTATUS);
 
 		dev->current_link_speed = (link_status >> 16) & PCI_EXP_LNKSTA_CLS;
