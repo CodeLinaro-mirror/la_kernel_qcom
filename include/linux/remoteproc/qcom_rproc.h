@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+
 #ifndef __QCOM_RPROC_H__
 #define __QCOM_RPROC_H__
 
@@ -25,6 +27,15 @@ struct qcom_ssr_notify_data {
 	bool crashed;
 };
 
+#if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS)
+int hibernation_rproc_early_boot_ping(struct rproc *rproc);
+#else
+static inline int hibernation_rproc_early_boot_ping(struct rproc *rproc)
+{
+	return 0;
+}
+#endif
+
 #if IS_ENABLED(CONFIG_QCOM_Q6V5_PAS_SOCCP_V1)
 
 int rproc_set_state(struct rproc *rproc, bool state);
@@ -35,6 +46,7 @@ static inline int rproc_set_state(struct rproc *rproc, bool state)
 {
 	return 0;
 }
+
 #endif
 
 #if IS_ENABLED(CONFIG_QCOM_RPROC_COMMON)
