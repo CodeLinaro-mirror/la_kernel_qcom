@@ -392,7 +392,41 @@ static int qcom_snps_eusb2_hsphy_runtime_resume(struct device *dev)
 	return 0;
 }
 
+static int qcom_snps_eusb2_hsphy_pm_suspend(struct device *dev)
+{
+	struct qcom_snps_eusb2_hsphy *phy = dev_get_drvdata(dev);
+
+	dev_dbg(dev, "Suspending qcom_snps_eusb2_hsphy\n");
+
+	if (pm_runtime_status_suspended(dev)) {
+		dev_dbg(dev, "already runtime-suspended, skipping ref_clk disable\n");
+		return 0;
+	}
+
+	clk_disable_unprepare(phy->ref_clk);
+
+	return 0;
+}
+
+static int qcom_snps_eusb2_hsphy_pm_resume(struct device *dev)
+{
+	struct qcom_snps_eusb2_hsphy *phy = dev_get_drvdata(dev);
+	int ret;
+
+	dev_dbg(dev, "Resuming qcom_snps_eusb2_hsphy\n");
+
+	ret = clk_prepare_enable(phy->ref_clk);
+	if (ret) {
+		dev_err(dev, "failed to enable ref clock, %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static const struct dev_pm_ops qcom_snps_eusb2_hsphy_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(qcom_snps_eusb2_hsphy_pm_suspend,
+				qcom_snps_eusb2_hsphy_pm_resume)
 	SET_RUNTIME_PM_OPS(qcom_snps_eusb2_hsphy_runtime_suspend,
 			   qcom_snps_eusb2_hsphy_runtime_resume, NULL)
 };
