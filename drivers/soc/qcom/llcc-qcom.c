@@ -1741,7 +1741,7 @@ static int qcom_llcc_tcm_init(struct platform_device *pdev,
 
 	tcm_drv_data->tcm_data->phys_addr = r.start;
 
-	if (!drv_data->sct_initialized) {
+	if (!drv_data->sct_initialized && table) {
 		tcm_drv_data->tcm_slice = llcc_slice_getd(LLCC_APTCM);
 		if (IS_ERR_OR_NULL(tcm_drv_data->tcm_slice)) {
 			pr_err("Failed to get tcm slice from llcc driver\n");
