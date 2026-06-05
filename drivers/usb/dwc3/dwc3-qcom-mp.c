@@ -101,6 +101,7 @@ struct dwc3_qcom {
 	struct icc_path		*icc_path_ddr;
 	struct icc_path		*icc_path_apps;
 	unsigned int is_mp;
+	bool			use_eusb2_phy;
 };
 
 static inline void dwc3_qcom_setbits(void __iomem *base, u32 offset, u32 val)
@@ -377,20 +378,13 @@ static void dwc3_qcom_disable_port_interrupts(struct dwc3_qcom_port *port)
 {
 	dwc3_qcom_disable_wakeup_irq(port->qusb2_phy_irq);
 
-	if (port->usb2_speed == USB_SPEED_LOW) {
-		dwc3_qcom_disable_wakeup_irq(port->dm_hs_phy_irq);
-	} else if ((port->usb2_speed == USB_SPEED_HIGH) ||
-			(port->usb2_speed == USB_SPEED_FULL)) {
-		dwc3_qcom_disable_wakeup_irq(port->dp_hs_phy_irq);
-	} else {
-		dwc3_qcom_disable_wakeup_irq(port->dp_hs_phy_irq);
-		dwc3_qcom_disable_wakeup_irq(port->dm_hs_phy_irq);
-	}
+	dwc3_qcom_disable_wakeup_irq(port->dm_hs_phy_irq);
+	dwc3_qcom_disable_wakeup_irq(port->dp_hs_phy_irq);
 
 	dwc3_qcom_disable_wakeup_irq(port->ss_phy_irq);
 }
 
-static void dwc3_qcom_enable_port_interrupts(struct dwc3_qcom_port *port)
+static void dwc3_qcom_enable_port_interrupts(struct dwc3_qcom *qcom, struct dwc3_qcom_port *port)
 {
 	dwc3_qcom_enable_wakeup_irq(port->qusb2_phy_irq, 0);
 
@@ -404,18 +398,48 @@ static void dwc3_qcom_enable_port_interrupts(struct dwc3_qcom_port *port)
 	 */
 
 	if (port->usb2_speed == USB_SPEED_LOW) {
-		dwc3_qcom_enable_wakeup_irq(port->dm_hs_phy_irq,
+		/*
+		 * According to eUSB2 spec, eDP line will be pulled high for remote
+		 * wakeup scenario for LS connected device in host mode. On disconnect
+		 * during bus-suspend case, irrespective of the speed of the connected
+		 * device, both eDM and eDP line will be pulled high (XeSE1).
+		 */
+		if (qcom->use_eusb2_phy) {
+			dwc3_qcom_enable_wakeup_irq(port->dp_hs_phy_irq,
+						    IRQ_TYPE_EDGE_RISING);
+			dwc3_qcom_enable_wakeup_irq(port->dm_hs_phy_irq,
+						    IRQ_TYPE_EDGE_RISING);
+		} else
+			dwc3_qcom_enable_wakeup_irq(port->dm_hs_phy_irq,
 					    IRQ_TYPE_EDGE_FALLING);
+
 	} else if ((port->usb2_speed == USB_SPEED_HIGH) ||
 			(port->usb2_speed == USB_SPEED_FULL)) {
-		dwc3_qcom_enable_wakeup_irq(port->dp_hs_phy_irq,
+		/*
+		 * According to eUSB2 spec, eDM line will be pulled high for remote
+		 * f_pro
+		 * wakeup scenario for HS/FS connected device in host mode. On disconnect
+		 * during bus-suspend case, irrespective of the speed of the connected
+		 * device, both eDM and eDP line will be pulled high (XeSE1).
+		 */
+		if (qcom->use_eusb2_phy) {
+			dwc3_qcom_enable_wakeup_irq(port->dp_hs_phy_irq,
+						    IRQ_TYPE_EDGE_RISING);
+			dwc3_qcom_enable_wakeup_irq(port->dm_hs_phy_irq,
+						    IRQ_TYPE_EDGE_RISING);
+		} else {
+			dwc3_qcom_enable_wakeup_irq(port->dp_hs_phy_irq,
 					    IRQ_TYPE_EDGE_FALLING);
+		}
+
 	} else {
 		dwc3_qcom_enable_wakeup_irq(port->dp_hs_phy_irq,
 					    IRQ_TYPE_EDGE_RISING);
 		dwc3_qcom_enable_wakeup_irq(port->dm_hs_phy_irq,
 					    IRQ_TYPE_EDGE_RISING);
 	}
+
+
 
 	dwc3_qcom_enable_wakeup_irq(port->ss_phy_irq, 0);
 }
@@ -433,7 +457,7 @@ static void dwc3_qcom_enable_interrupts(struct dwc3_qcom *qcom)
 	int i;
 
 	for (i = 0; i < qcom->num_ports; i++)
-		dwc3_qcom_enable_port_interrupts(&qcom->ports[i]);
+		dwc3_qcom_enable_port_interrupts(qcom, &qcom->ports[i]);
 }
 
 static void dwc3_qcom_vbus_regulator_enable(struct dwc3_qcom *qcom, bool on)
@@ -683,7 +707,7 @@ static int dwc3_qcom_find_num_ports(struct platform_device *pdev)
 	int port_num;
 	int irq;
 
-	irq = platform_get_irq_byname_optional(pdev, "dp_hs_phy_1");
+	irq = platform_get_irq_byname_optional(pdev, "dp_hs_phy_2");
 	if (irq <= 0)
 		return 1;
 
@@ -934,6 +958,7 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 
 	dwc3_qcom_vbus_regulator_enable(qcom, true);
 
+	qcom->use_eusb2_phy = of_property_read_bool(dev->of_node, "qcom,use-eusb2-phy");
 	wakeup_source = of_property_read_bool(dev->of_node, "wakeup-source");
 	device_init_wakeup(&pdev->dev, wakeup_source);
 	device_init_wakeup(&qcom->dwc3->dev, wakeup_source);
