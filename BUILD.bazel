@@ -13,6 +13,7 @@ load(":kleaf-scripts/targets/alor_le.bzl", "define_alor_le")
 load(":kleaf-scripts/targets/autogvm.bzl", "define_autogvm")
 load(":kleaf-scripts/targets/autogvmlv.bzl", "define_autogvmlv")
 load(":kleaf-scripts/targets/bengal.bzl", "define_bengal")
+load(":kleaf-scripts/targets/bengal_le.bzl", "define_bengal_le")
 load(
     ":kleaf-scripts/targets/canoe.bzl",
     "define_canoe",
@@ -336,6 +337,8 @@ define_autogvm()
 define_autogvmlv()
 
 define_bengal()
+
+define_bengal_le()
 
 define_sun_tuivm()
 

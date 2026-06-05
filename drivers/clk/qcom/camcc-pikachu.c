@@ -16,6 +16,7 @@
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
 #include "clk-pll.h"
+#include "clk-pm.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "clk-regmap-divider.h"
@@ -65,7 +66,7 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 };
 
 /* 1200.0 MHz Configuration */
-static const struct alpha_pll_config cam_cc_pll0_config = {
+static struct alpha_pll_config cam_cc_pll0_config = {
 	.l = 0x3e,
 	.cal_l = 0x48,
 	.alpha = 0x8000,
@@ -81,6 +82,7 @@ static struct clk_alpha_pll cam_cc_pll0 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &cam_cc_pll0_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "cam_cc_pll0",
@@ -149,7 +151,7 @@ static struct clk_alpha_pll_postdiv cam_cc_pll0_out_odd = {
 };
 
 /* 510.0 MHz Configuration */
-static const struct alpha_pll_config cam_cc_pll1_config = {
+static struct alpha_pll_config cam_cc_pll1_config = {
 	.l = 0x1a,
 	.cal_l = 0x48,
 	.alpha = 0x9000,
@@ -165,6 +167,7 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &cam_cc_pll1_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "cam_cc_pll1",
@@ -210,7 +213,7 @@ static struct clk_alpha_pll_postdiv cam_cc_pll1_out_even = {
 };
 
 /* 960.0 MHz Configuration */
-static const struct alpha_pll_config cam_cc_pll2_config = {
+static struct alpha_pll_config cam_cc_pll2_config = {
 	.l = 0x32,
 	.cal_l = 0x32,
 	.alpha = 0x0,
@@ -225,6 +228,7 @@ static struct clk_alpha_pll cam_cc_pll2 = {
 	.vco_table = rivian_eko_t_vco,
 	.num_vco = ARRAY_SIZE(rivian_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_RIVIAN_EKO_T],
+	.config = &cam_cc_pll2_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "cam_cc_pll2",
@@ -244,7 +248,7 @@ static struct clk_alpha_pll cam_cc_pll2 = {
 };
 
 /* 604.0 MHz Configuration */
-static const struct alpha_pll_config cam_cc_pll3_config = {
+static struct alpha_pll_config cam_cc_pll3_config = {
 	.l = 0x1f,
 	.cal_l = 0x48,
 	.alpha = 0x7555,
@@ -260,6 +264,7 @@ static struct clk_alpha_pll cam_cc_pll3 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &cam_cc_pll3_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "cam_cc_pll3",
@@ -305,7 +310,7 @@ static struct clk_alpha_pll_postdiv cam_cc_pll3_out_even = {
 };
 
 /* 1200.0 MHz Configuration */
-static const struct alpha_pll_config cam_cc_pll5_config = {
+static struct alpha_pll_config cam_cc_pll5_config = {
 	.l = 0x3e,
 	.cal_l = 0x48,
 	.alpha = 0x8000,
@@ -321,6 +326,7 @@ static struct clk_alpha_pll cam_cc_pll5 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &cam_cc_pll5_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "cam_cc_pll5",
@@ -366,7 +372,7 @@ static struct clk_alpha_pll_postdiv cam_cc_pll5_out_even = {
 };
 
 /* 960.0 MHz Configuration */
-static const struct alpha_pll_config cam_cc_pll6_config = {
+static struct alpha_pll_config cam_cc_pll6_config = {
 	.l = 0x32,
 	.cal_l = 0x48,
 	.alpha = 0x0,
@@ -382,6 +388,7 @@ static struct clk_alpha_pll cam_cc_pll6 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &cam_cc_pll6_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "cam_cc_pll6",
@@ -2213,6 +2220,15 @@ static struct clk_regmap *cam_cc_pikachu_clocks[] = {
 	[CAM_CC_XO_CLK_SRC] = &cam_cc_xo_clk_src.clkr,
 };
 
+/*
+ *	cam_cc_gdsc_clk
+ *	cam_cc_sleep_clk
+ */
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0x14058, .mask = BIT(0) },
+	{ .offset = 0x14074, .mask = BIT(0) },
+};
+
 static struct gdsc *cam_cc_pikachu_gdscs[] = {
 	[CAM_CC_BPS_GDSC] = &cam_cc_bps_gdsc,
 	[CAM_CC_IFE_0_GDSC] = &cam_cc_ife_0_gdsc,
@@ -2249,6 +2265,8 @@ static struct qcom_cc_desc cam_cc_pikachu_desc = {
 	.num_resets = ARRAY_SIZE(cam_cc_pikachu_resets),
 	.clk_regulators = cam_cc_pikachu_regulators,
 	.num_clk_regulators = ARRAY_SIZE(cam_cc_pikachu_regulators),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 	.gdscs = cam_cc_pikachu_gdscs,
 	.num_gdscs = ARRAY_SIZE(cam_cc_pikachu_gdscs),
 };
@@ -2268,13 +2286,9 @@ static int cam_cc_pikachu_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	ret = qcom_cc_runtime_init(pdev, &cam_cc_pikachu_desc);
+	ret = register_qcom_clks_pm(pdev, true, &cam_cc_pikachu_desc);
 	if (ret)
-		return ret;
-
-	ret = pm_runtime_resume_and_get(&pdev->dev);
-	if (ret)
-		return ret;
+		dev_err_probe(&pdev->dev, ret, "Failed to register for pm ops\n");
 
 	clk_taycan_eko_t_pll_configure(&cam_cc_pll0, regmap, &cam_cc_pll0_config);
 	clk_taycan_eko_t_pll_configure(&cam_cc_pll1, regmap, &cam_cc_pll1_config);
@@ -2283,13 +2297,8 @@ static int cam_cc_pikachu_probe(struct platform_device *pdev)
 	clk_taycan_eko_t_pll_configure(&cam_cc_pll5, regmap, &cam_cc_pll5_config);
 	clk_taycan_eko_t_pll_configure(&cam_cc_pll6, regmap, &cam_cc_pll6_config);
 
-	/*
-	 * Keep clocks always enabled:
-	 *	cam_cc_gdsc_clk
-	 *	cam_cc_sleep_clk
-	 */
-	regmap_update_bits(regmap, 0x14058, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x14074, BIT(0), BIT(0));
+	/* Enabling always ON clocks */
+	clk_restore_critical_clocks(&pdev->dev);
 
 	ret = qcom_cc_really_probe(&pdev->dev, &cam_cc_pikachu_desc, regmap);
 	if (ret) {
@@ -2310,19 +2319,12 @@ static void cam_cc_pikachu_sync_state(struct device *dev)
 	qcom_cc_sync_state(dev, &cam_cc_pikachu_desc);
 }
 
-static const struct dev_pm_ops cam_cc_pikachu_pm_ops = {
-	SET_RUNTIME_PM_OPS(qcom_cc_runtime_suspend, qcom_cc_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
-};
-
 static struct platform_driver cam_cc_pikachu_driver = {
 	.probe = cam_cc_pikachu_probe,
 	.driver = {
 		.name = "camcc-pikachu",
 		.of_match_table = cam_cc_pikachu_match_table,
 		.sync_state = cam_cc_pikachu_sync_state,
-		.pm = &cam_cc_pikachu_pm_ops,
 	},
 };
 

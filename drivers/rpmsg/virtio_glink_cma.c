@@ -24,7 +24,9 @@
 #include <linux/workqueue.h>
 #include <linux/errno.h>
 #include "qcom_glink_cma.h"
+#if IS_ENABLED(CONFIG_RPMSG_GLINK_DS_QB)
 #include <linux/power_mode.h>
+#endif
 
 #define VIRTIO_GLINK_DEBUG_LOG(ctxt, fmt, ...)	\
 	ipc_log_string(ctxt, "%s: %d" fmt "\n", __func__, __LINE__, ##__VA_ARGS__)

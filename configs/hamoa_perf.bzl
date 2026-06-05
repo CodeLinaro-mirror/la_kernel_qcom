@@ -194,6 +194,7 @@ hamoa_perf_config = {
     "CONFIG_QCOM_SI_CORE_MEM_FFA": "y",
     "CONFIG_QCOM_SI_CORE_WQ": "y",
     "CONFIG_QCOM_SMEM": "m",
+    "CONFIG_QCOM_SMMU_V2_V3_DISPATCHER": "m",
     "CONFIG_QCOM_SMP2P": "m",
     "CONFIG_QCOM_SMP2P_SLEEPSTATE": "m",
     "CONFIG_QCOM_SOCINFO": "m",
