@@ -1362,6 +1362,7 @@ struct msm_pcie_dev_t {
 	void __iomem *pcie_sm;
 	/* pcie state manager instructions sequence info */
 	struct msm_pcie_sm_info *sm_info;
+	bool cesta_initialized;
 	/* Need to configure the l1ss TO when using cesta */
 	u32 l1ss_timeout_us;
 	u32 l1ss_sleep_disable;
@@ -1514,6 +1515,8 @@ static void msm_pcie_config_link_pm(struct msm_pcie_dev_t *dev, bool enable);
 static int msm_pcie_set_link_width(struct msm_pcie_dev_t *pcie_dev,
 				   u16 target_link_width);
 
+static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
+			       struct device_node *of_node);
 static void msm_pcie_disable(struct msm_pcie_dev_t *dev);
 static int msm_pcie_enable(struct msm_pcie_dev_t *dev);
 static int msm_pcie_config_tc_bdf_sid_map(struct msm_pcie_dev_t *dev);
@@ -6977,6 +6980,13 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 		goto out;
 	}
 
+	/* Initialize CESTA state machine */
+	if (dev->pcie_sm) {
+		ret = msm_pcie_cesta_init(dev, dev->pdev->dev.of_node);
+		if (ret)
+			goto out;
+	}
+
 	/* enable power */
 	ret = msm_pcie_vreg_init(dev);
 	if (ret)
@@ -9616,31 +9626,39 @@ static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
 {
 	int ret = 0;
 
-	ret = of_property_read_u32(of_node, "qcom,pcie-clkreq-pin",
-			&pcie_dev->clkreq_gpio);
-	if (ret) {
-		PCIE_ERR(pcie_dev, "Couldn't find clkreq gpio %d\n",
-								ret);
-		return ret;
+	if (!pcie_dev->cesta_initialized) {
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: CESTA is supported\n", pcie_dev->rc_idx);
+		ret = of_property_read_u32(of_node, "qcom,pcie-clkreq-pin",
+				&pcie_dev->clkreq_gpio);
+		if (ret) {
+			PCIE_ERR(pcie_dev, "Couldn't find clkreq gpio %d\n", ret);
+			return ret;
+		}
+
+		ret = msm_pcie_cesta_get_sm_seq(pcie_dev);
+		if (ret)
+			return ret;
+
+		pcie_dev->crm_dev = crm_get_device("pcie_crm");
+
+		if (IS_ERR(pcie_dev->crm_dev)) {
+			ret = PTR_ERR(pcie_dev->crm_dev);
+			pcie_dev->crm_dev = NULL;
+			PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev: %d\n",
+					pcie_dev->rc_idx, ret);
+			return ret;
+		}
+
+		msm_pcie_cesta_map_save(pcie_dev->bw_gen_max);
+		INIT_WORK(&pcie_dev->drv_connect_work, msm_pcie_drv_cesta_connect_worker);
+		pcie_dev->cesta_initialized = true;
 	}
 
-	ret = msm_pcie_cesta_get_sm_seq(pcie_dev);
-	if (ret)
-		return ret;
-
+	/*
+	 * PCIE_SM sequence registers are reset by hibernation; reload on every
+	 * enable to restore CESTA hardware state.
+	 */
 	msm_pcie_cesta_load_sm_seq(pcie_dev);
-
-	pcie_dev->crm_dev = crm_get_device("pcie_crm");
-
-	if (IS_ERR(pcie_dev->crm_dev)) {
-		PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev\n",
-				pcie_dev->rc_idx);
-		return ret;
-	}
-
-	msm_pcie_cesta_map_save(pcie_dev->bw_gen_max);
-	INIT_WORK(&pcie_dev->drv_connect_work,
-			msm_pcie_drv_cesta_connect_worker);
 
 	return 0;
 }
@@ -10080,15 +10098,6 @@ static int msm_pcie_probe(struct platform_device *pdev)
 
 	if (pcie_dev->rumi)
 		pcie_dev->rumi_init = msm_pcie_rumi_init;
-
-	if (pcie_dev->pcie_sm) {
-		PCIE_DBG(pcie_dev, "pcie CESTA is supported\n");
-
-		ret = msm_pcie_cesta_init(pcie_dev, of_node);
-		if (ret)
-			goto decrease_rc_num;
-
-	}
 
 	/* SW DRV case */
 	if (!pcie_dev->pcie_sm && pcie_dev->drv_supported) {
