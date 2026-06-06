@@ -6977,6 +6977,10 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 		goto out;
 	}
 
+	/* Reload PCIe SM sequence to restore hardware state */
+	if (dev->pcie_sm)
+		msm_pcie_cesta_load_sm_seq(dev);
+
 	/* enable power */
 	ret = msm_pcie_vreg_init(dev);
 	if (ret)
@@ -9619,8 +9623,7 @@ static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
 	ret = of_property_read_u32(of_node, "qcom,pcie-clkreq-pin",
 			&pcie_dev->clkreq_gpio);
 	if (ret) {
-		PCIE_ERR(pcie_dev, "Couldn't find clkreq gpio %d\n",
-								ret);
+		PCIE_ERR(pcie_dev, "Couldn't find clkreq gpio %d\n", ret);
 		return ret;
 	}
 
@@ -10089,7 +10092,6 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		ret = msm_pcie_cesta_init(pcie_dev, of_node);
 		if (ret)
 			goto decrease_rc_num;
-
 	}
 
 	/* SW DRV case */
