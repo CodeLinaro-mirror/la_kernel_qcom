@@ -186,6 +186,8 @@ static int dbq_wait_free_ibdesc(struct qcom_hgsl *hgsl,
 static int hgsl_wait_timestamp(struct qcom_hgsl *hgsl,
 		struct hgsl_context *ctxt, struct hgsl_wait_ts_info *param);
 
+static void hgsl_work_period_update(struct qcom_hgsl *device,
+						struct gpu_work_period *period, u64 active);
 static struct gpu_work_period *hgsl_get_work_period(struct qcom_hgsl *device, uid_t uid);
 static void hgsl_put_work_period(struct gpu_work_period *wp);
 static void hgsl_work_period_account_submit(struct hgsl_priv *priv);
@@ -194,8 +196,6 @@ static int hgsl_ctxt_init_profiling(struct hgsl_hab_channel_t *hab_channel,
 				    struct hgsl_context *ctxt);
 static void hgsl_ctxt_destroy_profiling(struct hgsl_hab_channel_t *hab_channel,
 					struct hgsl_context *ctxt);
-static void hgsl_work_period_update(struct qcom_hgsl *device,
-				    struct gpu_work_period *period, u64 active);
 
 /* Forward declarations for helpers used before their definitions */
 static bool hgsl_prof_layout(const struct hgsl_context *ctxt,
@@ -560,18 +560,6 @@ static void hgsl_prof_enqueue(struct hgsl_context *ctxt,
 		*has_head = false;
 	if (has_tail)
 		*has_tail = false;
-
-	/* Profiling/work-period feature is runtime gated via sysfs */
-	if (!ctxt || !ctxt->priv || !ctxt->priv->dev) {
-		LOGE("[%s] invalid ctxt or device", __func__);
-		return;
-	}
-
-	if (!READ_ONCE(ctxt->priv->dev->work_period_enabled)) {
-		LOGE("[%s] work_period disabled: skip profiling enqueue (ctxt=%u, pid=%d)",
-		     __func__, ctxt->context_id, ctxt->pid);
-		return;
-	}
 
 	if (!ctxt || !out_head || !out_tail || !ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
 	    !ctxt->cmdbatch_kernel_profiling.buf_gpuaddr ||
@@ -2160,16 +2148,8 @@ static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 static void hgsl_prof_drain_ctxt(struct qcom_hgsl *device,
 				 struct hgsl_context *ctxt)
 {
-	if (!device || !ctxt || !ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
-	    !ctxt->cmdbatch_kernel_profiling.buf_size) {
-		LOGE("[%s] invalid profiling state: dev=%p ctxt=%p buf_vaddr=%p size=%zu",
-		     __func__, device, ctxt,
-		     ctxt ? ctxt->cmdbatch_kernel_profiling.buf_vaddr : NULL,
-		     ctxt ? ctxt->cmdbatch_kernel_profiling.buf_size : 0);
-		return;
-	}
-
-	if (!READ_ONCE(device->work_period_enabled))
+	if (!ctxt || !ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
+	    !ctxt->cmdbatch_kernel_profiling.buf_size)
 		return;
 
 	/* Precompute layout once per drain */
@@ -3178,9 +3158,7 @@ static void hgsl_prof_retire_timer_fn(struct timer_list *t)
 {
 	struct qcom_hgsl *device = from_timer(device, t, prof_retire_timer);
 
-	if (READ_ONCE(device->work_period_enabled))
-		queue_work(device->lockless_workqueue, &device->prof_retire_ws);
-
+	queue_work(device->lockless_workqueue, &device->prof_retire_ws);
 	mod_timer(&device->prof_retire_timer, jiffies + msecs_to_jiffies(100));
 }
 
@@ -4799,15 +4777,6 @@ static void _log_gpu_work_events(struct work_struct *work)
 	u64 active_time;
 	bool restart = false;
 
-	/* Fast-path: if work_period is disabled, skip all list processing. */
-	if (!READ_ONCE(device->work_period_enabled)) {
-		spin_lock(&device->work_period_lock);
-		memset(&device->gpu_period, 0, sizeof(device->gpu_period));
-		__clear_bit(HGSL_WORK_PERIOD, &device->flags);
-		spin_unlock(&device->work_period_lock);
-		return;
-	}
-
 	spin_lock(&device->work_period_lock);
 	device->gpu_period.end = ktime_get_ns();
 
@@ -4831,11 +4800,11 @@ static void _log_gpu_work_events(struct work_struct *work)
 		 * to provide information to the Android OS about how
 		 * apps are using the GPU.
 		 */
-		if (active_time)
+		if (active_time && READ_ONCE(device->work_period_enabled))
 			trace_gpu_work_period(HGSL_GPU_ID, wp->uid,
-					      device->gpu_period.begin,
-					      device->gpu_period.end,
-					      active_time);
+					device->gpu_period.begin,
+					device->gpu_period.end,
+					active_time);
 		/* Reset gpu work period stats */
 		wp->active = 0;
 		wp->cmds = 0;
@@ -4844,8 +4813,7 @@ static void _log_gpu_work_events(struct work_struct *work)
 		/* make sure other CPUs see the update */
 		smp_wmb();
 
-		if (!atomic_read(&wp->active_cmds) ||
-		    !READ_ONCE(device->work_period_enabled)) {
+		if (!atomic_read(&wp->active_cmds)) {
 			__clear_bit(HGSL_WORK_PERIOD, &wp->flags);
 			queue_work(device->lockless_workqueue, &wp->defer_ws);
 		} else {
@@ -4854,7 +4822,7 @@ static void _log_gpu_work_events(struct work_struct *work)
 	}
 	spin_unlock(&device->wp_list_lock);
 
-	if (restart && READ_ONCE(device->work_period_enabled)) {
+	if (restart) {
 		/*
 		 * GPU work period duration (end time - begin time) must be at
 		 * most 1 second. The event for a period must be emitted within
@@ -4877,21 +4845,8 @@ static int hgsl_suspend(struct device *dev)
 	struct qcom_hgsl *hgsl = platform_get_drvdata(pdev);
 
 	LOGD("+");
-
-	/* Enter LPM: stop periodic timers and prevent worker activity */
-	del_timer_sync(&hgsl->work_period_timer);
-	del_timer_sync(&hgsl->prof_retire_timer);
-
 	if (hgsl->wq)
 		flush_workqueue(hgsl->wq);
-	if (hgsl->lockless_workqueue)
-		flush_workqueue(hgsl->lockless_workqueue);
-
-	/* Reset open work-period window so it won't span across suspend */
-	spin_lock(&hgsl->work_period_lock);
-	__clear_bit(HGSL_WORK_PERIOD, &hgsl->flags);
-	memset(&hgsl->gpu_period, 0, sizeof(hgsl->gpu_period));
-	spin_unlock(&hgsl->work_period_lock);
 
 	/* TODO: shall we disable the interrupt from GMU? and enable them after resume? */
 	return 0;
@@ -4905,8 +4860,6 @@ static int hgsl_resume(struct device *dev)
 	int tcsr_idx = 0, ret = 0, rval = 0;
 
 	LOGD("+");
-
-	/* Exit LPM */
 	for (tcsr_idx = 0; tcsr_idx < HGSL_TCSR_NUM; tcsr_idx++) {
 		tcsr = hgsl->tcsr[tcsr_idx][HGSL_TCSR_ROLE_RECEIVER];
 		if (tcsr != NULL) {
@@ -4925,9 +4878,6 @@ static int hgsl_resume(struct device *dev)
 	 */
 	if (hgsl->wq != NULL)
 		queue_work(hgsl->wq, &hgsl->ts_retire_work);
-
-	/* Restart periodic profiling retire timer after resume */
-	mod_timer(&hgsl->prof_retire_timer, jiffies + msecs_to_jiffies(100));
 
 	/* TODO: should we notify for second device here? */
 	ret = hgsl_hyp_notify_pm_state(&hgsl->global_hyp, GSL_RPC_PM_RESUME,
@@ -5036,25 +4986,27 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 		hgsl_dev->lockless_workqueue = alloc_workqueue("hgsl-lockless-work",
 		WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
 		if (!hgsl_dev->lockless_workqueue) {
-			LOGE("hgsl: Failed to allocate lockless workqueue, disabling work_period");
-			/*
-			 * Do not tear down the global hypervisor channel or fail probe.
-			 * Disable work_period so submission and core HGSL paths are unaffected.
-			 */
-			hgsl_dev->work_period_enabled = false;
+			LOGE("hgsl: Failed to allocate lockless workqueue");
+			ret = -ENOMEM;
+			goto exit_hyp;
 		}
 	}
-	if (hgsl_dev->lockless_workqueue) {
-		timer_setup(&hgsl_dev->work_period_timer, hgsl_work_period_timer, 0);
-		spin_lock_init(&hgsl_dev->work_period_lock);
-		INIT_WORK(&hgsl_dev->work_period_ws, _log_gpu_work_events);
+	timer_setup(&hgsl_dev->work_period_timer, hgsl_work_period_timer, 0);
+	spin_lock_init(&hgsl_dev->work_period_lock);
+	INIT_WORK(&hgsl_dev->work_period_ws, _log_gpu_work_events);
 
-		INIT_WORK(&hgsl_dev->prof_retire_ws, hgsl_prof_retire_worker);
-		timer_setup(&hgsl_dev->prof_retire_timer, hgsl_prof_retire_timer_fn, 0);
-		mod_timer(&hgsl_dev->prof_retire_timer, jiffies + msecs_to_jiffies(100));
-	}
+	INIT_WORK(&hgsl_dev->prof_retire_ws, hgsl_prof_retire_worker);
+	timer_setup(&hgsl_dev->prof_retire_timer, hgsl_prof_retire_timer_fn, 0);
+	mod_timer(&hgsl_dev->prof_retire_timer, jiffies + msecs_to_jiffies(100));
 
 	return 0;
+
+exit_hyp:
+	if (hgsl_dev->global_hyp_inited)
+		hgsl_hyp_close(&hgsl_dev->global_hyp);
+	idr_destroy(&hgsl_dev->isync_timeline_idr);
+	if (hgsl_dev->release_wq)
+		destroy_workqueue(hgsl_dev->release_wq);
 
 exit_dereg:
 	qcom_hgsl_deregister(pdev);
@@ -5101,41 +5053,23 @@ static int qcom_hgsl_remove(struct platform_device *pdev)
 		destroy_workqueue(hgsl->wq);
 		hgsl->wq = NULL;
 	}
-	/*
-	 * Stop periodic timers and stop scheduling new work. Do NOT destroy
-	 * lockless_workqueue until after we have drained any queued defer_ws,
-	 * otherwise queued work items could leak refs.
-	 */
+	/* Stop periodic timers and destroy lockless workqueue */
 	del_timer_sync(&hgsl->work_period_timer);
 	del_timer_sync(&hgsl->prof_retire_timer);
-
-	if (hgsl->lockless_workqueue)
-		flush_workqueue(hgsl->lockless_workqueue);
-
-	/*
-	 * Drop the device/list lifetime ref for each gpu_work_period.
-	 * Even after flushing the workqueue, _log_gpu_work_events() can queue
-	 * wp->defer_ws while holding wp_list_lock but after we release it.
-	 * To avoid freeing wp while defer_ws might still run, free via RCU
-	 * after removing from the list and dropping the final ref.
-	 */
-	spin_lock(&hgsl->wp_list_lock);
-	list_for_each_entry_safe(wp, tmp, &hgsl->wp_list, list) {
-		list_del_init(&wp->list);
-		spin_unlock(&hgsl->wp_list_lock);
-
-		kref_put(&wp->refcount, hgsl_work_period_release);
-
-		spin_lock(&hgsl->wp_list_lock);
-	}
-	spin_unlock(&hgsl->wp_list_lock);
-
-	/* Final drain then destroy the lockless workqueue */
 	if (hgsl->lockless_workqueue) {
 		flush_workqueue(hgsl->lockless_workqueue);
 		destroy_workqueue(hgsl->lockless_workqueue);
 		hgsl->lockless_workqueue = NULL;
 	}
+
+	/* After timers/workqueues are stopped, safely drop all gpu_work_period objects */
+	spin_lock(&hgsl->wp_list_lock);
+	list_for_each_entry_safe(wp, tmp, &hgsl->wp_list, list) {
+		list_del_init(&wp->list);
+		/* Drop the device/list lifetime ref */
+		kref_put(&wp->refcount, hgsl_work_period_release);
+	}
+	spin_unlock(&hgsl->wp_list_lock);
 
 	memset(hgsl->tcsr, 0, sizeof(hgsl->tcsr));
 
