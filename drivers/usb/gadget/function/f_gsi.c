@@ -1366,8 +1366,6 @@ gsi_ctrl_dev_read(struct file *fp, char __user *buf, size_t count, loff_t *pos)
 	unsigned long flags;
 	int ret = 0;
 
-	pr_debug("%s: Enter %zu\n", __func__, count);
-
 	mutex_lock(&inst_cur->gsi_lock);
 	if (unlikely(!inst_cur->inst_exist)) {
 		mutex_unlock(&inst_cur->gsi_lock);
@@ -1383,6 +1381,8 @@ gsi_ctrl_dev_read(struct file *fp, char __user *buf, size_t count, loff_t *pos)
 		log_event_err("%s: gsi ctrl port %pK", __func__, c_port);
 		return -ENODEV;
 	}
+
+	log_event_dbg("%s: Enter %zu", __func__, count);
 
 	if (count > GSI_MAX_CTRL_PKT_SIZE) {
 		log_event_err("Large buff size %zu, should be %d",
@@ -1456,8 +1456,6 @@ static ssize_t gsi_ctrl_dev_write(struct file *fp, const char __user *buf,
 	if (prot_id == IPA_USB_DIAG)
 		return -EINVAL;
 
-	pr_debug("Enter %zu\n", count);
-
 	mutex_lock(&inst_cur->gsi_lock);
 	if (unlikely(!inst_cur->inst_exist)) {
 		mutex_unlock(&inst_cur->gsi_lock);
@@ -1470,6 +1468,8 @@ static ssize_t gsi_ctrl_dev_write(struct file *fp, const char __user *buf,
 	gsi = inst_cur->opts->gsi;
 	c_port = &gsi->c_port;
 	f = &gsi->function;
+
+	log_event_dbg("%s: Enter %zu", __func__, count);
 
 	if (!count || count > GSI_MAX_CTRL_PKT_SIZE) {
 		log_event_err("error: ctrl pkt length %zu", count);
@@ -1512,7 +1512,7 @@ static ssize_t gsi_ctrl_dev_write(struct file *fp, const char __user *buf,
 	if (!gsi_ctrl_send_notification(gsi))
 		c_port->modem_to_host++;
 
-	log_event_dbg("Exit %zu", count);
+	log_event_dbg("%s: Exit %zu", __func__, count);
 
 	return ret ? ret : count;
 }
