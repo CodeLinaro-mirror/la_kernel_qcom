@@ -239,9 +239,6 @@ struct qcom_hgsl {
 	atomic64_t total_mem_size;
 	struct hgsl_cache_flags cache_flags;
 
-	/* Runtime toggle for GPU work period accounting + tracepoints */
-	bool work_period_enabled;
-
 	/** @work_period_timer: Timer to capture application GPU work stats */
 	struct timer_list work_period_timer;
 	/** @work_period_lock: Lock to protect application GPU work periods */
