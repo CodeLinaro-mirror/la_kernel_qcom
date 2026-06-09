@@ -195,23 +195,24 @@ int ufshcd_qti_hba_init_crypto_capabilities(struct ufs_hba *hba)
 	max_slots = hba->crypto_capabilities.config_count + 1;
 
 	if (IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)) {
-		if (max_slots > crypto_qti_ice_get_num_fde_slots()) {
+		unsigned int fde_slots = crypto_qti_ice_get_num_fde_slots();
+
+		if (max_slots > fde_slots) {
 			/*
 			 * Reduce the total number of slots available to FBE
 			 * (by the number reserved for the FDE)
 			 * Check at least one slot for backward compatibility,
 			 * otherwise return failure
 			 */
-			if (max_slots - crypto_qti_ice_get_num_fde_slots() < 1) {
+			if (max_slots - fde_slots < 1) {
 				pr_err("%s: Too many slots allocated to fde\n", __func__);
 				err = -EINVAL;
 				goto out;
 			} else {
-				max_slots = max_slots - crypto_qti_ice_get_num_fde_slots();
+				max_slots -= fde_slots;
 			}
 		}
 	}
-
 	/* The actual number of configurations supported is (CFGC+1) */
 	err = devm_blk_crypto_profile_init(hba->dev, &hba->crypto_profile, max_slots);
 	if (err)

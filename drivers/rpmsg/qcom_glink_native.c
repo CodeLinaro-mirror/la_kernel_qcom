@@ -2050,6 +2050,7 @@ static void qcom_glink_destroy_ept(struct rpmsg_endpoint *ept)
 {
 	struct glink_channel *channel = to_glink_channel(ept);
 	struct qcom_glink *glink = channel->glink;
+	struct rpmsg_channel_info chinfo;
 	unsigned long flags;
 
 	spin_lock_irqsave(&channel->recv_lock, flags);
@@ -2059,6 +2060,15 @@ static void qcom_glink_destroy_ept(struct rpmsg_endpoint *ept)
 	}
 	channel->ept.cb = NULL;
 	spin_unlock_irqrestore(&channel->recv_lock, flags);
+	/* Decouple the potential rpdev from the channel */
+	if (channel->rpdev) {
+		strscpy_pad(chinfo.name, channel->name, sizeof(chinfo.name));
+		chinfo.src = RPMSG_ADDR_ANY;
+		chinfo.dst = RPMSG_ADDR_ANY;
+
+		rpmsg_unregister_device(glink->dev, &chinfo);
+	}
+	channel->rpdev = NULL;
 
 	qcom_glink_send_close_req(glink, channel);
 }
@@ -2538,8 +2548,11 @@ static void qcom_glink_rx_close_ack(struct qcom_glink *glink, unsigned int lcid)
 		spin_lock_irqsave(&glink->idr_lock, flags);
 		idr_remove(&glink->lcids, channel->lcid);
 		channel->lcid = 0;
+		idr_remove(&glink->rcids, channel->rcid);
+		channel->rcid = 0;
 		spin_unlock_irqrestore(&glink->idr_lock, flags);
 		CH_INFO(channel, "Channel fully closed, lcid cleared\n");
+		kref_put(&channel->refcount, qcom_glink_channel_release);
 	} else {
 		CH_INFO(channel, "Channel not fully closed yet, keeping lcid=%d\n", channel->lcid);
 	}
@@ -2547,8 +2560,6 @@ static void qcom_glink_rx_close_ack(struct qcom_glink *glink, unsigned int lcid)
 	/* Reinit any variables that are important to endpoint creation */
 	reinit_completion(&channel->open_ack);
 	channel->channel_ready = false;
-
-	kref_put(&channel->refcount, qcom_glink_channel_release);
 }
 
 static void qcom_glink_work(struct work_struct *work)
