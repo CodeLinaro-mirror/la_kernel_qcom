@@ -135,6 +135,7 @@ def define_autogvm():
         "kernel/trace/qcom_ipc_logging.ko",
         "net/core/failover.ko",
         "net/mac80211/mac80211.ko",
+        "net/netfilter/xt_HL.ko",
         "net/qrtr/qrtr.ko",
         "net/qrtr/qrtr-mhi.ko",
         "net/sched/cls_flower.ko",
