@@ -19,3 +19,6 @@ debug-regulator.ko
 proxy-consumer.ko
 qti-fixed-regulator.ko
 rpmh-regulator.ko
+pkvm-geni.ko
+pkvm-smc-filter.ko
+qcom_smmu_v2_v3_dispatcher.ko
