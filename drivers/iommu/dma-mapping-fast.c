@@ -118,6 +118,17 @@ static struct dma_fast_smmu_mapping *fast_smmu_lookup_mapping(struct iommu_domai
 	return fast;
 }
 
+/*
+ * Fast-path lookup: domain->fault_data caches the mapping pointer at init
+ * time, avoiding the RB-tree traversal and mappings_lock acquisition on
+ * every DMA map/sync call.
+ */
+static inline struct dma_fast_smmu_mapping *
+fast_smmu_domain_get_mapping(struct iommu_domain *domain)
+{
+	return (struct dma_fast_smmu_mapping *)READ_ONCE(domain->fault_data);
+}
+
 static struct dma_fast_smmu_mapping *fast_smmu_remove_mapping(struct iommu_domain *domain)
 {
 	struct dma_fast_smmu_mapping *fast;
@@ -158,10 +169,17 @@ static bool is_dma_coherent(struct device *dev, unsigned long attrs)
 static struct dma_fast_smmu_mapping *dev_get_mapping(struct device *dev)
 {
 	struct iommu_domain *domain;
+	struct dma_fast_smmu_mapping *fast;
 
 	domain = iommu_get_domain_for_dev(dev);
 	if (!domain)
 		return ERR_PTR(-EINVAL);
+
+	/* Fast path: use cached pointer stored in domain->fault_data */
+	fast = fast_smmu_domain_get_mapping(domain);
+	if (likely(fast))
+		return fast;
+
 	return fast_smmu_lookup_mapping(domain);
 }
 
@@ -1050,6 +1068,9 @@ void fast_smmu_put_dma_cookie(struct iommu_domain *domain)
 	if (!fast)
 		return;
 
+	/* Clear cached pointer before freeing */
+	WRITE_ONCE(domain->fault_data, NULL);
+
 	if (fast->iovad) {
 		put_iova_domain(fast->iovad);
 		kfree(fast->iovad);
@@ -1104,6 +1125,8 @@ int fast_smmu_init_mapping(struct device *dev, struct iommu_domain *domain,
 	fast->domain = domain;
 	fast->dev = dev;
 	fast_smmu_add_mapping(fast);
+	/* Cache in domain->fault_data for lockless fast-path lookup */
+	WRITE_ONCE(domain->fault_data, fast);
 
 	fast->pgtbl_ops = pgtable_ops;
 
