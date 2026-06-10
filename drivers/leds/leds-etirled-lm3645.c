@@ -63,6 +63,11 @@
 #define D1_ENABLED "D1_Enabled"
 #define D1_DISABLED "D1_Disabled"
 
+#define D1 "d1"
+#define D2 "d2"
+#define D3 "d3"
+#define D4 "d4"
+
 struct lm3645_etirled {
 	struct mutex m_lock;
 	struct i2c_client *client;
@@ -258,7 +263,7 @@ static ssize_t etirled_toggle_store(struct device *dev,
 	else if (!strncasecmp(buf, D3, sizeof(D3)))
 		chip->d3_toggle = !chip->d3_toggle;
 		/* D3 not connected on EVB2 */
-	else if (!strncasecmp(buf, D4, sizeof(D4))
+	else if (!strncasecmp(buf, D4, sizeof(D4)))
 		chip->d4_toggle = !chip->d4_toggle;
 		/* D4 not connected on EVB2 */
 	else
