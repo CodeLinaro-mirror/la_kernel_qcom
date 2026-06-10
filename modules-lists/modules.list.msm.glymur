@@ -54,6 +54,7 @@ msm_gpi.ko
 i2c-msm-geni.ko
 msm_geni_serial.ko
 spi-msm-geni.ko
+llcc-qcom.ko
 arm_ffa.ko
 arm_ffa_transport.ko
 gpucc-glymur.ko
