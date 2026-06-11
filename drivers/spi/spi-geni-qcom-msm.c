@@ -1094,6 +1094,17 @@ static irqreturn_t geni_spi_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int spi_geni_target_abort(struct spi_controller *spi)
+{
+	if (!spi->cur_msg)
+		return 0;
+
+	handle_se_timeout(spi);
+	spi_finalize_current_transfer(spi);
+
+	return 0;
+}
+
 static int geni_spi_set_level(struct device *dev, unsigned long clk_freq)
 {
 	struct spi_controller *spi = dev_get_drvdata(dev);
@@ -1285,6 +1296,9 @@ static int spi_geni_probe(struct platform_device *pdev)
 	init_completion(&mas->tx_reset_done);
 	init_completion(&mas->rx_reset_done);
 	spin_lock_init(&mas->lock);
+
+	if (spi->target)
+		spi->target_abort = spi_geni_target_abort;
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 250);
