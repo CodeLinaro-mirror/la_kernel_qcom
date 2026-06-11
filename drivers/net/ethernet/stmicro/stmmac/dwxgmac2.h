@@ -421,6 +421,9 @@ static inline u32 xgmac_mtl_chanx_base_addr(const struct dwxgmac_addrs *addrs,
 #define XGMAC_SWR			BIT(0)
 #define XGMAC_DSCB		BIT(16)
 #define XGMAC_HMIC		BIT(17)
+#define XGMAC_DMA_MODE_INTM_MASK	GENMASK(13, 12)
+#define XGMAC_DMA_MODE_INTM_SHIFT	12
+#define XGMAC_DMA_MODE_INTM_MODE1	0x1
 #define XGMAC_DMA_SYSBUS_MODE		0x00003004
 #define XGMAC_WR_OSR_LMT		GENMASK(29, 24)
 #define XGMAC_WR_OSR_LMT_SHIFT		24
