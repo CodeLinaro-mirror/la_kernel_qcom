@@ -1355,6 +1355,9 @@ static int __maybe_unused spi_geni_suspend(struct device *dev)
 	struct spi_controller *spi = dev_get_drvdata(dev);
 	int ret;
 
+	if (spi->target)
+		spi_geni_target_abort(spi);
+
 	ret = spi_controller_suspend(spi);
 	if (ret)
 		return ret;
