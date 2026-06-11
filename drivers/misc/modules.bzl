@@ -26,7 +26,7 @@ def register_modules(registry):
     )
 
     registry.register(
-        name = "drivers/misc/fastrpc",
+        name = "drivers/misc/frpc-adsprpc",
         out = "frpc-adsprpc.ko",
         config = "CONFIG_QTI_FASTRPC",
         srcs = [

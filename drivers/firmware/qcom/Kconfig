@@ -93,6 +93,15 @@ config QCOM_SCM_SMCI
 	  to QTEE and TAs. The SCM_SMCI implements the necessary marshaling of
 	  messages with QTEE.
 
+config PKVM_SECURE_MEMORY_MANAGER
+	tristate "PKVM SecureMemory Manager"
+	help
+	  This driver implements secure memory management for protected KVM
+	  (pKVM) on Qualcomm platforms. It queries TrustZone for secure memory
+	  region descriptors and loads an EL2 module to unmap those secure
+	  regions from the Host stage-2 page tables, preventing host access to
+	  hypervisor-protected memory.
+
 source "$(KCONFIG_EXT_PREFIX)drivers/firmware/qcom/si_core/Kconfig"
 
 endmenu

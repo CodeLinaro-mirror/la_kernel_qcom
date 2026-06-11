@@ -3,6 +3,7 @@
  * Memory allocator for buffers shared with the TrustZone.
  *
  * Copyright (C) 2023-2024 Linaro Ltd.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "qcom_tzmem: [%s][%d]: " fmt, __func__, __LINE__
@@ -45,6 +46,7 @@ struct qcom_tzmem_pool {
 struct qcom_tzmem_chunk {
 	size_t size;
 	struct qcom_tzmem_pool *owner;
+	struct qcom_tzmem_area *area;
 };
 
 static struct device *qcom_tzmem_dev;
@@ -84,6 +86,33 @@ static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
 
 #define QCOM_SHM_BRIDGE_NUM_VM_SHIFT 9
 #define QCOM_SHM_BRIDGE_SELF_OWNER_BIT 1
+#define QCOM_SHM_BRIDGE_PERM_BITS 3
+#define QCOM_SHM_BRIDGE_VM_BITS 16
+#define QCOM_SHM_BRIDGE_VM_MASK 0xFFFF
+#define QCOM_SHM_BRIDGE_PERM_MASK 0x7
+
+/* ns_vmids */
+#define UPDATE_NS_VMIDS(ns_vmids, id)	\
+			(((u64)(ns_vmids) << QCOM_SHM_BRIDGE_VM_BITS) \
+			| ((u64)(id) & QCOM_SHM_BRIDGE_VM_MASK))
+
+/* ns_perms */
+#define UPDATE_NS_PERMS(ns_perms, perm)	\
+			(((u64)(ns_perms) << QCOM_SHM_BRIDGE_PERM_BITS) \
+			| ((u64)(perm) & QCOM_SHM_BRIDGE_PERM_MASK))
+
+/* pfn_and_ns_perm_flags = paddr | ns_perms */
+#define UPDATE_PFN_AND_NS_PERM_FLAGS(paddr, ns_perms)	\
+			((u64)(paddr) | (ns_perms))
+
+
+/* ipfn_and_s_perm_flags = ipaddr | tz_perm */
+#define UPDATE_IPFN_AND_S_PERM_FLAGS(ipaddr, tz_perm)	\
+			((u64)(ipaddr) | (u64)(tz_perm))
+
+/* size_and_flags when dest_vm is not HYP */
+#define UPDATE_SIZE_AND_FLAGS(size, destnum)	\
+			((size) | (destnum) << QCOM_SHM_BRIDGE_NUM_VM_SHIFT)
 
 struct bridge_list {
 	struct list_head head;
@@ -312,9 +341,12 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_query);
  * qcom_tzmem_shm_bridge_create_with_vmid() - Create a SHM bridge.
  * @paddr: Physical address of the memory to share.
  * @size: Size of the memory to share.
- * @handle: Handle to the SHM bridge.
- * @vmid: Register bridge with vmid passed as argument
+ * @ns_vmid_list: List of secondary VMs
+ * @ns_vm_perm_list: List of individual permissions of secondary VMs
+ * @ns_vmid_num: number of non-secure VMs
+ * @tz_perm: QTEE permissions
  * @owner: Owner of memory.
+ * @handle: Handle to the SHM bridge.
  *
  * On platforms that support SHM bridge, this function creates a SHM bridge
  * for the given memory region with QTEE. The handle returned by this function
@@ -322,11 +354,13 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_query);
  *
  * Return: On success, returns 0; on failure, returns < 0.
  */
-int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 vmid,
-					  enum bridge_owner owner, u64 *handle)
+int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 *ns_vmid_list,
+	u32 *ns_vm_perm_list, u32 ns_vmid_num, u32 tz_perm, enum bridge_owner owner, u64 *handle)
 {
 	u64 pfn_and_ns_perm, ipfn_and_s_perm, size_and_flags;
-	int ret;
+	u64 ns_perms = 0;
+	u64 ns_vmids = 0;
+	int ret, i;
 
 	if (!qcom_tzmem_using_shm_bridge)
 		return 0;
@@ -344,21 +378,25 @@ int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 v
 		goto bridge_exist;
 	}
 
-	pfn_and_ns_perm = paddr;
-	ipfn_and_s_perm = paddr | QCOM_SCM_PERM_RW;
-
-	if (vmid) {
-		size_and_flags = size | (1 << QCOM_SHM_BRIDGE_NUM_VM_SHIFT);
-		pfn_and_ns_perm |= QCOM_SCM_PERM_RW;
-	} else {
-		size_and_flags  = size  | (QCOM_SHM_BRIDGE_SELF_OWNER_BIT << 1)
-					| (QCOM_SCM_PERM_RW << 2);
+	for (i = 0; i < ns_vmid_num; i++) {
+		ns_perms = UPDATE_NS_PERMS(ns_perms, ns_vm_perm_list[i]);
+		ns_vmids = UPDATE_NS_VMIDS(ns_vmids, ns_vmid_list[i]);
 	}
 
-	pr_debug("PA|PERM: %#llx, IPA|PERM: %#llx, size: %#zx, size|flags: %#llx, vmid: %#x\n",
-		 pfn_and_ns_perm, ipfn_and_s_perm, size, size_and_flags, vmid);
+	pfn_and_ns_perm = UPDATE_PFN_AND_NS_PERM_FLAGS(paddr, ns_perms);
+	ipfn_and_s_perm = UPDATE_IPFN_AND_S_PERM_FLAGS(paddr, tz_perm);
+	size_and_flags = UPDATE_SIZE_AND_FLAGS(size, ns_vmid_num);
+
+
+	if (ns_vmid_num == 0) {
+		size_and_flags  |= (QCOM_SHM_BRIDGE_SELF_OWNER_BIT << 1)
+				| (QCOM_SCM_PERM_RW << 2);
+	}
+
+	pr_debug("PA|PERM: %#llx, IPA|PERM: %#llx, size: %#zx, size|flags: %#llx, ns_perms: %#llx, ns_vmids: %#llx\n",
+		pfn_and_ns_perm, ipfn_and_s_perm, size, size_and_flags, ns_perms, ns_vmids);
 	ret = qcom_scm_shm_bridge_create(pfn_and_ns_perm, ipfn_and_s_perm,
-					 size_and_flags, vmid, handle);
+					 size_and_flags, ns_vmids, handle);
 
 	if (ret) {
 		dev_err(qcom_tzmem_dev,
@@ -370,7 +408,7 @@ int qcom_tzmem_shm_bridge_create_with_vmid(phys_addr_t paddr, size_t size, u32 v
 	}
 
 	ret = qcom_tzmem_list_add_locked(paddr, pfn_and_ns_perm, ipfn_and_s_perm,
-					size_and_flags, vmid, owner, *handle);
+					size_and_flags, ns_vmids, owner, *handle);
 bridge_exist:
 	ret = qcom_tzmem_list_inc_refcount_locked(paddr, handle);
 exit:
@@ -392,7 +430,8 @@ exit:
  */
 int qcom_tzmem_shm_bridge_create(phys_addr_t paddr, size_t size, u64 *handle)
 {
-	return qcom_tzmem_shm_bridge_create_with_vmid(paddr, size, 0, SELF, handle);
+	return qcom_tzmem_shm_bridge_create_with_vmid(paddr, size, NULL, NULL, 0,
+			QCOM_SCM_PERM_RW, SELF, handle);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_shm_bridge_create);
 
@@ -490,11 +529,10 @@ int qcom_tzmem_pm_thaw(void)
 
 #endif /* CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE */
 
-static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
-				      size_t size, gfp_t gfp)
+static int qcom_tzmem_area_alloc(struct qcom_tzmem_pool *pool, size_t size, gfp_t gfp,
+				 struct qcom_tzmem_area **out_area)
 {
 	int ret;
-
 	struct qcom_tzmem_area *area __free(kfree) = kzalloc(sizeof(*area),
 							     gfp);
 	if (!area)
@@ -525,30 +563,54 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 	ret = qcom_tzmem_init_area(area, pool->is_cached);
 	if (ret) {
 		pr_err("Failed to init area, ret: %d\n", ret);
-		goto exit_free_mem;
+		if (pool->is_cached) {
+			dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
+			free_pages((unsigned long)area->vaddr, get_order(area->size));
+		} else {
+			dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
+		}
+		return ret;
 	}
+
+	*out_area = no_free_ptr(area);
+	return 0;
+}
+
+static void qcom_tzmem_area_release(struct qcom_tzmem_pool *pool, struct qcom_tzmem_area *area)
+{
+	qcom_tzmem_cleanup_area(area);
+
+	if (pool->is_cached) {
+		dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
+		free_pages((unsigned long)area->vaddr, get_order(area->size));
+	} else {
+		dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
+	}
+	kfree(area);
+}
+
+static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
+				      size_t size, gfp_t gfp)
+{
+	int ret;
+	struct qcom_tzmem_area *area;
+
+	ret = qcom_tzmem_area_alloc(pool, size, gfp, &area);
+	if (ret)
+		return ret;
 
 	ret = gen_pool_add_virt(pool->genpool, (unsigned long)area->vaddr,
 				(phys_addr_t)area->paddr, size, -1);
 	if (ret) {
 		pr_err("Failed to create pool, ret: %d\n", ret);
-		qcom_tzmem_cleanup_area(area);
-		goto exit_free_mem;
+		qcom_tzmem_area_release(pool, area);
+		return ret;
 	}
 
 	scoped_guard(spinlock_irqsave, &pool->lock)
 		list_add_tail(&area->list, &pool->areas);
 
-	area = NULL;
 	return 0;
-
-exit_free_mem:
-	if (pool->is_cached) {
-		dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
-		free_pages((unsigned long)area->vaddr, get_order(area->size));
-	} else
-		dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
-	return ret;
 }
 
 /**
@@ -648,13 +710,7 @@ void qcom_tzmem_pool_free(struct qcom_tzmem_pool *pool)
 
 	list_for_each_entry_safe(area, next, &pool->areas, list) {
 		list_del(&area->list);
-		qcom_tzmem_cleanup_area(area);
-		if (pool->is_cached) {
-			dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
-			free_pages((unsigned long)area->vaddr, get_order(area->size));
-		} else
-			dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
-		kfree(area);
+		qcom_tzmem_area_release(pool, area);
 	}
 
 	gen_pool_destroy(pool->genpool);
@@ -732,8 +788,8 @@ static bool qcom_tzmem_try_grow_pool(struct qcom_tzmem_pool *pool,
  */
 void *qcom_tzmem_alloc(struct qcom_tzmem_pool *pool, size_t size, gfp_t gfp)
 {
+	struct qcom_tzmem_area *area = NULL;
 	unsigned long vaddr;
-	int ret;
 
 	if (!size)
 		return NULL;
@@ -751,16 +807,27 @@ again:
 		if (qcom_tzmem_try_grow_pool(pool, size, gfp))
 			goto again;
 
-		return NULL;
+		/* No runtime allocation for QTVM */
+		if (IS_ENABLED(CONFIG_ARCH_QTI_VM))
+			return NULL;
+
+		if (qcom_tzmem_area_alloc(pool, size, gfp, &area))
+			return NULL;
+
+		pr_info("Pool memory isn't sufficient, trying runtime now for %zu bytes\n", size);
+		vaddr = (unsigned long)area->vaddr;
 	}
 
 	chunk->size = size;
 	chunk->owner = pool;
+	chunk->area = area;
 
 	scoped_guard(spinlock_irqsave, &qcom_tzmem_chunks_lock) {
-		ret = radix_tree_insert(&qcom_tzmem_chunks, vaddr, chunk);
-		if (ret) {
-			gen_pool_free(pool->genpool, vaddr, size);
+		if (radix_tree_insert(&qcom_tzmem_chunks, vaddr, chunk)) {
+			if (chunk->area)
+				qcom_tzmem_area_release(pool, area);
+			else
+				gen_pool_free(pool->genpool, vaddr, size);
 			return NULL;
 		}
 
@@ -791,9 +858,13 @@ void qcom_tzmem_free(void *vaddr)
 		return;
 	}
 
-	scoped_guard(spinlock_irqsave, &chunk->owner->lock)
-		gen_pool_free(chunk->owner->genpool, (unsigned long)vaddr,
-			      chunk->size);
+	if (chunk->area) {
+		qcom_tzmem_area_release(chunk->owner, chunk->area);
+	} else {
+		scoped_guard(spinlock_irqsave, &chunk->owner->lock)
+			gen_pool_free(chunk->owner->genpool, (unsigned long)vaddr,
+				      chunk->size);
+	}
 	kfree(chunk);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_free);
@@ -811,39 +882,36 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_free);
 phys_addr_t qcom_tzmem_to_phys(void *vaddr)
 {
 	struct qcom_tzmem_chunk *chunk;
-	struct radix_tree_iter iter;
-	void __rcu **slot;
-	phys_addr_t ret;
+	phys_addr_t ret = 0;
 
 	guard(spinlock_irqsave)(&qcom_tzmem_chunks_lock);
 
-	radix_tree_for_each_slot(slot, &qcom_tzmem_chunks, &iter, 0) {
-		chunk = radix_tree_deref_slot_protected(slot,
-						&qcom_tzmem_chunks_lock);
+	chunk = radix_tree_lookup(&qcom_tzmem_chunks, (unsigned long)vaddr);
+	if (!chunk)
+		return 0;
 
-		ret = gen_pool_virt_to_phys(chunk->owner->genpool,
-					    (unsigned long)vaddr);
-		if (ret == -1)
-			continue;
+	if (chunk->area)
+		return chunk->area->paddr;
 
-		return ret;
-	}
+	ret = gen_pool_virt_to_phys(chunk->owner->genpool, (unsigned long)vaddr);
+	if (ret == -1)
+		return 0;
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_to_phys);
 
 /* cache clean operation for buffer sub-allocated from pool */
 void qcom_tzmem_flush_shm_buf(phys_addr_t paddr, size_t size)
 {
-	dma_sync_single_for_cpu(qcom_tzmem_dev, paddr, size, DMA_FROM_DEVICE);
+	dma_sync_single_for_device(qcom_tzmem_dev, paddr, size, DMA_TO_DEVICE);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_flush_shm_buf);
 
 /* cache invalidation operation for buffer sub-allocated from pool */
 void qcom_tzmem_inv_shm_buf(phys_addr_t paddr, size_t size)
 {
-	dma_sync_single_for_device(qcom_tzmem_dev, paddr, size, DMA_TO_DEVICE);
+	dma_sync_single_for_cpu(qcom_tzmem_dev, paddr, size, DMA_FROM_DEVICE);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_inv_shm_buf);
 

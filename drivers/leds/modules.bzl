@@ -76,3 +76,42 @@ def register_modules(registry):
             # do not sort
         ],
     )
+
+    registry.register(
+        name = "drivers/leds/leds-user-aw21104",
+        out = "leds-user-aw21104.ko",
+        config = "CONFIG_LEDS_USER_AW21104",
+        srcs = [
+            # do not sort
+            "drivers/leds/leds-user-aw21104.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
+
+    registry.register(
+        name = "drivers/leds/leds-bys-aw21104",
+        out = "leds-bys-aw21104.ko",
+        config = "CONFIG_LEDS_BYS_AW21104",
+        srcs = [
+            # do not sort
+            "drivers/leds/leds-bys-aw21104.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
+
+    registry.register(
+        name = "drivers/leds/leds-user-lp5814",
+        out = "leds-user-lp5814.ko",
+        config = "CONFIG_LEDS_USER_LP5814",
+        srcs = [
+            # do not sort
+            "drivers/leds/leds-user-lp5814.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )

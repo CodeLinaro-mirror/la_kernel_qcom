@@ -195,8 +195,8 @@ int32_t qtee_shmbridge_register(phys_addr_t paddr, size_t size, uint32_t *ns_vmi
 	if (ret)
 		goto bridge_exist;
 
-	ret = qcom_tzmem_shm_bridge_create_with_vmid(paddr, size, ns_vmid_list[0],
-							OTHERS, &qtee_handle);
+	ret = qcom_tzmem_shm_bridge_create_with_vmid(paddr, size, ns_vmid_list,
+			ns_vm_perm_list, ns_vmid_num, tz_perm, OTHERS, &qtee_handle);
 	if (ret)
 		goto exit;
 
@@ -211,7 +211,6 @@ bridge_exist:
 exit:
 	mutex_unlock(&bridge_list_head.lock);
 	return ret;
-
 }
 EXPORT_SYMBOL(qtee_shmbridge_register);
 
@@ -273,9 +272,9 @@ int qtee_shmbridge_driver_init(void)
 	struct qcom_tzmem_pool_config pool_config;
 
 	memset(&pool_config, 0, sizeof(pool_config));
-	pool_config.initial_size = SZ_512K;
-	pool_config.policy = QCOM_TZMEM_POLICY_ON_DEMAND;
-	pool_config.max_size = SZ_4M;
+	pool_config.initial_size = SZ_256K;
+	pool_config.policy = QCOM_TZMEM_POLICY_STATIC;
+	pool_config.max_size = SZ_256K;
 	pool_config.is_cached = true;
 
 	shmbridge_pool = qcom_tzmem_pool_new(&pool_config);

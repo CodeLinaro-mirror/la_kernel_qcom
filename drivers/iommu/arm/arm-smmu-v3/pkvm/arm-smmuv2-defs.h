@@ -125,6 +125,8 @@
 #define ARM_SMMU_GR0_S2CR(n) (0xc00 + ((n) << 2))
 #define ARM_SMMU_S2CR_PRIVCFG GENMASK(25, 24)
 
+#define QCOM_DUMMY_VAL	-1
+
 enum arm_smmu_s2cr_privcfg {
 	S2CR_PRIVCFG_DEFAULT,
 	S2CR_PRIVCFG_DIPAN,
@@ -292,7 +294,8 @@ enum arm_smmu_cbar_type {
 #define ARM_SMMU_RESUME_TERMINATE BIT(0)
 
 #define TLB_LOOP_TIMEOUT 1000000 /* 1s! */
-#define TLB_SPIN_COUNT 10
+#define TLB_SPIN_COUNT   10
+#define TLB_LOOP_INC_MAX 1000    /* 1ms */
 
 /* Helper Function definitions */
 struct smmu_v2_nested; /* forward */

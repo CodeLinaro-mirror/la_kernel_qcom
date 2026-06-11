@@ -15,6 +15,8 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/suspend.h>
+#include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/vmalloc.h>
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/minidump.h>
 #include <dt-bindings/soc/qcom,dcc_v2.h>
@@ -193,23 +195,22 @@ struct dcc_drvdata {
 	struct reg_state	*ll_state;
 	void			*sram_state;
 	uint8_t			*qad_output;
-	bool			no_offset_conv;
+	bool			smci_buf_valid;
+	unsigned char		*smci_buf;
 };
 
 static uint32_t dcc_offset_conv(struct dcc_drvdata *drvdata, uint32_t off)
 {
-	if (!drvdata->no_offset_conv) {
-		if (drvdata->mem_map_ver == DCC_MEM_MAP_VER1) {
-			if ((off & 0x7F) >= DCC_MAP_LEVEL3)
-				return (off - DCC_MAP_OFFSET3);
-			if ((off & 0x7F) >= DCC_MAP_LEVEL2)
-				return (off - DCC_MAP_OFFSET2);
-			else if ((off & 0x7F) >= DCC_MAP_LEVEL1)
-				return (off - DCC_MAP_OFFSET1);
-		} else if (drvdata->mem_map_ver == DCC_MEM_MAP_VER2) {
-			if ((off & 0x7F) >= DCC_MAP_LEVEL2)
-				return (off - DCC_MAP_OFFSET4);
-		}
+	if (drvdata->mem_map_ver == DCC_MEM_MAP_VER1) {
+		if ((off & 0x7F) >= DCC_MAP_LEVEL3)
+			return (off - DCC_MAP_OFFSET3);
+		if ((off & 0x7F) >= DCC_MAP_LEVEL2)
+			return (off - DCC_MAP_OFFSET2);
+		else if ((off & 0x7F) >= DCC_MAP_LEVEL1)
+			return (off - DCC_MAP_OFFSET1);
+	} else if (drvdata->mem_map_ver == DCC_MEM_MAP_VER2) {
+		if ((off & 0x7F) >= DCC_MAP_LEVEL2)
+			return (off - DCC_MAP_OFFSET4);
 	}
 
 	return (off);
@@ -1775,9 +1776,57 @@ static int dcc_sram_open(struct inode *inode, struct file *file)
 	struct dcc_drvdata *drvdata = container_of(inode->i_cdev,
 						   struct dcc_drvdata,
 						   sram_dev);
+#if IS_ENABLED(CONFIG_QCOM_SCM_SMCI)
+	int ret;
+
+	mutex_lock(&drvdata->mutex);
+	if (drvdata->smci_buf_valid) {
+		mutex_unlock(&drvdata->mutex);
+		return -EBUSY;
+	}
+
+	drvdata->smci_buf = vmalloc(drvdata->ram_size);
+	if (!drvdata->smci_buf) {
+		mutex_unlock(&drvdata->mutex);
+		return -ENOMEM;
+	}
+
+	ret = qcom_scm_dcc_fetch_data(drvdata->smci_buf, drvdata->ram_size);
+	if (ret) {
+		vfree(drvdata->smci_buf);
+		drvdata->smci_buf = NULL;
+		mutex_unlock(&drvdata->mutex);
+		return ret;
+	}
+
+	drvdata->smci_buf_valid = true;
+	mutex_unlock(&drvdata->mutex);
+#endif
+
 	file->private_data = drvdata;
 
 	return  0;
+}
+
+static int dcc_sram_release(struct inode *inode, struct file *file)
+{
+#if IS_ENABLED(CONFIG_QCOM_SCM_SMCI)
+	struct dcc_drvdata *drvdata = file->private_data;
+
+	if (!drvdata)
+		return 0;
+
+	mutex_lock(&drvdata->mutex);
+	if (drvdata->smci_buf) {
+		vfree(drvdata->smci_buf);
+		drvdata->smci_buf = NULL;
+	}
+
+	drvdata->smci_buf_valid = false;
+
+	mutex_unlock(&drvdata->mutex);
+#endif
+	return 0;
 }
 
 static ssize_t dcc_sram_read(struct file *file, char __user *data,
@@ -1785,7 +1834,7 @@ static ssize_t dcc_sram_read(struct file *file, char __user *data,
 {
 	unsigned char *buf;
 	struct dcc_drvdata *drvdata = file->private_data;
-	int ret;
+	int ret = 0;
 	/* EOF check */
 	if (drvdata->ram_size <= *ppos)
 		return 0;
@@ -1798,7 +1847,19 @@ static ssize_t dcc_sram_read(struct file *file, char __user *data,
 	if (!buf)
 		return -ENOMEM;
 
+#if IS_ENABLED(CONFIG_QCOM_SCM_SMCI)
+	mutex_lock(&drvdata->mutex);
+	if (!drvdata->smci_buf_valid || !drvdata->smci_buf) {
+		mutex_unlock(&drvdata->mutex);
+		kfree(buf);
+		return -EINVAL;
+	}
+
+	memcpy(buf, (drvdata->smci_buf + *ppos), len);
+	mutex_unlock(&drvdata->mutex);
+#else
 	ret = dcc_sram_memcpy(buf, (drvdata->ram_base + *ppos), len);
+#endif
 	if (ret) {
 		dev_err(drvdata->dev,
 			"Target address or size not aligned with 4 bytes\n");
@@ -1823,6 +1884,7 @@ static ssize_t dcc_sram_read(struct file *file, char __user *data,
 static const struct file_operations dcc_sram_fops = {
 	.owner		= THIS_MODULE,
 	.open		= dcc_sram_open,
+	.release	= dcc_sram_release,
 	.read		= dcc_sram_read,
 };
 
@@ -2106,12 +2168,6 @@ static int dcc_probe(struct platform_device *pdev)
 				   &drvdata->ram_offset);
 	if (ret)
 		return -EINVAL;
-
-	drvdata->no_offset_conv = of_property_read_bool(pdev->dev.of_node, "dcc-no-offset-conv");
-	if (!drvdata->no_offset_conv)
-		dev_dbg(dev, "DCC will do offset conversion\n");
-	else
-		dev_dbg(dev, "DCC will not do offset conversion\n");
 
 	drvdata->ll_state_cnt = of_property_count_elems_of_size(dev->of_node,
 					"ll-reg-offsets", sizeof(u32)); /* optional */

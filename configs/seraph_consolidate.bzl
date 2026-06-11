@@ -14,6 +14,7 @@ seraph_consolidate_config = {
     "CONFIG_MHI_BUS_DEBUG": "y",
     "CONFIG_MSM_GPI_DMA_DEBUG": "y",
     "CONFIG_PAGE_OWNER": "y",
+    "CONFIG_QCOM_VM_CRASH_DMESG_DUMP": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_RUNTIME_TESTING_MENU": "y",

@@ -55,3 +55,8 @@ obj-$(CONFIG_QCOM_SPMI_ADC_TM5) += qcom-spmi-adc-tm5.o
 obj-$(CONFIG_THERMAL_TSENS_LEGACY) += msm-tsens-driver.o
 msm-tsens-driver-objs += tsens2xxx.o tsens-dbg.o tsens1xxx.o msm-tsens.o
 
+obj-$(CONFIG_QTI_BCL_OFF_COOLING_DEVICE) += bcl_off_cdev.o
+
+obj-$(CONFIG_QTI_QMI_SENSOR) += qti_qmi_sensor.o
+qti_qmi_sensor-objs += qmi_sensors.o thermal_sensor_service_v01.o
+

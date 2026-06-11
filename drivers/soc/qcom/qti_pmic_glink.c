@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #define pr_fmt(fmt)	"PMIC_GLINK: %s: " fmt, __func__
 
@@ -234,6 +234,7 @@ static struct pmic_glink_dev *get_pmic_glink_from_rpdev(
 	return NULL;
 }
 
+#define GLINK_READ_FAIL_RETRIES 5
 /**
  * pmic_glink_write() - Send data from client to remote subsystem
  *
@@ -246,6 +247,7 @@ static struct pmic_glink_dev *get_pmic_glink_from_rpdev(
 int pmic_glink_write(struct pmic_glink_client *client, void *data,
 			size_t len)
 {
+	int retries = GLINK_READ_FAIL_RETRIES;
 	int rc;
 
 	if (!client || !client->pgdev || !client->name)
@@ -260,7 +262,15 @@ int pmic_glink_write(struct pmic_glink_client *client, void *data,
 	}
 
 	mutex_lock(&client->lock);
-	rc = rpmsg_send(client->pgdev->rpdev->ept, data, len);
+	do {
+		rc = rpmsg_send(client->pgdev->rpdev->ept, data, len);
+		if (rc != -ECANCELED)
+			break;
+		pmic_glink_dbg(client->pgdev, "Attempting a retry %d of %d times\n",
+				GLINK_READ_FAIL_RETRIES - retries + 1, GLINK_READ_FAIL_RETRIES);
+		usleep_range(10000, 11000);
+	} while (--retries > 0);
+
 	mutex_unlock(&client->lock);
 	up_read(&client->pgdev->rpdev_sem);
 

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __UAPI_LINUX_USB_CTRL_QTI_H
@@ -9,7 +9,11 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
-#define MAX_QTI_PKT_SIZE 2048
+/* Increased from 2048 to 8192 to support larger control transfers.
+ * Userspace consumers must ensure not exceed 8K buffer allocation
+ * to avoid stack overflow.
+ */
+#define MAX_QTI_PKT_SIZE 8192
 
 #define QTI_CTRL_IOCTL_MAGIC	'r'
 #define QTI_CTRL_GET_LINE_STATE	_IOR(QTI_CTRL_IOCTL_MAGIC, 2, int)

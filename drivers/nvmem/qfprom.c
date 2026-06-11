@@ -734,6 +734,7 @@ static const struct of_device_id qfprom_of_match[] = {
 	{ .compatible = "qcom,chora-qfprom", .data = &chora_qfprom},
 	{ .compatible = "qcom,malabar-qfprom", .data = &malabar_qfprom},
 	{ .compatible = "qcom,ravelin-qfprom", .data = &ravelin_qfprom},
+	{ .compatible = "qcom,bourtzi-qfprom", .data = &ravelin_qfprom},
 	{ .compatible = "qcom,pikachu-qfprom", .data = &pikachu_qfprom},
 	{ .compatible = "qcom,x1e80100-qfprom", .data = &x1e80100_qfprom},
 	{/* sentinel */},
