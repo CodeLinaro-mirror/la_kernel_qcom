@@ -567,16 +567,6 @@ static void hgsl_prof_enqueue(struct hgsl_context *ctxt,
 		return;
 	}
 
-	/* Profiling buffer not initialized for this context -> skip profiling enqueue */
-	if (!ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
-	    !ctxt->cmdbatch_kernel_profiling.buf_gpuaddr ||
-	    !ctxt->cmdbatch_kernel_profiling.buf_size)
-		return;
-
-	/* Process work-period not initialized -> skip profiling enqueue */
-	if (!ctxt->priv->period)
-		return;
-
 	if (!READ_ONCE(ctxt->priv->dev->work_period_enabled)) {
 		LOGE("[%s] work_period disabled: skip profiling enqueue (ctxt=%u, pid=%d)",
 		     __func__, ctxt->context_id, ctxt->pid);
@@ -2170,27 +2160,14 @@ static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 static void hgsl_prof_drain_ctxt(struct qcom_hgsl *device,
 				 struct hgsl_context *ctxt)
 {
-	void *buf_vaddr;
-	size_t buf_size;
-
-	if (!device || !ctxt)
+	if (!device || !ctxt || !ctxt->cmdbatch_kernel_profiling.buf_vaddr ||
+	    !ctxt->cmdbatch_kernel_profiling.buf_size) {
+		LOGE("[%s] invalid profiling state: dev=%p ctxt=%p buf_vaddr=%p size=%zu",
+		     __func__, device, ctxt,
+		     ctxt ? ctxt->cmdbatch_kernel_profiling.buf_vaddr : NULL,
+		     ctxt ? ctxt->cmdbatch_kernel_profiling.buf_size : 0);
 		return;
-
-	/*
-	 * Serialize against profiling buffer teardown: take lock and snapshot
-	 * pointers/sizes into locals so we don't race with destroy.
-	 */
-	spin_lock(&ctxt->cmdbatch_kernel_profiling.lock);
-	buf_vaddr = ctxt->cmdbatch_kernel_profiling.buf_vaddr;
-	buf_size = ctxt->cmdbatch_kernel_profiling.buf_size;
-	spin_unlock(&ctxt->cmdbatch_kernel_profiling.lock);
-
-	/*
-	 * Profiling buffer not allocated (init failed or profiling disabled)
-	 * or work period not set -> nothing to drain, silent return.
-	 */
-	if (!buf_vaddr || !buf_size || !ctxt->priv || !ctxt->priv->period)
-		return;
+	}
 
 	if (!READ_ONCE(device->work_period_enabled))
 		return;
@@ -2216,7 +2193,7 @@ static void hgsl_prof_drain_ctxt(struct qcom_hgsl *device,
 		return;
 
 	u16 consumed = 0;
-	u8 *base = (u8 *)buf_vaddr;
+	u8 *base = (u8 *)ctxt->cmdbatch_kernel_profiling.buf_vaddr;
 
 	while (rd != wr) {
 		u32 ts       = READ_ONCE(ctxt->cmdbatch_kernel_profiling.ring[rd].ts);
@@ -2235,7 +2212,8 @@ static void hgsl_prof_drain_ctxt(struct qcom_hgsl *device,
 		if (start32 && end32 && ctxt->priv && ctxt->priv->period) {
 			u32 delta32 = end32 - start32; /* wrap-aware */
 
-			hgsl_work_period_update(device, ctxt->priv->period, delta32);
+			hgsl_work_period_update(device, ctxt->priv->period,
+						delta32);
 		}
 
 		rd = (rd + 1) % HGSL_PROF_RING_SIZE;
@@ -2249,7 +2227,8 @@ static void hgsl_prof_drain_ctxt(struct qcom_hgsl *device,
 		spin_unlock(&ctxt->cmdbatch_kernel_profiling.lock);
 
 		if (ctxt->priv && ctxt->priv->period)
-			atomic_sub_clamp(&ctxt->priv->period->active_cmds, consumed);
+			atomic_sub_clamp(&ctxt->priv->period->active_cmds,
+					 consumed);
 	}
 }
 
@@ -2390,17 +2369,7 @@ static int hgsl_ioctl_ctxt_create(
 	}
 
 	wp = hgsl_get_work_period(hgsl, current_uid().val);
-	if (IS_ERR(wp)) {
-		/*
-		 * Do not fail context creation if work-period allocation fails.
-		 * Just disable profiling/work-period for this process.
-		 */
-		LOGW("hgsl: work_period alloc failed (%ld), disable profiling for pid=%d",
-		     PTR_ERR(wp), priv->pid);
-		wp = NULL;
-	} else {
-		hgsl->gpu_period.begin = ktime_get_ns();
-	}
+	hgsl->gpu_period.begin = ktime_get_ns();
 
 	if (params->flags & GSL_CONTEXT_FLAG_CLIENT_GENERATED_TS)
 		params->flags |= GSL_CONTEXT_FLAG_USER_GENERATED_TS;
@@ -2432,35 +2401,15 @@ static int hgsl_ioctl_ctxt_create(
 	} else
 		dbq_info_checked = true;
 
-	/* Initialize per-context profiling ring state */
+	/* Initialize per-context profiling buffer here */
+	if (hgsl_ctxt_init_profiling(hab_channel, ctxt)) {
+		LOGW("Profiling buffer init failed for ctxt=%u; profiling disabled",
+		     ctxt->context_id);
+	}
 	ctxt->cmdbatch_kernel_profiling.writeIdx = 0;
 	ctxt->cmdbatch_kernel_profiling.readIdx = 0;
 	spin_lock_init(&ctxt->cmdbatch_kernel_profiling.lock);
-
-	/*
-	 * Process-based work period:
-	 * - Do NOT clear priv->period here (it may be used by other contexts).
-	 * - Set priv->period on first successful profiling init.
-	 */
-	/*
-	 * If work-period allocation failed (wp == NULL), do not attempt to
-	 * initialize per-context profiling buffers; just keep profiling disabled
-	 * for this process to avoid extra allocations / SMMU mappings.
-	 */
-	if (!wp) {
-		priv->period = NULL;
-	} else if (hgsl_ctxt_init_profiling(hab_channel, ctxt)) {
-		LOGW("Profiling buffer init failed for ctxt=%u; profiling disabled",
-		     ctxt->context_id);
-		/*
-		 * Profiling buffer init failed (e.g. SMMU map failed).
-		 * Disable work-period for this process by clearing priv->period.
-		 * Keep device/wp accounting state untouched (minimal change).
-		 */
-		priv->period = NULL;
-	} else if (!priv->period) {
-		priv->period = wp;
-	}
+	ctxt->priv->period = wp;
 	kref_init(&ctxt->kref);
 	init_waitqueue_head(&ctxt->wait_q);
 	mutex_init(&ctxt->lock);
@@ -2530,23 +2479,22 @@ static int hgsl_ioctl_ctxt_destroy(
 	struct hgsl_hab_channel_t *hab_channel = NULL;
 	int ret;
 
-	/*
-	 * Per-context destroy does not clear process work-period pointer.
-	 * priv->period is process-based and may be used by other contexts.
+	/* Per-context destroy should not drop the device/list lifetime ref.
+	 * Just clear the pointer so future submissions stop using it.
 	 */
+	priv->period = NULL;
 
 	ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
 	if (ret) {
 		LOGE("Failed to get hab channel %d", ret);
-		hgsl_hyp_channel_pool_put(hab_channel);
-		return ret;
+		goto out;
 	}
 
 	ret = hgsl_ctxt_destroy(priv, hab_channel,
 			params->devhandle,
 			params->ctxthandle,
 			&params->rval, true);
-
+out:
 	hgsl_hyp_channel_pool_put(hab_channel);
 	return ret;
 }
@@ -3166,13 +3114,7 @@ err_unmap_smmu:
 	(void)hgsl_hyp_mem_unmap_smmu(hab_channel, mem_node);
 	dma_buf_end_cpu_access(mem_node->dma_buf, DMA_BIDIRECTIONAL);
 err_free_sharedmem:
-	/*
-	 * hgsl_sharedmem_free() drops the dma_buf ref; the actual mem_node
-	 * free happens in the dma_buf release callback.  Set mem_node to NULL
-	 * so the hgsl_free() below is a safe no-op for this path.
-	 */
 	hgsl_sharedmem_free(mem_node);
-	mem_node = NULL;
 err_free_node:
 	hgsl_free(mem_node);
 	return ret;
@@ -3183,45 +3125,28 @@ static void hgsl_ctxt_destroy_profiling(struct hgsl_hab_channel_t *hab_channel,
 					struct hgsl_context *ctxt)
 {
 	struct hgsl_mem_node *mem_node;
-	struct iosys_map map;
 
-	if (!ctxt)
+	if (!ctxt || !ctxt->cmdbatch_kernel_profiling.mem_node)
 		return;
 
-	/*
-	 * Serialize profiling buffer teardown vs. retire-worker/drain/enqueue.
-	 * The context itself is kref-protected, but the profiling buffer is not;
-	 * without this, a concurrent drain could dereference buf_vaddr after free.
-	 */
-	spin_lock(&ctxt->cmdbatch_kernel_profiling.lock);
-
 	mem_node = ctxt->cmdbatch_kernel_profiling.mem_node;
-	map = ctxt->cmdbatch_kernel_profiling.map;
 
-	/* Make buffer inaccessible to concurrent users first */
+	if (hab_channel)
+		(void)hgsl_hyp_mem_unmap_smmu(hab_channel, mem_node);
+
+	if (mem_node->dma_buf) {
+		dma_buf_vunmap(mem_node->dma_buf, &ctxt->cmdbatch_kernel_profiling.map);
+		dma_buf_end_cpu_access(mem_node->dma_buf, DMA_BIDIRECTIONAL);
+	}
+
+	hgsl_sharedmem_free(mem_node);
+
 	ctxt->cmdbatch_kernel_profiling.mem_node    = NULL;
 	ctxt->cmdbatch_kernel_profiling.buf_vaddr   = NULL;
 	ctxt->cmdbatch_kernel_profiling.buf_gpuaddr = 0;
 	ctxt->cmdbatch_kernel_profiling.buf_size    = 0;
 	memset(&ctxt->cmdbatch_kernel_profiling.map, 0,
 	       sizeof(ctxt->cmdbatch_kernel_profiling.map));
-	ctxt->cmdbatch_kernel_profiling.writeIdx = 0;
-	ctxt->cmdbatch_kernel_profiling.readIdx = 0;
-
-	spin_unlock(&ctxt->cmdbatch_kernel_profiling.lock);
-
-	if (!mem_node)
-		return;
-
-	if (hab_channel)
-		(void)hgsl_hyp_mem_unmap_smmu(hab_channel, mem_node);
-
-	if (mem_node->dma_buf) {
-		dma_buf_vunmap(mem_node->dma_buf, &map);
-		dma_buf_end_cpu_access(mem_node->dma_buf, DMA_BIDIRECTIONAL);
-	}
-
-	hgsl_sharedmem_free(mem_node);
 }
 
 /* Worker: iterate contexts and retire profiling entries */
@@ -3253,7 +3178,7 @@ static void hgsl_prof_retire_timer_fn(struct timer_list *t)
 {
 	struct qcom_hgsl *device = from_timer(device, t, prof_retire_timer);
 
-	if (READ_ONCE(device->work_period_enabled) && device->lockless_workqueue)
+	if (READ_ONCE(device->work_period_enabled))
 		queue_work(device->lockless_workqueue, &device->prof_retire_ws);
 
 	mod_timer(&device->prof_retire_timer, jiffies + msecs_to_jiffies(100));
@@ -4785,10 +4710,7 @@ static void _defer_work_period_put(struct work_struct *work)
  */
 static void hgsl_work_period_account_submit(struct hgsl_priv *priv)
 {
-	if (!priv || !trace_gpu_work_period_enabled())
-		return;
-
-	if (!priv->dev || !priv->period)
+	if (!priv || !priv->dev || !priv->period || !trace_gpu_work_period_enabled())
 		return;
 
 	if (!READ_ONCE(priv->dev->work_period_enabled))

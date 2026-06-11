@@ -314,6 +314,7 @@ struct hgsl_context {
 	struct doorbell_context_queue *dbcq;
 	uint32_t dbcq_export_id;
 	uint32_t db_signal;
+	/* Per-context profiling state */
 	struct hgsl_ctxt_profile cmdbatch_kernel_profiling;
 };
 
