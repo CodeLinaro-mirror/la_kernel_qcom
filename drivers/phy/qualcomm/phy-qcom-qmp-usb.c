@@ -1919,7 +1919,56 @@ static int __maybe_unused qmp_usb_runtime_resume(struct device *dev)
 	return 0;
 }
 
+static int qmp_usb_pm_suspend(struct device *dev)
+{
+	struct qmp_usb *qmp = dev_get_drvdata(dev);
+
+	dev_err(dev, "Suspending QMP phy, mode:%d\n", qmp->mode);
+
+	if (!qmp->phy->init_count || pm_runtime_suspended(dev)) {
+		dev_err(dev, "PHY not initialized, bailing out\n");
+		return 0;
+	}
+
+	qmp_usb_enable_autonomous_mode(qmp);
+
+	clk_disable_unprepare(qmp->pipe_clk);
+	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+
+	return 0;
+}
+
+static int qmp_usb_pm_resume(struct device *dev)
+{
+	struct qmp_usb *qmp = dev_get_drvdata(dev);
+	int ret = 0;
+
+	dev_err(dev, "Resuming QMP phy, mode:%d\n", qmp->mode);
+
+	if (!qmp->phy->init_count) {
+		dev_err(dev, "PHY not initialized, bailing out\n");
+		return 0;
+	}
+
+	ret = clk_bulk_prepare_enable(qmp->num_clks, qmp->clks);
+	if (ret)
+		return ret;
+
+	ret = clk_prepare_enable(qmp->pipe_clk);
+	if (ret) {
+		dev_err(dev, "pipe_clk enable failed, err=%d\n", ret);
+		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
+		return ret;
+	}
+
+	qmp_usb_disable_autonomous_mode(qmp);
+
+	return 0;
+
+}
+
 static const struct dev_pm_ops qmp_usb_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(qmp_usb_pm_suspend, qmp_usb_pm_resume)
 	SET_RUNTIME_PM_OPS(qmp_usb_runtime_suspend,
 			   qmp_usb_runtime_resume, NULL)
 };
@@ -2179,6 +2228,7 @@ static int qmp_usb_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	qmp->dev = dev;
+	dev_set_drvdata(dev, qmp);
 
 	qmp->cfg = of_device_get_match_data(dev);
 	if (!qmp->cfg)
