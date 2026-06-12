@@ -172,6 +172,8 @@ struct qcom_glink {
 
 	bool abort_tx;
 	void *ilc;
+
+	bool rx_wakeup;
 };
 
 enum {
@@ -790,6 +792,13 @@ int qcom_glink_rx_done(struct rpmsg_endpoint *ept, void *data)
 	return -EINVAL;
 }
 EXPORT_SYMBOL_GPL(qcom_glink_rx_done);
+
+void qcom_glink_native_set_rx_wakeup(struct qcom_glink *glink, bool enable)
+{
+	if (glink)
+		glink->rx_wakeup = enable;
+}
+EXPORT_SYMBOL_GPL(qcom_glink_native_set_rx_wakeup);
 
 /**
  * qcom_glink_receive_version() - receive version/features from remote system
@@ -1630,7 +1639,7 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 	int retry = 0;
 	int ret = 0;
 
-	if (should_wake) {
+	if (should_wake && glink->rx_wakeup) {
 		dev_dbg(glink->dev, "%s: wakeup\n", __func__);
 		glink_resume_pkt = true;
 		should_wake = false;
@@ -2515,6 +2524,8 @@ struct qcom_glink *qcom_glink_native_probe(struct device *dev,
 
 	glink->features = features;
 	glink->intentless = intentless;
+
+	glink->rx_wakeup = true;
 
 	spin_lock_init(&glink->tx_lock);
 	spin_lock_init(&glink->rx_lock);
