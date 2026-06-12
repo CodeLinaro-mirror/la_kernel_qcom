@@ -103,6 +103,8 @@
 #define LINESTATE_DP			BIT(0)
 #define LINESTATE_DM			BIT(1)
 
+#define QUSB2PHY_VDD_VOL_MIN           925000 /* uV */
+#define QUSB2PHY_VDD_VOL_MAX           970000 /* uV */
 
 #define QUSB2PHY_1P8_VOL_MIN           1800000 /* uV */
 #define QUSB2PHY_1P8_VOL_MAX           1800000 /* uV */
@@ -153,7 +155,9 @@ struct qusb_phy {
 	struct regulator	*vdd;
 	struct regulator	*vdda33;
 	struct regulator	*vdda18;
-	int			vdd_levels[3]; /* none, low, high */
+	u32			vdd_levels[3];
+	u32			vdda18_levels[3];
+	u32			vdda33_levels[3];
 	int			init_seq_len;
 	int			*qusb_phy_init_seq;
 	u32			major_rev;
@@ -195,6 +199,13 @@ struct qusb_phy {
 	u8			tune4;
 	u8			tune5;
 };
+
+static void qusb_phy_init_vreg_levels(u32 *levels, u32 min, u32 max)
+{
+	levels[0] = 0;
+	levels[1] = min;
+	levels[2] = max;
+}
 
 static void qusb_phy_update_tcsr_level_shifter(struct qusb_phy *qphy,
 						u32 val)
@@ -313,8 +324,9 @@ static int qusb_phy_enable_power(struct qusb_phy *qphy, bool on)
 		goto disable_vdd;
 	}
 
-	ret = regulator_set_voltage(qphy->vdda18, QUSB2PHY_1P8_VOL_MIN,
-						QUSB2PHY_1P8_VOL_MAX);
+	ret = regulator_set_voltage(qphy->vdda18,
+				    qphy->vdda18_levels[1],
+				    qphy->vdda18_levels[2]);
 	if (ret) {
 		dev_err(qphy->phy.dev,
 				"Unable to set voltage for vdda18:%d\n", ret);
@@ -333,8 +345,9 @@ static int qusb_phy_enable_power(struct qusb_phy *qphy, bool on)
 		goto disable_vdda18;
 	}
 
-	ret = regulator_set_voltage(qphy->vdda33, QUSB2PHY_3P3_VOL_MIN,
-						QUSB2PHY_3P3_VOL_MAX);
+	ret = regulator_set_voltage(qphy->vdda33,
+				    qphy->vdda33_levels[1],
+				    qphy->vdda33_levels[2]);
 	if (ret) {
 		dev_err(qphy->phy.dev,
 				"Unable to set voltage for vdda33:%d\n", ret);
@@ -357,7 +370,7 @@ disable_vdda33:
 		dev_err(qphy->phy.dev, "Unable to disable vdda33:%d\n", ret);
 
 unset_vdd33:
-	ret = regulator_set_voltage(qphy->vdda33, 0, QUSB2PHY_3P3_VOL_MAX);
+	ret = regulator_set_voltage(qphy->vdda33, 0, qphy->vdda33_levels[2]);
 	if (ret)
 		dev_err(qphy->phy.dev,
 			"Unable to set (0) voltage for vdda33:%d\n", ret);
@@ -373,7 +386,7 @@ disable_vdda18:
 		dev_err(qphy->phy.dev, "Unable to disable vdda18:%d\n", ret);
 
 unset_vdda18:
-	ret = regulator_set_voltage(qphy->vdda18, 0, QUSB2PHY_1P8_VOL_MAX);
+	ret = regulator_set_voltage(qphy->vdda18, 0, qphy->vdda18_levels[2]);
 	if (ret)
 		dev_err(qphy->phy.dev,
 			"Unable to set (0) voltage for vdda18:%d\n", ret);
@@ -1638,13 +1651,32 @@ static int qusb_phy_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(dev->of_node, "qcom,major-rev",
 						&qphy->major_rev);
 
+	qusb_phy_init_vreg_levels(qphy->vdd_levels, QUSB2PHY_VDD_VOL_MIN,
+				  QUSB2PHY_VDD_VOL_MAX);
+	qusb_phy_init_vreg_levels(qphy->vdda18_levels,
+				  QUSB2PHY_1P8_VOL_MIN,
+				  QUSB2PHY_1P8_VOL_MAX);
+	qusb_phy_init_vreg_levels(qphy->vdda33_levels,
+				  QUSB2PHY_3P3_VOL_MIN,
+				  QUSB2PHY_3P3_VOL_MAX);
+
 	ret = of_property_read_u32_array(dev->of_node, "qcom,vdd-voltage-level",
-					 (u32 *) qphy->vdd_levels,
+					 qphy->vdd_levels,
 					 ARRAY_SIZE(qphy->vdd_levels));
-	if (ret) {
-		dev_err(dev, "error reading qcom,vdd-voltage-level property\n");
-		return ret;
-	}
+	if (ret)
+		dev_dbg(dev, "qcom,vdd-voltage-level missing, using defaults\n");
+
+	ret = of_property_read_u32_array(dev->of_node, "qcom,vdda18-voltage-level",
+					 qphy->vdda18_levels,
+					 ARRAY_SIZE(qphy->vdda18_levels));
+	if (ret)
+		dev_dbg(dev, "qcom,vdda18-voltage-level missing, using defaults\n");
+
+	ret = of_property_read_u32_array(dev->of_node, "qcom,vdda33-voltage-level",
+					 qphy->vdda33_levels,
+					 ARRAY_SIZE(qphy->vdda33_levels));
+	if (ret)
+		dev_dbg(dev, "qcom,vdda33-voltage-level missing, using defaults\n");
 
 	qphy->vdd = devm_regulator_get(dev, "vdd");
 	if (IS_ERR(qphy->vdd)) {

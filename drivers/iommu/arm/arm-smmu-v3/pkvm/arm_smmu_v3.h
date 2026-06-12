@@ -32,6 +32,8 @@ struct hyp_arm_smmu_v3_device {
 	size_t			ias;
 	size_t			pgsize_bitmap;
 	size_t			ssid_bits;
+	unsigned long		evtq_base;
+	unsigned long		priq_base;
 };
 
 extern size_t kvm_nvhe_sym(kvm_hyp_arm_smmu_v3_count);

@@ -893,13 +893,13 @@ static enum hrtimer_restart bwprof_hrtimer_handler(struct hrtimer *timer)
 {
 	ktime_t now = ktime_get();
 
-	while (!atomic_cmpxchg(&buffer_fill_status->state, 1, 0))
-		cpu_relax();
+	if (!atomic_read(&buffer_fill_status->state)) {
+		hrtimer_forward(timer, now, ms_to_ktime(1));
+		return HRTIMER_RESTART;
+	}
 
 	bwprof_mon_rx_timer();
-	if (atomic_cmpxchg(&buffer_fill_status->state, 0, 1))
-		pr_err("Buffer state 1 not expected.\n");
-
+	atomic_set(&buffer_fill_status->state, 0);
 	hrtimer_forward(timer, now, ms_to_ktime(BUFFER_FILL_MS));
 
 	return HRTIMER_RESTART;

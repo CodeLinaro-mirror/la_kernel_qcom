@@ -7,12 +7,38 @@
 #include <linux/qtee_shmbridge.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 
+#include "qcom_scm.h"
 #include "qcom_scm_smcinvoke.h"
 
 static struct si_object *g_gpu_instance;
 static struct si_object *g_dcvs_instance;
 static DEFINE_MUTEX(g_gpu_mutex);
 static DEFINE_MUTEX(g_dcvs_mutex);
+
+/**
+ * qcom_scm_gpu_and_dcvs_remap_error() - remap GPU/DCVS service errors
+ * @ret: return code from SMCInvoke method
+ * @err: service-specific result written by SMCInvoke method
+ *
+ * Handle transport failures via @ret and remap
+ * GPU/DCVS result codes only when invocation itself succeeds.
+ *
+ * Return: 0 on success or a negative errno value.
+ */
+static int qcom_scm_gpu_and_dcvs_remap_error(int ret, int err)
+{
+	if (!ret && !err)
+		return 0;
+
+	if (ret)
+		return ret;
+
+	if (err == GPU_ERROR_OPERATION_FAILED ||
+	    err == GPU_DCVS_ERROR_INVALID_ARG)
+		return -EFAULT;
+
+	return -EINVAL;
+}
 
 bool qcom_scm_pas_supported(u32 peripheral)
 {
@@ -100,7 +126,9 @@ int qcom_scm_pas_shutdown(u32 peripheral)
 	 * Shutdown/teardown the specified peripheral and unlock the memory area
 	 * occupied by that region.
 	 */
-	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_UNLOCKAREA, args, &result);
+	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_UNLOCKAREA, args,
+			     &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		return ret;
 
@@ -159,7 +187,9 @@ int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr, phys_addr_t size)
 	if (ret)
 		return ret;
 
-	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_SETUPMEMAREA, args, &result);
+	ret = qcom_smci_call(pil_image_service, SMCI_PILIMAGE_OP_SETUPMEMAREA,
+			     args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		pr_err("memory setup failed with result %d: %d\n", result, ret);
 
@@ -231,15 +261,22 @@ EXPORT_SYMBOL_GPL(qcom_scm_pas_store_memoryinfo);
 static int qcom_smci_get_instance(struct si_object *service, uint32_t instance_id,
 				  unsigned long op, struct si_object **instance)
 {
-	struct si_arg args[3] = { 0 };
 	int ret, result;
-
-	args[0].b = (struct si_buffer) { .addr = &instance_id, .size = sizeof(instance_id) };
-	args[0].type = SI_AT_IB;
-	args[1].type = SI_AT_OO;
-	args[2].type = SI_AT_END;
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &instance_id, .size = sizeof(instance_id) },
+		},
+		{
+			.type = SI_AT_OO,
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
 
 	ret = qcom_smci_call(service, op, args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		return ret;
 
@@ -340,6 +377,7 @@ int qcom_scm_mem_protect_video_var(u32 cp_start, u32 cp_size,
 	}
 
 	ret = qcom_smci_call(video_var_service, SMCI_SET_VIDEO_VAR, args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		pr_err("Setting video vars failed with result %d: ret %d\n", result, ret);
 
@@ -411,7 +449,7 @@ int qcom_scm_kgsl_dcvs_tuning(u32 mingap, u32 penalty, u32 numbusy)
 		return PTR_ERR(dcvs_instance);
 
 	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_TUNING, args, &result);
-	return ret;
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_dcvs_tuning);
 
@@ -451,8 +489,9 @@ int _dcvs_update(int level, s64 total_time, s64 busy_time, int context_count)
 		return PTR_ERR(dcvs_instance);
 
 	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_UPDATE, args, &result);
+	ret = qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 	if (ret) {
-		pr_err("DCVS update failed: %d\n", ret);
+		pr_err("DCVS update failed (result: %d, ret: %d)\n", result, ret);
 		return ret;
 	}
 
@@ -484,20 +523,21 @@ int qcom_scm_dcvs_reset(void)
 			.type = SI_AT_END,
 		}
 	};
-	int result = 0;
+	int ret, result = 0;
 
 	dcvs_instance = get_dcvs_instance(0);
 	if (IS_ERR(dcvs_instance))
 		return PTR_ERR(dcvs_instance);
 
-	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_RESET, args, &result);
+	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_RESET, args, &result);
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_dcvs_reset);
 
 int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
 {
 	struct si_object *dcvs_instance = NULL;
-	int result = 0;
+	int ret, result = 0;
 	void *virt_src = NULL;
 	struct dcvs_init_ca {
 		uint32_t ctxt_aware_target_pwrlevel;
@@ -527,14 +567,15 @@ int qcom_scm_dcvs_init_ca_v2(phys_addr_t addr, size_t size)
 	if (IS_ERR(dcvs_instance))
 		return PTR_ERR(dcvs_instance);
 
-	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT_CA, args, &result);
+	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT_CA, args, &result);
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_ca_v2);
 
 int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
 {
 	struct si_object *dcvs_instance = NULL;
-	int result = 0;
+	int ret, result = 0;
 	void *virt_src = NULL;
 	uint32_t size_val = size;
 	struct dcvs_req {
@@ -578,7 +619,8 @@ int qcom_scm_dcvs_init_v2(phys_addr_t addr, size_t size, int *version)
 	if (IS_ERR(dcvs_instance))
 		return PTR_ERR(dcvs_instance);
 
-	return qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT, args, &result);
+	ret = qcom_smci_call(dcvs_instance, SMCI_DCVS_OP_INIT, args, &result);
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_dcvs_init_v2);
 
@@ -630,19 +672,96 @@ int qcom_scm_kgsl_init_regs(u32 gpu_req)
 		return PTR_ERR(kgsl_instance);
 
 	ret = qcom_smci_call(kgsl_instance, SMCI_GPU_OP_REG_SETUP, args, &result);
-	return ret;
+	return qcom_scm_gpu_and_dcvs_remap_error(ret, result);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
 
+/**
+ * _qcom_scm_kgsl_set_smmu_aperture() - configure GPU SMMU aperture values
+ * @config1: aperture configuration word 1
+ * @config2: aperture configuration word 2
+ * @config3: aperture configuration word 3
+ * @config4: aperture configuration word 4
+ *
+ * Build and invoke the secure GPU request payload used for SMMU aperture
+ * programming.
+ *
+ * Return: 0 on success, or a negative errno value on failure.
+ */
+static int _qcom_scm_kgsl_set_smmu_aperture(u32 config1, u32 config2,
+					    u32 config3, u32 config4)
+{
+	struct si_object *kgsl_instance = NULL;
+	int ret, result = 0;
+	struct {
+		u32 aperture_config1;
+		u32 aperture_config2;
+		u32 aperture_config3;
+		u32 aperture_config4;
+	} __packed buf = {
+		.aperture_config1 = config1,
+		.aperture_config2 = config2,
+		.aperture_config3 = config3,
+		.aperture_config4 = config4,
+	};
+	struct si_arg args[] = {
+		{
+			.type = SI_AT_IB,
+			.b = { .addr = &buf, .size = sizeof(buf) },
+		},
+		{
+			.type = SI_AT_END,
+		}
+	};
+
+	kgsl_instance = get_gpu_instance(0);
+	if (IS_ERR(kgsl_instance))
+		return PTR_ERR(kgsl_instance);
+
+	ret = qcom_smci_call(kgsl_instance,
+			     SMCI_GPU_OP_CONFIG_GPU_SMMU_APERTURE,
+			     args, &result);
+	if (ret) {
+		pr_err("GPU config SMMU aperture failed: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
 int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
 {
-	return 0;
+	int ret;
+
+	ret = _qcom_scm_kgsl_set_smmu_aperture(0xffff0000 |
+						((QCOM_SCM_CP_APERTURE_REG & 0xff) << 8) |
+						(num_context_bank & 0xff),
+						0xffffffff, 0xffffffff,
+						0xffffffff);
+	if (ret) {
+		pr_err("GPU set SMMU aperture failed: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture);
 
 int qcom_scm_kgsl_set_smmu_lpac_aperture(unsigned int num_context_bank)
 {
-	return 0;
+	int ret;
+
+	ret = _qcom_scm_kgsl_set_smmu_aperture(0xffff0000 |
+						((QCOM_SCM_CP_LPAC_APERTURE_REG & 0xff) << 8) |
+						(num_context_bank & 0xff),
+						0xffffffff, 0xffffffff,
+						0xffffffff);
+	if (ret) {
+		pr_err("GPU set SMMU LPAC aperture failed: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_lpac_aperture);
 
@@ -666,6 +785,7 @@ int qcom_scm_dcc_fetch_data(void *to, size_t count)
 		return ret;
 
 	ret = qcom_smci_call(dcc_service, SMCI_DCCSRAM_OP_FETCH, args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		pr_err("dcc fetch data failed with result %d: %d\n", result, ret);
 
