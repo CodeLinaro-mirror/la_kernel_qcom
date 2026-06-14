@@ -140,11 +140,7 @@ int freeze_processes(void)
 	if (!pm_freezing)
 		static_branch_inc(&freezer_active);
 
-<<<<<<< HEAD
-	pm_wakeup_clear(0); /* WA, need to be fixed */
-=======
 	pm_wakeup_clear(0);
->>>>>>> 1efba816378684f1afaeb2bc1f4d2340d2729243
 	pm_freezing = true;
 	error = try_to_freeze_tasks(true);
 	if (!error)
