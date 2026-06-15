@@ -201,7 +201,9 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 	current_type = FIELD_GET(ARM_SMMU_CBAR_TYPE, val);
 
 	/* If type is S1_TRANS_S2_BYPASS, modify hardware value for nested translation */
-	if (current_type == CBAR_TYPE_S1_TRANS_S2_BYPASS) {
+	if (current_type == CBAR_TYPE_S2_TRANS ||
+		current_type == CBAR_TYPE_S1_TRANS_S2_BYPASS ||
+		current_type == CBAR_TYPE_S1_TRANS_S2_TRANS) {
 		/* Clear the TYPE, VMID, and S1-specific fields (bits [8:15]) in hardware value */
 		hw_val &= ~(ARM_SMMU_CBAR_TYPE | ARM_SMMU_CBAR_VMID |
 			    ARM_SMMU_CBAR_S1_MEMATTR | ARM_SMMU_CBAR_S1_BPSHCFG);
@@ -214,10 +216,10 @@ static int smmuv2_cbar_write(struct smmu_v2_nested *smmu, u32 offset, u32 val)
 
 		/* Set bits [8:15] to host_s2_cb_idx (S2 host context bank) */
 		hw_val |= (smmu->host_s2_cb_idx << 8);
-	}
 
-	/* Write the (possibly modified) value to hardware */
-	arm_smmu_gr1_write(smmu, offset, hw_val);
+		/* Write the (possibly modified) value to hardware */
+		arm_smmu_gr1_write(smmu, offset, hw_val);
+	}
 
 	smmu_v2_debug_print("cbar_write: idx: %d, EL1_val: 0x%x, HW_val: 0x%x, stored: 0x%x\n",
 			    i, val, hw_val, smmu->cbar_pool[i]);
@@ -256,9 +258,6 @@ static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, 
 		if (!ARM_SMMU_GR0_S2CR_VALID(offset, smmu->num_s2cr))
 			return -EINVAL;  /* Invalid S2CR offset */
 		i = ARM_SMMU_GR0_S2CR_INDEX(offset);
-
-		/* Read current hardware value */
-		*buf = arm_smmu_gr0_read(smmu, offset);
 
 		/* Extract current type */
 		u32 current_type = (*buf & ARM_SMMU_S2CR_TYPE) >> 16;
@@ -372,7 +371,9 @@ static bool smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 	int rd = (esr & ESR_ELx_SRT_MASK) >> ESR_ELx_SRT_SHIFT;
 	u64 val = regs->regs[rd];
 	u32 offset;
-	bool ret = true;
+	int ret = 0;
+	u32 host_s2_cb_offset = ARM_SMMU_CB(smmu, smmu->host_s2_cb_idx) << smmu->pgshift;
+	u32 cb_size = 1U << smmu->pgshift;
 
 	smmu_v2_debug_print("addr: 0x%llx, val: 0x%llx, esr: 0x%llx\n",
 			    addr, regs->regs[rd], esr);
@@ -380,9 +381,22 @@ static bool smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 			    len, rd, is_write);
 
 	kvm_iommu_lock(&smmu->iommu);
+
 	offset = (u32)(addr & SMMU_V2_GLB_ADDR_OFFSET_MASK);
 
-	if (offset < ARM_SMMU_GLOBAL_REGION1_OFFSET) {
+	if (addr >= host_s2_cb_offset && addr < host_s2_cb_offset + cb_size) {
+		if (!is_write) {
+			void *reg_addr = (void *)((u64)smmu->base_va + addr);
+
+			regs->regs[rd] = readl_relaxed(reg_addr);
+		} else if ((addr - host_s2_cb_offset) == ARM_SMMU_CB_FSR) {
+			void *reg_addr = (void *)((u64)smmu->base_va + addr);
+
+			writel_relaxed((u32)val, reg_addr);
+		} else {
+			ret = -EPERM;
+		}
+	} else if (offset < ARM_SMMU_GLOBAL_REGION1_OFFSET) {
 		if (is_write) {
 			ret = smmuv2_write_global_region_0(smmu, offset, len, val);
 		} else {
@@ -411,10 +425,15 @@ static bool smmuv2_nesting_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 
 	int ret;
 
 	for_each_smmu(smmu) {
+		u32 host_s2_cb_offset = ARM_SMMU_CB(smmu, smmu->host_s2_cb_idx) << smmu->pgshift;
+		u32 cb_size = 1U << smmu->pgshift;
+
 		/* Check if address is within this SMMU's range */
-		if ((addr >= smmu->base_pa) && (addr < (smmu->base_pa + size))) {
+		if (((addr >= smmu->base_pa) && (addr < (smmu->base_pa + size))) ||
+		    ((addr >= smmu->base_pa + host_s2_cb_offset) &&
+			 (addr < smmu->base_pa + host_s2_cb_offset + cb_size))) {
 			ret = smmuv2_nesting_dabt_device(smmu, regs, esr, addr - smmu->base_pa);
-			return (ret == -EPERM) ? false : true;
+			return (ret != 0) ? false : true;
 		}
 	}
 	return false;
@@ -440,11 +459,32 @@ static int take_over_smmus(void)
 	return 0;
 }
 
+static bool is_handoff_smr(struct smmu_v2_nested *smmu, u32 smr_val)
+{
+	u32 k;
+	u32 smr_sid = smr_val & ARM_SMMU_SMR_ID;
+
+	for (k = 0; k < smmu->num_handoff_smrs; k++) {
+		if (smr_sid == (smmu->handoff_smrs[k] & ARM_SMMU_SMR_ID))
+			return true;
+	}
+	return false;
+}
+
 static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 {
-	int i;
+	int i, j;
 	u32 s2cr_val;
 	u32 smr_val;
+	u32 s2cr_reset_val = 0;
+	u32 s2cr_handoff_val = 0;
+
+	s2cr_reset_val = FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_FAULT);
+
+	/* Set PRIVCFG to PRIV, type to TRANS and CBNDX to host_s2_cb_idx */
+	s2cr_handoff_val |= FIELD_PREP(ARM_SMMU_S2CR_PRIVCFG, S2CR_PRIVCFG_PRIV);
+	s2cr_handoff_val |= FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_TRANS);
+	s2cr_handoff_val |= FIELD_PREP(ARM_SMMU_S2CR_CBNDX, smmu->host_s2_cb_idx);
 
 	for (i = smmu->num_s2cr - 1; i >= 0; i--) {
 		s2cr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_S2CR(i));
@@ -455,9 +495,16 @@ static int update_s2cr_profile(struct smmu_v2_nested *smmu)
 				    i, smr_val, s2cr_val);
 	}
 	/* Reset remaining SMRs and S2CRs */
-	for (int j = i; j >= 0; j--) {
-		smr_val  = 0x0;
-		s2cr_val = FIELD_PREP(ARM_SMMU_S2CR_TYPE, S2CR_TYPE_FAULT);
+	for (j = i; j >= 0; j--) {
+		smr_val  = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(j));
+
+		if (is_handoff_smr(smmu, smr_val)) {
+			s2cr_val = s2cr_handoff_val;
+		} else {
+			smr_val  = 0x0;
+			s2cr_val = s2cr_reset_val;
+		}
+
 		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_S2CR(j), s2cr_val);
 		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_SMR(j), smr_val);
 	}
@@ -547,7 +594,10 @@ static int smmu_attach_stage_2(void)
 		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
 				  ARM_SMMU_CB_SCTLR, sctlr_val);
 
-		/* Configure ACTLR - set CPRE and CMTLB bits */
+		/* Configure ACTLR - set CPRE and CMTLB bits
+		 * CPRE  - Enable context caching in the prefetch buffer.
+		 * CMTLB - Enable context caching in the macro-TLB.
+		 */
 		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
 				  ARM_SMMU_CB_ACTLR, 0x3);
 
@@ -595,13 +645,6 @@ static int hw_profile_init(void)
 		u32 id1 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID1);
 		u32 scr_val = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sCR0);
 
-		/* Enable SMMU by default.
-		 * And enable unidentified stream and Stream match conflicts by default
-		 */
-		scr_val &= ~(ARM_SMMU_sCR0_CLIENTPD);
-		scr_val |= FIELD_PREP(ARM_SMMU_sCR0_USFCFG, 1) |
-			   FIELD_PREP(ARM_SMMU_sCR0_SMCFCFG, 1);
-		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sCR0, scr_val);
 
 		smmu->num_smr = id0 & ARM_SMMU_ID0_NUMSMRG;
 		smmu->num_s2cr = smmu->num_smr; /* smr == s2cr */
@@ -616,20 +659,17 @@ static int hw_profile_init(void)
 		smmu_v2_debug_print("SMMU num_cb: %d, pgshift: %d, numpage: %d\n",
 				    smmu->num_cb, smmu->pgshift, smmu->numpage);
 
-		ret = update_s2cr_profile(smmu);
-		if (ret) {
-			smmu_v2_debug_print("Failed to update S2CR profile!\n");
-			return ret;
-		}
-
+		/*
+		 * update_cbar_profile() and reserve_host_s2_context_bank() must
+		 * run before update_s2cr_profile() so that host_s2_cb_idx is
+		 * valid when handoff SMR S2CRs are converted from bypass to
+		 * S2 translation mode.
+		 */
 		ret = update_cbar_profile(smmu);
 		if (ret) {
 			smmu_v2_debug_print("Failed to update CBAR profile!\n");
 			return ret;
 		}
-
-		smmu_v2_debug_print("num_smr: %d, num_cb: %d\n",
-				    smmu->num_smr, smmu->num_cb);
 
 		/* Reserve the bottom available context bank for host S2 */
 		ret = reserve_host_s2_context_bank(smmu);
@@ -638,8 +678,25 @@ static int hw_profile_init(void)
 			return ret;
 		}
 
+		ret = update_s2cr_profile(smmu);
+		if (ret) {
+			smmu_v2_debug_print("Failed to update S2CR profile!\n");
+			return ret;
+		}
+
+		smmu_v2_debug_print("num_smr: %d, num_cb: %d\n",
+				    smmu->num_smr, smmu->num_cb);
+
 		smmu_v2_debug_print("After reservation, available guests' CBs: %d & CBARs: %d\n",
 				    smmu->num_cb, smmu->num_cbar);
+
+		/* Enable SMMU by default.
+		 * And enable unidentified stream and Stream match conflicts by default
+		 */
+		scr_val &= ~(ARM_SMMU_sCR0_CLIENTPD);
+		scr_val |= FIELD_PREP(ARM_SMMU_sCR0_USFCFG, 1) |
+			   FIELD_PREP(ARM_SMMU_sCR0_SMCFCFG, 1);
+		arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sCR0, scr_val);
 	}
 
 	return 0;
@@ -742,27 +799,25 @@ int smmuv2_hyp_nesting_init(void)
 	int smmu_arr_size = PAGE_ALIGN(sizeof(*smmu_v2_nested_base) * smmu_v2_nested_count);
 	int ret;
 
+	/* Register this driver with the common vendor module */
+	ret = smmu_vendor_register_driver(&smmuv2_driver);
+	if (ret)
+		return ret;
+
 	smmu_v2_nested_base = kern_hyp_va(smmu_v2_nested_base);
 
 	u32 page_count = smmu_arr_size >> PAGE_SHIFT;
 
-	for (int i = 0; i < page_count; i++) {
-		ret = __pkvm_host_share_hyp((hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT) +
-					    i);
-		if (ret)
-			return ret;
-	}
+	ret = ___pkvm_host_donate_hyp((hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT),
+				      page_count, true);
+	if (ret)
+		return ret;
 
 	ret = take_over_smmus();
 	if (ret)
 		return ret;
 
 	ret = hw_profile_init();
-	if (ret)
-		return ret;
-
-	/* Register this driver with the common vendor module */
-	ret = smmu_vendor_register_driver(&smmuv2_driver);
 
 	return ret;
 }

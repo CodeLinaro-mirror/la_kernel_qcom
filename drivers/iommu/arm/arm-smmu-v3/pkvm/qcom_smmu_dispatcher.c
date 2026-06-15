@@ -266,6 +266,7 @@ static void qcom_smmu_nesting_idmap(struct kvm_hyp_iommu_domain *domain,
 	struct smmu_nested_domain *smmu_domain = &idmapped_domain;
 	struct io_pgtable *pgtable = smmu_domain->pgtable;
 	unsigned long pgsize_bitmap = pgtable->cfg.pgsize_bitmap;
+	struct iommu_iotlb_gather gather;
 
 	end = min(end, BIT(pgtable->cfg.oas));
 	if (start >= end)
@@ -289,10 +290,11 @@ static void qcom_smmu_nesting_idmap(struct kvm_hyp_iommu_domain *domain,
 		}
 	} else {
 		while (size) {
+			iommu_iotlb_gather_init(&gather);
 			pgsize = smmu_pgsize_idmap(size, start, pgsize_bitmap);
 			pgcount = size / pgsize;
 			unmapped = pgtable->ops.unmap_pages(&pgtable->ops, start,
-							    pgsize, pgcount, NULL);
+							    pgsize, pgcount, &gather);
 			size -= unmapped;
 			start += unmapped;
 			if (!unmapped)

@@ -2290,7 +2290,7 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 		if (rq->curr == p)
 			return 1;
 
-		return task_is_runnable(p) ? SCHED_ACCOUNT_WAIT_TIME : 0;
+		return task_is_runnable(p) && !task_is_blocked(p) ? SCHED_ACCOUNT_WAIT_TIME : 0;
 	}
 
 	return 1;
@@ -2440,6 +2440,7 @@ static void update_history(struct rq *rq, struct task_struct *p,
 		goto done;
 
 	runtime_scaled = scale_time_to_util(runtime);
+
 	/* Push new 'runtime' value onto stack */
 	for (; samples > 0; samples--) {
 		hist[wts->cidx] = runtime;
@@ -2588,11 +2589,12 @@ static u64 update_task_demand(struct task_struct *p, struct rq *rq,
 	 * activity count is only used for pipeline filtering
 	 * update activity count only if pipleine is in progress.
 	 */
-	if (pipeline_in_progress() && rtg && rtg->id == DEFAULT_CGROUP_COLOC_ID)
+	if (pipeline_in_progress() && rtg && rtg->id == DEFAULT_CGROUP_COLOC_ID &&
+									!task_is_blocked(p))
 		update_lst(wts, wallclock, new_window);
 
 	if (!account_busy_for_task_demand(rq, p, event)) {
-		if (new_window)
+		if (new_window && !task_is_blocked(p))
 			/*
 			 * If the time accounted isn't being accounted as
 			 * busy time, and a new window started, only the
@@ -6185,18 +6187,6 @@ static void walt_init(struct work_struct *work)
 	walt_init_cycle_counter();
 
 	stop_machine(walt_init_stop_handler, NULL, NULL);
-
-	/*
-	 * validate root-domain perf-domain is configured properly
-	 * to work with an asymmetrical soc. This is necessary
-	 * for load balance and task placement to work properly.
-	 * see walt_find_energy_efficient_cpu(), and
-	 * create_freq_to_cost().
-	 */
-	if (!rcu_access_pointer(rd->pd) && num_sched_clusters > 1)
-		WALT_BUG(WALT_BUG_WALT, NULL,
-			 "root domain's perf-domain values not initialized rd->pd=%p.",
-			 rd->pd);
 
 	walt_register_sysctl();
 	walt_register_debugfs();

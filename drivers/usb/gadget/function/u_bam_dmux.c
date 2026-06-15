@@ -2,15 +2,6 @@
 /*
  * Copyright (c) 2011-2018, 2020-2021, Linux Foundation. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -160,32 +151,6 @@ static struct bam_portmaster {
 static void gbam_start_rx(struct gbam_port *port);
 static void gbam_notify(void *p, int event, unsigned long data);
 static void gbam_data_write_tobam(struct work_struct *w);
-
-
-/*
- * TEMPORARY KP5.0 STUBS: In this build BAM DMUX core is not linked,
- * so provide local definitions to satisfy u_bam_dmux.c references.
- * These must match the prototypes in include/soc/qcom/bam_dmux.h exactly.
- */
-int msm_bam_dmux_open(uint32_t id, void *priv,
-		void (*notify)(void *priv, int event_type,
-			unsigned long data))
-{
-	pr_warn("%s: usb_f_rmnet_bam: stubbed (id=%u)\n", __func__, id);
-	return -ENODEV;
-}
-int msm_bam_dmux_close(uint32_t id)
-{
-	pr_warn("%s: usb_f_rmnet_bam: stubbed (id=%u)\n", __func__, id);
-	return -ENODEV;
-}
-int msm_bam_dmux_write(uint32_t id, struct sk_buff *skb)
-{
-	pr_warn("%s: usb_f_rmnet_bam: stubbed (id=%u)\n", __func__, id);
-	kfree_skb(skb);
-	return -ENODEV;
-}
-
 
 /*---------------misc functions---------------- */
 static void gbam_free_requests(struct usb_ep *ep, struct list_head *head)
