@@ -282,6 +282,7 @@ seraph_perf_config = {
     "CONFIG_SCHED_WALT_DEBUG": "n",
     "CONFIG_SCHED_WALT_STATS": "n",
     "CONFIG_SERIAL_MSM_GENI": "m",
+    "CONFIG_SLG4DC_SIGNAL_IC": "m",
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB_DEBUG": "m",
