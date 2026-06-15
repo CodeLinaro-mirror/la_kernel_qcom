@@ -58,3 +58,13 @@ def register_modules(registry):
             "drivers/misc/ina234b.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/misc/slg4dc",
+        out = "slg4dc.ko",
+        config = "CONFIG_SLG4DC_SIGNAL_IC",
+        srcs = [
+            # do not sort
+            "drivers/misc/slg4dc.c",
+        ],
+    )
