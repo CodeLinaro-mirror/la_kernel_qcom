@@ -571,7 +571,7 @@ static void qcom_glink_handle_intent_req_ack(struct qcom_glink *glink,
 	WRITE_ONCE(channel->intent_req_result, granted);
 	wake_up_all(&channel->intent_req_wq);
 	channel->intent_timeout_count = 0;
-	CH_INFO(channel, "\n");
+	CH_INFO(channel, "granted:%d\n", granted);
 	qcom_glink_channel_ref_put(channel);
 }
 
@@ -871,7 +871,7 @@ static int qcom_glink_send_intent_req_ack(struct qcom_glink *glink,
 	msg.param1 = cpu_to_le16(channel->lcid);
 	msg.param2 = cpu_to_le32(granted);
 
-	CH_INFO(channel, "\n");
+	CH_INFO(channel, "granted:%d\n", granted);
 	qcom_glink_tx(glink, &msg, sizeof(msg), NULL, 0, true);
 
 	return 0;
@@ -1494,12 +1494,20 @@ static void qcom_glink_handle_intent(struct qcom_glink *glink,
 				intent->id, intent->id + 1, GFP_ATOMIC);
 		spin_unlock_irqrestore(&channel->intent_lock, flags);
 
-		if (ret < 0)
+		if (ret < 0) {
 			dev_err(glink->dev, "failed to store remote intent\n");
-	}
+			kfree(intent);
+		}
 
-	WRITE_ONCE(channel->intent_received, true);
-	wake_up_all(&channel->intent_req_wq);
+		/*
+		 * Wake up the intent request thread regardless of whether
+		 * idr_alloc succeeded or failed. On failure the sender can
+		 * immediately re-queue the request instead of waiting for
+		 * the full intent-request timeout to expire.
+		 */
+		WRITE_ONCE(channel->intent_received, true);
+		wake_up_all(&channel->intent_req_wq);
+	}
 
 	kfree(msg);
 	qcom_glink_rx_advance(glink, ALIGN(msglen, 8));

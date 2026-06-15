@@ -60,4 +60,14 @@ config LEDS_BYS_AW21104
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called leds-bys-aw21104.
+
+config LEDS_USER_LP5814
+	tristate "LED Support for LP5814"
+	depends on LEDS_CLASS && I2C
+	help
+	  this option enables support for the LP5814 RGBW LED connected
+	  through I2C facing user(wearer) . Say Y to enable support for the LP5814 LED.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called leds-user-lp5814.
 endif # NEW_LEDS

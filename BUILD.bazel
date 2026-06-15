@@ -21,6 +21,7 @@ load(
     "define_canoe_tuivm",
 )
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
+load(":kleaf-scripts/targets/glymur.bzl", "define_glymur")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
 load(":kleaf-scripts/targets/hamoa_la.bzl", "define_hamoa_la")
 load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
@@ -385,3 +386,5 @@ define_shikra_oemvm()
 define_shikra_tuivm()
 
 define_shikra_vms()
+
+define_glymur()

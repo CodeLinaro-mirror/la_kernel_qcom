@@ -4,6 +4,7 @@ targets = [
     #"gen3auto",
     "autogvm",
     "bengal",
+    "glymur",
     "hamoa",
     "hamoa_la",
     "lahaina",

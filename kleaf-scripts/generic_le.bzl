@@ -96,6 +96,8 @@ def define_qcom_le(
         kconfig_ext = ":kconfig.msm.generated",
         makefile = "//common:Makefile",
         defconfig = defconfig,
+        system_trusted_key = ":verity_cert.pem",
+        module_signing_key = ":signing_key",
         post_defconfig_fragments = [
             ":{}_merged_defconfig".format(stem),
         ],
@@ -135,6 +137,8 @@ def define_base_kernel(name, base_kernel, defconfig, defconfig_fragments = None)
         module_outs = get_gki_modules_list("arm64") + get_kunit_modules_list("arm64"),
         keep_module_symvers = True,
         pack_module_env = True,
+        system_trusted_key = ":verity_cert.pem",
+        module_signing_key = ":signing_key",
         visibility = ["//visibility:public"],
     )
 
