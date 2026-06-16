@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/clk.h>
@@ -3409,3 +3409,4 @@ module_init(i2c_dev_init);
 module_exit(i2c_dev_exit);
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:i2c_geni");
+MODULE_SOFTDEP("pre: i2c-dev");
