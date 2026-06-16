@@ -357,11 +357,11 @@ struct sdhci_msm_bus_vote_data {
 };
 
 /*
- * DLL registers which needs be programmed with HSR settings.
+ * DLL registers which needs be programmed with configuration settings.
  * Add any new register only at the end and don't change the
  * sequence.
  */
-struct sdhci_msm_dll_hsr {
+struct sdhci_msm_dll_cfg {
 	u32 dll_config;
 	u32 dll_config_2;
 	u32 dll_config_3;
@@ -529,7 +529,6 @@ struct sdhci_msm_host {
 	bool pltfm_init_done;
 	bool fake_core_3_0v_support;
 	bool use_7nm_dll;
-	struct sdhci_msm_dll_hsr *dll_hsr;
 	struct sdhci_msm_regs_restore regs_restore;
 	struct cqe_regs_restore cqe_regs;
 	u32 *sup_ice_clk_table;
@@ -550,6 +549,7 @@ struct sdhci_msm_host {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pinctrl_state_default;
 	struct pinctrl_state *pinctrl_state_gpio;
+	struct sdhci_msm_dll_cfg *dll_cfg;
 };
 
 static struct sdhci_msm_host *sdhci_slot[3];
@@ -962,11 +962,11 @@ static int msm_init_cm_dll(struct sdhci_host *host,
 	 * (Only applicable for 7FF projects).
 	 */
 	if (msm_host->use_7nm_dll) {
-		if (msm_host->dll_hsr) {
-			writel_relaxed(msm_host->dll_hsr->dll_config_3,
+		if (msm_host->dll_cfg) {
+			writel_relaxed(msm_host->dll_cfg->dll_config_3,
 					host->ioaddr +
 					msm_offset->core_dll_config_3);
-			writel_relaxed(msm_host->dll_hsr->dll_usr_ctl,
+			writel_relaxed(msm_host->dll_cfg->dll_usr_ctl,
 					host->ioaddr +
 					msm_offset->core_dll_usr_ctl);
 		} else {
@@ -988,8 +988,8 @@ static int msm_init_cm_dll(struct sdhci_host *host,
 	else
 		ddr_cfg_offset = msm_offset->core_ddr_config_old;
 
-	if (msm_host->dll_hsr && msm_host->dll_hsr->ddr_config)
-		writel_relaxed(msm_host->dll_hsr->ddr_config, host->ioaddr +
+	if (msm_host->dll_cfg && msm_host->dll_cfg->ddr_config)
+		writel_relaxed(msm_host->dll_cfg->ddr_config, host->ioaddr +
 			ddr_cfg_offset);
 	else
 		writel_relaxed(DDR_CONFIG_POR_VAL, host->ioaddr +
@@ -1035,12 +1035,12 @@ static int msm_init_cm_dll(struct sdhci_host *host,
 
 	/*
 	 * Step 10 - Update the lower two bytes of DLL_CONFIG only with
-	 * HSR values. Since these are the static settings.
+	 * configuration values. Since these are the static settings.
 	 */
-	if (msm_host->dll_hsr) {
+	if (msm_host->dll_cfg) {
 		writel_relaxed((readl_relaxed(host->ioaddr +
 			msm_offset->core_dll_config) |
-			(msm_host->dll_hsr->dll_config & 0xffff)),
+			(msm_host->dll_cfg->dll_config & 0xffff)),
 			host->ioaddr + msm_offset->core_dll_config);
 	}
 
@@ -1433,8 +1433,8 @@ static int sdhci_msm_cm_dll_sdc4_calibration(struct sdhci_host *host)
 	else
 		ddr_cfg_offset = msm_offset->core_ddr_config_old;
 
-	if (msm_host->dll_hsr && msm_host->dll_hsr->ddr_config)
-		config = msm_host->dll_hsr->ddr_config;
+	if (msm_host->dll_cfg && msm_host->dll_cfg->ddr_config)
+		config = msm_host->dll_cfg->ddr_config;
 	else
 		config = DDR_CONFIG_POR_VAL;
 
@@ -1961,29 +1961,34 @@ static int sdhci_msm_set_pincfg(struct sdhci_msm_host *msm_host, bool level)
 	return ret;
 }
 
-static int sdhci_msm_dt_parse_hsr_info(struct device *dev,
+static int sdhci_msm_dt_parse_dll_cfg_info(struct device *dev,
 		struct sdhci_msm_host *msm_host)
 
 {
-	u32 *dll_hsr_table = NULL;
-	int dll_hsr_table_len, dll_hsr_reg_count;
+	u32 *dll_cfg_table = NULL;
+	int dll_cfg_table_len, dll_cfg_reg_count;
 	int ret = 0;
 
-	if (sdhci_msm_dt_get_array(dev, "qcom,dll-hsr-list",
-			&dll_hsr_table, &dll_hsr_table_len, 0))
-		goto skip_hsr;
-
-	dll_hsr_reg_count = sizeof(struct sdhci_msm_dll_hsr) / sizeof(u32);
-	if (dll_hsr_table_len != dll_hsr_reg_count) {
-		dev_err(dev, "Number of HSR entries are not matching\n");
-		ret = -EINVAL;
-	} else {
-		msm_host->dll_hsr = (struct sdhci_msm_dll_hsr *)dll_hsr_table;
+	/* Try to parse "qcom,dll-config-list" first */
+	if (sdhci_msm_dt_get_array(dev, "qcom,dll-config-list",
+			&dll_cfg_table, &dll_cfg_table_len, 0)) {
+		/* Try legacy property name for backward compatibility */
+		if (sdhci_msm_dt_get_array(dev, "qcom,dll-hsr-list",
+				&dll_cfg_table, &dll_cfg_table_len, 0))
+			goto skip_dll_cfg;
 	}
 
-skip_hsr:
-	if (!msm_host->dll_hsr)
-		dev_info(dev, "Failed to get dll hsr settings from dt\n");
+	dll_cfg_reg_count = sizeof(struct sdhci_msm_dll_cfg) / sizeof(u32);
+	if (dll_cfg_table_len != dll_cfg_reg_count) {
+		dev_err(dev, "Number of DLL config entries are not matching\n");
+		ret = -EINVAL;
+	} else {
+		msm_host->dll_cfg = (struct sdhci_msm_dll_cfg *)dll_cfg_table;
+	}
+
+skip_dll_cfg:
+	if (!msm_host->dll_cfg)
+		dev_info(dev, "Failed to get dll config settings from dt\n");
 	return ret;
 }
 
@@ -2048,7 +2053,7 @@ static bool sdhci_msm_populate_pdata(struct device *dev,
 	msm_host->dll_lock_bist_fail_wa =
 		of_property_read_bool(np, "qcom,dll_lock_bist_fail_wa");
 
-	if (sdhci_msm_dt_parse_hsr_info(dev, msm_host))
+	if (sdhci_msm_dt_parse_dll_cfg_info(dev, msm_host))
 		goto out;
 
 	if (!sdhci_msm_dt_get_array(dev, "qcom,ice-clk-rates",

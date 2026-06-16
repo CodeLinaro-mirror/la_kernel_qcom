@@ -397,6 +397,7 @@ canoe_perf_config = {
     "CONFIG_SM_GPUCC_4450": "m",
     "CONFIG_SM_GPUCC_CANOE": "m",
     "CONFIG_SM_GPUCC_CHORA": "m",
+    "CONFIG_SM_GPUCC_MALABAR": "m",
     "CONFIG_SM_TCSRCC_CANOE": "m",
     "CONFIG_SM_TCSRCC_CHORA": "m",
     "CONFIG_SM_VIDEOCC_CANOE": "m",

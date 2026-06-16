@@ -212,11 +212,12 @@ hab_msg_dequeue(struct virtual_channel *vchan, struct hab_message **msg,
 		/* no message received */
 		*rsize = 0;
 
-		if (vchan->otherend_closed)
+		if (vchan->otherend_closed) {
 			ret = -ENODEV;
-		else if (ret == -ERESTARTSYS)
+		} else if (ret == -ERESTARTSYS) {
 			ret = -EINTR;
-		else if (ret == 0) {
+			dump_hab_pending_signals();
+		} else if (ret == 0) {
 			pr_debug("timeout! vcid: %x\n", vchan->id);
 			ret = -ETIMEDOUT;
 		} else {

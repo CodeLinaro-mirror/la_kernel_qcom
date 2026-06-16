@@ -8,6 +8,45 @@
 #include "hab_virq.h"
 #include "hab_qvm.h"
 #include "hab_virtio.h"
+#include <linux/sched/signal.h>
+
+void dump_hab_pending_signals(void)
+{
+	struct task_struct *task = current;
+	sigset_t tpending;
+	sigset_t spending;
+	unsigned long flags;
+	int sig;
+	bool found = false;
+
+	/*
+	 * Called only from interruptible wait returns in process context for
+	 * current, so signal and sighand are always valid here.
+	 */
+	spin_lock_irqsave(&task->sighand->siglock, flags);
+	/* Interrupted waits may come from thread-directed or process-shared signals. */
+	tpending = task->pending.signal;
+	spending = task->signal->shared_pending.signal;
+	spin_unlock_irqrestore(&task->sighand->siglock, flags);
+
+	for (sig = 1; sig < _NSIG; sig++) {
+		if (sigismember(&tpending, sig)) {
+			pr_warn("pending thread signal %d pid %d tgid %d command %s\n",
+				sig, task_pid_nr(task), task_tgid_nr(task), task->comm);
+			found = true;
+		}
+
+		if (sigismember(&spending, sig)) {
+			pr_warn("pending shared signal %d pid %d tgid %d command %s\n",
+				sig, task_pid_nr(task), task_tgid_nr(task), task->comm);
+			found = true;
+		}
+	}
+
+	if (!found)
+		pr_warn("interrupted by signal but no pending signals pid %d tgid %d command %s\n",
+			task_pid_nr(task), task_tgid_nr(task), task->comm);
+}
 
 /**
  * hab_sgl_copy_buffer - Copy data between a linear buffer and an SG list

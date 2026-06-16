@@ -4,6 +4,7 @@ targets = [
     #"gen3auto",
     "autogvm",
     "bengal",
+    "glymur",
     "hamoa",
     "hamoa_la",
     "lahaina",
@@ -26,6 +27,7 @@ le_targets = [
     #"sun-allyes",
     "alor-le",
     "autogvm",
+    "bengal-le",
     "vienna-le",
 ]
 
