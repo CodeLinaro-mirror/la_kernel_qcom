@@ -1853,6 +1853,13 @@ static int qcom_ethqos_set_fixed_link(struct platform_device *pdev,
 static int qcom_ethqos_check_mdio_and_fix_link(struct platform_device *pdev,
 					       struct plat_stmmacenet_data *plat)
 {
+	/*
+	 * Save the mdio subnode that stmmac DT parsing found.  We clear
+	 * plat->mdio_node for the SWITCH/fixed-link paths (which don't need
+	 * MDIO), but restore it for the normal PHY path so phylink can
+	 * resolve phy-handle.
+	 */
+	struct device_node *dt_mdio = plat->mdio_node;
 	struct device *dev = &pdev->dev;
 	struct device_node *fixed_link_node;
 
@@ -1894,6 +1901,10 @@ static int qcom_ethqos_check_mdio_and_fix_link(struct platform_device *pdev,
 
 		plat->mdio_bus_data->needs_reset = true;
 	}
+
+	/* Restore DT-provided mdio node for phylink phy-handle resolution. */
+	if (dt_mdio)
+		plat->mdio_node = dt_mdio;
 
 	return 0;
 }
