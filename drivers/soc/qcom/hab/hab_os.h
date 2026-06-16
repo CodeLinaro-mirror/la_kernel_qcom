@@ -56,5 +56,6 @@ size_t hab_sgl_copy_buffer(struct scatterlist *sgl, void *buf,
 void hab_sgl_free(struct scatterlist *sgl);
 struct scatterlist *hab_sgl_alloc_merge(unsigned long long length, gfp_t gfp,
 			      unsigned int *nent_p);
+void dump_hab_pending_signals(void);
 
 #endif /*__HAB_OS_H*/

@@ -142,6 +142,7 @@ def register_modules(registry):
             "kernel/trace/qcom_ipc_logging",
             "drivers/rpmsg/qcom_glink",
             "drivers/remoteproc/rproc_qcom_common",
+            "drivers/soc/qcom/power_mode",
         ],
     )
 
@@ -178,5 +179,22 @@ def register_modules(registry):
             "drivers/rpmsg/qcom_glink_spss",
             "drivers/rpmsg/qcom_glink_rpm",
             "drivers/irqchip/qcom-mpm",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/rpmsg/rpm_dump",
+        out = "rpm_dump.ko",
+        config = "CONFIG_MSM_RPM_SMD",
+        srcs = [
+            # do not sort
+            "drivers/rpmsg/rpm_dump.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_ramdump",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/remoteproc/rproc_qcom_common",
+            "drivers/rpmsg/rpm-smd",
         ],
     )

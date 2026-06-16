@@ -1935,8 +1935,20 @@ static const struct msm_pinctrl_soc_data bourtzi_tlmm = {
 	.egpio_func = 11,
 };
 
+static const struct msm_pinctrl_soc_data bourtzi_vm_tlmm = {
+	.pins = bourtzi_pins,
+	.npins = ARRAY_SIZE(bourtzi_pins),
+	.functions = bourtzi_functions,
+	.nfunctions = ARRAY_SIZE(bourtzi_functions),
+	.groups = bourtzi_groups,
+	.ngroups = ARRAY_SIZE(bourtzi_groups),
+	.ngpios = 137,
+	.egpio_func = 11,
+};
+
 static const struct of_device_id bourtzi_tlmm_of_match[] = {
 	{ .compatible = "qcom,bourtzi-tlmm", .data = &bourtzi_tlmm},
+	{ .compatible = "qcom,bourtzi-vm-tlmm", .data = &bourtzi_vm_tlmm },
 	{},
 };
 

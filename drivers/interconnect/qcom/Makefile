@@ -29,6 +29,12 @@ qnoc-x1e80100-objs += x1e80100.o
 obj-$(CONFIG_INTERCONNECT_QCOM_MALABAR) += qnoc-malabar.o
 qnoc-malabar-objs += malabar.o
 
+obj-$(CONFIG_INTERCONNECT_QCOM_LAHAINA) += qnoc-lahaina.o
+qnoc-lahaina-objs += lahaina.o
+
+obj-$(CONFIG_INTERCONNECT_QCOM_RAVELIN) += qnoc-ravelin.o
+qnoc-ravelin-objs += ravelin.o
+
 obj-$(CONFIG_INTERCONNECT_QCOM_YUPIK) += qnoc-yupik.o
 qnoc-yupik-objs += yupik.o
 
@@ -38,6 +44,9 @@ obj-$(CONFIG_INTERCONNECT_QCOM_QOS_RPM) += qnoc-qos-rpm.o
 
 obj-$(CONFIG_INTERCONNECT_QCOM_BENGAL) += qnoc-bengal.o
 qnoc-bengal-objs += bengal.o
+
+obj-$(CONFIG_INTERCONNECT_QCOM_SCUBA) += qnoc-scuba.o
+qnoc-scuba-objs += scuba.o
 
 obj-$(CONFIG_INTERCONNECT_QCOM_MONACO) += qnoc-monaco.o
 qnoc-monaco-objs += monaco.o

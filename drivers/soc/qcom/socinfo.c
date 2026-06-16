@@ -50,6 +50,7 @@ enum {
 	HW_PLATFORM_SBC = 24,
 	HW_PLATFORM_ADP = 25,
 	HW_PLATFORM_HDK = 31,
+	HW_PLATFORM_IOT = 32,
 	HW_PLATFORM_ATP = 33,
 	HW_PLATFORM_IDP = 34,
 	HW_PLATFORM_WDP = 36,
@@ -85,6 +86,7 @@ static const char * const hw_platform[] = {
 	[HW_PLATFORM_SBC] = "SBC",
 	[HW_PLATFORM_ADP] = "ADP",
 	[HW_PLATFORM_HDK] = "HDK",
+	[HW_PLATFORM_IOT] = "IOT",
 	[HW_PLATFORM_ATP] = "ATP",
 	[HW_PLATFORM_IDP] = "IDP",
 	[HW_PLATFORM_WDP] = "WDP",
@@ -712,7 +714,9 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(WHALEP) },
 	{ qcom_board_id(CANOEPSG) },
 	{ qcom_board_id(CHORA) },
+	{ qcom_board_id(CHORAP) },
 	{ qcom_board_id(KHAJE) },
+	{ qcom_board_id(KHAJEAPQ) },
 	{ qcom_board_id(KHAJEP) },
 	{ qcom_board_id(KHAJEQ) },
 	{ qcom_board_id(KHAJEG) },
@@ -729,6 +733,7 @@ static const struct soc_id soc_id[] = {
 	{ qcom_board_id(SM6115P) },
 	{ qcom_board_id(DIWALI) },
 	{ qcom_board_id(DIWALIP) },
+	{ qcom_board_id(MAHUA) },
 };
 
 static struct attribute *msm_custom_socinfo_attrs[MAX_SOCINFO_ATTRS];
@@ -1156,8 +1161,7 @@ msm_get_hw_platform(struct device *dev,
 		name = hw_platform[hw_type];
 	}
 
-	return scnprintf(buf, PAGE_SIZE, "%-.32s\n",
-			name);
+	return scnprintf(buf, PAGE_SIZE, "%-.32s\n", name);
 }
 ATTR_DEFINE(hw_platform);
 

@@ -821,7 +821,8 @@ void smart_freq_init(const char *name)
 				cluster->smart_freq_info->min_cycles = 7004160;
 			}
 		}
-	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP") ||
+			!strcmp(name, "BOURTZI") || !strcmp(name, "BOURTZIP")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
@@ -1012,7 +1013,7 @@ void smart_freq_init(const char *name)
 					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 			}
 		}
-	} else if (!strcmp(name, "CHORA")) {
+	} else if (!strcmp(name, "CHORA") || !strcmp(name, "CHORAP")) {
 
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
@@ -1056,7 +1057,7 @@ void smart_freq_init(const char *name)
 					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 			}
 		}
-	} else if (!strcmp(name, "X1E80100")) {
+	} else if (!strcmp(name, "X1E80100") || !strcmp(name, "X1P42100")) {
 		for_each_sched_cluster(cluster) {
 			/* Legacy */
 			/* Keeping the legacy freq reasons hyst default as canoe.
@@ -1070,8 +1071,7 @@ void smart_freq_init(const char *name)
 			cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
 				300000000;
 
-			/* All X1E80100 clusters share the same frequency points, and
-			 * cluster 1 and cluster 2 have the same capacity. we can keep
+			/* All clusters share the same frequency points. we can keep
 			 * the current configuration and wait for the perf/power team
 			 * to tune an appropriate value
 			 */

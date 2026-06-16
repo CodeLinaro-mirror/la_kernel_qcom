@@ -9,7 +9,6 @@ blocklist can-gw
 blocklist can-raw
 blocklist dummy-cpufreq
 blocklist dummy_hcd
-blocklist dummy_hcd
 blocklist e4000
 blocklist failover
 blocklist fc0011
@@ -21,6 +20,7 @@ blocklist kheaders
 blocklist limits_stat
 blocklist lkdtm
 blocklist llcc_perfmon
+blocklist slc_perfmon
 blocklist locktorture
 blocklist m88rs6000t
 blocklist max2165

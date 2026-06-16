@@ -16,7 +16,9 @@ COPY_FILES = [
     "drivers/dma/qcom/gpi.c",
     "drivers/dma/dmaengine.h",
     "drivers/dma/virt-dma.h",
+    "drivers/extcon/extcon-usb-gpio.c",
     "drivers/gpio/gpio-virtio.c",
+    "drivers/gpu/drm/bridge/aux-bridge.c",
     "drivers/i2c/busses/i2c-qcom-geni.c",
     "drivers/i2c/busses/i2c-virtio.c",
     "drivers/spi/spi-geni-qcom.c",
@@ -32,10 +34,17 @@ COPY_FILES = [
     "drivers/net/pcs/pcs-xpcs-wx.c",
     "drivers/net/phy/aquantia/aquantia_leds.c",
     "drivers/net/phy/aquantia/aquantia_firmware.c",
+    "drivers/net/phy/qcom/qca808x.c",
+    "drivers/net/phy/qcom/at803x.c",
+    "drivers/net/phy/qcom/qcom.h",
+    "drivers/net/phy/qcom/qcom-phy-lib.c",
+    "drivers/perf/dwc_pcie_pmu.c",
     "drivers/phy/qualcomm/phy-qcom-sgmii-eth.c",
     "drivers/phy/qualcomm/phy-qcom-qmp-pcs-sgmii.h",
     "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v5.h",
     "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v5.h",
+    "drivers/thermal/thermal-generic-adc.c",
+    "drivers/usb/typec/mux/nb7vpq904m.c",
     # cfg80211.ko files start
     "net/wireless/ap.c",
     "net/wireless/certs/sforshee.hex",
@@ -188,6 +197,30 @@ def define_common_upstream_files():
             src = "//common:{}".format(file),
             out = file,
         )
+
+    copy_file(
+        name = "copied-arm-smmuv2-defs",
+        src = "drivers/iommu/arm/arm-smmu-v3/pkvm/arm-smmuv2-defs.h",
+        out = "drivers/iommu/arm/arm-smmu-v3/arm-smmuv2-defs.h",
+    )
+
+    copy_file(
+        name = "copied-smmuv2_nesting",
+        src = "drivers/iommu/arm/arm-smmu-v3/pkvm/smmuv2_nesting.h",
+        out = "drivers/iommu/arm/arm-smmu-v3/smmuv2_nesting.h",
+    )
+
+    copy_file(
+        name = "copied-arm_smmu_v3_nested",
+        src = "drivers/iommu/arm/arm-smmu-v3/pkvm/arm_smmu_v3_nested.h",
+        out = "drivers/iommu/arm/arm-smmu-v3/arm_smmu_v3_nested.h",
+    )
+
+    copy_file(
+        name = "copied-arm-smmu-v3",
+        src = "drivers/iommu/arm/arm-smmu-v3/arm-smmu-v3.h",
+        out = "drivers/iommu/arm/arm-smmu-v3/pkvm/arm-smmu-v3.h",
+    )
 
     # TODO: Use hermetic_genrule when prebuilt `patch` tool is available.
     native.genrule(

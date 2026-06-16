@@ -16,3 +16,13 @@ qcom-pmu-lib-objs += pmu_lib.o
 
 obj-$(CONFIG_QTI_QCOM_SCMI_CLIENT) += qcom_scmi_client.o
 
+obj-$(CONFIG_QCOM_LLCC_MISS) += llcc_miss.o
+
+obj-$(CONFIG_QCOM_BUS_PROF) += trace-bus-prof.o
+
+obj-$(CONFIG_QCOM_LLCC_OCCUPANCY) += llcc_occ.o
+
+obj-$(CONFIG_QCOM_BUS_LAT) += mem_lat_prof.o
+
+obj-$(CONFIG_QCOM_BWPROF_SCMI) += bwprof_scmi.o
+

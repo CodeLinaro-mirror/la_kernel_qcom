@@ -804,7 +804,6 @@ static void handle_bam_mux_cmd(struct work_struct *work)
 		memcpy(ptr, bam_cma_rx_buf_virt(info->cma_buf_idx), info->len);
 	}
 	bam_cma_rx_buf_free(info->cma_buf_idx);
-	memset(info, 0, sizeof(*info));
 	kfree(info);
 
 	if (!rx_skb) {
@@ -2462,13 +2461,12 @@ static void bam_cma_assign_to_modem(void)
 
 	ret = qcom_scm_assign_mem(bam_cma_phys_base, bam_cma_total_size,
 				  &src, dest, 2);
-	if (ret) {
+	if (ret)
 		pr_err("%s: failed to assign CMA to modem addr=%pap size=%zu rc=%d\n",
 		       __func__, &bam_cma_phys_base, bam_cma_total_size, ret);
-	} else {
+	else
 		BAM_DMUX_LOG("%s: assigned CMA to modem addr=%pap size=%zu\n",
 			     __func__, &bam_cma_phys_base, bam_cma_total_size);
-	}
 }
 
 static int bam_init(void)

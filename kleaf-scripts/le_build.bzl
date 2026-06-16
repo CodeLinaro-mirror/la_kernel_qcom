@@ -110,7 +110,7 @@ def define_single_le_build(
         dtbo_srcs = [":{}_dtb_build/{}".format(stem, dtbo) for dtbo in dtbo_list] if dtbo_list else None,
         build_boot = True,
         build_initramfs = True,
-        build_dtbo = True,
+        build_dtbo = True if dtbo_list else False,
         modules_list = "modules-lists/modules.list.msm.{}".format(name),
         vendor_ramdisk_binaries = get_vendor_ramdisk_binaries(stem, flavor = "le"),
         boot_image_outs = ["boot.img"],

@@ -159,7 +159,8 @@ static int scm_smc_do_quirk(struct device *dev, struct arm_smccc_args *smc,
 
 			if (res->a0 == QCOM_SCM_WAITQ_SLEEP) {
 				trace_scm_waitq_sleep(wq_ctx, smc_call_ctx);
-				wait_for_completion(wq);
+				wait_for_completion_state(wq, TASK_IDLE | TASK_FREEZABLE
+							| TASK_KILLABLE);
 				trace_scm_waitq_resume(smc_call_ctx);
 				fill_wq_resume_args(smc, smc_call_ctx);
 				continue;
