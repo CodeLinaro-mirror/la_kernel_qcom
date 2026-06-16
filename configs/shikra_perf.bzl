@@ -30,6 +30,7 @@ shikra_perf_config = {
     "CONFIG_CRYPTO_DEV_QCOM_RNG": "m",
     "CONFIG_DEVFREQ_GOV_QCOM_ADRENO_TZ": "m",
     "CONFIG_DMABUF_HEAPS_SYSTEM": "y",
+    "CONFIG_DP83867_PHY": "m",
     "CONFIG_EDAC_KRYO_ARM64": "m",
     "CONFIG_EDAC_KRYO_ARM64_PANIC_ON_UE": "y",
     "CONFIG_EDAC_QCOM": "m",
