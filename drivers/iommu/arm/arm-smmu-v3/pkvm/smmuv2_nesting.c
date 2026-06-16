@@ -798,7 +798,7 @@ int smmuv2_hyp_nesting_init(void)
 	u32 page_count = smmu_arr_size >> PAGE_SHIFT;
 
 	ret = ___pkvm_host_donate_hyp((hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT),
-				      page_count, true);
+				      page_count, false);
 	if (ret)
 		return ret;
 
