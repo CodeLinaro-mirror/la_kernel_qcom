@@ -54,6 +54,9 @@
 /*RGMII IO MACRO BYPASS fields*/
 #define RGMII_BYPASS_EN		BIT(0)
 
+/* SDCC_USR_CTL bits */
+#define SDCC_USR_CTL_DDR_BYPASS			BIT(30)
+
 /* SDCC_HC_REG_DLL_CONFIG fields */
 #define SDCC_DLL_CONFIG_DLL_RST			BIT(30)
 #define SDCC_DLL_CONFIG_PDN			BIT(29)
@@ -1029,6 +1032,51 @@ static int ethqos_rgmii_macro_init(struct qcom_ethqos *ethqos)
 	return 0;
 }
 
+static void ethqos_rgmii_id_macro_init(struct qcom_ethqos *ethqos)
+{
+	rgmii_updatel(ethqos, RGMII_CONFIG2_TX_TO_RX_LOOPBACK_EN,
+		      0, RGMII_IO_MACRO_CONFIG2);
+
+	if (ethqos->speed == SPEED_1000)
+		rgmii_updatel(ethqos, RGMII_CONFIG_DDR_MODE,
+			      RGMII_CONFIG_DDR_MODE, RGMII_IO_MACRO_CONFIG);
+	else
+		rgmii_updatel(ethqos, RGMII_CONFIG_DDR_MODE,
+			      0, RGMII_IO_MACRO_CONFIG);
+
+	rgmii_updatel(ethqos, RGMII_CONFIG_BYPASS_TX_ID_EN,
+		      RGMII_CONFIG_BYPASS_TX_ID_EN, RGMII_IO_MACRO_CONFIG);
+	rgmii_updatel(ethqos, RGMII_CONFIG_POS_NEG_DATA_SEL,
+		      0, RGMII_IO_MACRO_CONFIG);
+	rgmii_updatel(ethqos, RGMII_CONFIG_PROG_SWAP,
+		      0, RGMII_IO_MACRO_CONFIG);
+
+	if (ethqos->has_emac_ge_3)
+		rgmii_updatel(ethqos, RGMII_CONFIG2_DATA_DIVIDE_CLK_SEL,
+			      0, RGMII_IO_MACRO_CONFIG2);
+	else
+		rgmii_updatel(ethqos, RGMII_CONFIG2_DATA_DIVIDE_CLK_SEL,
+			      RGMII_CONFIG2_DATA_DIVIDE_CLK_SEL,
+			      RGMII_IO_MACRO_CONFIG2);
+
+	rgmii_updatel(ethqos, RGMII_CONFIG2_TX_CLK_PHASE_SHIFT_EN,
+		      0, RGMII_IO_MACRO_CONFIG2);
+
+	if (ethqos->speed == SPEED_1000)
+		rgmii_updatel(ethqos, RGMII_CONFIG2_RSVD_CONFIG15,
+			      0, RGMII_IO_MACRO_CONFIG2);
+	else
+		rgmii_updatel(ethqos, RGMII_CONFIG2_RSVD_CONFIG15,
+			      RGMII_CONFIG2_RSVD_CONFIG15, RGMII_IO_MACRO_CONFIG2);
+
+	if (!ethqos->rgmii_config_loopback_en)
+		rgmii_updatel(ethqos, RGMII_CONFIG_LOOPBACK_EN,
+			      0, RGMII_IO_MACRO_CONFIG);
+
+	rgmii_updatel(ethqos, RGMII_CONFIG2_RX_PROG_SWAP,
+		      RGMII_CONFIG2_RX_PROG_SWAP, RGMII_IO_MACRO_CONFIG2);
+}
+
 static int ethqos_configure_rgmii(struct qcom_ethqos *ethqos)
 {
 	struct device *dev = &ethqos->pdev->dev;
@@ -1040,6 +1088,15 @@ static int ethqos_configure_rgmii(struct qcom_ethqos *ethqos)
 		rgmii_writel(ethqos, ethqos->por[i].value,
 			     ethqos->por[i].offset);
 	ethqos_set_func_clk_en(ethqos);
+
+	if (ethqos->phy_mode == PHY_INTERFACE_MODE_RGMII_ID) {
+		rgmii_updatel(ethqos, SDCC_DLL_CONFIG_PDN,
+			      SDCC_DLL_CONFIG_PDN, SDCC_HC_REG_DLL_CONFIG);
+		rgmii_updatel(ethqos, SDCC_USR_CTL_DDR_BYPASS,
+			      SDCC_USR_CTL_DDR_BYPASS, SDCC_USR_CTL);
+		ethqos_rgmii_id_macro_init(ethqos);
+		return 0;
+	}
 
 	/* Initialize the DLL first */
 
