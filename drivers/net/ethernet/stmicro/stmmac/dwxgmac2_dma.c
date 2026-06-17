@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: (GPL-2.0 OR MIT)
 /*
  * Copyright (c) 2018 Synopsys, Inc. and/or its affiliates.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * stmmac XGMAC support.
  */
 
@@ -219,10 +220,6 @@ static void dwxgmac2_dma_rx_mode(struct stmmac_priv *priv, void __iomem *ioaddr,
 	}
 
 	writel(value, ioaddr + XGMAC_MTL_RXQ_OPMODE(dwxgmac_addrs, channel));
-
-	/* Enable MTL RX overflow */
-	value = readl(ioaddr + XGMAC_MTL_QINTEN(dwxgmac_addrs, channel));
-	writel(value | XGMAC_RXOIE, ioaddr + XGMAC_MTL_QINTEN(dwxgmac_addrs, channel));
 }
 
 static void dwxgmac2_dma_tx_mode(struct stmmac_priv *priv, void __iomem *ioaddr,
@@ -619,6 +616,24 @@ static void dwxgmac2_set_bfsize(struct stmmac_priv *priv, void __iomem *ioaddr,
 	writel(value, ioaddr + XGMAC_DMA_CH_RX_CONTROL(dwxgmac_addrs, chan));
 }
 
+static void dwxgmac2_set_splm(struct stmmac_priv *priv, void __iomem *ioaddr,
+			      u32 mode)
+{
+	u32 value;
+
+	value = readl(ioaddr + XGMAC_EXT_CFG1);
+	value |= XGMAC_CONFIG1_SPLM(mode);
+	if (mode == XGMAC_SPLM_L2)
+		value |= XGMAC_CONFIG1_SAVE_EN;
+	writel(value, ioaddr + XGMAC_EXT_CFG1);
+
+	if (mode == XGMAC_SPLM_L2) {
+		value = readl(ioaddr + XGMAC_EXT_CFG0);
+		value &= ~XGMAC_EXT_CFG0_VPRE;
+		writel(value, ioaddr + XGMAC_EXT_CFG0);
+	}
+}
+
 static void dwxgmac2_enable_sph(struct stmmac_priv *priv, void __iomem *ioaddr,
 				bool en, u32 chan)
 {
@@ -629,10 +644,7 @@ static void dwxgmac2_enable_sph(struct stmmac_priv *priv, void __iomem *ioaddr,
 	value |= XGMAC_CONFIG_HDSMS_256; /* Segment max 256 bytes */
 	writel(value, ioaddr + XGMAC_RX_CONFIG);
 
-	value = readl(ioaddr + XGMAC_EXT_CFG1);
-	value |= XGMAC_CONFIG1_SPLM(1);
-	value |= XGMAC_CONFIG1_SAVE_EN;
-	writel(value, ioaddr + XGMAC_EXT_CFG1);
+	dwxgmac2_set_splm(priv, ioaddr, XGMAC_SPLM_L2);
 
 	value = readl(ioaddr + XGMAC_DMA_CH_CONTROL(dwxgmac_addrs, chan));
 	if (en)

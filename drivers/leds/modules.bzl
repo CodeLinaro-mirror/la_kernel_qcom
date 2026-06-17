@@ -102,3 +102,16 @@ def register_modules(registry):
             # do not sort
         ],
     )
+
+    registry.register(
+        name = "drivers/leds/leds-user-lp5814",
+        out = "leds-user-lp5814.ko",
+        config = "CONFIG_LEDS_USER_LP5814",
+        srcs = [
+            # do not sort
+            "drivers/leds/leds-user-lp5814.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )

@@ -262,10 +262,13 @@ config QCOM_SMMU_IRGN0_ERRATA
 
 	  Say N here if unsure.
 
-config ARM_SMMU_V3_PKVM_NESTED
-	tristate "ARM SMMUv3 nested support for protected Virtual Machines"
-	depends on KVM && ARM64 && ARM_SMMU_V3
-	help
-	  Enable a SMMUv3 driver in the KVM hypervisor, to protect VMs against
-	  memory accesses from devices owned by the host.
+config QCOM_SMMU_V2_V3_DISPATCHER
+       tristate "SMMUv2/3 nesting support in pKVM"
+       default m
+       help
+         When enabled, pKVM will implement SMMUv2/3 nesting emulating the host access to
+         command queue and STEs and attach a stage-2 page table to match the host page
+         table, this allows pKVM to be enabled while using the kernel driver for SMMUv2/3
+         instead of the pKVM driver.
+
 endif # IOMMU_SUPPORT

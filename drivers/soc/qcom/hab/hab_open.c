@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include "hab.h"
 
@@ -175,6 +175,7 @@ int hab_open_listen(struct uhab_context *ctx,
 		} else if (-ERESTARTSYS == ret) {
 			pr_warn("something failed in open listen ret %d\n",
 					ret);
+			dump_hab_pending_signals();
 			ret = -EINTR; /* condition not met */
 		} else if (ret > 0)
 			ret = 0; /* condition met */
@@ -194,6 +195,7 @@ int hab_open_listen(struct uhab_context *ctx,
 				ret = -ENODEV;
 			} else if (-ERESTARTSYS == ret) {
 				pr_warn("local interrupted ret %d\n", ret);
+				dump_hab_pending_signals();
 				ret = -EINTR;
 			}
 		}

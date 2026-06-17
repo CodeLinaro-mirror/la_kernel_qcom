@@ -3279,6 +3279,9 @@ static const struct adsp_data malabar_mpss_resource = {
 	.dma_phys_below_32b = true,
 	.decrypt_shutdown = true,
 	.both_dumps = true,
+	.region_assign_idx = 3,
+	.region_assign_count = 1,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
 };
 
 static const struct adsp_data malabar_wpss_resource = {
@@ -3411,6 +3414,8 @@ static const struct adsp_data pikachu_adsp_resource = {
 	.sysmon_name = "adsp",
 	.load_state = "adsp",
 	.ssctl_id = 0x14,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
 };
 
 static const struct adsp_data pikachu_cdsp_resource = {
@@ -3426,6 +3431,8 @@ static const struct adsp_data pikachu_cdsp_resource = {
 	.sysmon_name = "cdsp",
 	.load_state = "cdsp",
 	.ssctl_id = 0x17,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
 };
 
 static const struct adsp_data pikachu_soccp_resource = {
@@ -3510,6 +3517,35 @@ static const struct adsp_data scuba_mpss_resource = {
 	.uses_elf64 = true,
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+};
+
+static const struct adsp_data bourtzi_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.auto_boot = false,
+};
+
+static const struct adsp_data bourtzi_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
 	.decrypt_shutdown = true,
 	.both_dumps = true,
 };
@@ -3642,6 +3678,8 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,lahaina-modem-pas", .data = &yupik_mpss_resource},
 	{ .compatible = "qcom,lahaina-slpi-pas", .data = &lahaina_slpi_resource},
 	{ .compatible = "qcom,bourtzi-wpss-pas", .data = &bourtzi_wpss_resource},
+	{ .compatible = "qcom,bourtzi-adsp-pas", .data = &bourtzi_adsp_resource},
+	{ .compatible = "qcom,bourtzi-modem-pas", .data = &bourtzi_mpss_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

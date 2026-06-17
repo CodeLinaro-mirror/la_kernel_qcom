@@ -3840,7 +3840,7 @@ static void psy_changed_notifier_work(struct work_struct *w)
 
 		usb_extcon_state = extcon_get_state(pd->extcon, EXTCON_USB);
 
-		if (usb_extcon_state == 0) {
+		if (usb_extcon_state == 0 && typec_mode >= QTI_POWER_SUPPLY_TYPEC_SOURCE_DEFAULT) {
 			ret = usbpd_get_psy_iio_property(pd, POWER_SUPPLY_PROP_REAL_TYPE,
 								&val);
 			if (ret) {

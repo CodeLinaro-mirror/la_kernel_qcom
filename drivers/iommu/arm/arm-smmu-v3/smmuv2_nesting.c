@@ -211,9 +211,12 @@ int smmuv2_describe_smmuv2(void)
 	struct resource res;
 	int total_smmus = 0;
 	int ret;
-	int i;
+	int i, j;
 	u32 irq;
 	int smmu_order;
+	const __be32 *cell;
+	int num_handoff_smrs;
+	u32 sid, mask;
 
 	for (i = 0; i < ARRAY_SIZE(compatible_devices); i++) {
 		for_each_compatible_node(np, NULL, compatible_devices[i])
@@ -257,6 +260,29 @@ int smmuv2_describe_smmuv2(void)
 				pr_info("smmu_v2_nested_base[%lx].irq_s2_cb: %d\n",
 					smmu_v2_nested_count,
 					smmu_v2_nested_base[smmu_v2_nested_count].irq_s2_cb);
+
+				/* Read qcom,handoff-smrs: array of (sid, mask) pairs.
+				 * Each pair is packed as sid | (mask << 16) into handoff_smrs[].
+				 */
+				cell = of_get_property(np, "qcom,handoff-smrs", NULL);
+
+				num_handoff_smrs = of_property_count_elems_of_size(np,
+							"qcom,handoff-smrs", sizeof(u32) * 2);
+
+				if (cell && num_handoff_smrs > 0) {
+					for (j = 0; j < num_handoff_smrs; j++) {
+						sid = of_read_number(cell++, 1);
+						mask = of_read_number(cell++, 1);
+						smmu_v2_nested_base[
+							smmu_v2_nested_count].handoff_smrs[j] =
+								sid | (mask << 16);
+					}
+					smmu_v2_nested_base[smmu_v2_nested_count].num_handoff_smrs =
+						num_handoff_smrs;
+					pr_info("smmu_v2_nested_base[%lx]: %d handoff-smrs\n",
+						smmu_v2_nested_count, num_handoff_smrs);
+				}
+
 				smmu_v2_nested_count++;
 				desc = irq_to_desc(irq);
 				if (desc)
