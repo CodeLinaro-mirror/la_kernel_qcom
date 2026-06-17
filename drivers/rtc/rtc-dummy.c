@@ -250,7 +250,6 @@ static const struct file_operations rtc_dev_fops = {
 static int rtc_dummy_register_device(struct module *owner, struct rtc_device *rtc)
 {
 	dev_t rtc_devt;
-	struct device *class_dev;
 
 	int err;
 
@@ -283,7 +282,7 @@ static int rtc_dummy_register_device(struct module *owner, struct rtc_device *rt
 	cdev_init(&rtc->char_dev, &rtc_dev_fops);
 	rtc->char_dev.owner = rtc->owner;
 
-	err = cdev_add(&rtc->char_dev, rtc->dev.devt, 1);
+	err = cdev_device_add(&rtc->char_dev, &rtc->dev);
 	if (err) {
 		set_bit(RTC_NO_CDEV, &rtc->flags);
 		dev_err(rtc->dev.parent, "failed to add char device %d:%d err: %d\n",
@@ -292,12 +291,6 @@ static int rtc_dummy_register_device(struct module *owner, struct rtc_device *rt
 	}
 	dev_info(rtc->dev.parent, "char device (%d:%d) registered as %s\n",
 			MAJOR(rtc->dev.devt), rtc->id, dev_name(&rtc->dev));
-
-	class_dev = device_create(rtc->dev.class, NULL, rtc->dev.devt, NULL, "rtc0");
-	if (IS_ERR(class_dev)) {
-		dev_err(rtc->dev.parent, "class_device_create failed %d\n", -ENOMEM);
-		return -ENOMEM;
-	}
 
 	return 0;
 }
@@ -312,7 +305,7 @@ static void rtc_dummy_unregister_device(void *data)
 	 * letting any rtc_class_open() users access it again
 	 */
 	if (!test_bit(RTC_NO_CDEV, &rtc->flags))
-		cdev_del(&rtc->char_dev);
+		cdev_device_del(&rtc->char_dev, &rtc->dev);
 	rtc->ops = NULL;
 	mutex_unlock(&rtc->ops_lock);
 }
@@ -490,7 +483,7 @@ static int rtc_dummy_probe(struct platform_device *plat_dev)
 	rtd->regs = match->data;
 
 	switch (plat_dev->id) {
-	case 0:
+	case PLATFORM_DEVID_NONE:
 		rtd->rtc->ops = &rtc_dummy_ops_noalm;
 		break;
 	default:
