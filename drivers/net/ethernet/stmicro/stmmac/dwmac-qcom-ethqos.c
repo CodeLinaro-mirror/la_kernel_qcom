@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19, Linaro Limited
-// Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -29,6 +29,31 @@
 
 #include "stmmac_ptp.h"
 #include "dwmac-qcom-serdes.h"
+
+#define DMA_BUS_MODE			0x00001000
+#define DMA_BUS_MODE_SFT_RESET		BIT(0)
+
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+#define DMA_CHAN_BASE_ADDR		0x00008100
+#define DMA_CHAN_BASE_OFFSET		0x1000
+#else
+#define DMA_CHAN_BASE_ADDR		0x00001100
+#define DMA_CHAN_BASE_OFFSET		0x80
+#endif
+#define DMA_CHANX_BASE_ADDR(x)		(DMA_CHAN_BASE_ADDR + \
+					((x) * DMA_CHAN_BASE_OFFSET))
+
+#define DMA_CHAN_TX_CONTROL(x)		(DMA_CHANX_BASE_ADDR(x) + 0x4)
+#define DMA_CHAN_RX_CONTROL(x)		(DMA_CHANX_BASE_ADDR(x) + 0x8)
+
+#define DMA_CONTROL_ST			BIT(0)
+#define DMA_CONTROL_SR			BIT(0)
+
+ /*  MAC registers */
+#define GMAC_CONFIG			0x00000000
+#define GMAC_CONFIG_TE			BIT(1)
+#define GMAC_CONFIG_RE			BIT(0)
+#define DMA_CONTROL_RPF			BIT(31)
 
 #define RGMII_IO_MACRO_DEBUG1		0x20
 #define EMAC_SYSTEM_LOW_POWER_DEBUG	0x28
@@ -167,10 +192,14 @@
 
 #define DWMAC4_PCS_BASE			0x000000e0
 #define RGMII_CONFIG_10M_CLK_DVD	GENMASK(18, 10)
+#define GMAC_INT_EN			0x000000b4
+#define GMAC_INT_PCS_LINK		BIT(1)
+#define GMAC_INT_PCS_ANE		BIT(2)
 
 static int phytype = -1;
 static int boardtype = -1;
 void *ipc_emac_log_ctxt;
+static int disable_pcs_ane = -1;
 
 struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
 static int qcom_ethqos_hib_restore(struct device *dev);
@@ -198,6 +227,10 @@ MODULE_PARM_DESC(eipv6, "ipv6 value from ethernet partition");
 static char *ermac;
 module_param(ermac, charp, 0660);
 MODULE_PARM_DESC(ermac, "mac address from ethernet partition");
+
+static char *pcs_ane;
+module_param(pcs_ane, charp, 0660);
+MODULE_PARM_DESC(pcs_ane, "pcs_ane value for disable pcs auto negotiation");
 #endif
 
 inline void *qcom_ethqos_get_priv(struct qcom_ethqos *ethqos)
@@ -313,11 +346,22 @@ fail:
 	return 1;
 }
 
+static int set_pcs_ane(char *pcs_ane)
+{
+	if (!strcmp(pcs_ane, "disable"))
+		disable_pcs_ane = 1;
+	else
+		disable_pcs_ane = 0;
+	return 0;
+}
+
 #ifndef MODULE
 
 __setup("dwmac_qcom_eth.board=", set_board_type);
 
 __setup("dwmac_qcom_eth.enet=", set_phy_type);
+
+__setup("pcs_ane=", set_pcs_ane);
 
 static int __init set_early_ethernet_ipv4_static(char *ipv4_addr_in)
 {
@@ -379,8 +423,11 @@ static int qcom_ethqos_add_ipaddr(struct ip_params *ip_info,
 		} else {
 			ETHQOSINFO("Assigned IPv4 address: %s\r\n",
 				   ip_info->ipv4_addr_str);
-
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+	bootmarker_place_marker("M - Etherent Assigned IPv4 address");
+#else
 	ETHQOSINFO("M - Etherent Assigned IPv4 address\n");
+#endif
 		}
 	return res;
 }
@@ -426,8 +473,11 @@ static int qcom_ethqos_add_ipv6addr(struct ip_params *ip_info,
 	} else {
 		ETHQOSDBG("Assigned IPv6 address: %s\r\n",
 			  ip_info->ipv6_addr_str);
-
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+		bootmarker_place_marker("M - Ethernet Assigned IPv6 address");
+#else
 		ETHQOSINFO("M - Ethernet Assigned IPv6 address\n");
+#endif
 	}
 	return ret;
 }
@@ -456,14 +506,12 @@ u16 dwmac_qcom_select_queue(struct net_device *dev,
 {
 	u16 txqueue_select = ALL_OTHER_TRAFFIC_TX_CHANNEL;
 	unsigned int eth_type, priority;
-	int gso = skb_shinfo(skb)->gso_type;
 
-	if (skb && skb->priority) {
-		if (gso & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6 | SKB_GSO_UDP_L4))
-			return 0;
-		else
-			return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
-	}
+	if (!skb)
+		return txqueue_select;
+
+	if (skb->priority)
+		return netdev_pick_tx(dev, skb, NULL) % dev->real_num_tx_queues;
 
 	/* Retrieve ETH type */
 	eth_type = dwmac_qcom_get_eth_type(skb->data);
@@ -1068,11 +1116,15 @@ static int ethqos_rgmii_macro_init_v3(struct qcom_ethqos *ethqos)
 int ethqos_configure_sgmii_v3_1(struct qcom_ethqos *ethqos)
 {
 	u32 value = 0;
+	u32 intr_mask;
 	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
 
 	value = readl(priv->ioaddr + MAC_CTRL_REG);
 	switch (ethqos->speed) {
 	case SPEED_2500:
+		intr_mask = readl(priv->ioaddr + GMAC_INT_EN);
+		intr_mask &= ~(GMAC_INT_PCS_LINK | GMAC_INT_PCS_ANE);
+		writel(intr_mask, priv->ioaddr + GMAC_INT_EN);
 		value &= ~GMAC_CONFIG_PS;
 		writel(value, priv->ioaddr + MAC_CTRL_REG);
 		rgmii_updatel(ethqos, RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
@@ -1087,7 +1139,11 @@ int ethqos_configure_sgmii_v3_1(struct qcom_ethqos *ethqos)
 		rgmii_updatel(ethqos, RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
 			      RGMII_CONFIG2_RGMII_CLK_SEL_CFG, RGMII_IO_MACRO_CONFIG2);
 		value = readl(priv->ioaddr + DWMAC4_PCS_BASE);
-		value |= GMAC_AN_CTRL_RAN | GMAC_AN_CTRL_ANE;
+		/* Customer required to disable auto negotiate. */
+		if (priv->plat->disable_pcs_ane == 1)
+			value &= ~GMAC_AN_CTRL_ANE;
+		else
+			value |= GMAC_AN_CTRL_RAN | GMAC_AN_CTRL_ANE;
 		writel(value, priv->ioaddr + DWMAC4_PCS_BASE);
 	break;
 
@@ -2251,6 +2307,141 @@ static void qcom_ethqos_request_phy_wol(void *plat_n)
 	}
 }
 
+static int qcom_ethqos_set_fixed_link(struct platform_device *pdev)
+{
+	struct device_node *fixed_phy_node;
+	struct property *status_prop;
+
+	fixed_phy_node = of_get_child_by_name(pdev->dev.of_node, "fixed-link");
+
+		if (fixed_phy_node) {
+			status_prop = kzalloc(sizeof(*status_prop), GFP_KERNEL);
+			if (!status_prop) {
+				ETHQOSERR("kzalloc failed\n");
+				return -ENOMEM;
+			}
+
+			status_prop->name = kstrdup("status", GFP_KERNEL);
+			if (!(status_prop->name)) {
+				ETHQOSERR("kstrdup failed to alloc space for name\n");
+				kfree(status_prop);
+				return -ENOMEM;
+			}
+			status_prop->value = kstrdup("okay", GFP_KERNEL);
+			if (!(status_prop->value)) {
+				ETHQOSERR("kstrdup failed to alloc space for value\n");
+				kfree(status_prop);
+				return -ENOMEM;
+			}
+			status_prop->length = strlen(status_prop->value) + 1;
+
+			if (!(of_update_property(fixed_phy_node, status_prop) == 0)) {
+				kfree(status_prop);
+				ETHQOSERR("Fixed-link status update failed\n");
+				return -ENOENT;
+			}
+			ETHQOSINFO("Switch case: Fixed-link enabled from code\n");
+		}
+
+	of_node_put(fixed_phy_node);
+	kfree(plat_dat->mdio_bus_data);
+	return 0;
+}
+
+static int qcom_ethqos_check_mdio_and_fix_link(struct platform_device *pdev)
+{
+	size_t size;
+
+	size = sizeof(*plat_dat->mdio_bus_data);
+	if (phytype == SWITCH) {
+		ETHQOSINFO("Switch detected, Enable fixed-link");
+		qcom_ethqos_set_fixed_link(pdev);
+	} else {
+		struct device_node *fixed_phy_node;
+
+		fixed_phy_node = of_get_child_by_name(pdev->dev.of_node, "fixed-link");
+		if (of_device_is_available(fixed_phy_node)) {
+			ETHQOSINFO("Fixed link already enabled here");
+			kfree(plat_dat->mdio_bus_data);
+			return 0;
+		}
+		if (!plat_dat->mdio_bus_data) {
+			ETHQOSINFO("Detected Phy type %d", phytype);
+			plat_dat->mdio_bus_data = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
+			if (!plat_dat->mdio_bus_data)
+				return -ENOMEM;
+			plat_dat->mdio_bus_data->needs_reset = true;
+		}
+	}
+	return 0;
+}
+
+void qcom_stop_dma(void __iomem *ioaddr)
+{
+	u32 value = readl(ioaddr + DMA_CHAN_TX_CONTROL(0));
+
+	//stop tx dma
+	value &= ~DMA_CONTROL_ST;
+	writel(value, ioaddr + DMA_CHAN_TX_CONTROL(0));
+
+	//stop rx
+	value = readl(ioaddr + DMA_CHAN_RX_CONTROL(0));
+
+	//stop RPF
+	value |= DMA_CONTROL_RPF;
+	value &= ~DMA_CONTROL_SR;
+	writel(value, ioaddr + DMA_CHAN_RX_CONTROL(0));
+}
+
+void qcom_disable_mac(void __iomem *ioaddr, bool enable)
+{
+	u32 value = readl(ioaddr + GMAC_CONFIG);
+	u32 old_val = value;
+
+	if (enable)
+		value |= GMAC_CONFIG_RE | GMAC_CONFIG_TE;
+	else
+		value &= ~(GMAC_CONFIG_TE | GMAC_CONFIG_RE);
+
+	if (value != old_val)
+		writel(value, ioaddr + GMAC_CONFIG);
+}
+
+int qcom_dwmac4_dma_reset(void __iomem *ioaddr, struct plat_stmmacenet_data *plat)
+{
+	u32 value = 0;
+	int ret = 0;
+
+	qcom_serdes_loopback_v3_1(plat, true);
+
+	//serdes power up
+	ret =  qcom_ethqos_serdes_update(pethqos, pethqos->speed,
+					 plat->interface);
+
+	if (ret < 0) {
+		ETHQOSERR("serdes up failed\n");
+		return 0;
+	}
+
+	/* DMA SW reset */
+	value |= DMA_BUS_MODE_SFT_RESET;
+	writel(value, ioaddr + DMA_BUS_MODE);
+
+	return readl_poll_timeout(ioaddr + DMA_BUS_MODE, value,
+			!(value & DMA_BUS_MODE_SFT_RESET),
+			10000, 1000000);
+}
+
+void ethqos_cleanup(void __iomem *ioaddr, struct plat_stmmacenet_data *plat)
+{
+	//stop DMA
+	qcom_stop_dma(ioaddr);
+	//stop mac
+	qcom_disable_mac(ioaddr, false);
+	//reset DMA
+	qcom_dwmac4_dma_reset(ioaddr, plat);
+}
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -2271,7 +2462,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ETHQOSERR("Error creating logging context for emac\n");
 	else
 		ETHQOSDBG("IPC logging has been enabled for emac\n");
-
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+	bootmarker_place_marker("M - Ethernet probe start");
+#endif
 	ETHQOSINFO("M - Ethernet probe start\n");
 
 #ifdef MODULE
@@ -2289,9 +2482,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 		if (ermac)
 			ret = set_early_ethernet_mac(ermac);
+
+		if (pcs_ane)
+			ret = set_pcs_ane(pcs_ane);
 #endif
 
-	stmmac_set_phytype(phytype);
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return ret;
@@ -2313,6 +2508,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "dt configuration failed\n");
 		return PTR_ERR(plat_dat);
 	}
+
+	ret = qcom_ethqos_check_mdio_and_fix_link(pdev);
+	if (ret)
+		goto err_mem;
+	plat_dat->disable_pcs_ane = disable_pcs_ane;
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
 	if (IS_ERR(ethqos->rgmii_base)) {
@@ -2384,20 +2584,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))
 		plat_dat->rx_clk_runs_in_lpi = 1;
 
-	if (of_property_read_bool(pdev->dev.of_node, "qcom,arm-smmu")) {
-		emac_emb_smmu_ctx.pdev_master = pdev;
-		ret = of_platform_populate(pdev->dev.of_node,
-					   qcom_ethqos_match, NULL, &pdev->dev);
-		if (ret)
-			ETHQOSERR("Failed to populate EMAC platform\n");
-		if (emac_emb_smmu_ctx.ret) {
-			ETHQOSERR("smmu probe failed\n");
-			of_platform_depopulate(&pdev->dev);
-			ret = emac_emb_smmu_ctx.ret;
-			emac_emb_smmu_ctx.ret = 0;
-		}
-	}
-
+	pethqos = ethqos;
 	if (of_property_read_bool(pdev->dev.of_node,
 				  "emac-core-version")) {
 		/* Read emac core version value from dtsi */
@@ -2415,6 +2602,25 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 	ETHQOSDBG(": emac_core_version = %d\n", ethqos->emac_ver);
 
+#if IS_ENABLED(CONFIG_DWMAC_QCOM_VER3)
+	//reset DMA
+	ethqos_cleanup((&stmmac_res)->addr, plat_dat);
+#endif
+
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,arm-smmu")) {
+		emac_emb_smmu_ctx.pdev_master = pdev;
+		ret = of_platform_populate(pdev->dev.of_node,
+					   qcom_ethqos_match, NULL, &pdev->dev);
+		if (ret)
+			ETHQOSERR("Failed to populate EMAC platform\n");
+		if (emac_emb_smmu_ctx.ret) {
+			ETHQOSERR("smmu probe failed\n");
+			of_platform_depopulate(&pdev->dev);
+			ret = emac_emb_smmu_ctx.ret;
+			emac_emb_smmu_ctx.ret = 0;
+		}
+	}
+
 	if (of_property_read_bool(pdev->dev.of_node,
 				  "gdsc-off-on-suspend")) {
 		ethqos->gdsc_off_on_suspend = true;
@@ -2428,8 +2634,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;
-
-	pethqos = ethqos;
 
 	if (of_property_read_bool(np, "pcs-v3")) {
 		plat_dat->pcs_v3 = true;
@@ -2474,6 +2678,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ethqos_set_early_eth_param(priv, ethqos);
 	}
 	atomic_set(&priv->plat->phy_clks_suspended, 0);
+#if (IS_ENABLED(CONFIG_BOOTMARKER_PROXY))
+	bootmarker_place_marker("M - Ethernet probe end");
+#endif
 	ETHQOSINFO("M - Ethernet probe end\n");
 	return ret;
 
@@ -2508,8 +2715,6 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 
 	ret = stmmac_pltfr_remove(pdev);
 
-	if (ethqos->rgmii_clk)
-		clk_disable_unprepare(ethqos->rgmii_clk);
 	if (priv->plat->has_gmac4 && ethqos->phyaux_clk)
 		clk_disable_unprepare(ethqos->phyaux_clk);
 	if (priv->plat->has_gmac4 && ethqos->sgmiref_clk)

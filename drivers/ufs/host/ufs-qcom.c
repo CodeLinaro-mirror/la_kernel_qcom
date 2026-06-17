@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2022, Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/acpi.h>
@@ -1818,6 +1818,54 @@ static int ufs_qcom_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 	return err;
 }
 
+static int ufs_qcom_set_clk_freq(struct ufs_hba *hba, bool scale_up)
+{
+	int ret = 0;
+	struct ufs_clk_info *clki;
+	struct list_head *head = &hba->clk_list_head;
+
+	if (list_empty(head))
+		goto out;
+
+	list_for_each_entry(clki, head, list) {
+		if (!IS_ERR_OR_NULL(clki->clk)) {
+			if (scale_up && clki->max_freq) {
+				if (clki->curr_freq == clki->max_freq)
+					continue;
+
+				ret = clk_set_rate(clki->clk, clki->max_freq);
+				if (ret) {
+					dev_err(hba->dev, "%s: %s clk set rate(%dHz) failed, %d\n",
+						__func__, clki->name,
+						clki->max_freq, ret);
+					break;
+				}
+
+				clki->curr_freq = clki->max_freq;
+
+			} else if (!scale_up && clki->min_freq) {
+				if (clki->curr_freq == clki->min_freq)
+					continue;
+
+				ret = clk_set_rate(clki->clk, clki->min_freq);
+				if (ret) {
+					dev_err(hba->dev, "%s: %s clk set rate(%dHz) failed, %d\n",
+						__func__, clki->name,
+						clki->min_freq, ret);
+					break;
+				}
+
+				clki->curr_freq = clki->min_freq;
+			}
+		}
+		dev_dbg(hba->dev, "%s: clk: %s, rate: %lu\n", __func__,
+				clki->name, clk_get_rate(clki->clk));
+	}
+
+out:
+	return ret;
+}
+
 static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
@@ -1848,6 +1896,13 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		spin_lock_irqsave(hba->host->host_lock, flags);
 		hba->clk_gating.delay_ms = 5;
 		spin_unlock_irqrestore(hba->host->host_lock, flags);
+	}
+
+	/* Scale down clocks before resume */
+	if (hba->spm_lvl == UFS_PM_LVL_5 && pm_op == UFS_SYSTEM_PM) {
+		err = ufs_qcom_set_clk_freq(hba, false);
+		if (err)
+			return err;
 	}
 
 	ufs_qcom_log_str(host, "$,%d,%d,%d,%d,%d,%d\n",
@@ -2499,7 +2554,7 @@ ufshcd_is_valid_pm_lvl(enum ufs_pm_level lvl)
 	return lvl >= 0 && lvl < UFS_PM_LVL_MAX;
 }
 
-static void ufshcd_parse_pm_levels(struct ufs_hba *hba)
+static void ufs_qcom_parse_pm_levels(struct ufs_hba *hba)
 {
 	struct device *dev = hba->dev;
 	struct device_node *np = dev->of_node;
@@ -2509,18 +2564,15 @@ static void ufshcd_parse_pm_levels(struct ufs_hba *hba)
 	if (!np)
 		return;
 
-	if (host->is_dt_pm_level_read)
-		return;
-
 	if (!of_property_read_u32(np, "rpm-level", &rpm_lvl) &&
 		ufshcd_is_valid_pm_lvl(rpm_lvl))
 		hba->rpm_lvl = rpm_lvl;
 	if (!of_property_read_u32(np, "spm-level", &spm_lvl) &&
 		ufshcd_is_valid_pm_lvl(spm_lvl))
 		hba->spm_lvl = spm_lvl;
-	host->is_dt_pm_level_read = true;
+	if (of_property_read_bool(np, "set-ds-spm-level"))
+		host->set_ds_spm_level = true;
 
-	host->spm_lvl_default = hba->spm_lvl;
 }
 
 static void ufs_qcom_override_pa_tx_hsg1_sync_len(struct ufs_hba *hba)
@@ -2562,8 +2614,6 @@ static int ufs_qcom_apply_dev_quirks(struct ufs_hba *hba)
 
 	if (hba->dev_quirks & UFS_DEVICE_QUIRK_PA_TX_HSG1_SYNC_LENGTH)
 		ufs_qcom_override_pa_tx_hsg1_sync_len(hba);
-
-	ufshcd_parse_pm_levels(hba);
 
 	if (hba->dev_info.wmanufacturerid == UFS_VENDOR_MICRON)
 		hba->dev_quirks |= UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM;
@@ -2634,9 +2684,10 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 			UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_AGGR_POWER_COLLAPSE |
 			UFSHCD_CAP_WB_WITH_CLK_SCALING;
-		if (!host->disable_wb_support)
-			hba->caps |= UFSHCD_CAP_WB_EN;
 	}
+
+	if (!host->disable_wb_support)
+		hba->caps |= UFSHCD_CAP_WB_EN;
 
 	hba->caps |= UFSHCD_CAP_CRYPTO;
 
@@ -2781,7 +2832,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 		break;
 	case POST_CHANGE:
 		if (!on) {
-			if (ufs_qcom_is_link_hibern8(hba)) {
+			if ((ufs_qcom_is_link_hibern8(hba)) || (ufs_qcom_is_link_off(hba))) {
 				ufs_qcom_phy_set_src_clk_h8_enter(phy);
 				/*
 				 * As XO is set to the source of lane clocks, hence
@@ -3234,21 +3285,6 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 	/* If device includes perf mask, enable dynamic irq affinity feature */
 	if (host->perf_mask.bits[0])
 		host->irq_affinity_support = true;
-}
-
-static void ufs_qcom_parse_pm_level(struct ufs_hba *hba)
-{
-	struct device *dev = hba->dev;
-	struct device_node *np = dev->of_node;
-
-	if (np) {
-		if (of_property_read_u32(np, "rpm-level",
-					 &hba->rpm_lvl))
-			hba->rpm_lvl = -1;
-		if (of_property_read_u32(np, "spm-level",
-					 &hba->spm_lvl))
-			hba->spm_lvl = -1;
-	}
 }
 
 /* Returns the max mitigation level supported */
@@ -3863,7 +3899,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	if (err)
 		goto out_disable_vccq_parent;
 
-	ufs_qcom_parse_pm_level(hba);
+	ufs_qcom_parse_pm_levels(hba);
 	ufs_qcom_parse_limits(host);
 	ufs_qcom_parse_g4_workaround_flag(host);
 	ufs_qcom_parse_lpm(host);
@@ -3979,6 +4015,9 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 	ufs_qcom_disable_lane_clks(host);
 	ufs_qcom_phy_power_off(hba);
 	phy_exit(host->generic_phy);
+	if (msm_minidump_enabled())
+		atomic_notifier_chain_unregister(&panic_notifier_list,
+				 &host->ufs_qcom_panic_nb);
 }
 
 static int ufs_qcom_set_dme_vs_core_clk_ctrl_clear_div(struct ufs_hba *hba,
@@ -6107,38 +6146,51 @@ static int ufs_qcom_suspend_prepare(struct device *dev)
 	hba = dev_get_drvdata(dev);
 	host = ufshcd_get_variant(hba);
 
-	/* For deep sleep, set spm level to lvl 5 because all
-	 * regulators is turned off in DS. For other senerios
-	 * like s2idle, retain the default spm level.
+	host->spm_lvl_prev = hba->spm_lvl;
+
+	/*
+	 * For deep sleep, if "set_ds_spm_level" flag is true, set the
+	 * spm level to lvl 5 because all regulators is turned off in DS.
+	 * For other scenarios like s2idle, retain the default spm level.
 	 */
 	switch (host->ufs_pm_mode) {
 	case UFS_QCOM_SYSFS_NONE:
-		if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		if (host->set_ds_spm_level && (pm_suspend_target_state == PM_SUSPEND_MEM))
 			hba->spm_lvl = UFS_PM_LVL_5;
-		else
-			hba->spm_lvl = host->spm_lvl_default;
-		break;
-	case UFS_QCOM_SYSFS_S2R:
-		hba->spm_lvl = host->spm_lvl_default;
 		break;
 	case UFS_QCOM_SYSFS_DEEPSLEEP:
-		hba->spm_lvl = UFS_PM_LVL_5;
+		if (host->set_ds_spm_level)
+			hba->spm_lvl = UFS_PM_LVL_5;
 		break;
+	case UFS_QCOM_SYSFS_S2R:
 	default:
 		break;
 	}
 
-	dev_info(dev, "spm level is set to %d\n", hba->spm_lvl);
+	if (hba->spm_lvl != host->spm_lvl_prev)
+		dev_info(dev, "spm level is changed from %d to %d\n",
+			host->spm_lvl_prev, hba->spm_lvl);
 
 	return ufshcd_suspend_prepare(dev);
 }
 
 static void ufs_qcom_resume_complete(struct device *dev)
 {
+	struct ufs_hba *hba;
+	struct ufs_qcom_host *host;
+
 	if (!is_bootdevice_ufs) {
 		dev_info(dev, "UFS is not boot dev.\n");
 		return;
 	}
+
+	hba = dev_get_drvdata(dev);
+	host = ufshcd_get_variant(hba);
+
+	if (host->set_ds_spm_level)
+		hba->spm_lvl = host->spm_lvl_prev;
+
+	host->ufs_pm_mode = UFS_QCOM_SYSFS_NONE;
 
 	return ufshcd_resume_complete(dev);
 }
@@ -6182,11 +6234,20 @@ static int ufs_qcom_system_freeze(struct device *dev)
 
 static int ufs_qcom_system_restore(struct device *dev)
 {
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host;
+
 	if (!is_bootdevice_ufs) {
 		dev_info(dev, "UFS is not boot dev.\n");
 		return 0;
 	}
+
+	host = ufshcd_get_variant(hba);
+
 	ufs_qcom_set_s2r_cap(dev);
+	if (host->set_ds_spm_level)
+		hba->spm_lvl = UFS_PM_LVL_5;
+	ufshcd_set_link_off(hba);
 	return ufshcd_system_restore(dev);
 }
 

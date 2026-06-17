@@ -2,7 +2,7 @@
 /*
  * Portions of this file
  * Copyright(c) 2016-2017 Intel Deutschland GmbH
- * Copyright (C) 2018, 2021-2023 Intel Corporation
+ * Copyright (C) 2018, 2021-2024 Intel Corporation
  */
 #ifndef __CFG80211_RDEV_OPS
 #define __CFG80211_RDEV_OPS
@@ -446,6 +446,10 @@ static inline int rdev_scan(struct cfg80211_registered_device *rdev,
 			    struct cfg80211_scan_request *request)
 {
 	int ret;
+
+	if (WARN_ON_ONCE(!request->n_ssids && request->ssids))
+		return -EINVAL;
+
 	trace_rdev_scan(&rdev->wiphy, request);
 	ret = rdev->ops->scan(&rdev->wiphy, request);
 	trace_rdev_return_int(&rdev->wiphy, ret);
@@ -1444,6 +1448,23 @@ rdev_del_intf_link(struct cfg80211_registered_device *rdev,
 	if (rdev->ops->del_intf_link)
 		rdev->ops->del_intf_link(&rdev->wiphy, wdev, link_id);
 	trace_rdev_return_void(&rdev->wiphy);
+}
+
+static inline int
+rdev_link_reconfig_remove(struct cfg80211_registered_device *rdev,
+			  struct net_device *dev,
+			  const struct cfg80211_link_reconfig_removal_params *params)
+{
+	int ret = -EOPNOTSUPP;
+
+	trace_rdev_link_reconfig_remove(&rdev->wiphy, dev, params);
+
+	if (rdev->ops->link_reconfig_remove)
+		ret = rdev->ops->link_reconfig_remove(&rdev->wiphy, dev,
+						      params);
+
+	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
 }
 
 static inline int

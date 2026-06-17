@@ -678,6 +678,16 @@ config DM_ZONED
 
 	  If unsure, say N.
 
+config DM_AUDIT
+	bool "DM audit events"
+	depends on BLK_DEV_DM
+	depends on AUDIT
+	help
+	  Generate audit events for device-mapper.
+
+	  Enables audit logging of several security relevant events in the
+	  particular device-mapper targets, especially the integrity target.
+
 config DM_BOW
 	tristate "Backup block device"
 	depends on BLK_DEV_DM
@@ -689,16 +699,6 @@ config DM_BOW
 	  or committed by simply replacing the target.
 
 	  If unsure, say N.
-
-config DM_AUDIT
-	bool "DM audit events"
-	depends on BLK_DEV_DM
-	depends on AUDIT
-	help
-	  Generate audit events for device-mapper.
-
-	  Enables audit logging of several security relevant events in the
-	  particular device-mapper targets, especially the integrity target.
 
 config DM_USER
 	tristate "Block device in userspace"

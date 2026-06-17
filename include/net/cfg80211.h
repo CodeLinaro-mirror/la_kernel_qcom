@@ -560,7 +560,7 @@ ieee80211_get_sband_iftype_data(const struct ieee80211_supported_band *sband,
 {
 	int i;
 
-	if (WARN_ON(iftype >= NL80211_IFTYPE_MAX))
+	if (WARN_ON(iftype >= NUM_NL80211_IFTYPES))
 		return NULL;
 
 	if (iftype == NL80211_IFTYPE_AP_VLAN)
@@ -3982,6 +3982,23 @@ struct mgmt_frame_regs {
 };
 
 /**
+ * struct cfg80211_link_reconfig_removal_params - Contains params needed for
+ *	link reconfig removal
+ * @link_removal_cntdown: TBTT countdown value until which the beacon with ML
+ *	reconfigure element will be sent.
+ * @reconfigure_elem: ML reconfigure element to be updated in beacon in the link going to be
+ *	removed and in all affiliated links.
+ * @elem_len: ML reconfigure element length
+ * @link_id: Link id of the link to be removed.
+ */
+struct cfg80211_link_reconfig_removal_params {
+	u32 link_removal_cntdown;
+	unsigned int link_id;
+	const u8 *reconfigure_elem;
+	size_t elem_len;
+};
+
+/**
  * struct cfg80211_ops - backend description for wireless configuration
  *
  * This struct is registered by fullmac card drivers and/or wireless stacks
@@ -4372,6 +4389,10 @@ struct mgmt_frame_regs {
  * @add_link_station: Add a link to a station.
  * @mod_link_station: Modify a link of a station.
  * @del_link_station: Remove a link of a station.
+ * @link_reconfig_remove: Notifies the driver about the link to be
+ *	scheduled for removal with ML reconfigure element built for that particular
+ *	link along with the TBTT count until which the beacon with ML
+ *	reconfigure element should be sent.
  */
 struct cfg80211_ops {
 	int	(*suspend)(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
@@ -4725,6 +4746,9 @@ struct cfg80211_ops {
 				    struct link_station_parameters *params);
 	int	(*del_link_station)(struct wiphy *wiphy, struct net_device *dev,
 				    struct link_station_del_parameters *params);
+	int	(*link_reconfig_remove)(struct wiphy *wiphy,
+					struct net_device *dev,
+					const struct cfg80211_link_reconfig_removal_params *params);
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
@@ -6403,6 +6427,19 @@ static inline int ieee80211_data_to_8023(struct sk_buff *skb, const u8 *addr,
 }
 
 /**
+ * ieee80211_is_valid_amsdu - check if subframe lengths of an A-MSDU are valid
+ *
+ * This is used to detect non-standard A-MSDU frames, e.g. the ones generated
+ * by ath10k and ath11k, where the subframe length includes the length of the
+ * mesh control field.
+ *
+ * @skb: The input A-MSDU frame without any headers.
+ * @mesh_hdr: use standard compliant mesh A-MSDU subframe header
+ * Returns: true if subframe header lengths are valid for the @mesh_hdr mode
+ */
+bool ieee80211_is_valid_amsdu(struct sk_buff *skb, bool mesh_hdr);
+
+/**
  * ieee80211_amsdu_to_8023s - decode an IEEE 802.11n A-MSDU frame
  *
  * Decode an IEEE 802.11 A-MSDU and convert it to a list of 802.3 frames.
@@ -6417,11 +6454,36 @@ static inline int ieee80211_data_to_8023(struct sk_buff *skb, const u8 *addr,
  * @extra_headroom: The hardware extra headroom for SKBs in the @list.
  * @check_da: DA to check in the inner ethernet header, or NULL
  * @check_sa: SA to check in the inner ethernet header, or NULL
+ * @mesh_control: A-MSDU subframe header includes the mesh control field
  */
 void ieee80211_amsdu_to_8023s(struct sk_buff *skb, struct sk_buff_head *list,
 			      const u8 *addr, enum nl80211_iftype iftype,
 			      const unsigned int extra_headroom,
-			      const u8 *check_da, const u8 *check_sa);
+			      const u8 *check_da, const u8 *check_sa,
+			      bool mesh_control);
+
+/**
+ * ieee80211_get_8023_tunnel_proto - get RFC1042 or bridge tunnel encap protocol
+ *
+ * Check for RFC1042 or bridge tunnel header and fetch the encapsulated
+ * protocol.
+ *
+ * @hdr: pointer to the MSDU payload
+ * @proto: destination pointer to store the protocol
+ * Return: true if encapsulation was found
+ */
+bool ieee80211_get_8023_tunnel_proto(const void *hdr, __be16 *proto);
+
+/**
+ * ieee80211_strip_8023_mesh_hdr - strip mesh header from converted 802.3 frames
+ *
+ * Strip the mesh header, which was left in by ieee80211_data_to_8023 as part
+ * of the MSDU data. Also move any source/destination addresses from the mesh
+ * header to the ethernet header (if present).
+ *
+ * @skb: The 802.3 frame with embedded mesh header
+ */
+int ieee80211_strip_8023_mesh_hdr(struct sk_buff *skb);
 
 /**
  * cfg80211_classify8021d - determine the 802.1p/1d tag for a data frame
@@ -9142,5 +9204,32 @@ static inline int cfg80211_color_change_notify(struct net_device *dev)
  */
 bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
 					      const struct cfg80211_chan_def *chandef);
+
+/**
+ * cfg80211_update_link_reconfig_remove_update - Inform userspace about
+ *	the removal status of link which is scheduled for removal
+ * @dev: the device on which the operation is requested
+ * @link_id: Link which is undergoing removal
+ * @tbtt_count: Current tbtt_count to be updated.
+ * @tsf: Beacon's timestamp value
+ * @cmd: Inform started or completed action to userspace based on the value
+ *
+ * This function is used to inform userspace about the ongoing link removal
+ * status. %NL80211_CMD_LINK_REMOVAL_STARTED is issued when the first beacon with
+ * ML reconfigure element is sent out. This event can be used by userspace to start
+ * the BTM in case of AP mode. And, %NL80211_CMD_LINK_REMOVAL_COMPLETED is issued
+ * when the last beacon is sent with ML reconfigure element. This is used to
+ * initiate the deletion of that link, also to trigger deauth/disassoc for the
+ * associated peer(s).
+ *
+ * Note: This API is currently used by drivers which supports offloaded
+ * Multi-Link reconfigure link removal. Returns failure if FEATURE FLAG is not
+ * set or success if NL message is sent.
+ */
+int
+cfg80211_update_link_reconfig_remove_update(struct net_device *dev,
+					    unsigned int link_id,
+					    u32 tbtt_count, u64 tsf,
+					    enum nl80211_commands cmd);
 
 #endif /* __NET_CFG80211_H */

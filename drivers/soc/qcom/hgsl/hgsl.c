@@ -161,11 +161,6 @@ struct ctx_queue_header {
 	uint32_t unused1;
 };
 
-static inline bool _timestamp_retired(struct hgsl_context *ctxt,
-				unsigned int timestamp);
-
-static inline void set_context_retired_ts(struct hgsl_context *ctxt,
-				unsigned int ts);
 static void _signal_contexts(struct qcom_hgsl *hgsl, u32 dev_hnd);
 
 static int db_get_busy_state(void *dbq_base);
@@ -174,10 +169,6 @@ static void db_set_busy_state(void *dbq_base, int in_busy);
 static int dbcq_get_free_indirect_ib_buffer(struct hgsl_priv  *priv,
 				struct hgsl_context *ctxt,
 				uint32_t ts, uint32_t timeout_in_ms);
-
-static struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
-				uint32_t dev_hnd, uint32_t context_id);
-static void hgsl_put_context(struct hgsl_context *ctxt);
 
 static bool dbq_check_ibdesc_state(struct qcom_hgsl *hgsl, struct hgsl_context *ctxt,
 		uint32_t request_type);
@@ -372,13 +363,6 @@ struct db_ignore_retpacket {
 	int in_use;
 	struct db_msg_id db_msg_id;
 } __packed;
-
-
-struct hgsl_active_wait {
-	struct list_head head;
-	struct hgsl_context *ctxt;
-	unsigned int timestamp;
-};
 
 #ifdef CONFIG_TRACE_GPU_MEM
 static inline void hgsl_trace_gpu_mem_total(struct hgsl_priv *priv, int64_t delta)
@@ -588,6 +572,13 @@ static int dbcq_send_msg(struct hgsl_priv  *priv,
 	struct doorbell_context_queue *dbcq = ctxt->dbcq;
 	uint32_t wptr;
 	struct ctx_queue_header *queue_header = (struct ctx_queue_header *)dbcq->queue_header;
+	u32 dev_id = hgsl_hnd2id(ctxt->devhandle);
+
+	if (dev_id >= HGSL_DEVICE_NUM) {
+		LOGE("Invalid dev handle %u", ctxt->devhandle);
+		ret = -EINVAL;
+		goto quit;
+	}
 
 	queue_size_dword = queue_header->dwSize;
 	msg_size_align = ALIGN(msg_req->msg_dwords, 4);
@@ -622,7 +613,7 @@ static int dbcq_send_msg(struct hgsl_priv  *priv,
 
 	if (is_gmugos(ctxt->db_signal))
 		hgsl_gmugos_irq_trigger(
-			&hgsl->gmugos[hgsl_hnd2id(ctxt->devhandle)],
+			&hgsl->gmugos[dev_id],
 			dbcq->irq_idx);
 	if (is_global_db(ctxt->tcsr_idx))
 		/* trigger TCSR interrupt for global doorbell */
@@ -1024,7 +1015,7 @@ static int hgsl_dbcq_open(struct hgsl_priv *priv,
 		goto err;
 	}
 
-	dbcq->queue_mem = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	dbcq->queue_mem = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (!dbcq->queue_mem) {
 		LOGE("out of memory");
 		ret = -ENOMEM;
@@ -1341,30 +1332,6 @@ static void hgsl_reset_dbq(struct doorbell_queue *dbq)
 	dbq->state = DB_STATE_Q_UNINIT;
 }
 
-static inline uint32_t get_context_retired_ts(struct hgsl_context *ctxt)
-{
-	unsigned int ts = ctxt->shadow_ts->eop;
-
-	/* ensure read is done before comparison */
-	dma_rmb();
-	return ts;
-}
-
-static inline void set_context_retired_ts(struct hgsl_context *ctxt,
-				unsigned int ts)
-{
-	ctxt->shadow_ts->eop = ts;
-
-	/* ensure update is done before return */
-	dma_wmb();
-}
-
-static inline bool _timestamp_retired(struct hgsl_context *ctxt,
-				unsigned int timestamp)
-{
-	return hgsl_ts32_ge(get_context_retired_ts(ctxt), timestamp);
-}
-
 static inline void _destroy_context(struct kref *kref);
 static void _signal_contexts(struct qcom_hgsl *hgsl,
 	u32 dev_hnd)
@@ -1415,19 +1382,26 @@ static int hgsl_init_global_hyp_channel(struct qcom_hgsl *hgsl)
 {
 	int ret = 0;
 	int rval = 0;
+	unsigned int retry_count = 5;
 
 	ret = hgsl_hyp_init(&hgsl->global_hyp, hgsl->dev, 0, "hgsl");
 	if (ret != 0)
 		goto out;
 
-	ret = hgsl_hyp_gsl_lib_open(&hgsl->global_hyp, 0, &rval);
+	/* Retry to communicate with BE here */
+	do {
+		ret = hgsl_hyp_gsl_lib_open(&hgsl->global_hyp, 0, &rval);
+	} while (ret == -EAGAIN && retry_count--);
 	if (rval)
 		ret = -EINVAL;
 	else
 		hgsl->global_hyp_inited = true;
 out:
-	if (ret)
+	if (ret) {
+		LOGE("Failed to open gsl lib ret: %d retry_count: %u\n",
+				ret, retry_count);
 		hgsl_hyp_close(&hgsl->global_hyp);
+	}
 
 	return ret;
 }
@@ -1563,7 +1537,7 @@ static inline void _destroy_context(struct kref *kref)
 	ctxt->destroyed = true;
 }
 
-static struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
+struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
 	uint32_t dev_hnd, uint32_t context_id)
 {
 	struct hgsl_context *ctxt = NULL;
@@ -1626,7 +1600,7 @@ static struct hgsl_context *hgsl_remove_context(struct hgsl_priv *priv,
 	return ctxt;
 }
 
-static void hgsl_put_context(struct hgsl_context *ctxt)
+void hgsl_put_context(struct hgsl_context *ctxt)
 {
 	if (ctxt)
 		kref_put(&ctxt->kref, _destroy_context);
@@ -1938,6 +1912,7 @@ static int hgsl_ctxt_create_dbq(struct hgsl_priv *priv,
 	ctxt->dbq = &hgsl->dbq[dbq_idx];
 	ctxt->tcsr_idx = ctxt->dbq->tcsr_idx;
 	ctxt->db_signal = db_signal;
+	ctxt->dbq_info = dbq_info;
 	hgsl_dbq_set_state_info(ctxt->dbq->vbase,
 				HGSL_DBQ_METADATA_CONTEXT_INFO,
 				ctxt->context_id,
@@ -2383,7 +2358,7 @@ static int hgsl_ioctl_mem_alloc(
 		goto out;
 	}
 
-	mem_node = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	mem_node = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (mem_node == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -2394,7 +2369,6 @@ static int hgsl_ioctl_mem_alloc(
 	ret = hgsl_sharedmem_alloc(hgsl->dev, params->sizebytes, params->flags, mem_node);
 	if (ret)
 		goto out;
-
 	ret = hgsl_hyp_mem_map_smmu(hab_channel, mem_node->memdesc.size, 0, mem_node);
 	LOGD("%d, %d, gpuaddr 0x%llx",
 		ret, mem_node->export_id, mem_node->memdesc.gpuaddr);
@@ -2567,7 +2541,7 @@ static int hgsl_ioctl_mem_map_smmu(
 		goto out;
 	}
 
-	mem_node = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	mem_node = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (mem_node == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -3839,6 +3813,75 @@ static int hgsl_ioctl_timeline_wait(
 	return hgsl_isync_wait_multiple(priv, param);
 }
 
+static int hgsl_ioctl_gslprofiler_per_proc_gpu_busy(struct file *filep, void *data)
+{
+	struct hgsl_priv *priv = filep->private_data;
+	struct hgsl_ioctl_gslprofiler_per_proc_gpu_busy_params *param = data;
+	struct gsl_profiler_get_per_proc_gpu_busy_percentage_t *busy = NULL;
+	uint32_t usize = sizeof(*busy);
+	int ret = 0;
+
+	if (hgsl_check_userparams(param->busy, usize)) {
+		LOGE("invalid input busy data (0x%llx)", param->busy);
+		return -EINVAL;
+	}
+
+	busy = hgsl_malloc(usize);
+	if (busy == NULL) {
+		LOGE("failed to allocate memory");
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = hgsl_hyp_gslprofiler_per_proc_gpu_busy(&priv->hyp_priv, param, busy);
+	if (ret == 0) {
+		if (copy_to_user(USRPTR(param->busy), busy, usize)) {
+			LOGE("failed to copy busy to user");
+			ret = -EFAULT;
+			goto out;
+		}
+	}
+
+out:
+	hgsl_free(busy);
+	return ret;
+}
+
+static int hgsl_ioctl_gslprofiler_per_proc_gpu_pmem(struct file *filep, void *data)
+{
+	struct hgsl_priv *priv = filep->private_data;
+	struct hgsl_ioctl_gslprofiler_per_proc_gpu_pmem_params *param = data;
+	struct gsl_profiler_get_per_proc_gpu_pmem_usage_t *pmem = NULL;
+	uint32_t usize = sizeof(*pmem);
+	int ret = 0;
+
+	if (hgsl_check_userparams(param->pmem, usize)) {
+		LOGE("invalid input pmem data (0x%llx)", param->pmem);
+		return -EINVAL;
+	}
+
+	pmem = hgsl_malloc(usize);
+	if (pmem == NULL) {
+		LOGE("failed to allocate memory");
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = hgsl_hyp_gslprofiler_per_proc_gpu_pmem(&priv->hyp_priv, param, pmem);
+	if (ret == 0) {
+		if (copy_to_user(USRPTR(param->pmem), pmem, usize)) {
+			LOGE("failed to copy pmem to user");
+			ret = -EFAULT;
+			goto out;
+		}
+	}
+
+out:
+	hgsl_free(pmem);
+	return ret;
+}
+
+
 static const struct hgsl_ioctl hgsl_ioctl_func_table[] = {
 	HGSL_IOCTL_FUNC(HGSL_IOCTL_ISSUE_IB,
 			hgsl_ioctl_issueib),
@@ -3906,6 +3949,10 @@ static const struct hgsl_ioctl hgsl_ioctl_func_table[] = {
 			hgsl_ioctl_timeline_query),
 	HGSL_IOCTL_FUNC(HGSL_IOCTL_TIMELINE_WAIT,
 			hgsl_ioctl_timeline_wait),
+	HGSL_IOCTL_FUNC(HGSL_IOCTL_GSLPROFILER_PER_PROC_GPU_BUSY,
+			hgsl_ioctl_gslprofiler_per_proc_gpu_busy),
+	HGSL_IOCTL_FUNC(HGSL_IOCTL_GSLPROFILER_PER_PROC_GPU_PMEM,
+			hgsl_ioctl_gslprofiler_per_proc_gpu_pmem),
 };
 
 static long hgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
@@ -4092,9 +4139,14 @@ exit:
 
 static int hgsl_suspend(struct device *dev)
 {
-	/* Do nothing */
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_hgsl *hgsl = platform_get_drvdata(pdev);
 
-	// TODO: shall we disable the interrupt from GMU? and enable them after resume?
+	LOGD("+");
+	if (hgsl->wq)
+		flush_workqueue(hgsl->wq);
+
+	/* TODO: shall we disable the interrupt from GMU? and enable them after resume? */
 	return 0;
 }
 
@@ -4103,30 +4155,64 @@ static int hgsl_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct qcom_hgsl *hgsl = platform_get_drvdata(pdev);
 	struct hgsl_tcsr *tcsr = NULL;
-	int tcsr_idx = 0;
+	int tcsr_idx = 0, ret = 0, rval = 0;
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
-		for (tcsr_idx = 0; tcsr_idx < HGSL_TCSR_NUM; tcsr_idx++) {
-			tcsr = hgsl->tcsr[tcsr_idx][HGSL_TCSR_ROLE_RECEIVER];
-			if (tcsr != NULL) {
-				hgsl_tcsr_irq_enable(tcsr,
-					GLB_DB_DEST_TS_RETIRE_IRQ_MASK, true);
-			}
+	LOGD("+");
+	for (tcsr_idx = 0; tcsr_idx < HGSL_TCSR_NUM; tcsr_idx++) {
+		tcsr = hgsl->tcsr[tcsr_idx][HGSL_TCSR_ROLE_RECEIVER];
+		if (tcsr != NULL) {
+			hgsl_tcsr_irq_enable(tcsr,
+				GLB_DB_DEST_TS_RETIRE_IRQ_MASK, true);
 		}
-		/*
-		 * There could be a scenario when GVM submit some work to GMU
-		 * just before going to suspend, in this case, the GMU will
-		 * not submit it to RB and when GMU resume(FW reload) happens,
-		 * it submits the work to GPU and fire the ts_retire to GVM.
-		 * At this point, the GVM is not up so it may miss the
-		 * interrupt from GMU so check if there is any ts_retire by
-		 * reading the shadow timestamp.
-		 */
-		if (hgsl->wq != NULL)
-			queue_work(hgsl->wq, &hgsl->ts_retire_work);
 	}
+	/*
+	 * There could be a scenario when GVM submit some work to GMU
+	 * just before going to suspend, in this case, the GMU will
+	 * not submit it to RB and when GMU resume(FW reload) happens,
+	 * it submits the work to GPU and fire the ts_retire to GVM.
+	 * At this point, the GVM is not up so it may miss the
+	 * interrupt from GMU so check if there is any ts_retire by
+	 * reading the shadow timestamp.
+	 */
+	if (hgsl->wq != NULL)
+		queue_work(hgsl->wq, &hgsl->ts_retire_work);
+
+	/* TODO: should we notify for second device here? */
+	ret = hgsl_hyp_notify_pm_state(&hgsl->global_hyp, GSL_RPC_PM_RESUME,
+								GSL_HANDLE_NULL, &rval);
+	if (ret)
+		LOGE("Failed to reregister context after resume ret %d\n", ret);
 
 	return 0;
+}
+
+static int hgsl_pm_suspend(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_suspend(dev);
+}
+
+static int hgsl_pm_resume(struct device *dev)
+{
+	int ret = 0;
+
+	LOGD("+");
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		ret = hgsl_resume(dev);
+
+	return ret;
+}
+
+static int hgsl_hibernation_suspend(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_suspend(dev);
+}
+
+static int hgsl_hibernation_resume(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_resume(dev);
 }
 
 static int qcom_hgsl_probe(struct platform_device *pdev)
@@ -4179,8 +4265,10 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 	if (!hgsl_dev->db_off)
 		hgsl_init_global_hyp_channel(hgsl_dev);
 
-	hgsl_dev->default_iocoherency = of_property_read_bool(pdev->dev.of_node,
+	hgsl_dev->cache_flags.default_iocoherency = of_property_read_bool(pdev->dev.of_node,
 							"default_iocoherency");
+	hgsl_dev->cache_flags.writecombine_enable = of_property_read_bool(pdev->dev.of_node,
+							"writecombine_enable");
 	platform_set_drvdata(pdev, hgsl_dev);
 	hgsl_sysfs_init(pdev);
 	hgsl_debugfs_init(pdev);
@@ -4245,8 +4333,12 @@ static int qcom_hgsl_remove(struct platform_device *pdev)
 }
 
 static const struct dev_pm_ops hgsl_pm_ops = {
-	.suspend         = hgsl_suspend,
-	.resume          = hgsl_resume,
+	.suspend     = hgsl_pm_suspend,
+	.resume      = hgsl_pm_resume,
+	.freeze      = hgsl_hibernation_suspend,
+	.thaw        = hgsl_hibernation_resume,
+	.poweroff    = hgsl_hibernation_suspend,
+	.restore     = hgsl_hibernation_resume,
 };
 
 static const struct of_device_id qcom_hgsl_of_match[] = {

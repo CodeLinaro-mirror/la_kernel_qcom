@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/module.h>
@@ -1789,6 +1789,7 @@ static struct platform_driver lemans_pinctrl_driver = {
 	.driver = {
 		.name = "lemans-pinctrl",
 		.of_match_table = lemans_pinctrl_of_match,
+		.pm = &msm_pinctrl_dev_pm_ops,
 	},
 	.probe = lemans_pinctrl_probe,
 	.remove = msm_pinctrl_remove,
