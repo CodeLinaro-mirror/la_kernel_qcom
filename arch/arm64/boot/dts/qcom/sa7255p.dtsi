@@ -51,11 +51,13 @@
 			L2_0: l2-cache {
 			      compatible = "cache";
 			      cache-level = <2>;
+			      cache-unified;
 			      next-level-cache = <&L3_0>;
 
 				L3_0: l3-cache {
 				      compatible = "cache";
 				      cache-level = <3>;
+				      cache-unified;
 				};
 			};
 		};
@@ -70,6 +72,7 @@
 			L2_1: l2-cache {
 			      compatible = "cache";
 			      cache-level = <2>;
+			      cache-unified;
 			      next-level-cache = <&L3_0>;
 			};
 		};
@@ -84,6 +87,7 @@
 			L2_2: l2-cache {
 			      compatible = "cache";
 			      cache-level = <2>;
+			      cache-unified;
 			      next-level-cache = <&L3_0>;
 			};
 		};
@@ -98,6 +102,7 @@
 			L2_3: l2-cache {
 			      compatible = "cache";
 			      cache-level = <2>;
+			      cache-unified;
 			      next-level-cache = <&L3_0>;
 			};
 		};
@@ -112,10 +117,12 @@
 			L2_4: l2-cache {
 			      compatible = "cache";
 			      cache-level = <2>;
+			      cache-unified;
 			      next-level-cache = <&L3_1>;
 				L3_1: l3-cache {
 				      compatible = "cache";
 				      cache-level = <3>;
+				      cache-unified;
 				};
 			};
 		};
@@ -130,6 +137,7 @@
 			L2_5: l2-cache {
 			      compatible = "cache";
 			      cache-level = <2>;
+			      cache-unified;
 			      next-level-cache = <&L3_1>;
 			};
 		};
@@ -144,6 +152,7 @@
 			L2_6: l2-cache {
 			      compatible = "cache";
 			      cache-level = <2>;
+			      cache-unified;
 			      next-level-cache = <&L3_1>;
 			};
 		};
@@ -158,6 +167,7 @@
 			L2_7: l2-cache {
 			      compatible = "cache";
 			      cache-level = <2>;
+			      cache-unified;
 			      next-level-cache = <&L3_1>;
 			};
 		};
@@ -171,19 +181,17 @@
 				core1 {
 					cpu = <&cpu1>;
 				};
-			};
 
-			cluster1 {
-				core0 {
+				core2 {
 					cpu = <&cpu2>;
 				};
 
-				core1 {
+				core3 {
 					cpu = <&cpu3>;
 				};
 			};
 
-			cluster2 {
+			cluster1 {
 				core0 {
 					cpu = <&cpu4>;
 				};
