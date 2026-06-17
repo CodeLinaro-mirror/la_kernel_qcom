@@ -245,6 +245,7 @@ struct llcc_uid_slice_pair {
  * @bitmap: Bit map to track the active slice ids
  * @ecc_irq: interrupt for llcc cache error detection and reporting
  * @lcp_irq: interrupt for LCP/SRP DDR DRAM ECC error reporting (or -ENXIO)
+ * @ecc_irq_configured: true when firmware already configured LLCC ECC routing
  * @version: Indicates the LLCC version
  * @desc: Array pointer of llcc_slice_desc
  * @uid_slice_lookup: Lookup form UID to slice desc
@@ -264,6 +265,7 @@ struct llcc_drv_data {
 	unsigned long *bitmap;
 	int ecc_irq;
 	int lcp_irq;
+	bool ecc_irq_configured;
 	u32 version;
 	bool cap_based_alloc_and_pwr_collapse;
 	struct llcc_slice_desc *desc;

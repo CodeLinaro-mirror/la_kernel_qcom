@@ -103,7 +103,7 @@ static int qcom_llcc_core_setup(struct llcc_drv_data *drv, struct regmap *llcc_b
 
 	/*
 	 * Configure interrupt enable registers such that Tag, Data RAM related
-	 * interrupts are propagated to interrupt controller for servicing
+	 * interrupts are propagated to interrupt controller for servicing.
 	 */
 	ret = regmap_update_bits(llcc_bcast_regmap, drv->edac_reg_offset->cmn_interrupt_0_enable,
 				 TRP0_INTERRUPT_ENABLE,
@@ -430,9 +430,19 @@ static int qcom_llcc_edac_probe(struct platform_device *pdev)
 	int ecc_irq;
 	int rc;
 
-	rc = qcom_llcc_core_setup(llcc_driv_data, llcc_driv_data->bcast_regmap);
-	if (rc)
-		return rc;
+	if (!llcc_driv_data || !llcc_driv_data->bcast_regmap ||
+	    !llcc_driv_data->edac_reg_offset) {
+		dev_err(dev, "invalid LLCC platform data, EDAC probe aborted\n");
+		return -EINVAL;
+	}
+
+	if (!llcc_driv_data->ecc_irq_configured) {
+		rc = qcom_llcc_core_setup(llcc_driv_data, llcc_driv_data->bcast_regmap);
+		if (rc) {
+			dev_err(dev, "EDAC core setup failed: %d\n", rc);
+			return rc;
+		}
+	}
 
 	/* Allocate edac control info */
 	edev_ctl = edac_device_alloc_ctl_info(0, "qcom-llcc", 1, "bank",
@@ -447,9 +457,12 @@ static int qcom_llcc_edac_probe(struct platform_device *pdev)
 	edev_ctl->dev_name = dev_name(dev);
 	edev_ctl->ctl_name = "llcc";
 	edev_ctl->panic_on_ue = LLCC_ERP_PANIC_ON_UE;
+	edev_ctl->edac_check = NULL;
+	edev_ctl->poll_msec = 0;
 
 	/* Check if LLCC driver has passed ECC IRQ */
 	ecc_irq = llcc_driv_data->ecc_irq;
+
 	if (ecc_irq > 0) {
 		/* Use interrupt mode if IRQ is available */
 		rc = devm_request_irq(dev, ecc_irq, llcc_ecc_irq_handler,
@@ -458,11 +471,14 @@ static int qcom_llcc_edac_probe(struct platform_device *pdev)
 			edac_op_state = EDAC_OPSTATE_INT;
 			goto irq_done;
 		}
+
+		dev_warn(dev, "failed to request LLCC ECC irq %d: %d, falling back to polling\n",
+			 ecc_irq, rc);
 	}
 
 	/* Fall back to polling mode otherwise */
-	edev_ctl->poll_msec = ECC_POLL_MSEC;
 	edev_ctl->edac_check = llcc_ecc_check;
+	edev_ctl->poll_msec = ECC_POLL_MSEC;
 	edac_op_state = EDAC_OPSTATE_POLL;
 
 irq_done:

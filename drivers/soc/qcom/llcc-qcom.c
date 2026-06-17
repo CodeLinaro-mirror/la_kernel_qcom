@@ -285,6 +285,7 @@ struct qcom_llcc_config {
 	const struct llcc_edac_reg_offset *edac_reg_offset;
 	int size;
 	bool need_llcc_cfg;
+	bool irq_configured;
 	bool no_edac;
 };
 
@@ -1549,6 +1550,12 @@ static const struct qcom_llcc_config shikra_cfg[] = {
 		.need_llcc_cfg	= true,
 		.reg_offset	= llcc_v2_1_reg_offset,
 		.edac_reg_offset = &llcc_v2_1_edac_reg_offset,
+		/*
+		 * On Shikra, EDAC register programming can be unstable during
+		 * early probe. Keep EDAC child registration, but skip core setup
+		 * writes here and let later test/validation flows program them.
+		 */
+		.irq_configured = true,
 	},
 };
 
@@ -2832,6 +2839,10 @@ static int qcom_llcc_get_cfg_index(struct platform_device *pdev, u8 *cfg_index, 
 {
 	int ret;
 
+	*cfg_index = 0;
+	if (num_config == 1)
+		return 0;
+
 	ret = nvmem_cell_read_u8(&pdev->dev, "multi-chan-ddr", cfg_index);
 	if (ret == -ENOENT || ret == -EOPNOTSUPP) {
 		dev_err(&pdev->dev, "multi-chan-ddr not found\n");
@@ -3149,6 +3160,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 							  "qcom,sct-initialized");
 	platform_set_drvdata(pdev, drv_data);
 	drv_data->edac_reg_offset = cfg->edac_reg_offset;
+	drv_data->ecc_irq_configured = cfg->irq_configured;
 
 	if (drv_data->sct_initialized) {
 		ret = qcom_llcc_mem_based_init(pdev);
