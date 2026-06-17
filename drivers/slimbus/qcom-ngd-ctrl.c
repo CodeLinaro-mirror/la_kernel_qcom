@@ -1001,10 +1001,7 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 	 * acquired by SSR sequence hence it will unblock SSR to finish
 	 * gracefully
 	 */
-	if (!mutex_trylock(&ctrl->tx_lock)) {
-		SLIM_ERR(ctrl, "ngd going down due SSR/PDR, try again! skipping check hw state\n");
-		return -EAGAIN;
-	}
+	mutex_lock(&ctrl->tx_lock);
 	ret = check_hw_state(ctrl, txn);
 	if (ret) {
 		SLIM_WARN(ctrl, "ADSP slimbus not up MC:0x%x,mt:0x%x ret:%d\n",
@@ -1019,7 +1016,6 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 		mutex_unlock(&ctrl->tx_lock);
 		return -ENOMEM;
 	}
-	mutex_unlock(&ctrl->tx_lock);
 
 	if (txn->mt == SLIM_MSG_MT_CORE &&
 		(txn->mc == SLIM_MSG_MC_CONNECT_SOURCE ||
@@ -1037,6 +1033,7 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 			txn->mc = SLIM_USR_MC_DISCONNECT_PORT;
 			break;
 		default:
+			mutex_unlock(&ctrl->tx_lock);
 			return -EINVAL;
 		}
 
@@ -1052,6 +1049,7 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 		ret = slim_alloc_txn_tid(sctrl, txn);
 		if (ret) {
 			SLIM_ERR(ctrl, "Unable to allocate TID\n");
+			mutex_unlock(&ctrl->tx_lock);
 			return ret;
 		}
 
@@ -1092,10 +1090,6 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 			memcpy(puc, txn->msg->wbuf, txn->msg->num_bytes);
 	}
 
-	if (!mutex_trylock(&ctrl->tx_lock)) {
-		SLIM_ERR(ctrl, "ngd going down due SSR/PDR, try again! skipping tx msg post\n");
-		return -EAGAIN;
-	}
 	ret = qcom_slim_ngd_tx_msg_post(ctrl, pbuf, txn->rl);
 	if (ret) {
 		mutex_unlock(&ctrl->tx_lock);
