@@ -61,6 +61,7 @@ pinctrl-msm.ko
 pinctrl-bengal.ko
 qcom_tsens.ko
 qcom-scm.ko
+qcom-rng.ko
 qcom_hwspinlock.ko
 qrtr.ko
 msm_qmp.ko
