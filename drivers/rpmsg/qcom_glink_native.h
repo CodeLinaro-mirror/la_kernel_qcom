@@ -67,6 +67,8 @@ int qcom_glink_register_signals_cb(struct rpmsg_endpoint *ept,
 bool qcom_glink_rx_done_supported(struct rpmsg_endpoint *ept);
 int qcom_glink_rx_done(struct rpmsg_endpoint *ept, void *data);
 
+void qcom_glink_native_set_rx_wakeup(struct qcom_glink *glink, bool enable);
+
 void *qcom_glink_prepare_da_for_cpu(u64 da, size_t len);
 
 #endif
