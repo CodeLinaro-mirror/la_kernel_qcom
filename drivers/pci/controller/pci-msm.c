@@ -11159,8 +11159,6 @@ static void __exit pcie_exit(void)
 
 	pr_info("PCIe: %s\n", __func__);
 
-	i2c_del_driver(&pcie_i2c_ctrl_driver);
-
 	if (mpcie_wq)
 		destroy_workqueue(mpcie_wq);
 
