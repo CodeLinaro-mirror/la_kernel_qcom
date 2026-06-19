@@ -550,6 +550,33 @@ config KINECTICS_XR_NORDIC
 	   this also parses the gpios and interrupts from device tree and sets
 	   the gpios and interrupt handler for handling the interrupt.
 
+config USBMUX_PS8822
+        tristate "Parade PS8822 DP/USB Mux chip"
+        depends on I2C && OF
+        select REGMAP_I2C
+        help
+          This driver provides mode switching support for the Parade
+          Technologies PS8822 Type-C DP/USB3.0 Mux/Redriver.
+
+          The PS8822 supports multiple operation modes including:
+          - USB3 only mode
+          - DisplayPort 4-lane mode
+          - USB3 2-lane + DisplayPort 2-lane mode (default)
+          - DisplayPort 2-lane mode
+
+          To compile this driver as a module, choose M here: the
+          module will be called usbmux_ps8822.
+
+          If unsure, say N.
+
+config CCI_UTIL
+	tristate "Lontium LT7911UXC DP to CSI Bridge chip driver"
+	help
+	   This driver powers up Lontium LT7911UXC bridge chip and handles the
+	   communication with the Lontium chip over i2c. In addition, the driver
+	   performs LT7911 firmware upgrade when a new version of the firmware
+	   is available.
+
 source "drivers/misc/rtimd-i2c/Kconfig"
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"

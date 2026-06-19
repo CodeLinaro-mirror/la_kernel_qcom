@@ -10027,6 +10027,9 @@ int msm_pcie_prevent_l1(struct pci_dev *pci_dev)
 
 	msm_pcie_write_mask(pcie_dev->parf + PCIE20_PARF_PM_CTRL, 0, BIT(5));
 
+	/* Disable L1 on EP and RP for LTSSM stability during link state poll */
+	msm_pcie_config_l1_disable_all(pcie_dev, pcie_dev->dev->bus);
+
 	/* confirm link is in L0/L0s */
 	while (!msm_pcie_check_ltssm_state(pcie_dev, MSM_PCIE_LTSSM_L0) &&
 		!msm_pcie_check_ltssm_state(pcie_dev, MSM_PCIE_LTSSM_L0S)) {
@@ -10058,8 +10061,6 @@ int msm_pcie_prevent_l1(struct pci_dev *pci_dev)
 
 		usleep_range(100, 105);
 	}
-
-	msm_pcie_config_l1_disable_all(pcie_dev, pcie_dev->dev->bus);
 
 	PCIE_DBG2(pcie_dev, "PCIe: RC%d: %02x:%02x.%01x: exit\n",
 		pcie_dev->rc_idx, pci_dev->bus->number,
@@ -11850,6 +11851,12 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 			/* make sure enable pc happens asap */
 			flush_work(&pcie_dev->drv_enable_pc_work);
 		}
+		mutex_unlock(&pcie_dev->drv_pc_lock);
+		break;
+	case MSM_PCIE_ENABLE_ASPM:
+		mutex_lock(&pcie_dev->drv_pc_lock);
+		msm_pcie_check_l1ss_support_all(pcie_dev);
+		msm_pcie_config_link_pm(pcie_dev, true);
 		mutex_unlock(&pcie_dev->drv_pc_lock);
 		break;
 	default:
