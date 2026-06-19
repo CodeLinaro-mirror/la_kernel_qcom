@@ -199,3 +199,5 @@ obj-$(CONFIG_CDX_BUS)		+= cdx/
 obj-$(CONFIG_CORESIGHT)		+= hwtracing/coresight/
 
 obj-$(CONFIG_S390)		+= s390/
+obj-y                           += ../../qcom/opensource/dataipa/
+obj-y				+= ../../qcom/opensource/datarmnet/core/

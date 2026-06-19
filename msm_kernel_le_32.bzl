@@ -34,7 +34,8 @@ def _define_build_config(
         variant,
         defconfig,
         boot_image_opts = boot_image_opts(),
-        build_config_fragments = []):
+        build_config_fragments = [],
+        extra_srcs = []):
     """Creates a kernel_build_config for an MSM target
 
     Creates a `kernel_build_config` for input to a `kernel_build` rule.
@@ -108,7 +109,8 @@ def _define_kernel_build(
         in_tree_module_list,
         dtb_list,
         dtbo_list,
-        dtstree):
+        dtstree,
+        extra_srcs = []):
     """Creates a `kernel_build` and other associated definitions
 
     This is where the main kernel build target is created (e.g. `//msm-kernel:kalama_gki`).
@@ -149,6 +151,7 @@ def _define_kernel_build(
         outs = out_list,
         build_config = ":{}_build_config".format(target),
         dtstree = dtstree,
+        srcs = native.glob(["**"]) + extra_srcs,
         kmi_symbol_list = None,
         additional_kmi_symbol_lists = None,
         module_signing_key = ":signing_key",
@@ -242,7 +245,8 @@ def define_msm_le_32(
         defconfig,
         in_tree_module_list,
         target_variants = le_32_variants,
-        boot_image_opts = boot_image_opts()):
+        boot_image_opts = boot_image_opts(),
+        extra_srcs = []):
     """Top-level kernel build definition macro for an MSM platform
 
     Args:
@@ -280,6 +284,7 @@ def define_msm_le_32(
         defconfig,
         boot_image_opts = boot_image_opts,
         build_config_fragments = build_config_fragments,
+        extra_srcs = extra_srcs,
     )
 
     _define_kernel_build(
@@ -288,6 +293,7 @@ def define_msm_le_32(
         dtb_list,
         dtbo_list,
         dtstree,
+        extra_srcs = extra_srcs,
     )
 
     kernel_images(

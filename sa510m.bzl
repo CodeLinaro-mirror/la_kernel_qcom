@@ -34,6 +34,10 @@ def define_sa510m():
             msm_target = target_name,
             variant = variant,
             defconfig = "build.config.msm.sa510m",
+            extra_srcs = [
+                "//qcom/opensource/dataipa:dataipa_sources",
+                "//qcom/opensource/datarmnet:datarmnet_sources",
+            ],
             in_tree_module_list = mod_list,
             target_variants = le_32_variants,
             boot_image_opts = boot_image_opts(
