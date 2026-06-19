@@ -606,7 +606,7 @@ static int gpu_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regma
 		gpu_cc_alor_fixup(regmap);
 
 	if (!strcmp(compat, "qcom,whale-gpucc")) {
-		gpu_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
+		gpu_cc_pll0_config.config_ctl_hi_val = 0x0a826060;
 		gpu_cc_pll0_config.cal_l = 0x48;
 	}
 
