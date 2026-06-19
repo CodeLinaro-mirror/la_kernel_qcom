@@ -6,7 +6,9 @@ qcom_rpmh.ko
 arm_smmu.ko
 arm_smmu_v3.ko
 smem.ko
+qcom_iommu_debug.ko
 qcom_iommu_util.ko
+iommu-logger.ko
 socinfo.ko
 qcom_tzmem.ko
 qcom_hwspinlock.ko
