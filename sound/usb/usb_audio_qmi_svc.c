@@ -1492,7 +1492,7 @@ static int check_valid_request(struct qmi_uaudio_stream_req_msg_v01 *req_msg,
 
 	if (req_msg->enable && (*info_idx < 0)) {
 		uaudio_err("interface# %d already in use card# %d\n",
-				subs->cur_audiofmt->iface, pcm_card_num);
+			subs->cur_audiofmt ? subs->cur_audiofmt->iface : -1, pcm_card_num);
 		return -EBUSY;
 	}
 

@@ -293,6 +293,7 @@
 
 #define PHY_READY_TIMEOUT_COUNT (10)
 #define XMLH_LINK_UP (0x400)
+#define PARF_XMLH_LINK_UP (BIT(30))
 #define MAX_PROP_SIZE (32)
 #define MAX_RC_NAME_LEN (15)
 #define MSM_PCIE_MAX_VREG (6)
@@ -3968,6 +3969,16 @@ static int msm_pcie_is_link_up(struct msm_pcie_dev_t *dev)
 			PCIE20_CAP_LINKCTRLSTATUS) & BIT(29);
 }
 
+static inline bool msm_pcie_ltssm_link_up(struct msm_pcie_dev_t *dev)
+{
+	u32 ltssm;
+
+	ltssm = readl_relaxed(dev->parf + PCIE20_PARF_LTSSM) & MSM_PCIE_LTSSM_MASK;
+
+	/* L0 (0x11) through L2_IDLE (0x15) are contiguous stable states */
+	return (ltssm >= MSM_PCIE_LTSSM_L0 && ltssm <= MSM_PCIE_LTSSM_L2_IDLE);
+}
+
 static void msm_pcie_config_bandwidth_int(struct msm_pcie_dev_t *dev,
 						bool enable)
 {
@@ -6221,9 +6232,8 @@ static int msm_pcie_get_iommu_map(struct msm_pcie_dev_t *pcie_dev)
 
 	of_get_property(pdev->dev.of_node, "iommu-map", &size);
 	if (!size) {
-		PCIE_DBG(pcie_dev,
-			"PCIe: RC%d: iommu-map is not present in DT.\n",
-			pcie_dev->rc_idx);
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: iommu-map is not present in DT.\n",
+			 pcie_dev->rc_idx);
 		return 0;
 	}
 
@@ -6231,8 +6241,39 @@ static int msm_pcie_get_iommu_map(struct msm_pcie_dev_t *pcie_dev)
 	if (!map)
 		return -ENOMEM;
 
-	of_property_read_u32_array(pdev->dev.of_node,
-		"iommu-map", (u32 *)map, size / sizeof(u32));
+	of_property_read_u32_array(pdev->dev.of_node, "iommu-map", (u32 *)map, size / sizeof(u32));
+
+	/*
+	 * Detect SMMUv3 (pcie_smmu): look up the SMMU phandle from the first iommu-map entry and
+	 * check its compatible string.  SMMUv3 manages stream-ID assignment internally;
+	 * no BDF-to-SID table programming is required from the PCIe driver.
+	 */
+	if (size >= (int)sizeof(*map)) {
+		struct device_node *smmu_node = of_find_node_by_phandle(map[0].phandle);
+
+		if (smmu_node) {
+			bool is_smmuv3 = of_device_is_compatible(smmu_node, "arm,smmu-v3");
+
+			of_node_put(smmu_node);
+
+			if (is_smmuv3) {
+				PCIE_DBG(pcie_dev,
+					"PCIe: RC%d: SMMUv3 detected skip SID table programming.\n",
+					pcie_dev->rc_idx);
+				kfree(map);
+				return 0;
+			}
+		}
+	}
+
+	/*
+	 * smmu_sid_base (from qcom,smmu-sid-base) is required to derive the PCIe-local
+	 * SID from the global SMMU SID.  Warn loudly if it was not provided alongside iommu-map.
+	 */
+	if (!pcie_dev->smmu_sid_base)
+		PCIE_ERR(pcie_dev,
+			 "PCIe: RC%d: smmu-sid-base is 0, sid calculation may be incorrect.\n",
+			 pcie_dev->rc_idx);
 
 	pcie_dev->sid_info_len = size / (sizeof(*map));
 	pcie_dev->sid_info = devm_kcalloc(&pdev->dev, pcie_dev->sid_info_len,
@@ -6813,11 +6854,6 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 	if (ret)
 		return ret;
 
-	dev->link_status = MSM_PCIE_LINK_ENABLED;
-	dev->power_on = true;
-	dev->suspending = false;
-	dev->link_turned_on_counter++;
-
 	if (dev->switch_latency) {
 		PCIE_DBG(dev, "switch_latency: %dms\n",
 			dev->switch_latency);
@@ -6828,12 +6864,14 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 			msleep(dev->switch_latency);
 	}
 
-	if (!dev->tc2bdf_tc_count)
-		ret = msm_pcie_config_sid(dev);
-	else
-		ret = msm_pcie_config_tc_bdf_sid_map(dev);
-	if (ret)
-		return ret;
+	if (dev->sid_info && !dev->save_sid_config) {
+		if (!dev->tc2bdf_tc_count)
+			ret = msm_pcie_config_sid(dev);
+		else
+			ret = msm_pcie_config_tc_bdf_sid_map(dev);
+		if (ret)
+			return ret;
+	}
 
 	msm_pcie_config_controller(dev);
 
@@ -6923,6 +6961,7 @@ static void msm_pcie_parf_cesta_config(struct msm_pcie_dev_t *dev)
 
 static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 {
+	uint32_t xmlh_link_up = 0, link_status;
 	int ret = 0;
 
 	PCIE_DBG(dev, "RC%d: entry\n", dev->rc_idx);
@@ -6937,17 +6976,6 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 			dev->rc_idx);
 		goto out;
 	}
-
-	/* assert PCIe reset link to keep EP in reset */
-
-	PCIE_INFO(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
-		dev->rc_idx);
-	msm_pcie_config_perst(dev, true);
-	usleep_range(dev->perst_delay_us_min, dev->perst_delay_us_max);
-
-	ret = msm_pcie_gpio_init(dev);
-	if (ret)
-		goto out;
 
 	/* enable power */
 	ret = msm_pcie_vreg_init(dev);
@@ -6969,7 +6997,37 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 	/* Use CESTA to turn on the resources */
 	ret = msm_pcie_enable_cesta(dev);
 	if (ret)
-		goto reset_fail;
+		goto gpio_fail;
+
+	/* Check for PCIe link up, if link is already up, skip the link initialization */
+	xmlh_link_up = !!(readl_relaxed(dev->parf + PCIE20_PARF_PM_STTS) & PARF_XMLH_LINK_UP);
+	if (xmlh_link_up && msm_pcie_ltssm_link_up(dev)) {
+		link_status = readl_relaxed(dev->dm_core + PCIE20_CAP_LINKCTRLSTATUS);
+
+		dev->current_link_speed = (link_status >> 16) & PCI_EXP_LNKSTA_CLS;
+		dev->current_link_width = ((link_status >> 16) & PCI_EXP_LNKSTA_NLW)
+						>> PCI_EXP_LNKSTA_NLW_SHIFT;
+		PCIE_DBG(dev, "PCIe: RC%d: Link is up at Gen%dX%d\n",
+			dev->rc_idx, dev->current_link_speed, dev->current_link_width);
+
+		ret = msm_pcie_pipe_clk_init(dev);
+		/* ensure that changes propagated to the hardware */
+		wmb();
+		if (ret)
+			goto gpio_fail;
+
+		goto skip_link_enablement;
+	}
+
+	/* assert PCIe reset link to keep EP in reset */
+	PCIE_INFO(dev, "PCIe: Assert the reset of endpoint of RC%d.\n",
+		dev->rc_idx);
+	msm_pcie_config_perst(dev, true);
+	usleep_range(dev->perst_delay_us_min, dev->perst_delay_us_max);
+
+	ret = msm_pcie_gpio_init(dev);
+	if (ret)
+		goto gpio_fail;
 
 	/* reset pcie controller and phy */
 	ret = msm_pcie_core_phy_reset(dev);
@@ -6978,10 +7036,6 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 	if (ret)
 		goto reset_fail;
 
-	/* Configure clkreq, l1ss sleep timeout access to CESTA */
-	if (dev->pcie_parf_cesta_config)
-		msm_pcie_parf_cesta_config(dev);
-
 	/* RUMI PCIe reset sequence */
 	if (dev->rumi_init)
 		dev->rumi_init(dev);
@@ -6989,6 +7043,10 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 	ret = msm_pcie_enable_link(dev);
 	if (ret)
 		goto link_fail;
+skip_link_enablement:
+	/* Configure clkreq, l1ss sleep timeout access to CESTA */
+	if (dev->pcie_parf_cesta_config)
+		msm_pcie_parf_cesta_config(dev);
 
 	if (!dev->save_sid_config) {
 		ret = msm_pcie_save_sid_config(dev);
@@ -7004,6 +7062,11 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 
 	if (dev->no_client_based_bw_voting)
 		msm_pcie_icc_vote(dev, dev->current_link_speed, dev->current_link_width, false);
+
+	dev->link_status = MSM_PCIE_LINK_ENABLED;
+	dev->power_on = true;
+	dev->suspending = false;
+	dev->link_turned_on_counter++;
 
 	if (dev->enumerated) {
 		if (!dev->lpi_enable)
@@ -7034,6 +7097,9 @@ link_fail:
 
 	msm_pcie_pipe_clk_deinit(dev);
 reset_fail:
+
+	msm_pcie_gpio_deinit(dev);
+gpio_fail:
 
 	msm_pcie_clk_deinit(dev);
 clk_fail:
@@ -7090,6 +7156,18 @@ static void msm_pcie_disable(struct msm_pcie_dev_t *dev)
 
 	/* Enable override for fal10_veto logic to assert Qactive signal.*/
 	msm_pcie_write_mask(dev->parf + PCIE20_PARF_CFG_BITS_3, 0, BIT(0));
+
+	/* Assert, De-assert the pipe reset */
+	msm_pcie_pipe_reset(dev);
+
+	/* ensure that changes propagated to the hardware */
+	wmb();
+
+	/* reset pcie controller and phy */
+	msm_pcie_core_phy_reset(dev);
+
+	/* ensure that changes propagated to the hardware */
+	wmb();
 
 	/* Use CESTA to turn off the resources */
 	if (dev->pcie_sm) {
@@ -7190,6 +7268,11 @@ static int msm_pcie_save_sid_config(struct msm_pcie_dev_t *dev)
 	if (!dev)
 		return -EINVAL;
 
+	if (!dev->sid_info) {
+		PCIE_DBG(dev, "PCIe: RC%d: SID info not available .\n", dev->rc_idx);
+		return 0;
+	}
+
 	sid_table_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 	sid_table_size = CRC8_TABLE_SIZE * sizeof(u32);
 
@@ -7219,6 +7302,17 @@ static int msm_pcie_restore_sid_config(struct msm_pcie_dev_t *dev)
 	if (!dev)
 		return -EINVAL;
 
+	if (!dev->sid_info) {
+		PCIE_DBG(dev, "PCIe: RC%d: SID info not available .\n", dev->rc_idx);
+		return 0;
+	}
+
+	if (!dev->save_sid_config) {
+		PCIE_DBG(dev,
+			 "PCIe: RC%d: SID config not saved yet, skipping restore.\n", dev->rc_idx);
+		return 0;
+	}
+
 	sid_table_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 	sid_table_size = CRC8_TABLE_SIZE * sizeof(u32);
 
@@ -7240,13 +7334,6 @@ static int msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 {
 	void __iomem *bdf_to_sid_base;
 	int i;
-
-	/* Perform SID mapping only if the configuration hasn't been saved yet */
-	if (dev->save_sid_config)
-		return 0;
-
-	if (!dev->sid_info)
-		return -EINVAL;
 
 	bdf_to_sid_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 
@@ -7312,13 +7399,6 @@ static int msm_pcie_config_tc_bdf_sid_map(struct msm_pcie_dev_t *dev)
 {
 	void __iomem *tc_bdf_to_sid_lut_base;
 	int i, tc, lut_offset = 0;
-
-	/* Perform SID mapping only if the configuration hasn't been saved yet */
-	if (dev->save_sid_config)
-		return 0;
-
-	if (!dev->sid_info)
-		return -ENODEV;
 
 	tc_bdf_to_sid_lut_base = dev->parf + PCIE20_PARF_TC_BDF_TO_SID_LUT_N;
 

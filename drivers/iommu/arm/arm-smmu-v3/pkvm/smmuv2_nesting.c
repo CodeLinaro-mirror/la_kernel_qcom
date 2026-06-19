@@ -259,9 +259,6 @@ static int smmuv2_read_global_region_0(struct smmu_v2_nested *smmu, u64 offset, 
 			return -EINVAL;  /* Invalid S2CR offset */
 		i = ARM_SMMU_GR0_S2CR_INDEX(offset);
 
-		/* Read current hardware value */
-		*buf = arm_smmu_gr0_read(smmu, offset);
-
 		/* Extract current type */
 		u32 current_type = (*buf & ARM_SMMU_S2CR_TYPE) >> 16;
 
@@ -374,7 +371,9 @@ static bool smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 	int rd = (esr & ESR_ELx_SRT_MASK) >> ESR_ELx_SRT_SHIFT;
 	u64 val = regs->regs[rd];
 	u32 offset;
-	bool ret = true;
+	int ret = 0;
+	u32 host_s2_cb_offset = ARM_SMMU_CB(smmu, smmu->host_s2_cb_idx) << smmu->pgshift;
+	u32 cb_size = 1U << smmu->pgshift;
 
 	smmu_v2_debug_print("addr: 0x%llx, val: 0x%llx, esr: 0x%llx\n",
 			    addr, regs->regs[rd], esr);
@@ -382,9 +381,22 @@ static bool smmuv2_nesting_dabt_device(struct smmu_v2_nested *smmu,
 			    len, rd, is_write);
 
 	kvm_iommu_lock(&smmu->iommu);
+
 	offset = (u32)(addr & SMMU_V2_GLB_ADDR_OFFSET_MASK);
 
-	if (offset < ARM_SMMU_GLOBAL_REGION1_OFFSET) {
+	if (addr >= host_s2_cb_offset && addr < host_s2_cb_offset + cb_size) {
+		if (!is_write) {
+			void *reg_addr = (void *)((u64)smmu->base_va + addr);
+
+			regs->regs[rd] = readl_relaxed(reg_addr);
+		} else if ((addr - host_s2_cb_offset) == ARM_SMMU_CB_FSR) {
+			void *reg_addr = (void *)((u64)smmu->base_va + addr);
+
+			writel_relaxed((u32)val, reg_addr);
+		} else {
+			ret = -EPERM;
+		}
+	} else if (offset < ARM_SMMU_GLOBAL_REGION1_OFFSET) {
 		if (is_write) {
 			ret = smmuv2_write_global_region_0(smmu, offset, len, val);
 		} else {
@@ -413,10 +425,15 @@ static bool smmuv2_nesting_dabt_handler(struct user_pt_regs *regs, u64 esr, u64 
 	int ret;
 
 	for_each_smmu(smmu) {
+		u32 host_s2_cb_offset = ARM_SMMU_CB(smmu, smmu->host_s2_cb_idx) << smmu->pgshift;
+		u32 cb_size = 1U << smmu->pgshift;
+
 		/* Check if address is within this SMMU's range */
-		if ((addr >= smmu->base_pa) && (addr < (smmu->base_pa + size))) {
+		if (((addr >= smmu->base_pa) && (addr < (smmu->base_pa + size))) ||
+		    ((addr >= smmu->base_pa + host_s2_cb_offset) &&
+			 (addr < smmu->base_pa + host_s2_cb_offset + cb_size))) {
 			ret = smmuv2_nesting_dabt_device(smmu, regs, esr, addr - smmu->base_pa);
-			return (ret == -EPERM) ? false : true;
+			return (ret != 0) ? false : true;
 		}
 	}
 	return false;
@@ -542,19 +559,7 @@ static int smmu_attach_stage_2(void)
 	       FIELD_PREP(ARM_SMMU_VTCR_T0SZ, pt_cfg->arm_lpae_s2_cfg.vtcr.tsz);
 
 	for_each_smmu(smmu) {
-		u64 page_pa;
 		u32 sctlr_val;
-		int ret;
-
-		page_pa = (u64)arm_smmu_page_pa(smmu, smmu->host_s2_cb_idx);
-
-		/* Donate the S2 context bank page to hypervisor */
-		ret = ___pkvm_host_donate_hyp(page_pa >> PAGE_SHIFT, 1, true);
-		if (ret) {
-			smmu_v2_debug_print("Failed to donate CB page: %d\n",
-					    ret);
-			return ret;
-		}
 
 		/* Configure the stage-2 translation registers */
 		arm_smmu_cb_writeq(smmu, smmu->host_s2_cb_idx,
@@ -577,7 +582,10 @@ static int smmu_attach_stage_2(void)
 		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
 				  ARM_SMMU_CB_SCTLR, sctlr_val);
 
-		/* Configure ACTLR - set CPRE and CMTLB bits */
+		/* Configure ACTLR - set CPRE and CMTLB bits
+		 * CPRE  - Enable context caching in the prefetch buffer.
+		 * CMTLB - Enable context caching in the macro-TLB.
+		 */
 		arm_smmu_cb_write(smmu, smmu->host_s2_cb_idx,
 				  ARM_SMMU_CB_ACTLR, 0x3);
 
@@ -777,18 +785,22 @@ static struct smmu_vendor_driver smmuv2_driver = {
 int smmuv2_hyp_nesting_init(void)
 {
 	int smmu_arr_size = PAGE_ALIGN(sizeof(*smmu_v2_nested_base) * smmu_v2_nested_count);
+	struct smmu_v2_nested *smmu;
 	int ret;
+
+	/* Register this driver with the common vendor module */
+	ret = smmu_vendor_register_driver(&smmuv2_driver);
+	if (ret)
+		return ret;
 
 	smmu_v2_nested_base = kern_hyp_va(smmu_v2_nested_base);
 
 	u32 page_count = smmu_arr_size >> PAGE_SHIFT;
 
-	for (int i = 0; i < page_count; i++) {
-		ret = __pkvm_host_share_hyp((hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT) +
-					    i);
-		if (ret)
-			return ret;
-	}
+	ret = ___pkvm_host_donate_hyp((hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT),
+				      page_count, true);
+	if (ret)
+		return ret;
 
 	ret = take_over_smmus();
 	if (ret)
@@ -798,8 +810,18 @@ int smmuv2_hyp_nesting_init(void)
 	if (ret)
 		return ret;
 
-	/* Register this driver with the common vendor module */
-	ret = smmu_vendor_register_driver(&smmuv2_driver);
+	for_each_smmu(smmu) {
+		u64 page_pa;
+
+		page_pa = (u64)arm_smmu_page_pa(smmu, smmu->host_s2_cb_idx);
+
+		/* Donate the S2 context bank page to hypervisor */
+		ret = ___pkvm_host_donate_hyp(page_pa >> PAGE_SHIFT, 1, true);
+		if (ret) {
+			smmu_v2_debug_print("Failed to donate CB page: %d\n", ret);
+			return ret;
+		}
+	}
 
 	return ret;
 }
