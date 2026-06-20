@@ -5641,7 +5641,7 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct dma_desc *desc, *first;
 	struct stmmac_tx_queue *tx_q;
 	bool has_vlan, set_ic;
-	int entry, first_tx;
+	int entry, first_tx, skb_entry;
 	dma_addr_t des;
 	unsigned int int_mod;
 
@@ -5685,6 +5685,7 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	entry = tx_q->cur_tx;
 	first_entry = entry;
+	skb_entry = first_entry;
 	WARN_ON(tx_q->tx_skbuff[first_entry]);
 
 	csum_insertion = (skb->ip_summed == CHECKSUM_PARTIAL);
@@ -5747,6 +5748,7 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	/* Only the last descriptor gets to point to the skb. */
+	skb_entry = entry;
 	tx_q->tx_skbuff[entry] = skb;
 	tx_q->tx_skbuff_dma[entry].buf_type = STMMAC_TXBUF_T_SKB;
 
@@ -5889,6 +5891,23 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 
 dma_map_err:
 	netdev_err(priv->dev, "Tx DMA map failed\n");
+	tx_q->tx_skbuff[skb_entry] = NULL;
+	if (entry >= 0) {
+		for (i = STMMAC_GET_ENTRY(first_entry, priv->dma_tx_size);
+		     i != entry;
+		     i = STMMAC_GET_ENTRY(i, priv->dma_tx_size)) {
+			if (tx_q->tx_skbuff_dma[i].buf) {
+				dma_unmap_page(GET_MEM_PDEV_DEV,
+					       tx_q->tx_skbuff_dma[i].buf,
+					       tx_q->tx_skbuff_dma[i].len,
+					       DMA_TO_DEVICE);
+				tx_q->tx_skbuff_dma[i].buf = 0;
+				tx_q->tx_skbuff_dma[i].len = 0;
+				tx_q->tx_skbuff_dma[i].map_as_page = false;
+			}
+		}
+	}
+	tx_q->cur_tx = first_tx;
 	dev_kfree_skb(skb);
 	priv->dev->stats.tx_dropped++;
 	return NETDEV_TX_OK;
