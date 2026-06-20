@@ -2312,6 +2312,9 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 			goto out;
 		}
 		put_channel = true;
+
+		/* workqueue path — PVM may exit before we finish; use short timeout */
+		hab_channel->teardown = true;
 	}
 	/* Drain any remaining retired profiling entries before freeing buffers */
 	hgsl_prof_drain_ctxt(hgsl, ctxt);
@@ -4029,6 +4032,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
 		if (ret)
 			LOGE("Failed to get channel %d", ret);
+			hab_channel->teardown = true;
 
 		ret = hgsl_hyp_notify_cleanup(hab_channel, HGSL_CLEANUP_WAIT_SLICE_IN_MS);
 		if (ret == -ETIMEDOUT) {
