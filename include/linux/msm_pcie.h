@@ -24,6 +24,7 @@ enum msm_pcie_pm_opt {
 	MSM_PCIE_ENABLE_PC,
 	MSM_PCIE_HANDLE_LINKDOWN,
 	MSM_PCIE_DRV_PC_CTRL,
+	MSM_PCIE_ENABLE_ASPM,
 };
 
 enum msm_pcie_event {
@@ -63,6 +64,7 @@ struct msm_pcie_register_event {
 void msm_msi_config_access(struct irq_domain *domain, bool allow);
 void msm_msi_config(struct irq_domain *domain);
 int msm_msi_init(struct device *dev);
+void msm_msi_deinit(struct device *dev);
 
 #if IS_ENABLED(CONFIG_PCI_MSM)
 
