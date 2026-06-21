@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/delay.h>
@@ -93,6 +93,7 @@ struct msm_pinctrl {
 	struct msm_gpio_regs *gpio_regs;
 	struct msm_tile *msm_tile_regs;
 	bool hibernation;
+	bool deep_sleep_support;
 };
 
 static struct msm_pinctrl *msm_pinctrl_data;
@@ -979,11 +980,29 @@ static bool is_gpio_dual_edge(struct irq_data *d, irq_hw_number_t *irq)
 
 	for (i = pctrl->n_dir_conns; i > 0; i--) {
 		dc = &pctrl->soc->dir_conn[i];
-
 		if (dc->gpio == d->hwirq) {
 			*irq = dc->irq;
 			return true;
 		}
+	}
+
+	return false;
+}
+static bool is_gpio_tlmm_dc(struct irq_data *d, u32 *offset,
+				irq_hw_number_t *irq)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	struct msm_dir_conn *dc;
+	int i;
+
+	for (i = pctrl->n_dir_conns; i > 0; i--) {
+		dc = &pctrl->soc->dir_conn[i];
+		*offset = pctrl->n_dir_conns - i;
+		*irq = dc->irq;
+
+		if (dc->gpio == d->hwirq)
+			return true;
 	}
 
 	return false;
@@ -995,7 +1014,18 @@ static void msm_gpio_irq_mask(struct irq_data *d)
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
 	const struct msm_pingroup *g;
 	unsigned long flags;
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
+	u32 offset = 0;
 	u32 val;
+
+	if (is_gpio_tlmm_dc(d, &offset, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		dir_conn_data->chip->irq_mask(dir_conn_data);
+	}
 
 	if (d->parent_data)
 		irq_chip_mask_parent(d);
@@ -1095,7 +1125,18 @@ static void msm_gpio_irq_unmask(struct irq_data *d)
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
 	const struct msm_pingroup *g;
 	unsigned long flags;
+	struct irq_data *dir_conn_data;
+	irq_hw_number_t dir_conn_irq = 0;
+	u32 offset = 0;
 	u32 val;
+
+	if (is_gpio_tlmm_dc(d, &offset, &dir_conn_irq)) {
+		dir_conn_data = irq_get_irq_data(dir_conn_irq);
+		if (!dir_conn_data)
+			return;
+
+		dir_conn_data->chip->irq_unmask(dir_conn_data);
+	}
 
 	if (d->parent_data)
 		irq_chip_unmask_parent(d);
@@ -1166,26 +1207,6 @@ static void enable_tlmm_dc(irq_hw_number_t irq)
 		return;
 
 	dir_conn_data->chip->irq_unmask(dir_conn_data);
-}
-
-static bool is_gpio_tlmm_dc(struct irq_data *d, u32 *offset,
-				irq_hw_number_t *irq)
-{
-	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
-	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
-	struct msm_dir_conn *dc;
-	int i;
-
-	for (i = pctrl->n_dir_conns; i > 0; i--) {
-		dc = &pctrl->soc->dir_conn[i];
-		*offset = pctrl->n_dir_conns - i;
-		*irq = dc->irq;
-
-		if (dc->gpio == d->hwirq)
-			return true;
-	}
-
-	return false;
 }
 
 static void msm_gpio_irq_enable(struct irq_data *d)
@@ -1370,6 +1391,25 @@ static void msm_dirconn_cfg_reg(struct irq_data *d, u32 offset)
 	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 }
 
+static void msm_gpio_irq_init_valid_mask(struct gpio_chip *gc,
+					 unsigned long *valid_mask,
+					 unsigned int ngpios)
+{
+	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+	const struct msm_pingroup *g;
+	int i;
+
+	bitmap_fill(valid_mask, ngpios);
+
+	for (i = 0; i < ngpios; i++) {
+		g = &pctrl->soc->groups[i];
+
+		if (g->intr_detection_width != 1 &&
+		    g->intr_detection_width != 2)
+			clear_bit(i, valid_mask);
+	}
+}
+
 static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
@@ -1379,8 +1419,7 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	u32 intr_target_mask = GENMASK(2, 0);
 	unsigned long flags;
 	u32 offset = 0;
-	bool was_enabled;
-	u32 val;
+	u32 val, oldval;
 
 	if (msm_gpio_needs_dual_edge_parent_workaround(d, type)) {
 		set_bit(d->hwirq, pctrl->dual_edge_irqs);
@@ -1450,8 +1489,7 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	 * internal circuitry of TLMM, toggling the RAW_STATUS
 	 * could cause the INTR_STATUS to be set for EDGE interrupts.
 	 */
-	val = msm_readl_intr_cfg(pctrl, g);
-	was_enabled = val & BIT(g->intr_raw_status_bit);
+	val = oldval = msm_readl_intr_cfg(pctrl, g);
 	val |= BIT(g->intr_raw_status_bit);
 	if (g->intr_detection_width == 2) {
 		val &= ~(3 << g->intr_detection_bit);
@@ -1504,9 +1542,11 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	/*
 	 * The first time we set RAW_STATUS_EN it could trigger an interrupt.
 	 * Clear the interrupt.  This is safe because we have
-	 * IRQCHIP_SET_TYPE_MASKED.
+	 * IRQCHIP_SET_TYPE_MASKED. When changing the interrupt type, we could
+	 * also still have a non-matching interrupt latched, so clear whenever
+	 * making changes to the interrupt configuration.
 	 */
-	if (!was_enabled)
+	if (val != oldval)
 		msm_ack_intr_status(pctrl, g);
 
 	if (test_bit(d->hwirq, pctrl->dual_edge_irqs))
@@ -1822,6 +1862,7 @@ static int msm_gpio_init(struct msm_pinctrl *pctrl)
 	girq->default_type = IRQ_TYPE_NONE;
 	girq->handler = handle_bad_irq;
 	girq->parents[0] = pctrl->irq;
+	girq->init_valid_mask = msm_gpio_irq_init_valid_mask;
 
 	ret = gpiochip_add_data(&pctrl->chip, pctrl);
 	if (ret) {
@@ -1931,7 +1972,8 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 	struct msm_pinctrl *pctrl = msm_pinctrl_data;
 	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
 
-	if (event == PM_HIBERNATION_PREPARE) {
+	if (event == PM_HIBERNATION_PREPARE ||
+		(event == PM_SUSPEND_PREPARE &&	pctrl->deep_sleep_support)) {
 		pctrl->gpio_regs = kcalloc(soc->ngroups,
 			sizeof(*pctrl->gpio_regs), GFP_KERNEL);
 		if (pctrl->gpio_regs == NULL)
@@ -1945,7 +1987,8 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 			}
 		}
 		pctrl->hibernation = true;
-	} else if (event == PM_POST_HIBERNATION) {
+	} else if (event == PM_POST_HIBERNATION ||
+		(event == PM_POST_SUSPEND && pctrl->deep_sleep_support)) {
 		kfree(pctrl->gpio_regs);
 		kfree(pctrl->msm_tile_regs);
 		pctrl->gpio_regs = NULL;
@@ -2022,20 +2065,23 @@ static void msm_pinctrl_hibernation_resume(void)
 	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
 	void __iomem *tile_addr = NULL;
 
-	if (likely(!pctrl->hibernation) || !pctrl->gpio_regs || !pctrl->msm_tile_regs)
+	if (likely(!pctrl->hibernation) ||
+		!pctrl->deep_sleep_support || !pctrl->gpio_regs)
 		return;
-	for (i = 0; i < soc->ntiles; i++) {
-		if (soc->tiles)
-			tile_addr = pctrl->regs[i] + soc->dir_conn_addr[i];
-		else
-			tile_addr = pctrl->regs[0] + soc->dir_conn_addr[i];
-		pr_err("The tile addr generated is 0x%lx\n", (u64)tile_addr);
-		for (j = 0; j < 8; j++)
-			writel_relaxed(pctrl->msm_tile_regs[i].dir_con_regs[j],
-					tile_addr + j*4);
-	}
 
-    /* Restore normal gpios */
+	if (pctrl->msm_tile_regs) {
+		for (i = 0; i < soc->ntiles; i++) {
+			if (soc->tiles)
+				tile_addr = pctrl->regs[i] + soc->dir_conn_addr[i];
+			else
+				tile_addr = pctrl->regs[0] + soc->dir_conn_addr[i];
+			pr_err("The tile addr generated is 0x%lx\n", (u64)tile_addr);
+			for (j = 0; j < 8; j++)
+				writel_relaxed(pctrl->msm_tile_regs[i].dir_con_regs[j],
+						tile_addr + j*4);
+		}
+	}
+	/* Restore normal gpios */
 	for (i = 0; i < soc->ngpios; i++) {
 		pgroup = &soc->groups[i];
 		msm_writel_ctl(pctrl->gpio_regs[i].ctl_reg, pctrl, pgroup);
@@ -2057,6 +2103,8 @@ static void msm_pinctrl_hibernation_resume(void)
 			msm_writel_io(pctrl->gpio_regs[i].io_reg,
 					pctrl, pgroup);
 	}
+
+	msm_gpio_setup_dir_connects(pctrl);
 }
 
 static struct syscore_ops msm_pinctrl_pm_ops = {
@@ -2082,8 +2130,38 @@ static __maybe_unused int msm_pinctrl_resume(struct device *dev)
 	return pinctrl_force_default(pctrl->pctrl);
 }
 
-SIMPLE_DEV_PM_OPS(msm_pinctrl_dev_pm_ops, msm_pinctrl_suspend,
-		  msm_pinctrl_resume);
+#ifdef CONFIG_HIBERNATION
+static __maybe_unused int msm_pinctrl_freeze(struct device *dev)
+{
+	msm_pinctrl_hibernation_suspend();
+
+	return msm_pinctrl_suspend(dev);
+}
+
+static __maybe_unused int msm_pinctrl_restore(struct device *dev)
+{
+	int ret;
+
+	ret = msm_pinctrl_resume(dev);
+	if (ret)
+		return ret;
+
+	msm_pinctrl_hibernation_resume();
+
+	return 0;
+}
+#endif
+
+const struct dev_pm_ops __maybe_unused msm_pinctrl_dev_pm_ops = {
+	.suspend = msm_pinctrl_suspend,
+	.resume = msm_pinctrl_resume,
+#ifdef CONFIG_HIBERNATION
+	.freeze_late = msm_pinctrl_freeze,
+	.thaw = msm_pinctrl_resume,
+	.restore_early = msm_pinctrl_restore,
+#endif
+	.poweroff = msm_pinctrl_suspend,
+};
 
 EXPORT_SYMBOL(msm_pinctrl_dev_pm_ops);
 
@@ -2297,12 +2375,16 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 		return -ENOMEM;
 
 	pctrl->hibernation = false;
+	pctrl->deep_sleep_support = false;
 	pctrl->dev = &pdev->dev;
 	pctrl->soc = soc_data;
 	pctrl->chip = msm_gpio_template;
 	pctrl->intr_target_use_scm = of_device_is_compatible(
 					pctrl->dev->of_node,
 					"qcom,ipq8064-pinctrl");
+	if (of_property_read_bool(pctrl->dev->of_node,
+				"qcom,support-deepsleep"))
+		pctrl->deep_sleep_support = true;
 
 	raw_spin_lock_init(&pctrl->lock);
 

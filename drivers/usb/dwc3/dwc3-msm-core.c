@@ -72,7 +72,6 @@
 #define DWC3_GUSB3PIPECTL_DISRXDETU3	BIT(22)
 #define DWC3_GUCTL_SPRSCTRLTRANSEN	BIT(17)
 
-#define DWC3_LLUCTL	0xd024
 /* Force Gen1 speed on Gen2 link */
 #define DWC3_LLUCTL_FORCE_GEN1	BIT(10)
 
@@ -3789,15 +3788,19 @@ static void dwc3_msm_orientation_gpio_init(struct dwc3_msm *mdwc)
 	int rc;
 
 	mdwc->orientation_gpio = of_get_gpio(dev->of_node, 0);
+	/*
+	 * If the GPIO is not defined or invalid, simply disable the
+	 * orientation feature - this is not an error condition.
+	 */
 	if (!gpio_is_valid(mdwc->orientation_gpio)) {
-		dev_err(dev, "Failed to get gpio\n");
+		dev_dbg(dev, "Orientation GPIO not defined, feature disabled\n");
 		return;
 	}
 
 	rc = devm_gpio_request_one(dev, mdwc->orientation_gpio,
 				   GPIOF_IN, "dwc3-msm-orientation");
 	if (rc < 0) {
-		dev_err(dev, "Failed to request gpio\n");
+		dev_err(dev, "failed to request orientation GPIO, ret=%d\n", rc);
 		mdwc->orientation_gpio = -EINVAL;
 		return;
 	}
@@ -4240,7 +4243,8 @@ static void dwc3_msm_interrupt_enable(struct dwc3_msm *mdwc, bool enable)
 	}
 }
 
-static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
+static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
+		bool enable_wakeup)
 {
 	int ret;
 	struct dwc3 *dwc = NULL;
@@ -4363,7 +4367,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
 	 * case of platforms with mpm interrupts and snps phy, enable
 	 * dpse hsphy irq and dmse hsphy irq as done for pdc interrupts.
 	 */
-	dwc3_msm_interrupt_enable(mdwc, true);
+	dwc3_msm_interrupt_enable(mdwc, enable_wakeup);
 
 	if (mdwc->use_pwr_event_for_wakeup &&
 			!(mdwc->lpm_flags & MDWC3_SS_PHY_SUSPEND))
@@ -6318,7 +6322,7 @@ static int dwc3_msm_register_interrupts(struct platform_device *pdev)
 	int i;
 
 	for (i = 0; i < USB_MAX_IRQ; i++) {
-		mdwc->wakeup_irq[i].irq = platform_get_irq_byname(pdev,
+		mdwc->wakeup_irq[i].irq = platform_get_irq_byname_optional(pdev,
 					usb_irq_info[i].name);
 		if (mdwc->wakeup_irq[i].irq < 0) {
 			/* pwr_evnt_irq is only mandatory irq */
@@ -6379,6 +6383,7 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret = 0, i;
 	u32 val;
+	bool disable_wakeup;
 
 	mdwc = devm_kzalloc(&pdev->dev, sizeof(*mdwc), GFP_KERNEL);
 	if (!mdwc)
@@ -6553,7 +6558,10 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	atomic_set(&mdwc->in_lpm, 1);
 	pm_runtime_set_autosuspend_delay(mdwc->dev, 1000);
 	pm_runtime_use_autosuspend(mdwc->dev);
-	device_init_wakeup(mdwc->dev, 1);
+
+	disable_wakeup =
+		device_property_read_bool(mdwc->dev, "qcom,disable-wakeup");
+	device_init_wakeup(mdwc->dev, !disable_wakeup);
 
 	ret = vbus_regulator_get(mdwc);
 	if (ret < 0)
@@ -7678,9 +7686,16 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 	 * Power collapse the core. Hence call dwc3_msm_suspend with
 	 * 'force_power_collapse' set to 'true'.
 	 */
-	ret = dwc3_msm_suspend(mdwc, true);
+	ret = dwc3_msm_suspend(mdwc, true, device_may_wakeup(dev));
 	if (!ret)
 		atomic_set(&mdwc->pm_suspended, 1);
+
+	/*
+	 * Disable IRQs if not wakeup capable. Wakeup IRQs may sometimes
+	 * be enabled as part of a runtime suspend.
+	 */
+	if (!device_may_wakeup(dev))
+		dwc3_msm_interrupt_enable(mdwc, false);
 
 	return ret;
 }
@@ -7835,7 +7850,7 @@ static int dwc3_msm_runtime_suspend(struct device *dev)
 	if (dwc)
 		device_init_wakeup(dwc->dev, false);
 
-	return dwc3_msm_suspend(mdwc, false);
+	return dwc3_msm_suspend(mdwc, false, true);
 }
 
 static int dwc3_msm_runtime_resume(struct device *dev)

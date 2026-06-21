@@ -350,6 +350,8 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 
 	dsp_info = virtio_glink_bridge_get_dsp_info(vgbridge, label);
 	if (!dsp_info) {
+		if (msg_type == MSG_INBUF_RECLAIM)
+			return;
 		dev_err(dev, "fail to find dsp_info %u\n", label);
 		rc = VIRTIO_GLINK_BRIDGE_ENODEV;
 		goto out;
@@ -600,6 +602,7 @@ static void virtio_glink_bridge_remove(struct virtio_device *vdev)
 	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "success");
 }
 
+#if IS_ENABLED(CONFIG_RPMSG_GLINK_DS_QB)
 static int virtio_glink_suspend(struct device *dev)
 {
 	struct virtio_glink_bridge_dsp_info *dsp_info;
@@ -648,10 +651,12 @@ static int virtio_glink_resume(struct device *dev)
 
 	return 0;
 }
+
 static const struct dev_pm_ops virtio_glink_pm_ops = {
 	.suspend = virtio_glink_suspend,
 	.resume = virtio_glink_resume,
 };
+#endif /* IS_ENABLED(CONFIG_RPMSG_GLINK_DS_QB) */
 
 static const struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_GLINK_BRIDGE, VIRTIO_DEV_ANY_ID },
@@ -669,7 +674,9 @@ static struct virtio_driver virtio_glink_bridge_driver = {
 	.id_table			= id_table,
 	.probe				= virtio_glink_bridge_probe,
 	.remove				= virtio_glink_bridge_remove,
+#if IS_ENABLED(CONFIG_RPMSG_GLINK_DS_QB)
 	.driver.pm			= &virtio_glink_pm_ops,
+#endif
 };
 
 module_virtio_driver(virtio_glink_bridge_driver);
