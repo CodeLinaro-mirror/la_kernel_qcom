@@ -7924,7 +7924,6 @@ static struct gdsc gcc_pcie_0_tunnel_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_1_tunnel_gdsc = {
@@ -7937,7 +7936,6 @@ static struct gdsc gcc_pcie_1_tunnel_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_2_tunnel_gdsc = {
@@ -7950,7 +7948,6 @@ static struct gdsc gcc_pcie_2_tunnel_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_3_gdsc = {
@@ -7963,7 +7960,6 @@ static struct gdsc gcc_pcie_3_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_3_phy_gdsc = {
@@ -7976,7 +7972,6 @@ static struct gdsc gcc_pcie_3_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_4_gdsc = {
@@ -7989,7 +7984,6 @@ static struct gdsc gcc_pcie_4_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_4_phy_gdsc = {
@@ -8002,7 +7996,6 @@ static struct gdsc gcc_pcie_4_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_5_gdsc = {
@@ -8015,7 +8008,6 @@ static struct gdsc gcc_pcie_5_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_5_phy_gdsc = {
@@ -8028,7 +8020,6 @@ static struct gdsc gcc_pcie_5_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_6_phy_gdsc = {
@@ -8041,7 +8032,6 @@ static struct gdsc gcc_pcie_6_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_6a_gdsc = {
@@ -8054,7 +8044,6 @@ static struct gdsc gcc_pcie_6a_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_pcie_6b_gdsc = {
@@ -8067,7 +8056,6 @@ static struct gdsc gcc_pcie_6b_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE | VOTABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_ufs_mem_phy_gdsc = {
@@ -8080,7 +8068,6 @@ static struct gdsc gcc_ufs_mem_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_ufs_phy_gdsc = {
@@ -8093,7 +8080,6 @@ static struct gdsc gcc_ufs_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb20_prim_gdsc = {
@@ -8106,7 +8092,6 @@ static struct gdsc gcc_usb20_prim_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb30_mp_gdsc = {
@@ -8119,7 +8104,6 @@ static struct gdsc gcc_usb30_mp_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb30_prim_gdsc = {
@@ -8132,7 +8116,6 @@ static struct gdsc gcc_usb30_prim_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb30_sec_gdsc = {
@@ -8145,7 +8128,6 @@ static struct gdsc gcc_usb30_sec_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb30_tert_gdsc = {
@@ -8158,7 +8140,6 @@ static struct gdsc gcc_usb30_tert_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb3_mp_ss0_phy_gdsc = {
@@ -8171,7 +8152,6 @@ static struct gdsc gcc_usb3_mp_ss0_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb3_mp_ss1_phy_gdsc = {
@@ -8184,7 +8164,6 @@ static struct gdsc gcc_usb3_mp_ss1_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb4_0_gdsc = {
@@ -8197,7 +8176,6 @@ static struct gdsc gcc_usb4_0_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb4_1_gdsc = {
@@ -8210,7 +8188,6 @@ static struct gdsc gcc_usb4_1_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb4_2_gdsc = {
@@ -8223,7 +8200,6 @@ static struct gdsc gcc_usb4_2_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb_0_phy_gdsc = {
@@ -8236,7 +8212,6 @@ static struct gdsc gcc_usb_0_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb_1_phy_gdsc = {
@@ -8249,7 +8224,6 @@ static struct gdsc gcc_usb_1_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct gdsc gcc_usb_2_phy_gdsc = {
@@ -8262,7 +8236,6 @@ static struct gdsc gcc_usb_2_phy_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
-	.supply = "vdd_cx",
 };
 
 static struct clk_regmap *gcc_x1p42100_clocks[] = {
