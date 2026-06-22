@@ -935,8 +935,13 @@ ddk_headers(
     # from. In other words, these are the `-I` option to the C compiler.
     # These are prepended to LINUXINCLUDE.
     linux_includes = [
-        "arch/arm64/include",
-        "arch/arm64/include/uapi",
+        # "arch/arm64/include" and "arch/arm64/include/uapi" are redundant:
+        # arch/arm64/include is already in LINUXINCLUDE (top-level Makefile:569).
+        # arch/arm64/include/uapi is already in USERINCLUDE (Makefile:559),
+        # which is appended to LINUXINCLUDE (Makefile:573). Keeping them here
+        # adds duplicate -I flags (~300 chars each in long Docker CI paths)
+        #"arch/arm64/include",
+        #"arch/arm64/include/uapi",
         "drivers/net/ethernet/aquantia/atlantic-fwd",
         "drivers/net/ethernet/stmicro/stmmac",
         "drivers/thermal",

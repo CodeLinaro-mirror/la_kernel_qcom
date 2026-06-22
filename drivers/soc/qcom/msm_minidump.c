@@ -65,7 +65,6 @@ static DEFINE_RWLOCK(mdt_remove_lock);
 static struct md_table		*minidump_table;
 struct workqueue_struct *minidump_rm_wq;
 static struct md_elfhdr		minidump_elfheader;
-static int first_removed_entry = INT_MAX;
 static bool md_init_done;
 static unsigned int num_regions;
 static bool is_rm_minidump;
@@ -514,21 +513,8 @@ static inline int validate_region(const struct md_region *entry)
 
 static int md_update_ss_toc(int regno, const struct md_region *entry)
 {
-	int ret = 0;
 	struct md_region *mdr;
 	struct md_ss_region *mdssr;
-
-	if (regno >= first_removed_entry) {
-		printk_deferred("Region:[%s] was moved\n", entry->name);
-		return -EINVAL;
-	}
-
-	ret = md_entry_num(entry);
-	if (ret < 0) {
-		printk_deferred("Region:[%s] does not exist to update\n",
-				entry->name);
-		return ret;
-	}
 
 	mdr = &minidump_table->entry[regno];
 	mdr->virt_addr = entry->virt_addr;
@@ -564,7 +550,7 @@ static int md_rm_update(int regno, const struct md_region *entry)
 int msm_minidump_update_region(int regno, const struct md_region *entry)
 {
 	int ret = 0;
-	unsigned long flags;
+	unsigned long flags, rm_flags;
 
 	/* Ensure that init completes before we update regions */
 	if (!smp_load_acquire(&md_init_done))
@@ -573,14 +559,32 @@ int msm_minidump_update_region(int regno, const struct md_region *entry)
 	if (validate_region(entry) || (regno >= MAX_NUM_ENTRIES))
 		return -EINVAL;
 
-	read_lock_irqsave(&mdt_remove_lock, flags);
+	read_lock_irqsave(&mdt_remove_lock, rm_flags);
+	/*
+	 * For SMEM path: perform re-lookup for caller's regno
+	 * to find the current index. A prior msm_minidump_remove_region()
+	 * compacts the table with memmove(), shifting every entry above the
+	 * removed slot down by one.
+	 * Skip for the RM path since minidump_table is NULL there and
+	 * md_rm_update() does its own lookup via md_elf_entry_number() anyway.
+	 */
 	if (is_rm_minidump)
 		ret = md_rm_update(regno, entry);
 	else {
+		spin_lock_irqsave(&mdt_lock, flags);
+		regno = md_entry_num(entry);
+		if (regno < 0) {
+			spin_unlock_irqrestore(&mdt_lock, flags);
+			read_unlock_irqrestore(&mdt_remove_lock, rm_flags);
+			printk_deferred("Region:[%s] does not exist to update\n",
+				entry->name);
+			return -EINVAL;
+		}
 		ret = md_update_ss_toc(regno, entry);
 		md_update_elf_header(regno, entry);
+		spin_unlock_irqrestore(&mdt_lock, flags);
 	}
-	read_unlock_irqrestore(&mdt_remove_lock, flags);
+	read_unlock_irqrestore(&mdt_remove_lock, rm_flags);
 
 	return ret;
 }
@@ -709,8 +713,6 @@ static int md_remove_ss_toc(const struct md_region *entry)
 		return -EINVAL;
 	}
 	rcount = minidump_table->md_ss_toc->ss_region_count;
-	if (first_removed_entry > entryno)
-		first_removed_entry = entryno;
 	minidump_table->md_ss_toc->md_ss_toc_init = 0;
 	/* Remove entry from: entry list, ss region list and elf header */
 	memmove(&minidump_table->entry[entryno],

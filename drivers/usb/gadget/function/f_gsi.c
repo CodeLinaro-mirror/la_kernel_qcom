@@ -2218,6 +2218,30 @@ static void gsi_ctrl_send_response_complete(struct usb_ep *ep,
 	gsi_ctrl_send_notification(gsi);
 }
 
+static bool gsi_ep0_ctrl_needs_zlp(struct usb_composite_dev *cdev,
+				      unsigned int value, unsigned int w_length)
+{
+	unsigned int ep0_mps = cdev->gadget->ep0->maxpacket;
+
+	/*
+	 * For control IN transfers, composite_setup() truncates wLength to
+	 * USB_COMP_EP0_BUFSIZ if the host requests a larger size.
+	 *
+	 * If we return exactly USB_COMP_EP0_BUFSIZ bytes and it is a multiple
+	 * of ep0 maxpacket, the transfer appears complete to the function
+	 * driver but is shorter than what the host originally requested.
+	 * In this case, a ZLP is still required to terminate the data stage.
+	 *
+	 * Without ZLP, the host continues issuing IN tokens and may timeout.
+	 */
+	if (!ep0_mps)
+		return false;
+
+	return (value % ep0_mps == 0) &&
+	       ((value < w_length) ||
+		(value == USB_COMP_EP0_BUFSIZ));
+}
+
 static int
 gsi_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 {
@@ -2414,7 +2438,7 @@ invalid:
 		log_event_dbg("req%02x.%02x v%04x i%04x l%d",
 			ctrl->bRequestType, ctrl->bRequest,
 			w_value, w_index, w_length);
-		req->zero = (value < w_length);
+		req->zero = gsi_ep0_ctrl_needs_zlp(cdev, value, w_length);
 		req->length = value;
 		value = usb_ep_queue(cdev->gadget->ep0, req, GFP_ATOMIC);
 		if (value < 0)

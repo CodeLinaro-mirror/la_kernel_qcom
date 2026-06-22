@@ -1157,6 +1157,9 @@ void ___cfg80211_scan_done(struct cfg80211_registered_device *rdev,
 
 	dev_put(wdev->netdev);
 
+	if (!msg)
+		return;
+
 	/* If scan aborted due to netdev down completed after scan_done
 	 * work queue scheduled, hold the scan_msg.
 	 * If scan_done work queue not scheduled but netdev_down completed
