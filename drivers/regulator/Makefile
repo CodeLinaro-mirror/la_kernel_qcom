@@ -28,3 +28,7 @@ obj-$(CONFIG_REGULATOR_QPNP_LCDB) += qpnp-lcdb-regulator.o
 
 obj-$(CONFIG_REGULATOR_QCOM_PM8008) += qcom-pm8008-regulator.o
 
+obj-$(CONFIG_REGULATOR_RENESAS_SLG5BLEFT) += renesas-slg5bleft.o
+
+obj-$(CONFIG_REGULATOR_RENESAS_SLG5BRIGHT) += renesas-slg5bright.o
+

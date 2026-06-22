@@ -14,6 +14,8 @@ obj-$(CONFIG_PINCTRL_QCOM_SPMI_PMIC) += pinctrl-spmi-mpp.o
 
 obj-$(CONFIG_PINCTRL_RAVELIN) += pinctrl-ravelin.o
 
+obj-$(CONFIG_PINCTRL_BOURTZI) += pinctrl-bourtzi.o
+
 obj-$(CONFIG_PINCTRL_SUN) += pinctrl-sun.o
 
 obj-$(CONFIG_PINCTRL_VIENNA) += pinctrl-vienna.o
@@ -47,6 +49,8 @@ obj-$(CONFIG_PINCTRL_SA8797P) += pinctrl-sa8797p.o
 obj-$(CONFIG_PINCTRL_PIKACHU) += pinctrl-pikachu.o
 
 obj-$(CONFIG_PINCTRL_SHIKRA) += pinctrl-shikra.o
+
+obj-$(CONFIG_PINCTRL_GLYMUR) += pinctrl-glymur.o
 
 obj-$(CONFIG_PINCTRL_SERAPH) += pinctrl-seraph.o
 
