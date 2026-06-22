@@ -1796,7 +1796,15 @@ def register_modules(registry):
             "drivers/rpmsg/qcom_glink",
         ],
     )
-
+    registry.register(
+        name = "drivers/soc/qcom/sensors_ssc",
+        out = "sensors_ssc.ko",
+        config = "CONFIG_SENSORS_SSC",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/sensors_ssc.c",
+        ],
+    )
     registry.register(
         name = "drivers/soc/qcom/core_hang_detect",
         out = "core_hang_detect.ko",
