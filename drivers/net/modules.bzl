@@ -1,3 +1,4 @@
+load(":drivers/net/ethernet/realtek/modules.bzl", register_r8169 = "register_modules")
 load(":drivers/net/ethernet/stmicro/stmmac/modules.bzl", register_stmmac_eth = "register_modules")
 load(":drivers/net/mdio_fe/modules.bzl", register_mdio_fe = "register_modules")
 load(":drivers/net/pcs/modules.bzl", register_pcs = "register_modules")
@@ -6,6 +7,7 @@ load(":drivers/net/phy/qcom/modules.bzl", register_phy_qcom = "register_modules"
 
 def register_modules(registry):
     register_pcs(registry)
+    register_r8169(registry)
     register_stmmac_eth(registry)
     register_phy_aquantia(registry)
     register_mdio_fe(registry)
