@@ -6458,9 +6458,6 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 
 	dwc3_msm_override_pm_ops(dwc->dev, mdwc->dwc3_pm_ops, false);
 
-	if (!mdwc->force_suspend)
-		dev_pm_syscore_device(dwc->dev, true);
-
 	mdwc->xhci_pm_ops = kzalloc(sizeof(struct dev_pm_ops), GFP_ATOMIC);
 	if (!mdwc->xhci_pm_ops)
 		goto free_dwc_pm_ops;
