@@ -9681,6 +9681,7 @@ static int msm_pcie_i2c_ctrl_init(struct msm_pcie_dev_t *pcie_dev)
 	struct device_node *of_node, *i2c_client_node;
 	struct device *dev = &pcie_dev->pdev->dev;
 	struct pcie_i2c_ctrl *i2c_ctrl = &pcie_dev->i2c_ctrl;
+	struct i2c_client *client;
 	const char *prop = NULL;
 	int reg_numbers = 0;
 	int ret, size = 0;
@@ -9699,11 +9700,19 @@ static int msm_pcie_i2c_ctrl_init(struct msm_pcie_dev_t *pcie_dev)
 		return -ENODEV;
 	}
 
-	if (!i2c_ctrl->client) {
+	client = of_find_i2c_device_by_node(of_node);
+	if (!client) {
 		PCIE_DBG(pcie_dev, "PCIe: RC%d: No i2c probe yet\n",
 			 pcie_dev->rc_idx);
 		of_node_put(of_node);
 		return -EPROBE_DEFER;
+	} else {
+		i2c_ctrl->client_i2c_read = ntn3_i2c_read;
+		i2c_ctrl->client_i2c_write = ntn3_i2c_write;
+		i2c_ctrl->client_i2c_reset = ntn3_ep_reset_ctrl;
+		i2c_ctrl->client_i2c_dump_regs = ntn3_dump_regs;
+		i2c_ctrl->client_i2c_de_emphasis_config = ntn3_de_emphasis_config;
+		i2c_ctrl->client = client;
 	}
 
 	of_node_put(of_node);
@@ -9911,7 +9920,6 @@ MODULE_DEVICE_TABLE(of, of_i2c_id_table);
 static int pcie_i2c_ctrl_probe(struct i2c_client *client)
 {
 	const struct of_device_id *match;
-	struct pcie_i2c_ctrl *i2c_ctrl;
 	struct i2c_driver_data *data;
 	enum i2c_client_id client_id  = I2C_CLIENT_ID_INVALID;
 	int rc_index = -EINVAL;
@@ -9946,26 +9954,6 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client)
 	}
 
 	dev_info(&client->dev, "PCIe rc-index: 0x%X\n", rc_index);
-
-	if (client_id == I2C_CLIENT_ID_NTN3) {
-		if (!msm_pcie_dev[rc_index]) {
-			dev_err(&client->dev,
-				"PCIe device at index %d not initialized\n",
-				rc_index);
-			return -EPROBE_DEFER;
-		}
-
-		i2c_ctrl = &msm_pcie_dev[rc_index]->i2c_ctrl;
-		i2c_ctrl->client_i2c_read = ntn3_i2c_read;
-		i2c_ctrl->client_i2c_write = ntn3_i2c_write;
-		i2c_ctrl->client_i2c_reset = ntn3_ep_reset_ctrl;
-		i2c_ctrl->client_i2c_dump_regs = ntn3_dump_regs;
-		i2c_ctrl->client_i2c_de_emphasis_config = ntn3_de_emphasis_config;
-		i2c_ctrl->client = client;
-	} else {
-		dev_err(&client->dev, "invalid client id %d\n", client_id);
-		return -EINVAL;
-	}
 
 	return 0;
 }
@@ -10225,6 +10213,11 @@ static void msm_pcie_remove(struct platform_device *pdev)
 		msm_pcie_i2c_drv[rc_idx] = NULL;
 		msm_pcie_dev[rc_idx]->i2c_drv = NULL;
 		msm_pcie_i2c_drv_registered[rc_idx] = false;
+	}
+
+	if (msm_pcie_dev[rc_idx]->i2c_ctrl.client) {
+		put_device(&msm_pcie_dev[rc_idx]->i2c_ctrl.client->dev);
+		msm_pcie_dev[rc_idx]->i2c_ctrl.client = NULL;
 	}
 
 	msm_pcie_irq_deinit(msm_pcie_dev[rc_idx]);
