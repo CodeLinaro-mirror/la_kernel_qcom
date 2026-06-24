@@ -6156,6 +6156,9 @@ static irqreturn_t stmmac_mac_interrupt(int irq, void *dev_id)
 	/* To handle Common interrupts */
 	stmmac_common_interrupt(priv);
 
+	if (priv->plat->dma_cfg->multi_irq_en)
+		stmmac_dma_interrupt(priv);
+
 	return IRQ_HANDLED;
 }
 
