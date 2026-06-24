@@ -1653,6 +1653,10 @@ static int arm_smmu_init_domain_context(struct arm_smmu_domain *smmu_domain,
 			pgtbl_cfg->quirks |= IO_PGTABLE_QUIRK_QCOM_TCR_IRGN_NC;
 	}
 
+	if (of_property_read_bool(smmu->dev->of_node,
+				  "qcom,outer-shareable-for-iommu-cache-errata"))
+		pgtbl_cfg->quirks |= IO_PGTABLE_QUIRK_QCOM_OSH_FOR_IOMMU_CACHE;
+
 	if (smmu_domain->pgtbl_quirks)
 		pgtbl_cfg->quirks |= smmu_domain->pgtbl_quirks;
 
