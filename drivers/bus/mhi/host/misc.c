@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -1075,6 +1075,10 @@ static int mhi_get_capability_offset(struct mhi_controller *mhi_cntrl,
 				 MISC_CAP_MASK, offset);
 	if (ret)
 		return ret;
+
+	/* a zero capability pointer means the device has no capability list */
+	if (!*offset)
+		return -ENXIO;
 	do {
 		if (*offset >= MHI_REG_SIZE)
 			return -ENXIO;
