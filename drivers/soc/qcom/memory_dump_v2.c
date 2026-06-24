@@ -1611,7 +1611,8 @@ static int mem_dump_alloc_with_rmem(struct platform_device *pdev,
 static int mem_dump_resume(struct platform_device *pdev)
 {
 	int ret;
-	u64 shm_bridge_handle;
+	u64 shm_bridge_handle = 0;
+	bool shm_bridge_registered = false;
 	uint32_t ns_vmids[] = {VMID_HLOS};
 	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
 
@@ -1625,6 +1626,7 @@ static int mem_dump_resume(struct platform_device *pdev)
 				"Failed to create shm bridge,ret=%d\n", ret);
 				return ret;
 			}
+			shm_bridge_registered = true;
 		}
 		ret = qcom_scm_assign_dump_table_region(1, global_mini_phys_addr,
 							total_size);
@@ -1633,7 +1635,7 @@ static int mem_dump_resume(struct platform_device *pdev)
 			if (ret) {
 				dev_err(&pdev->dev,
 					"init memdump imem area failed, ret=%d\n", ret);
-				if (qtee_shmbridge_is_enabled())
+				if (shm_bridge_registered)
 					qtee_shmbridge_deregister(shm_bridge_handle);
 				return ret;
 			}
