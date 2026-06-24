@@ -22,6 +22,25 @@
 #include "coresight-tmc.h"
 #include "coresight-common.h"
 
+#include <linux/dma-mapping.h>
+#include <linux/of.h>
+#include <linux/of_reserved_mem.h>
+#include <linux/slab.h>
+
+#define ETR_CMA_MAX_SIZE	SZ_128M
+
+/*
+ * Private state for a CMA-backed ETR buffer.
+ * vaddr and daddr come from a single dma_alloc_coherent() call and are
+ * released together via dma_free_coherent().
+ */
+struct etr_cma_buf {
+	struct device	*dev;	/* coresight child device (csdev) */
+	void		*vaddr;	/* CPU virtual address */
+	dma_addr_t	 daddr;	/* DMA bus address for ETR DBALO/DBAHI registers */
+	size_t		 size;	/* allocation size in bytes */
+};
+
 struct etr_flat_buf {
 	struct device	*dev;
 	dma_addr_t	daddr;
@@ -319,7 +338,7 @@ long tmc_get_rwp_offset(struct tmc_drvdata *drvdata)
 		return -EINVAL;
 	}
 
-	if (etr_buf->mode == ETR_MODE_FLAT)
+	if ((etr_buf->mode == ETR_MODE_FLAT) || (etr_buf->mode == ETR_MODE_CMA))
 		return tmc_flat_get_rwp_offset(drvdata);
 	else
 		return tmc_sg_get_rwp_offset(drvdata);
@@ -877,10 +896,177 @@ tmc_etr_get_catu_device(struct tmc_drvdata *drvdata)
 }
 EXPORT_SYMBOL_GPL(tmc_etr_get_catu_device);
 
+/*
+ * tmc_etr_alloc_cma_buf - bind the CMA pool and allocate coherent DMA memory.
+ *
+ * Resolves the 'memory-region' phandle to a struct reserved_mem, validates
+ * the region size, then calls rmem->ops->device_init() to install the CMA
+ * area into real_dev->cma_area.  After that, dma_alloc_coherent() draws
+ * from the reserved pool rather than the general-purpose allocator.
+ *
+ * device_init() is called on every alloc because the matching
+ * of_reserved_mem_device_release() in tmc_etr_free_cma_buf() clears
+ * cma_area; re-initialisation is therefore required for each new session.
+ */
+static int tmc_etr_alloc_cma_buf(struct tmc_drvdata *drvdata,
+				  struct etr_buf *etr_buf, int node,
+				  void **pages)
+{
+	struct device		*dev      = &drvdata->csdev->dev;
+	struct device		*real_dev = dev->parent;
+	struct device_node	*rmem_np;
+	struct reserved_mem	*rmem;
+	struct etr_cma_buf	*cbuf;
+	int			 ret;
+
+	if (pages)
+		return -EINVAL;
+
+	if ((size_t)etr_buf->size > ETR_CMA_MAX_SIZE) {
+		dev_err(dev, "ETR CMA: requested %zu bytes exceeds 128 MiB limit\n",
+			(size_t)etr_buf->size);
+		return -EINVAL;
+	}
+
+	rmem_np = of_parse_phandle(real_dev->of_node, "memory-region", 0);
+	if (!rmem_np) {
+		dev_err(dev, "no memory-region specified\n");
+		return -EINVAL;
+	}
+
+	rmem = of_reserved_mem_lookup(rmem_np);
+	of_node_put(rmem_np);
+	if (!rmem) {
+		dev_err(dev, "unable to resolve memory-region\n");
+		return -EINVAL;
+	}
+
+	if (rmem->size < (phys_addr_t)etr_buf->size) {
+		dev_err(dev, "ETR CMA: reserved region %pa too small for %zu bytes\n",
+			&rmem->size, (size_t)etr_buf->size);
+		return -ENOMEM;
+	}
+
+	/*
+	 * Install the CMA area into real_dev->cma_area so that the following
+	 * dma_alloc_coherent() draws from the dedicated reserved pool.
+	 */
+	if (!rmem->ops || !rmem->ops->device_init) {
+		dev_err(dev, "ETR CMA: memory-region has no device_init op\n");
+		return -EINVAL;
+	}
+
+	ret = rmem->ops->device_init(rmem, real_dev);
+	if (ret) {
+		dev_err(dev, "ETR CMA: device_init failed: %d\n", ret);
+		return ret;
+	}
+
+	cbuf = kzalloc(sizeof(*cbuf), GFP_KERNEL);
+	if (!cbuf) {
+		of_reserved_mem_device_release(real_dev);
+		return -ENOMEM;
+	}
+
+	cbuf->dev  = dev;
+	cbuf->size = etr_buf->size;
+
+	/*
+	 * dma_alloc_coherent() draws from real_dev->cma_area (installed
+	 * above).  It returns a cache-coherent mapping: the CPU virtual
+	 * address and the DMA bus address are both valid immediately after
+	 * the call.  No memremap() or dma_map_resource() are required.
+	 */
+	cbuf->vaddr = dma_alloc_coherent(real_dev, cbuf->size,
+					 &cbuf->daddr, GFP_KERNEL);
+	if (!cbuf->vaddr) {
+		kfree(cbuf);
+		of_reserved_mem_device_release(real_dev);
+		return -ENOMEM;
+	}
+
+	etr_buf->hwaddr  = cbuf->daddr;
+	etr_buf->mode    = ETR_MODE_CMA;
+	etr_buf->private = cbuf;
+
+	dev_dbg(dev, "ETR CMA: dma=%pad virt=%p size=%zu KiB\n",
+		&cbuf->daddr, cbuf->vaddr, cbuf->size >> 10);
+
+	return 0;
+}
+
+static void tmc_etr_free_cma_buf(struct etr_buf *etr_buf)
+{
+	struct etr_cma_buf	*cbuf = etr_buf->private;
+	struct device		*real_dev;
+
+	if (!cbuf)
+		return;
+
+	real_dev = cbuf->dev->parent;
+
+	if (cbuf->vaddr)
+		dma_free_coherent(real_dev, cbuf->size, cbuf->vaddr, cbuf->daddr);
+
+	/*
+	 * Release the CMA area binding so the pool can be reassigned on the
+	 * next trace session and real_dev->cma_area is left in a clean state.
+	 */
+	of_reserved_mem_device_release(real_dev);
+
+	kfree(cbuf);
+	etr_buf->private = NULL;
+}
+
+/*
+ * tmc_etr_sync_cma_buf - compute trace offset/len after hardware stop.
+ *
+ * dma_alloc_coherent() memory is CPU-coherent, so no explicit cache
+ * invalidation is required before reading trace data.  We call
+ * dma_sync_single_for_cpu() conservatively because some platforms may
+ * use write-combining buffers that are not fully flushed until this point.
+ */
+static void tmc_etr_sync_cma_buf(struct etr_buf *etr_buf, u64 rrp, u64 rwp)
+{
+	struct etr_cma_buf	*cbuf     = etr_buf->private;
+	struct device		*real_dev = cbuf->dev->parent;
+
+	etr_buf->offset = rrp - etr_buf->hwaddr;
+
+	if (etr_buf->full)
+		etr_buf->len = etr_buf->size;
+	else
+		etr_buf->len = rwp - rrp;
+
+	dma_sync_single_for_cpu(real_dev, cbuf->daddr,
+				cbuf->size, DMA_FROM_DEVICE);
+}
+
+static ssize_t tmc_etr_get_data_cma_buf(struct etr_buf *etr_buf,
+					 u64 offset, size_t len, char **bufpp)
+{
+	struct etr_cma_buf *cbuf = etr_buf->private;
+
+	*bufpp = (char *)cbuf->vaddr + offset;
+	/*
+	 * tmc_etr_buf_get_data() already clamps len to the end of the
+	 * buffer; return the full adjusted length.
+	 */
+	return len;
+}
+
+static const struct etr_buf_operations etr_cma_buf_ops = {
+	.alloc    = tmc_etr_alloc_cma_buf,
+	.free     = tmc_etr_free_cma_buf,
+	.sync     = tmc_etr_sync_cma_buf,
+	.get_data = tmc_etr_get_data_cma_buf,
+};
+
 static const struct etr_buf_operations *etr_buf_ops[] = {
 	[ETR_MODE_FLAT] = &etr_flat_buf_ops,
 	[ETR_MODE_ETR_SG] = &etr_sg_buf_ops,
 	[ETR_MODE_CATU] = NULL,
+	[ETR_MODE_CMA] = &etr_cma_buf_ops,
 };
 
 void tmc_etr_set_catu_ops(const struct etr_buf_operations *catu)
@@ -903,6 +1089,7 @@ static inline int tmc_etr_mode_alloc_buf(int mode,
 	int rc = -EINVAL;
 
 	switch (mode) {
+	case ETR_MODE_CMA:
 	case ETR_MODE_FLAT:
 	case ETR_MODE_ETR_SG:
 	case ETR_MODE_CATU:
@@ -989,6 +1176,9 @@ static struct etr_buf *tmc_alloc_etr_buf(struct tmc_drvdata *drvdata,
 	 * Fallback to available mechanisms.
 	 *
 	 */
+	if (rc && !pages)
+		rc = tmc_etr_mode_alloc_buf(ETR_MODE_CMA, drvdata,
+									etr_buf, node, pages);
 	if (rc && !pages && etr_can_use_flat_mode(&buf_hw, size))
 		rc = tmc_etr_mode_alloc_buf(ETR_MODE_FLAT, drvdata,
 					    etr_buf, node, pages);
@@ -999,6 +1189,8 @@ static struct etr_buf *tmc_alloc_etr_buf(struct tmc_drvdata *drvdata,
 		rc = tmc_etr_mode_alloc_buf(ETR_MODE_CATU, drvdata,
 					    etr_buf, node, pages);
 	if (rc) {
+		dev_err(dev, "Fail to allocat buffer of size %ldKB in mode %d\n",
+						(unsigned long)size >> 10, etr_buf->mode);
 		kfree(etr_buf);
 		return ERR_PTR(rc);
 	}
@@ -1855,6 +2047,7 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 {
 	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	struct etr_buf *free_buf = NULL;
 	u32 previous_mode;
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
@@ -1894,7 +2087,20 @@ static int _tmc_disable_etr_sink(struct coresight_device *csdev,
 	/* Reset perf specific data */
 	drvdata->perf_buf = NULL;
 
+	if (!mode_switch && previous_mode == CS_MODE_SYSFS &&
+	    drvdata->sysfs_buf && drvdata->sysfs_buf->mode == ETR_MODE_CMA) {
+		free_buf = drvdata->sysfs_buf;
+		drvdata->sysfs_buf = NULL;
+	}
+
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+
+	/* Release the CMA buffer */
+	if (free_buf) {
+		free_buf->ops->free(free_buf);
+		kfree(free_buf);
+	}
+
 	if (previous_mode == CS_MODE_SYSFS &&
 			drvdata->out_mode == TMC_ETR_OUT_MODE_MEM)
 		tmc_etr_byte_cntr_stop(drvdata->byte_cntr);

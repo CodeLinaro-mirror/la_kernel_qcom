@@ -60,8 +60,10 @@ static inline int set_msc_query(struct msc_query *query,
 	query->qcom_msc_id.idx =
 		qcom_mpam_msc->qcom_msc_id.idx;
 
-	query->client_id = pm_item->client_id;
-	query->part_id = pm_item->part_id;
+	if (pm_item) {
+		query->client_id = pm_item->client_id;
+		query->part_id = pm_item->part_id;
+	}
 
 	return 0;
 }
@@ -327,7 +329,7 @@ static ssize_t slc_mpam_monitors_data_show(struct config_item *item,
 {
 	struct msc_query query;
 
-	memset(&query, 0, sizeof(struct msc_query));
+	set_msc_query(&query, NULL);
 
 	return msc_system_mon_read_all(SLC, &query, page);
 }

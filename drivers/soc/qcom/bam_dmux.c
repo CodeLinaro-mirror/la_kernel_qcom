@@ -22,6 +22,7 @@
 #include <linux/srcu.h>
 #include <linux/msm-sps.h>
 #include <linux/sizes.h>
+#include <linux/bitmap.h>
 #include <soc/qcom/bam_dmux.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
@@ -29,6 +30,7 @@
 #include <linux/irq.h>
 #include <linux/of_irq.h>
 #include <linux/sched/clock.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 
 #include "bam_dmux_private.h"
 
@@ -191,6 +193,160 @@ static int bam_mux_initialized;
 static int polling_mode;
 static unsigned long rx_timer_interval;
 
+/*
+ * CMA-based single DMA memory pool.
+ *
+ * A single dma_alloc_coherent() call is made at probe time to obtain one
+ * contiguous CMA block.  All TX/RX descriptor rings and TX/RX data buffers
+ * are carved out of this block, eliminating per-packet DMA mapping overhead.
+ *
+ * Layout of the CMA block:
+ *   [0 .. TX_DESC_SIZE)                          TX descriptor ring
+ *   [TX_DESC_SIZE .. TX_DESC_SIZE+RX_DESC_SIZE)  RX descriptor ring
+ *   [DESC_TOTAL .. DESC_TOTAL + num_buffers*BUF)  RX data buffers
+ *   [above + num_buffers*BUF .. end)              TX data buffers
+ */
+#define BAM_CMA_TX_DESC_SIZE	0x800	/* 2 KB – matches original alloc */
+#define BAM_CMA_RX_DESC_SIZE	0x800	/* 2 KB – matches original alloc */
+#define BAM_CMA_DESC_TOTAL	(BAM_CMA_TX_DESC_SIZE + BAM_CMA_RX_DESC_SIZE)
+/* Maximum single-buffer size: largest possible MTU + BAM header + padding */
+#define BAM_CMA_MAX_BUF_SIZE	(SZ_16K + 64)
+/* Number of pre-allocated TX DMA buffers */
+#define BAM_NUM_TX_BUFS		DEFAULT_NUM_BUFFERS
+
+/* Single CMA allocation base */
+static void *bam_cma_base;
+static dma_addr_t bam_cma_phys_base;
+static size_t bam_cma_total_size;
+
+/* RX buffer pool – bitmap of free slots (1 = free, 0 = in use) */
+static DEFINE_SPINLOCK(bam_rx_buf_pool_lock);
+static DECLARE_BITMAP(bam_rx_buf_bitmap, SZ_256);
+
+/* TX buffer pool – bitmap of free slots */
+static DEFINE_SPINLOCK(bam_tx_buf_pool_lock);
+static DECLARE_BITMAP(bam_tx_buf_bitmap, BAM_NUM_TX_BUFS);
+
+/* ---- CMA layout helpers ---- */
+
+static inline void *bam_cma_tx_desc_virt(void)
+{
+	return bam_cma_base;
+}
+
+static inline dma_addr_t bam_cma_tx_desc_phys(void)
+{
+	return bam_cma_phys_base;
+}
+
+static inline void *bam_cma_rx_desc_virt(void)
+{
+	return (u8 *)bam_cma_base + BAM_CMA_TX_DESC_SIZE;
+}
+
+static inline dma_addr_t bam_cma_rx_desc_phys(void)
+{
+	return bam_cma_phys_base + BAM_CMA_TX_DESC_SIZE;
+}
+
+static inline void *bam_cma_rx_buf_virt(int idx)
+{
+	return (u8 *)bam_cma_base + BAM_CMA_DESC_TOTAL +
+		(size_t)idx * BAM_CMA_MAX_BUF_SIZE;
+}
+
+static inline dma_addr_t bam_cma_rx_buf_phys(int idx)
+{
+	return bam_cma_phys_base + BAM_CMA_DESC_TOTAL +
+		(size_t)idx * BAM_CMA_MAX_BUF_SIZE;
+}
+
+static inline void *bam_cma_tx_buf_virt(int idx)
+{
+	return (u8 *)bam_cma_base + BAM_CMA_DESC_TOTAL +
+		(size_t)num_buffers * BAM_CMA_MAX_BUF_SIZE +
+		(size_t)idx * BAM_CMA_MAX_BUF_SIZE;
+}
+
+static inline dma_addr_t bam_cma_tx_buf_phys(int idx)
+{
+	return bam_cma_phys_base + BAM_CMA_DESC_TOTAL +
+		(size_t)num_buffers * BAM_CMA_MAX_BUF_SIZE +
+		(size_t)idx * BAM_CMA_MAX_BUF_SIZE;
+}
+
+/* ---- CMA pool management ---- */
+
+/**
+ * bam_cma_rx_buf_alloc() - allocate a free RX CMA buffer slot
+ *
+ * Returns the slot index on success, or -1 if the pool is exhausted.
+ */
+static int bam_cma_rx_buf_alloc(void)
+{
+	unsigned long flags;
+	int idx;
+
+	spin_lock_irqsave(&bam_rx_buf_pool_lock, flags);
+	idx = find_first_zero_bit(bam_rx_buf_bitmap, num_buffers);
+	if (idx < (int)num_buffers)
+		set_bit(idx, bam_rx_buf_bitmap);
+	else
+		idx = -1;
+	spin_unlock_irqrestore(&bam_rx_buf_pool_lock, flags);
+	return idx;
+}
+
+/**
+ * bam_cma_rx_buf_free() - return an RX CMA buffer slot to the pool
+ * @idx: slot index previously returned by bam_cma_rx_buf_alloc()
+ */
+static void bam_cma_rx_buf_free(int idx)
+{
+	unsigned long flags;
+
+	if (idx < 0)
+		return;
+	spin_lock_irqsave(&bam_rx_buf_pool_lock, flags);
+	clear_bit(idx, bam_rx_buf_bitmap);
+	spin_unlock_irqrestore(&bam_rx_buf_pool_lock, flags);
+}
+
+/**
+ * bam_cma_tx_buf_alloc() - allocate a free TX CMA buffer slot
+ *
+ * Returns the slot index on success, or -1 if the pool is exhausted.
+ */
+static int bam_cma_tx_buf_alloc(void)
+{
+	unsigned long flags;
+	int idx;
+
+	spin_lock_irqsave(&bam_tx_buf_pool_lock, flags);
+	idx = find_first_zero_bit(bam_tx_buf_bitmap, BAM_NUM_TX_BUFS);
+	if (idx < BAM_NUM_TX_BUFS)
+		set_bit(idx, bam_tx_buf_bitmap);
+	else
+		idx = -1;
+	spin_unlock_irqrestore(&bam_tx_buf_pool_lock, flags);
+	return idx;
+}
+
+/**
+ * bam_cma_tx_buf_free() - return a TX CMA buffer slot to the pool
+ * @idx: slot index previously returned by bam_cma_tx_buf_alloc()
+ */
+static void bam_cma_tx_buf_free(int idx)
+{
+	unsigned long flags;
+
+	if (idx < 0)
+		return;
+	spin_lock_irqsave(&bam_tx_buf_pool_lock, flags);
+	clear_bit(idx, bam_tx_buf_bitmap);
+	spin_unlock_irqrestore(&bam_tx_buf_pool_lock, flags);
+}
+
 static LIST_HEAD(bam_rx_pool);
 static DEFINE_MUTEX(bam_rx_pool_mutexlock);
 static int bam_rx_pool_len;
@@ -203,6 +359,7 @@ static void bam_mux_write_done(struct work_struct *work);
 static void handle_bam_mux_cmd(struct work_struct *work);
 static void rx_timer_work_func(struct work_struct *work);
 static void queue_rx_work_func(struct work_struct *work);
+static void bam_cma_assign_to_modem(void);
 
 static DECLARE_WORK(rx_timer_work, rx_timer_work_func);
 static DECLARE_WORK(queue_rx_work, queue_rx_work_func);
@@ -371,7 +528,6 @@ static inline void verify_tx_queue_is_empty(const char *func)
 
 static void __queue_rx(gfp_t alloc_flags)
 {
-	void *ptr;
 	struct rx_pkt_info *info;
 	int ret;
 	int rx_len_cached;
@@ -391,19 +547,23 @@ static void __queue_rx(gfp_t alloc_flags)
 			goto fail;
 
 		info->len = current_buffer_size;
+		info->skb = NULL;
 
 		INIT_WORK(&info->work, handle_bam_mux_cmd);
 
-		info->skb = __dev_alloc_skb(info->len, alloc_flags);
-		if (info->skb == NULL)
+		/*
+		 * Use a pre-allocated CMA buffer as the DMA target.
+		 * The memory is already DMA-coherent; no dma_map_single()
+		 * is required.
+		 */
+		info->cma_buf_idx = bam_cma_rx_buf_alloc();
+		if (info->cma_buf_idx < 0) {
+			pr_err_ratelimited("%s: no free RX CMA buffers (pool_len=%d target=%u)\n",
+				__func__, rx_len_cached, num_buffers);
 			goto fail_info;
-		ptr = skb_put(info->skb, info->len);
+		}
 
-		info->dma_address = dma_map_single(dma_dev, ptr, info->len,
-							bam_ops->dma_from);
-		if (info->dma_address == 0 || info->dma_address == ~0)
-			goto fail_skb;
-
+		info->dma_address = bam_cma_rx_buf_phys(info->cma_buf_idx);
 
 		mutex_lock(&bam_rx_pool_mutexlock);
 		list_add_tail(&info->list_node, &bam_rx_pool);
@@ -418,19 +578,13 @@ static void __queue_rx(gfp_t alloc_flags)
 			DMUX_LOG_KERR("%s: sps_transfer_one failed %d\n",
 				__func__, ret);
 
-			dma_unmap_single(dma_dev, info->dma_address,
-						info->len,
-						bam_ops->dma_from);
-
-			goto fail_skb;
+			bam_cma_rx_buf_free(info->cma_buf_idx);
+			goto fail_info;
 		}
 		mutex_unlock(&bam_rx_pool_mutexlock);
 
 	}
 	return;
-
-fail_skb:
-	dev_kfree_skb_any(info->skb);
 
 fail_info:
 	kfree(info);
@@ -605,13 +759,15 @@ static void handle_bam_mux_cmd_open(struct bam_mux_hdr *rx_hdr)
 	spin_lock_irqsave(&bam_ch[rx_hdr->ch_id].lock, flags);
 	if (bam_ch_is_remote_open(rx_hdr->ch_id)) {
 		/*
-		 * Receiving an open command for a channel that is already open
-		 * is an invalid operation and likely signifies a significant
-		 * issue within the A2 which should be caught immediately
-		 * before it snowballs and the root cause is gone.
+		 * Duplicate remote OPEN is invalid but should not panic the
+		 * system. Drop it and keep the existing channel state.
 		 */
-		panic("A2 sent invalid duplicate open for channel %d\n",
-								rx_hdr->ch_id);
+		spin_unlock_irqrestore(&bam_ch[rx_hdr->ch_id].lock, flags);
+		DMUX_LOG_KERR("%s: dropping duplicate remote open for channel %d\n",
+			      __func__, rx_hdr->ch_id);
+		mutex_unlock(&bam_pdev_mutexlock);
+		queue_rx();
+		return;
 	}
 	bam_ch[rx_hdr->ch_id].status |= BAM_CH_REMOTE_OPEN;
 	bam_ch[rx_hdr->ch_id].num_tx_pkts = 0;
@@ -633,17 +789,33 @@ static void handle_bam_mux_cmd(struct work_struct *work)
 	uint16_t sps_size;
 
 	info = container_of(work, struct rx_pkt_info, work);
-	rx_skb = info->skb;
-	dma_unmap_single(dma_dev, info->dma_address, info->len,
-			bam_ops->dma_from);
 	sps_size = info->sps_size;
-	memset(info, 0, sizeof(*info));
+
+	/*
+	 * The DMA target was a pre-allocated CMA buffer.  Allocate a fresh
+	 * skb, copy the received data into it, then return the CMA buffer
+	 * to the pool.  No dma_unmap_single() is needed because the CMA
+	 * memory is already DMA-coherent.
+	 */
+	rx_skb = __dev_alloc_skb(info->len, GFP_KERNEL);
+	if (rx_skb) {
+		void *ptr = skb_put(rx_skb, info->len);
+
+		memcpy(ptr, bam_cma_rx_buf_virt(info->cma_buf_idx), info->len);
+	}
+	bam_cma_rx_buf_free(info->cma_buf_idx);
 	kfree(info);
+
+	if (!rx_skb) {
+		pr_err("%s: skb alloc failed, dropping packet\n", __func__);
+		queue_rx();
+		return;
+	}
 
 	rx_hdr = (struct bam_mux_hdr *)rx_skb->data;
 
 	DBG_INC_READ_CNT(sizeof(struct bam_mux_hdr));
-	DBG("%s: magic %x signal %x cmd %d pad %d ch %d len %d\n", __func__,
+	BAM_DMUX_LOG("%s: magic %x signal %x cmd %d pad %d ch %d len %d\n", __func__,
 			rx_hdr->magic_num, rx_hdr->signal, rx_hdr->cmd,
 			rx_hdr->pad_len, rx_hdr->ch_id, rx_hdr->pkt_len);
 	if (rx_hdr->magic_num != BAM_MUX_HDR_MAGIC_NO) {
@@ -709,7 +881,7 @@ static void handle_bam_mux_cmd(struct work_struct *work)
 		spin_unlock_irqrestore(&bam_ch[rx_hdr->ch_id].lock, flags);
 		platform_device_unregister(bam_ch[rx_hdr->ch_id].pdev);
 		bam_ch[rx_hdr->ch_id].pdev =
-			platform_device_alloc(bam_ch[rx_hdr->ch_id].name, 2);
+			platform_device_alloc(bam_ch[rx_hdr->ch_id].name, PLATFORM_DEVID_NONE);
 		if (!bam_ch[rx_hdr->ch_id].pdev)
 			pr_err("%s: platform_device_alloc failed\n", __func__);
 		mutex_unlock(&bam_pdev_mutexlock);
@@ -732,31 +904,34 @@ static int bam_mux_write_cmd(void *data, uint32_t len)
 {
 	int rc;
 	struct tx_pkt_info *pkt;
-	dma_addr_t dma_address;
 	unsigned long flags;
 
 	pkt = kmalloc(sizeof(struct tx_pkt_info), GFP_ATOMIC);
 	if (pkt == NULL)
 		return -ENOMEM;
 
-
-	dma_address = dma_map_single(dma_dev, data, len,
-					bam_ops->dma_to);
-	if (!dma_address) {
-		pr_err("%s: dma_map_single() failed\n", __func__);
+	/*
+	 * Copy the command data into a pre-allocated CMA TX buffer so that
+	 * the DMA engine reads from CMA-coherent memory.  No dma_map_single()
+	 * is required.
+	 */
+	pkt->cma_buf_idx = bam_cma_tx_buf_alloc();
+	if (pkt->cma_buf_idx < 0) {
+		pr_err("%s: no TX CMA buffer available\n", __func__);
 		kfree(pkt);
 		rc = -ENOMEM;
 		return rc;
 	}
+	memcpy(bam_cma_tx_buf_virt(pkt->cma_buf_idx), data, len);
 	pkt->skb = (struct sk_buff *)(data);
 	pkt->len = len;
-	pkt->dma_address = dma_address;
+	pkt->dma_address = bam_cma_tx_buf_phys(pkt->cma_buf_idx);
 	pkt->is_cmd = 1;
 	set_tx_timestamp(pkt);
 	INIT_WORK(&pkt->work, bam_mux_write_done);
 	spin_lock_irqsave(&bam_tx_pool_spinlock, flags);
 	list_add_tail(&pkt->list_node, &bam_tx_pool);
-	rc = bam_ops->sps_transfer_one_ptr(bam_tx_pipe, dma_address, len,
+	rc = bam_ops->sps_transfer_one_ptr(bam_tx_pipe, pkt->dma_address, len,
 				pkt, SPS_IOVEC_FLAG_EOT);
 	if (rc) {
 		DMUX_LOG_KERR("%s sps_transfer_one failed rc=%d\n",
@@ -764,9 +939,7 @@ static int bam_mux_write_cmd(void *data, uint32_t len)
 		list_del(&pkt->list_node);
 		DBG_INC_TX_SPS_FAILURE_CNT();
 		spin_unlock_irqrestore(&bam_tx_pool_spinlock, flags);
-		dma_unmap_single(dma_dev, pkt->dma_address,
-					pkt->len,
-					bam_ops->dma_to);
+		bam_cma_tx_buf_free(pkt->cma_buf_idx);
 		kfree(pkt);
 	} else {
 		spin_unlock_irqrestore(&bam_tx_pool_spinlock, flags);
@@ -808,9 +981,11 @@ static void bam_mux_write_done(struct work_struct *work)
 		}
 		spin_unlock_irqrestore(&bam_tx_pool_spinlock, flags);
 		WARN_ON(info != info_expected);
+		return;
 	}
 	list_del(&info->list_node);
 	spin_unlock_irqrestore(&bam_tx_pool_spinlock, flags);
+	bam_cma_tx_buf_free(info->cma_buf_idx);
 
 	if (info->is_cmd) {
 		kfree(info->skb);
@@ -844,7 +1019,6 @@ int msm_bam_dmux_write(uint32_t id, struct sk_buff *skb)
 	struct bam_mux_hdr *hdr;
 	unsigned long flags;
 	struct sk_buff *new_skb = NULL;
-	dma_addr_t dma_address;
 	struct tx_pkt_info *pkt;
 	int rcu_id;
 
@@ -938,29 +1112,33 @@ int msm_bam_dmux_write(uint32_t id, struct sk_buff *skb)
 	if (pkt == NULL)
 		goto write_fail2;
 
-	dma_address = dma_map_single(dma_dev, skb->data, skb->len,
-					bam_ops->dma_to);
-	if (!dma_address) {
-		pr_err("%s: dma_map_single() failed\n", __func__);
+	/*
+	 * Copy the skb payload into a pre-allocated CMA TX buffer so that
+	 * the DMA engine reads from CMA-coherent memory.  No dma_map_single()
+	 * is required.
+	 */
+	pkt->cma_buf_idx = bam_cma_tx_buf_alloc();
+	if (pkt->cma_buf_idx < 0) {
+		pr_err("%s: no TX CMA buffer available\n", __func__);
 		goto write_fail3;
 	}
+	memcpy(bam_cma_tx_buf_virt(pkt->cma_buf_idx), skb->data, skb->len);
 	pkt->skb = skb;
-	pkt->dma_address = dma_address;
+	pkt->dma_address = bam_cma_tx_buf_phys(pkt->cma_buf_idx);
 	pkt->is_cmd = 0;
 	set_tx_timestamp(pkt);
 	INIT_WORK(&pkt->work, bam_mux_write_done);
 	spin_lock_irqsave(&bam_tx_pool_spinlock, flags);
 	list_add_tail(&pkt->list_node, &bam_tx_pool);
-	rc = bam_ops->sps_transfer_one_ptr(bam_tx_pipe, dma_address, skb->len,
-				pkt, SPS_IOVEC_FLAG_EOT);
+	rc = bam_ops->sps_transfer_one_ptr(bam_tx_pipe, pkt->dma_address,
+				skb->len, pkt, SPS_IOVEC_FLAG_EOT);
 	if (rc) {
 		DMUX_LOG_KERR("%s sps_transfer_one failed rc=%d\n",
 			__func__, rc);
 		list_del(&pkt->list_node);
 		DBG_INC_TX_SPS_FAILURE_CNT();
 		spin_unlock_irqrestore(&bam_tx_pool_spinlock, flags);
-		dma_unmap_single(dma_dev, pkt->dma_address,
-					pkt->skb->len,	bam_ops->dma_to);
+		bam_cma_tx_buf_free(pkt->cma_buf_idx);
 		kfree(pkt);
 		if (new_skb)
 			dev_kfree_skb_any(new_skb);
@@ -976,6 +1154,7 @@ int msm_bam_dmux_write(uint32_t id, struct sk_buff *skb)
 	return rc;
 
 write_fail3:
+	bam_cma_tx_buf_free(pkt->cma_buf_idx);
 	kfree(pkt);
 write_fail2:
 	skb_pull(skb, sizeof(struct bam_mux_hdr));
@@ -1053,7 +1232,7 @@ int msm_bam_dmux_open(uint32_t id, void *priv,
 	unsigned long flags;
 	int rc = 0;
 
-	DBG("%s: opening ch %d\n", __func__, id);
+	BAM_DMUX_LOG("%s: opening ch %d\n", __func__, id);
 	if (!bam_mux_initialized) {
 		DBG("%s: not inititialized\n", __func__);
 		return -ENODEV;
@@ -1486,14 +1665,7 @@ static void bam_mux_tx_notify(struct sps_event_notify *notify)
 	switch (notify->event_id) {
 	case SPS_EVENT_EOT:
 		pkt = notify->data.transfer.user;
-		if (!pkt->is_cmd)
-			dma_unmap_single(dma_dev, pkt->dma_address,
-						pkt->skb->len,
-						bam_ops->dma_to);
-		else
-			dma_unmap_single(dma_dev, pkt->dma_address,
-						pkt->len,
-						bam_ops->dma_to);
+		/* No dma_unmap_single() is needed for CMA-coherent memory. */
 		queue_work(bam_mux_tx_workqueue, &pkt->work);
 		break;
 	default:
@@ -2073,9 +2245,12 @@ static void disconnect_to_bam(void)
 		node = bam_rx_pool.next;
 		list_del(node);
 		info = container_of(node, struct rx_pkt_info, list_node);
-		dma_unmap_single(dma_dev, info->dma_address, info->len,
-							bam_ops->dma_from);
-		dev_kfree_skb_any(info->skb);
+		/*
+		 * Return the CMA RX buffer to the pool.  The skb field is
+		 * NULL because DMA has not completed yet for these entries.
+		 * No dma_unmap_single() is needed for CMA-coherent memory.
+		 */
+		bam_cma_rx_buf_free(info->cma_buf_idx);
 		kfree(info);
 	}
 	bam_rx_pool_len = 0;
@@ -2232,7 +2407,7 @@ static int restart_notifier_cb(struct notifier_block *this,
 		if (temp_remote_status) {
 			platform_device_unregister(bam_ch[i].pdev);
 			bam_ch[i].pdev = platform_device_alloc(
-						bam_ch[i].name, 2);
+						bam_ch[i].name, PLATFORM_DEVID_NONE);
 		}
 	}
 	mutex_unlock(&bam_pdev_mutexlock);
@@ -2244,17 +2419,15 @@ static int restart_notifier_cb(struct notifier_block *this,
 		list_del(node);
 		info = container_of(node, struct tx_pkt_info,
 							list_node);
-		if (!info->is_cmd) {
-			dma_unmap_single(dma_dev, info->dma_address,
-						info->skb->len,
-						bam_ops->dma_to);
+		/*
+		 * Return the CMA TX buffer to the pool.  No dma_unmap_single()
+		 * is needed for CMA-coherent memory.
+		 */
+		bam_cma_tx_buf_free(info->cma_buf_idx);
+		if (!info->is_cmd)
 			dev_kfree_skb_any(info->skb);
-		} else {
-			dma_unmap_single(dma_dev, info->dma_address,
-						info->len,
-						bam_ops->dma_to);
+		else
 			kfree(info->skb);
-		}
 		kfree(info);
 	}
 	spin_unlock_irqrestore(&bam_tx_pool_spinlock, flags);
@@ -2263,10 +2436,37 @@ static int restart_notifier_cb(struct notifier_block *this,
 	return NOTIFY_DONE;
 }
 
+/**
+ * bam_cma_assign_to_modem() - Transfer CMA block ownership to the modem.
+ *
+ * Reassigns the single CMA allocation from HLOS to the modem (NAV VMID) so
+ * that the BAM hardware can DMA into/from the descriptor rings and data
+ * buffers.  Called after all host-side BAM setup is complete.
+ */
+static void bam_cma_assign_to_modem(void)
+{
+	struct qcom_scm_vmperm dest[2] = { { 0 }, { 0 } };
+	u64 src = BIT(QCOM_SCM_VMID_HLOS);
+	int ret;
+
+	dest[0].vmid = QCOM_SCM_VMID_HLOS;
+	dest[0].perm = QCOM_SCM_PERM_RW;
+	dest[1].vmid = QCOM_SCM_VMID_NAV;
+	dest[1].perm = QCOM_SCM_PERM_RW;
+
+	ret = qcom_scm_assign_mem(bam_cma_phys_base, bam_cma_total_size,
+				  &src, dest, 2);
+	if (ret)
+		pr_err("%s: failed to assign CMA to modem addr=%pap size=%zu rc=%d\n",
+		       __func__, &bam_cma_phys_base, bam_cma_total_size, ret);
+	else
+		BAM_DMUX_LOG("%s: assigned CMA to modem addr=%pap size=%zu\n",
+			     __func__, &bam_cma_phys_base, bam_cma_total_size);
+}
+
 static int bam_init(void)
 {
 	unsigned long h;
-	dma_addr_t dma_addr;
 	int ret;
 	void *a2_virt_addr;
 	int skip_iounmap = 0;
@@ -2284,7 +2484,8 @@ static int bam_init(void)
 	a2_props.virt_addr = a2_virt_addr;
 	a2_props.virt_size = a2_phys_size;
 	a2_props.irq = a2_bam_irq;
-	a2_props.options = SPS_BAM_OPT_IRQ_WAKEUP | SPS_BAM_HOLD_MEM;
+	a2_props.options = SPS_BAM_OPT_IRQ_WAKEUP | SPS_BAM_HOLD_MEM
+				| SPS_BAM_RES_CONFIRM;
 	a2_props.num_pipes = A2_NUM_PIPES;
 	a2_props.summing_threshold = A2_SUMMING_THRESHOLD;
 	a2_props.constrained_logging = true;
@@ -2318,15 +2519,13 @@ static int bam_init(void)
 	tx_connection.dest_pipe_index = 4;
 	tx_connection.mode = SPS_MODE_DEST;
 	tx_connection.options = SPS_O_AUTO_ENABLE | SPS_O_EOT;
-	tx_desc_mem_buf.size = 0x800; /* 2k */
-	tx_desc_mem_buf.base = dma_alloc_coherent(dma_dev, tx_desc_mem_buf.size,
-							&dma_addr, 0);
-	if (tx_desc_mem_buf.base == NULL) {
-		BAM_DMUX_INFO("tx memory alloc failed\n");
-		ret = -ENOMEM;
-		goto tx_get_config_failed;
-	}
-	tx_desc_mem_buf.phys_base = dma_addr;
+	/*
+	 * Use the TX descriptor sub-region of the single CMA block instead
+	 * of a separate dma_alloc_coherent() call.
+	 */
+	tx_desc_mem_buf.size = BAM_CMA_TX_DESC_SIZE;
+	tx_desc_mem_buf.base = bam_cma_tx_desc_virt();
+	tx_desc_mem_buf.phys_base = bam_cma_tx_desc_phys();
 	memset(tx_desc_mem_buf.base, 0x0, tx_desc_mem_buf.size);
 	tx_connection.desc = tx_desc_mem_buf;
 	tx_connection.event_thresh = 0x10;
@@ -2356,15 +2555,13 @@ static int bam_init(void)
 	rx_connection.mode = SPS_MODE_SRC;
 	rx_connection.options = SPS_O_AUTO_ENABLE | SPS_O_EOT |
 					SPS_O_ACK_TRANSFERS;
-	rx_desc_mem_buf.size = 0x800; /* 2k */
-	rx_desc_mem_buf.base = dma_alloc_coherent(dma_dev, rx_desc_mem_buf.size,
-							&dma_addr, 0);
-	if (rx_desc_mem_buf.base == NULL) {
-		BAM_DMUX_INFO("rx memory alloc failed\n");
-		ret = -ENOMEM;
-		goto rx_mem_failed;
-	}
-	rx_desc_mem_buf.phys_base = dma_addr;
+	/*
+	 * Use the RX descriptor sub-region of the single CMA block instead
+	 * of a separate dma_alloc_coherent() call.
+	 */
+	rx_desc_mem_buf.size = BAM_CMA_RX_DESC_SIZE;
+	rx_desc_mem_buf.base = bam_cma_rx_desc_virt();
+	rx_desc_mem_buf.phys_base = bam_cma_rx_desc_phys();
 	memset(rx_desc_mem_buf.base, 0x0, rx_desc_mem_buf.size);
 	rx_connection.desc = rx_desc_mem_buf;
 	rx_connection.event_thresh = 0x10;
@@ -2404,6 +2601,8 @@ static int bam_init(void)
 		msm_bam_dmux_kickoff_ul_wakeup();
 	}
 	mutex_unlock(&delayed_ul_vote_lock);
+	BAM_DMUX_LOG("%s: BAM init done tx_pipe=%p rx_pipe=%p\n", __func__,
+		     bam_tx_pipe, bam_rx_pipe);
 	toggle_apps_ack();
 	bam_connection_is_active = 1;
 	complete_all(&bam_connection_completion);
@@ -2413,16 +2612,13 @@ static int bam_init(void)
 rx_event_reg_failed:
 	bam_ops->sps_disconnect_ptr(bam_rx_pipe);
 rx_connect_failed:
-	dma_free_coherent(dma_dev, rx_desc_mem_buf.size, rx_desc_mem_buf.base,
-				rx_desc_mem_buf.phys_base);
-rx_mem_failed:
+	/* rx_desc_mem_buf is a sub-region of the CMA pool; do not free it */
 rx_get_config_failed:
 	bam_ops->sps_free_endpoint_ptr(bam_rx_pipe);
 rx_alloc_endpoint_failed:
 	bam_ops->sps_disconnect_ptr(bam_tx_pipe);
 tx_connect_failed:
-	dma_free_coherent(dma_dev, tx_desc_mem_buf.size, tx_desc_mem_buf.base,
-				tx_desc_mem_buf.phys_base);
+	/* tx_desc_mem_buf is a sub-region of the CMA pool; do not free it */
 tx_get_config_failed:
 	bam_ops->sps_free_endpoint_ptr(bam_tx_pipe);
 tx_alloc_endpoint_failed:
@@ -2732,6 +2928,32 @@ static int bam_dmux_probe(struct platform_device *pdev)
 	*dma_dev->dma_mask = DMA_BIT_MASK(32);
 	dma_dev->coherent_dma_mask = DMA_BIT_MASK(32);
 
+	/*
+	 * Allocate a single CMA block that covers all DMA memory needs:
+	 *   - TX descriptor ring  (BAM_CMA_TX_DESC_SIZE)
+	 *   - RX descriptor ring  (BAM_CMA_RX_DESC_SIZE)
+	 *   - num_buffers RX data buffers (each BAM_CMA_MAX_BUF_SIZE)
+	 *   - BAM_NUM_TX_BUFS TX data buffers (each BAM_CMA_MAX_BUF_SIZE)
+	 *
+	 * All sub-regions are carved out of this single allocation; no
+	 * further dma_alloc_coherent() or dma_map_single() calls are made
+	 * for descriptor or data buffer memory.
+	 */
+	bam_cma_total_size = BAM_CMA_DESC_TOTAL +
+		(size_t)(num_buffers + BAM_NUM_TX_BUFS) * BAM_CMA_MAX_BUF_SIZE;
+	bam_cma_base = dma_alloc_coherent(dma_dev, bam_cma_total_size,
+					  &bam_cma_phys_base, GFP_KERNEL);
+	if (!bam_cma_base) {
+		DMUX_LOG_KERR("%s: CMA alloc failed (size=%zu)\n",
+			      __func__, bam_cma_total_size);
+		return -ENOMEM;
+	}
+
+	bam_cma_assign_to_modem();
+	memset(bam_cma_base, 0, bam_cma_total_size);
+	bitmap_zero(bam_rx_buf_bitmap, SZ_256);
+	bitmap_zero(bam_tx_buf_bitmap, BAM_NUM_TX_BUFS);
+
 	xo_clk = devm_clk_get(&pdev->dev, "xo");
 	if (IS_ERR(xo_clk)) {
 		BAM_DMUX_LOG("%s: did not get xo clock\n", __func__);
@@ -2758,8 +2980,10 @@ static int bam_dmux_probe(struct platform_device *pdev)
 	else
 		bam_mux_rx_workqueue = alloc_workqueue("bam_dmux_rx",
 					WQ_MEM_RECLAIM | WQ_CPU_INTENSIVE, 1);
-	if (!bam_mux_rx_workqueue)
-		return -ENOMEM;
+	if (!bam_mux_rx_workqueue) {
+		rc = -ENOMEM;
+		goto free_cma;
+	}
 
 	bam_mux_tx_workqueue = create_singlethread_workqueue("bam_dmux_tx");
 	if (!bam_mux_tx_workqueue) {
@@ -2772,7 +2996,7 @@ static int bam_dmux_probe(struct platform_device *pdev)
 		scnprintf(bam_ch[i].name, BAM_DMUX_CH_NAME_MAX_LEN,
 					"bam_dmux_ch_%d", i);
 		/* bus 2, ie a2 stream 2 */
-		bam_ch[i].pdev = platform_device_alloc(bam_ch[i].name, 2);
+		bam_ch[i].pdev = platform_device_alloc(bam_ch[i].name, PLATFORM_DEVID_NONE);
 		if (!bam_ch[i].pdev) {
 			rc = -ENOMEM;
 			pr_err("%s: platform device alloc failed\n", __func__);
@@ -2858,6 +3082,10 @@ free_platform_dev:
 	destroy_workqueue(bam_mux_tx_workqueue);
 free_wq_rx:
 	destroy_workqueue(bam_mux_rx_workqueue);
+free_cma:
+	dma_free_coherent(dma_dev, bam_cma_total_size, bam_cma_base,
+			  bam_cma_phys_base);
+	bam_cma_base = NULL;
 
 	return rc;
 }

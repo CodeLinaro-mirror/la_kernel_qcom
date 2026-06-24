@@ -16,6 +16,7 @@
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
 #include "clk-pll.h"
+#include "clk-pm.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "clk-regmap-divider.h"
@@ -47,7 +48,7 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 };
 
 /* 360.0 MHz Configuration */
-static const struct alpha_pll_config video_cc_pll0_config = {
+static struct alpha_pll_config video_cc_pll0_config = {
 	.l = 0x12,
 	.cal_l = 0x48,
 	.alpha = 0xc000,
@@ -63,6 +64,7 @@ static struct clk_alpha_pll video_cc_pll0 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &video_cc_pll0_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "video_cc_pll0",
@@ -85,7 +87,7 @@ static struct clk_alpha_pll video_cc_pll0 = {
 };
 
 /* 480.0 MHz Configuration */
-static const struct alpha_pll_config video_cc_pll1_config = {
+static struct alpha_pll_config video_cc_pll1_config = {
 	.l = 0x19,
 	.cal_l = 0x48,
 	.alpha = 0x0,
@@ -101,6 +103,7 @@ static struct clk_alpha_pll video_cc_pll1 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &video_cc_pll1_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "video_cc_pll1",
@@ -123,7 +126,7 @@ static struct clk_alpha_pll video_cc_pll1 = {
 };
 
 /* 480.0 MHz Configuration */
-static const struct alpha_pll_config video_cc_pll2_config = {
+static struct alpha_pll_config video_cc_pll2_config = {
 	.l = 0x19,
 	.cal_l = 0x48,
 	.alpha = 0x0,
@@ -139,6 +142,7 @@ static struct clk_alpha_pll video_cc_pll2 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &video_cc_pll2_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "video_cc_pll2",
@@ -619,6 +623,32 @@ static struct clk_regmap *video_cc_pikachu_clocks[] = {
 	[VIDEO_CC_XO_CLK_SRC] = &video_cc_xo_clk_src.clkr,
 };
 
+/*
+ *	Keep the clocks always enabled
+ *	video_cc_ahb_clk
+ *	video_cc_sleep_clk
+ *	video_cc_ts_xo_clk
+ *	video_cc_xo_clk
+ *
+ *	Maximize ctl data download delay and enable memory redundancy
+ *	MVS0 CFG3
+ *	MVS0 VPP0 CFG3
+ *	MVS0C CFG3
+ *
+ *	Update VIDEO_CC_SPARE1 to have same clk_on for video_cc_mvs0_clk,
+ *	video_cc_mvs0_vpp0_clk, video_cc_mvs0_vpp1_clk during core reset by default.
+ */
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0x817c, .mask = BIT(0) },
+	{ .offset = 0x81bc, .mask = BIT(0) },
+	{ .offset = 0x81b0, .mask = BIT(0) },
+	{ .offset = 0x81ac, .mask = BIT(0) },
+	{ .offset = 0x80b4, .mask = ACCU_CFG_MASK },
+	{ .offset = 0x812c, .mask = ACCU_CFG_MASK },
+	{ .offset = 0x8158, .mask = ACCU_CFG_MASK },
+	{ .offset = 0x9f24, .mask = BIT(0) },
+};
+
 static struct gdsc *video_cc_pikachu_gdscs[] = {
 	[VIDEO_CC_MVS0_GDSC] = &video_cc_mvs0_gdsc,
 	[VIDEO_CC_MVS0_VPP0_GDSC] = &video_cc_mvs0_vpp0_gdsc,
@@ -652,6 +682,8 @@ static struct qcom_cc_desc video_cc_pikachu_desc = {
 	.num_resets = ARRAY_SIZE(video_cc_pikachu_resets),
 	.clk_regulators = video_cc_pikachu_regulators,
 	.num_clk_regulators = ARRAY_SIZE(video_cc_pikachu_regulators),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 	.gdscs = video_cc_pikachu_gdscs,
 	.num_gdscs = ARRAY_SIZE(video_cc_pikachu_gdscs),
 };
@@ -671,45 +703,16 @@ static int video_cc_pikachu_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	ret = qcom_cc_runtime_init(pdev, &video_cc_pikachu_desc);
+	ret = register_qcom_clks_pm(pdev, true, &video_cc_pikachu_desc);
 	if (ret)
-		return ret;
-
-	ret = pm_runtime_resume_and_get(&pdev->dev);
-	if (ret)
-		return ret;
+		dev_err_probe(&pdev->dev, ret, "Failed to register for pm ops\n");
 
 	clk_taycan_eko_t_pll_configure(&video_cc_pll0, regmap, &video_cc_pll0_config);
 	clk_taycan_eko_t_pll_configure(&video_cc_pll1, regmap, &video_cc_pll1_config);
 	clk_taycan_eko_t_pll_configure(&video_cc_pll2, regmap, &video_cc_pll2_config);
 
-	/*
-	 * Update VIDEO_CC_SPARE1 to have same clk_on for video_cc_mvs0_clk,
-	 * video_cc_mvs0_vpp0_clk, video_cc_mvs0_vpp1_clk during core reset by default.
-	 */
-	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
-
-	/*
-	 *	Maximize ctl data download delay and enable memory redundancy:
-	 *	MVS0 CFG3
-	 *	MVS0 VPP0 CFG3
-	 *	MVS0C CFG3
-	 */
-	regmap_update_bits(regmap, 0x80b4, ACCU_CFG_MASK, ACCU_CFG_MASK);
-	regmap_update_bits(regmap, 0x812c, ACCU_CFG_MASK, ACCU_CFG_MASK);
-	regmap_update_bits(regmap, 0x8158, ACCU_CFG_MASK, ACCU_CFG_MASK);
-
-	/*
-	 * Keep clocks always enabled:
-	 *	video_cc_ahb_clk
-	 *	video_cc_sleep_clk
-	 *	video_cc_ts_xo_clk
-	 *	video_cc_xo_clk
-	 */
-	regmap_update_bits(regmap, 0x817c, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x81bc, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x81b0, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x81ac, BIT(0), BIT(0));
+	/* Enabling always ON clocks */
+	clk_restore_critical_clocks(&pdev->dev);
 
 	ret = qcom_cc_really_probe(&pdev->dev, &video_cc_pikachu_desc, regmap);
 	if (ret) {
@@ -730,19 +733,12 @@ static void video_cc_pikachu_sync_state(struct device *dev)
 	qcom_cc_sync_state(dev, &video_cc_pikachu_desc);
 }
 
-static const struct dev_pm_ops video_cc_pikachu_pm_ops = {
-	SET_RUNTIME_PM_OPS(qcom_cc_runtime_suspend, qcom_cc_runtime_resume, NULL)
-	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
-				pm_runtime_force_resume)
-};
-
 static struct platform_driver video_cc_pikachu_driver = {
 	.probe = video_cc_pikachu_probe,
 	.driver = {
 		.name = "videocc-pikachu",
 		.of_match_table = video_cc_pikachu_match_table,
 		.sync_state = video_cc_pikachu_sync_state,
-		.pm = &video_cc_pikachu_pm_ops,
 	},
 };
 
