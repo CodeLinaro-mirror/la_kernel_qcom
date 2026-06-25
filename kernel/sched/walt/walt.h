@@ -451,6 +451,10 @@ extern unsigned int sysctl_sched_idle_enough;
 extern unsigned int sysctl_sched_cluster_util_thres_pct;
 extern unsigned int sysctl_sched_idle_enough_clust[MAX_CLUSTERS];
 extern unsigned int sysctl_sched_cluster_util_thres_pct_clust[MAX_CLUSTERS];
+extern unsigned int sf_misfit_delay_low_cap[MAX_CLUSTERS];
+extern unsigned int sf_misfit_delay_high_cap[MAX_CLUSTERS];
+/* deep-throttle boundary: cap_orig at/below this % of pre_cap is "deep" */
+#define SF_MISFIT_DEEP_CAP_PCT 40
 
 /* 1ms default for 20ms window size scaled to 1024 */
 extern unsigned int sysctl_sched_min_task_util_for_boost;
@@ -1224,6 +1228,7 @@ static inline bool task_fits_capacity(struct task_struct *p,
 	unsigned long pre_cap  = cluster->pre_smart_freq_capacity;
 	bool fits;
 	u64 now;
+	u32 dw;
 
 	fits = __task_fits_capacity(p, dst_cpu, cap_orig);
 
@@ -1268,19 +1273,31 @@ static inline bool task_fits_capacity(struct task_struct *p,
 		return true;
 	}
 
-	/* Within the delay window: keep suppressing. */
-	if (now - wts->sf_misfit_time < sched_ravg_window)
+	/*
+	 * Two-tier delay window based on throttle depth:
+	 *   cap_orig <= 40% of pre_cap  (low remaining cap)  -> sf_misfit_delay_low_cap
+	 *   cap_orig >  40% of pre_cap  (high remaining cap) -> sf_misfit_delay_high_cap
+	 *
+	 * Values are stored in nanoseconds and are independent of the window
+	 * size. A value of 0 disables the delay entirely (non-ART default).
+	 * The tier is re-evaluated on every call so transitions are handled
+	 * automatically without extra per-task state.
+	 */
+	dw = (cap_orig * 100 <= pre_cap * SF_MISFIT_DEEP_CAP_PCT)
+	     ? sf_misfit_delay_low_cap[cluster->id]
+	     : sf_misfit_delay_high_cap[cluster->id];
+
+	if (now - wts->sf_misfit_time < dw)
 		return true;
 
 	/*
 	 * Delay expired: keep reporting as misfit until the task actually
 	 * migrates to a new cluster.  Do NOT reset sf_misfit_time here;
 	 * it will be cleared by android_rvh_set_task_cpu() on a
-	 * cross-cluster migration, or by the fits branch above when
-	 * the task fits again.  Resetting here would re-arm the
-	 * sched_ravg_window suppression window on every failed migration
-	 * attempt, preventing the task from ever being upmigrated while
-	 * large CPUs are busy or isolated.
+	 * cross-cluster migration, or by the sf_fits branch above when
+	 * the task fits again.  Resetting here would re-arm the delay
+	 * window on every failed migration attempt, preventing the task
+	 * from ever being upmigrated while large CPUs are busy or isolated.
 	 */
 
 	return false;
