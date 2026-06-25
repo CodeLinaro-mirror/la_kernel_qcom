@@ -1233,6 +1233,23 @@ static inline bool task_fits_capacity(struct task_struct *p,
 	fits = __task_fits_capacity(p, dst_cpu, cap_orig);
 
 	/*
+	 * Two-tier delay window based on throttle depth:
+	 *   cap_orig <= 40% of pre_cap  (low remaining cap)  -> sf_misfit_delay_low_cap
+	 *   cap_orig >  40% of pre_cap  (high remaining cap) -> sf_misfit_delay_high_cap
+	 *
+	 * Values are stored in nanoseconds and are independent of the window
+	 * size. A value of 0 disables the delay entirely (non-ART default).
+	 * The tier is re-evaluated on every call so transitions are handled
+	 * automatically without extra per-task state.
+	 */
+	dw = (cap_orig * 100 <= pre_cap * SF_MISFIT_DEEP_CAP_PCT)
+	     ? sf_misfit_delay_low_cap[cluster->id]
+	     : sf_misfit_delay_high_cap[cluster->id];
+
+	if (!dw)
+		return fits;
+
+	/*
 	 * The smart_freq delay is a per-cluster mechanism: sf_misfit_time
 	 * records a smart_freq-induced misfit in the context of the task's
 	 * current cluster. For a cross-cluster dst_cpu, skip the delay and
@@ -1272,20 +1289,6 @@ static inline bool task_fits_capacity(struct task_struct *p,
 		wts->sf_misfit_time = now;
 		return true;
 	}
-
-	/*
-	 * Two-tier delay window based on throttle depth:
-	 *   cap_orig <= 40% of pre_cap  (low remaining cap)  -> sf_misfit_delay_low_cap
-	 *   cap_orig >  40% of pre_cap  (high remaining cap) -> sf_misfit_delay_high_cap
-	 *
-	 * Values are stored in nanoseconds and are independent of the window
-	 * size. A value of 0 disables the delay entirely (non-ART default).
-	 * The tier is re-evaluated on every call so transitions are handled
-	 * automatically without extra per-task state.
-	 */
-	dw = (cap_orig * 100 <= pre_cap * SF_MISFIT_DEEP_CAP_PCT)
-	     ? sf_misfit_delay_low_cap[cluster->id]
-	     : sf_misfit_delay_high_cap[cluster->id];
 
 	if (now - wts->sf_misfit_time < dw)
 		return true;
