@@ -4,6 +4,7 @@ qcom-scm.ko
 cmd-db.ko
 qcom_rpmh.ko
 arm_smmu.ko
+arm_smmu_v3.ko
 smem.ko
 qcom_iommu_util.ko
 socinfo.ko
