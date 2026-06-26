@@ -28,9 +28,9 @@
 #define CX_GMU_CBCR_WAKE_MASK		0xf
 #define CX_GMU_CBCR_WAKE_SHIFT		8
 
-static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L1 + 1, 1, vdd_corner);
-static DEFINE_VDD_REGULATORS(vdd_gfx, VDD_HIGH_L1 + 1, 1, vdd_corner);
-static DEFINE_VDD_REGULATORS(vdd_mx, VDD_HIGH_L1 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L2 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_gfx, VDD_HIGH_L2 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_mx, VDD_HIGH_L2 + 1, 1, vdd_corner);
 
 static struct clk_vdd_class *gpu_cc_malabar_regulators[] = {
 	&vdd_cx,
@@ -262,7 +262,8 @@ static struct clk_rcg2 gpu_cc_gx_gfx3d_clk_src = {
 			[VDD_NOMINAL] = 650000000,
 			[VDD_NOMINAL_L1] = 770000000,
 			[VDD_HIGH] = 840000000,
-			[VDD_HIGH_L1] = 950000000 },
+			[VDD_HIGH_L1] = 950000000,
+			[VDD_HIGH_L2] = 1050000000},
 	},
 };
 
