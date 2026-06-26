@@ -80,6 +80,7 @@ shikra_perf_config = {
     "CONFIG_MSM_HAB": "n",
     "CONFIG_MSM_PERFORMANCE": "m",
     "CONFIG_MSM_QUSB_PHY": "m",
+    "CONFIG_MSM_RDBG": "m",
     "CONFIG_MSM_RPM_SMD": "m",
     "CONFIG_NL80211_TESTMODE": "y",
     "CONFIG_NOP_USB_XCEIV": "m",

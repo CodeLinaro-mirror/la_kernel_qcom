@@ -18,6 +18,7 @@
 #define SMCI_GPUOBJECT_UID 470
 #define SMCI_DCVSOBJECT_UID 472
 #define SMCI_VIDEOVAROBJECT_UID 474
+#define SMCI_DCCSRAM_UID 482
 
 #define SMCI_DT_OP_SET 0
 #define SMCI_PIL_OP_INITIMAGE 0
@@ -25,6 +26,7 @@
 #define SMCI_PILIMAGE_OP_SETUPMEMAREA 1
 #define SMCI_PILIMAGE_OP_AUTHRESET 2
 #define SMCI_PILIMAGE_OP_UNLOCKAREA 3
+#define SMCI_DCCSRAM_OP_FETCH 0
 
 /* Service Operations (IGPU/IGFXDCVS OP_init) */
 #define SMCI_GPU_OP_INIT_INSTANCE  0
@@ -32,6 +34,7 @@
 
 /* GPU Control Operations (IGPUControl OP_regSetup) */
 #define SMCI_GPU_OP_REG_SETUP 0
+#define SMCI_GPU_OP_CONFIG_GPU_SMMU_APERTURE 1
 
 /* GPU DCVS Control Operations (IGFXDCVSControl OPs) */
 #define SMCI_DCVS_OP_RESET 0
@@ -105,22 +108,29 @@ int32_t qcom_smci_init_smobject(dma_addr_t dma_addr, void *vaddr, size_t size,
 #define QCOM_SCMI_LEAKING_MEM_INTENTIONALLY	23
 #define QCOM_SCMI_INVALID_NUM_REGION_INFO	24
 
-/* GPU and DCVS Error Codes */
-#define GPU_DCVS_ERROR_INVALID_ARG       10
-#define GPU_ERROR_CMD_DB_FAIL            10
-#define GPU_ERROR_CMD_DB_INVALID_PARAM   11
-#define GPU_ERROR_CMD_DB_NOT_FOUND       12
+/* GPU and DCVS service-specific error codes */
+#define GPU_DCVS_ERROR_INVALID_ARG	10
+#define GPU_ERROR_OPERATION_FAILED	10
 
-/*
- * Note: Error codes 10-12 are shared between standard QCOM SCMI errors
- * and GPU/DCVS specific errors. They are mapped to common Linux error codes
- * that are appropriate for both contexts where possible.
+/**
+ * qcom_scmi_remap_error() - remap common SMCInvoke service errors
+ * @ret: return code from qcom_smci_call()
+ * @err: service-specific result written by qcom_smci_call()
+ *
+ * qcom_smci_call() returns transport/invocation errors in @ret and reports
+ * service errors in @err. Only @err values from the common SMCInvoke services
+ * are handled here. GPU/DCVS services use qcom_scm_gpu_and_dcvs_remap_error().
+ *
+ * Return: 0 on success or a negative errno value.
  */
 
-static inline int qcom_scmi_remap_error(int err)
+static inline int qcom_scmi_remap_error(int ret, int err)
 {
-	if (!err)
-		return err;
+	if (!ret && !err)
+		return 0;
+
+	if (ret)
+		return ret;
 
 	switch (err) {
 	case QCOM_SCMI_INVALID_INPUT_PARAM:

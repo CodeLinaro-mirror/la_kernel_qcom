@@ -13,6 +13,7 @@ load(":kleaf-scripts/targets/alor_le.bzl", "define_alor_le")
 load(":kleaf-scripts/targets/autogvm.bzl", "define_autogvm")
 load(":kleaf-scripts/targets/autogvmlv.bzl", "define_autogvmlv")
 load(":kleaf-scripts/targets/bengal.bzl", "define_bengal")
+load(":kleaf-scripts/targets/bengal_le.bzl", "define_bengal_le")
 load(
     ":kleaf-scripts/targets/canoe.bzl",
     "define_canoe",
@@ -20,6 +21,7 @@ load(
     "define_canoe_tuivm",
 )
 load(":kleaf-scripts/targets/canoe_vms.bzl", "define_canoe_vms")
+load(":kleaf-scripts/targets/glymur.bzl", "define_glymur")
 load(":kleaf-scripts/targets/hamoa.bzl", "define_hamoa")
 load(":kleaf-scripts/targets/hamoa_la.bzl", "define_hamoa_la")
 load(":kleaf-scripts/targets/lahaina.bzl", "define_lahaina")
@@ -337,6 +339,8 @@ define_autogvmlv()
 
 define_bengal()
 
+define_bengal_le()
+
 define_sun_tuivm()
 
 define_sun_oemvm()
@@ -382,3 +386,5 @@ define_shikra_oemvm()
 define_shikra_tuivm()
 
 define_shikra_vms()
+
+define_glymur()

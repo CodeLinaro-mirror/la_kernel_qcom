@@ -3279,6 +3279,9 @@ static const struct adsp_data malabar_mpss_resource = {
 	.dma_phys_below_32b = true,
 	.decrypt_shutdown = true,
 	.both_dumps = true,
+	.region_assign_idx = 3,
+	.region_assign_count = 1,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
 };
 
 static const struct adsp_data malabar_wpss_resource = {
@@ -3534,9 +3537,7 @@ static const struct adsp_data bourtzi_adsp_resource = {
 static const struct adsp_data bourtzi_mpss_resource = {
 	.crash_reason_smem = 421,
 	.firmware_name = "modem.mdt",
-	.dtb_firmware_name = "modem_dtb.mdt",
 	.pas_id = 4,
-	.dtb_pas_id = 0x26,
 	.minidump_id = 3,
 	.load_state = "modem",
 	.uses_elf64 = true,

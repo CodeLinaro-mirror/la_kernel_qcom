@@ -46,6 +46,7 @@ struct qcom_tzmem_pool {
 struct qcom_tzmem_chunk {
 	size_t size;
 	struct qcom_tzmem_pool *owner;
+	struct qcom_tzmem_area *area;
 };
 
 static struct device *qcom_tzmem_dev;
@@ -528,11 +529,10 @@ int qcom_tzmem_pm_thaw(void)
 
 #endif /* CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE */
 
-static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
-				      size_t size, gfp_t gfp)
+static int qcom_tzmem_area_alloc(struct qcom_tzmem_pool *pool, size_t size, gfp_t gfp,
+				 struct qcom_tzmem_area **out_area)
 {
 	int ret;
-
 	struct qcom_tzmem_area *area __free(kfree) = kzalloc(sizeof(*area),
 							     gfp);
 	if (!area)
@@ -563,30 +563,54 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 	ret = qcom_tzmem_init_area(area, pool->is_cached);
 	if (ret) {
 		pr_err("Failed to init area, ret: %d\n", ret);
-		goto exit_free_mem;
+		if (pool->is_cached) {
+			dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
+			free_pages((unsigned long)area->vaddr, get_order(area->size));
+		} else {
+			dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
+		}
+		return ret;
 	}
+
+	*out_area = no_free_ptr(area);
+	return 0;
+}
+
+static void qcom_tzmem_area_release(struct qcom_tzmem_pool *pool, struct qcom_tzmem_area *area)
+{
+	qcom_tzmem_cleanup_area(area);
+
+	if (pool->is_cached) {
+		dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
+		free_pages((unsigned long)area->vaddr, get_order(area->size));
+	} else {
+		dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
+	}
+	kfree(area);
+}
+
+static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
+				      size_t size, gfp_t gfp)
+{
+	int ret;
+	struct qcom_tzmem_area *area;
+
+	ret = qcom_tzmem_area_alloc(pool, size, gfp, &area);
+	if (ret)
+		return ret;
 
 	ret = gen_pool_add_virt(pool->genpool, (unsigned long)area->vaddr,
 				(phys_addr_t)area->paddr, size, -1);
 	if (ret) {
 		pr_err("Failed to create pool, ret: %d\n", ret);
-		qcom_tzmem_cleanup_area(area);
-		goto exit_free_mem;
+		qcom_tzmem_area_release(pool, area);
+		return ret;
 	}
 
 	scoped_guard(spinlock_irqsave, &pool->lock)
 		list_add_tail(&area->list, &pool->areas);
 
-	area = NULL;
 	return 0;
-
-exit_free_mem:
-	if (pool->is_cached) {
-		dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
-		free_pages((unsigned long)area->vaddr, get_order(area->size));
-	} else
-		dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
-	return ret;
 }
 
 /**
@@ -686,13 +710,7 @@ void qcom_tzmem_pool_free(struct qcom_tzmem_pool *pool)
 
 	list_for_each_entry_safe(area, next, &pool->areas, list) {
 		list_del(&area->list);
-		qcom_tzmem_cleanup_area(area);
-		if (pool->is_cached) {
-			dma_unmap_single(qcom_tzmem_dev, area->paddr, area->size, DMA_TO_DEVICE);
-			free_pages((unsigned long)area->vaddr, get_order(area->size));
-		} else
-			dma_free_coherent(qcom_tzmem_dev, area->size, area->vaddr, area->paddr);
-		kfree(area);
+		qcom_tzmem_area_release(pool, area);
 	}
 
 	gen_pool_destroy(pool->genpool);
@@ -770,8 +788,8 @@ static bool qcom_tzmem_try_grow_pool(struct qcom_tzmem_pool *pool,
  */
 void *qcom_tzmem_alloc(struct qcom_tzmem_pool *pool, size_t size, gfp_t gfp)
 {
+	struct qcom_tzmem_area *area = NULL;
 	unsigned long vaddr;
-	int ret;
 
 	if (!size)
 		return NULL;
@@ -789,16 +807,27 @@ again:
 		if (qcom_tzmem_try_grow_pool(pool, size, gfp))
 			goto again;
 
-		return NULL;
+		/* No runtime allocation for QTVM */
+		if (IS_ENABLED(CONFIG_ARCH_QTI_VM))
+			return NULL;
+
+		if (qcom_tzmem_area_alloc(pool, size, gfp, &area))
+			return NULL;
+
+		pr_info("Pool memory isn't sufficient, trying runtime now for %zu bytes\n", size);
+		vaddr = (unsigned long)area->vaddr;
 	}
 
 	chunk->size = size;
 	chunk->owner = pool;
+	chunk->area = area;
 
 	scoped_guard(spinlock_irqsave, &qcom_tzmem_chunks_lock) {
-		ret = radix_tree_insert(&qcom_tzmem_chunks, vaddr, chunk);
-		if (ret) {
-			gen_pool_free(pool->genpool, vaddr, size);
+		if (radix_tree_insert(&qcom_tzmem_chunks, vaddr, chunk)) {
+			if (chunk->area)
+				qcom_tzmem_area_release(pool, area);
+			else
+				gen_pool_free(pool->genpool, vaddr, size);
 			return NULL;
 		}
 
@@ -829,9 +858,13 @@ void qcom_tzmem_free(void *vaddr)
 		return;
 	}
 
-	scoped_guard(spinlock_irqsave, &chunk->owner->lock)
-		gen_pool_free(chunk->owner->genpool, (unsigned long)vaddr,
-			      chunk->size);
+	if (chunk->area) {
+		qcom_tzmem_area_release(chunk->owner, chunk->area);
+	} else {
+		scoped_guard(spinlock_irqsave, &chunk->owner->lock)
+			gen_pool_free(chunk->owner->genpool, (unsigned long)vaddr,
+				      chunk->size);
+	}
 	kfree(chunk);
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_free);
@@ -849,25 +882,22 @@ EXPORT_SYMBOL_GPL(qcom_tzmem_free);
 phys_addr_t qcom_tzmem_to_phys(void *vaddr)
 {
 	struct qcom_tzmem_chunk *chunk;
-	struct radix_tree_iter iter;
-	void __rcu **slot;
-	phys_addr_t ret;
+	phys_addr_t ret = 0;
 
 	guard(spinlock_irqsave)(&qcom_tzmem_chunks_lock);
 
-	radix_tree_for_each_slot(slot, &qcom_tzmem_chunks, &iter, 0) {
-		chunk = radix_tree_deref_slot_protected(slot,
-						&qcom_tzmem_chunks_lock);
+	chunk = radix_tree_lookup(&qcom_tzmem_chunks, (unsigned long)vaddr);
+	if (!chunk)
+		return 0;
 
-		ret = gen_pool_virt_to_phys(chunk->owner->genpool,
-					    (unsigned long)vaddr);
-		if (ret == -1)
-			continue;
+	if (chunk->area)
+		return chunk->area->paddr;
 
-		return ret;
-	}
+	ret = gen_pool_virt_to_phys(chunk->owner->genpool, (unsigned long)vaddr);
+	if (ret == -1)
+		return 0;
 
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_to_phys);
 

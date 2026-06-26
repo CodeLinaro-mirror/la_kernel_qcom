@@ -1741,7 +1741,7 @@ static int qcom_llcc_tcm_init(struct platform_device *pdev,
 
 	tcm_drv_data->tcm_data->phys_addr = r.start;
 
-	if (!drv_data->sct_initialized) {
+	if (!drv_data->sct_initialized && table) {
 		tcm_drv_data->tcm_slice = llcc_slice_getd(LLCC_APTCM);
 		if (IS_ERR_OR_NULL(tcm_drv_data->tcm_slice)) {
 			pr_err("Failed to get tcm slice from llcc driver\n");
@@ -1829,8 +1829,11 @@ struct llcc_tcm_data *llcc_tcm_activate(void)
 	int ret;
 	void __iomem *virt_addr;
 
-	if (IS_ERR(tcm_drv_data))
+	if (IS_ERR(tcm_drv_data)) {
+		if (PTR_ERR(tcm_drv_data) == -ENODEV)
+			return ERR_PTR(-ENODEV);
 		return ERR_PTR(-EPROBE_DEFER);
+	}
 
 	mutex_lock(&tcm_drv_data->lock);
 	if (IS_ERR_OR_NULL(tcm_drv_data->tcm_slice) ||
@@ -2850,8 +2853,12 @@ static int qcom_llcc_mem_based_init(struct platform_device *pdev)
 			ret = qcom_llcc_tcm_init(pdev, llcc_cfg, sz, tcm_memory_node, drv_data);
 			if (ret)
 				dev_err(dev, "Failed to probe TCM manager\n");
+		} else {
+			tcm_drv_data = ERR_PTR(-ENODEV);
 		}
 		of_node_put(tcm_memory_node);
+	} else {
+		tcm_drv_data = ERR_PTR(-ENODEV);
 	}
 end:
 	devm_iounmap(dev, slc_mem);
@@ -3026,6 +3033,8 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 			ret = qcom_llcc_tcm_init(pdev, llcc_cfg, sz, tcm_memory_node, drv_data);
 			if (ret)
 				dev_err(dev, "Failed to probe TCM manager\n");
+		} else {
+			tcm_drv_data = ERR_PTR(-ENODEV);
 		}
 	}
 

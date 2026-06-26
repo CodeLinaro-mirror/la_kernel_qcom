@@ -181,3 +181,20 @@ def register_modules(registry):
             "drivers/irqchip/qcom-mpm",
         ],
     )
+
+    registry.register(
+        name = "drivers/rpmsg/rpm_dump",
+        out = "rpm_dump.ko",
+        config = "CONFIG_MSM_RPM_SMD",
+        srcs = [
+            # do not sort
+            "drivers/rpmsg/rpm_dump.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_ramdump",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/remoteproc/rproc_qcom_common",
+            "drivers/rpmsg/rpm-smd",
+        ],
+    )
