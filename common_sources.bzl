@@ -17,6 +17,7 @@ COPY_FILES = [
     "drivers/dma/dmaengine.h",
     "drivers/dma/virt-dma.h",
     "drivers/extcon/extcon-usb-gpio.c",
+    "drivers/gpio/gpio-pca953x.c",
     "drivers/gpio/gpio-virtio.c",
     "drivers/gpu/drm/bridge/aux-bridge.c",
     "drivers/i2c/busses/i2c-qcom-geni.c",

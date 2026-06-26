@@ -57,6 +57,7 @@ shikra_perf_config = {
     "CONFIG_GH_VCPU_MGR": "m",
     "CONFIG_GH_VIRT_WATCHDOG": "n",
     "CONFIG_GIC_INTERRUPT_ROUTING": "m",
+    "CONFIG_GPIO_PCA953X": "m",
     "CONFIG_GUNYAH_DRIVERS": "y",
     "CONFIG_GUNYAH_TRACE": "m",
     "CONFIG_HVC_GUNYAH": "m",
