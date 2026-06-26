@@ -605,6 +605,7 @@ struct dwc3_msm {
 	/* tracks if USB3 PHY is powered off */
 	bool			usb3_phy_off;
 	bool			enable_host_slow_suspend;
+	bool			hibernate_skip_thaw;
 	bool			force_suspend;
 	unsigned long		lpm_flags;
 	unsigned int		vbus_draw;
@@ -6461,6 +6462,9 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 	if (!mdwc->xhci_pm_ops)
 		goto free_dwc_pm_ops;
 
+	if (mdwc->hibernate_skip_thaw)
+		dev_pm_syscore_device(dwc->dev, true);
+
 	if (of_property_read_bool(node, "qcom,enabled-retimer")) {
 		mdwc->retimer = typec_retimer_get(mdwc->dev);
 		if (IS_ERR(mdwc->retimer)) {
@@ -6839,6 +6843,9 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 
 	mdwc->enable_host_slow_suspend = of_property_read_bool(node,
 				"qcom,enable_host_slow_suspend");
+
+	mdwc->hibernate_skip_thaw = of_property_read_bool(node,
+					"qcom,hibernate-skip-thaw");
 
 	mdwc->dis_sending_cm_l1_quirk = of_property_read_bool(node,
 				"qcom,dis-sending-cm-l1-quirk");
