@@ -35,6 +35,7 @@ COPY_FILES = [
     "drivers/net/pcs/pcs-xpcs-wx.c",
     "drivers/net/phy/aquantia/aquantia_leds.c",
     "drivers/net/phy/aquantia/aquantia_firmware.c",
+    "drivers/net/phy/motorcomm.c",
     "drivers/net/phy/qcom/qca808x.c",
     "drivers/net/phy/qcom/at803x.c",
     "drivers/net/phy/qcom/qcom.h",
