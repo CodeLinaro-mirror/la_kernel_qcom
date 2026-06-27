@@ -7259,6 +7259,9 @@ static void dwc3_msm_shutdown(struct platform_device *pdev)
 {
 	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
 
+	if (mdwc->hibernate_skip_thaw)
+		return;
+
 	dbg_log_string("Entry\n");
 	dwc3_msm_set_role(mdwc, USB_ROLE_NONE);
 	mdwc->dis_role_switch = true;
