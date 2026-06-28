@@ -439,17 +439,28 @@ class BazelBuilder:
             if os.path.isdir(runfiles_dir):
                 env["RUNFILES_DIR"] = runfiles_dir
 
-            proc = subprocess.Popen(
-                [script, "--destdir", out_dir],
-                cwd=bazel_bin, env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            )
-            stdout, _ = proc.communicate()
-            for line in stdout.decode("utf-8", errors="replace").splitlines():
-                logging.info(line)
-            return proc.returncode, target, out_dir
+            # Use per-target runfiles dir as cwd so all manifest
+            # relative paths resolve correctly via symlinks
+            with _dir_locks_lock:
+                if out_dir not in _dir_locks:
+                    _dir_locks[out_dir] = threading.Lock()
+                _out_dir_lock = _dir_locks[out_dir]
+            with _out_dir_lock:
+                runfiles_main = os.path.join(runfiles_dir, '_main')
+                script_cwd = runfiles_main if os.path.isdir(runfiles_main) else bazel_bin
+                proc = subprocess.Popen(
+                    [script, "--destdir", out_dir],
+                    cwd=script_cwd, env=env,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                )
+                stdout, _ = proc.communicate()
+                for line in stdout.decode("utf-8", errors="replace").splitlines():
+                    logging.info(line)
+                return proc.returncode, target, out_dir
 
         _bazel_lock = threading.Lock()
+        _dir_locks = {}
+        _dir_locks_lock = threading.Lock()
 
         def _run_via_bazel(target):
             """Warm-server bazel run for alias targets that have no own executable."""
