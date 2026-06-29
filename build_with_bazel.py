@@ -170,6 +170,23 @@ class BazelBuilder:
                         h.update(f.read())
                 except OSError:
                     pass
+        # Also hash the extension bzl files (and their symlink targets)
+        # since they live outside kernel_dir and may be replaced or broken
+        for ext in (MSM_EXTENSIONS, ABL_EXTENSIONS):
+            ext_path = os.path.join(self.workspace, ext)
+            real_path = os.path.realpath(ext_path)
+            # Hash both path strings for cache sensitivity to symlink changes
+            for candidate in (ext_path, real_path):
+                rel = os.path.relpath(candidate, self.workspace)
+                h.update(rel.encode())
+            # Read file content only once (via the real path)
+            if real_path not in seen:
+                seen.add(real_path)
+                try:
+                    with open(real_path, "rb") as f:
+                        h.update(f.read())
+                except OSError:
+                    h.update(b"missing")
         return h.hexdigest()[:16]
 
     def _query_cache_key(self):
