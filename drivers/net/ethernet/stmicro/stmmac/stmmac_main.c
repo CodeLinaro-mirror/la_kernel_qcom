@@ -5749,7 +5749,6 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* Only the last descriptor gets to point to the skb. */
 	skb_entry = entry;
-	tx_q->tx_skbuff[entry] = skb;
 	tx_q->tx_skbuff_dma[entry].buf_type = STMMAC_TXBUF_T_SKB;
 
 	/* According to the coalesce parameter the IC bit for the latest
@@ -5868,6 +5867,8 @@ static netdev_tx_t stmmac_xmit(struct sk_buff *skb, struct net_device *dev)
 				csum_insertion, priv->mode, 0, last_segment,
 				skb->len);
 	}
+
+	tx_q->tx_skbuff[skb_entry] = skb;
 
 	if (tx_q->tbs & STMMAC_TBS_EN) {
 		struct timespec64 ts = ns_to_timespec64(skb->tstamp);
