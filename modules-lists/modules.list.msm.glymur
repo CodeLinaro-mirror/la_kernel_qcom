@@ -16,6 +16,11 @@ pinctrl-glymur.ko
 debug_symbol.ko
 qcom-dload-mode.ko
 qcom_cpu_vendor_hooks.ko
+icc-bcm-voter.ko
+icc-debug.ko
+icc-rpmh.ko
+qnoc-qos.ko
+qnoc-glymur.ko
 debug-regulator.ko
 proxy-consumer.ko
 qti-fixed-regulator.ko
