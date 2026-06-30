@@ -713,6 +713,7 @@ void *dwc_trace_ipc_log_ctxt;
 static struct dload_struct __iomem *diag_dload;
 
 static void dwc3_pwr_event_handler(struct dwc3_msm *mdwc);
+static enum usb_role dwc3_msm_get_role(struct dwc3_msm *mdwc);
 
 static inline void dwc3_msm_set_usbphy_flags(struct usb_phy *phy,
 					     unsigned int flags)
@@ -4728,6 +4729,7 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	int ret;
 	struct dwc3 *dwc = NULL;
 	struct usb_irq *uirq;
+	enum usb_role cur_role = dwc3_msm_get_role(mdwc);
 
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
@@ -4792,14 +4794,14 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 		/* Send orientation to USB3 PHY subsystem */
 		dwc3_msm_typec_switch_set(mdwc, mdwc->typec_orientation);
 
-		if (!mdwc->in_host_mode || mdwc->disable_host_ssphy_powerdown ||
-			(mdwc->in_host_mode && mdwc->max_rh_port_speed != USB_SPEED_HIGH))
+		if (cur_role != USB_ROLE_HOST || mdwc->disable_host_ssphy_powerdown ||
+			(cur_role == USB_ROLE_HOST && mdwc->max_rh_port_speed != USB_SPEED_HIGH))
 			usb_phy_set_suspend(mdwc->ss_phy, 0);
 
 		dwc3_msm_clear_usbphy_flags(mdwc->ss_phy, DEVICE_IN_SS_MODE);
 		mdwc->lpm_flags &= ~MDWC3_SS_PHY_SUSPEND;
 
-		if (mdwc->in_host_mode) {
+		if (cur_role == USB_ROLE_HOST) {
 			u32 reg = dwc3_msm_read_reg(mdwc->base,
 					DWC3_GUSB3PIPECTL(0));
 
@@ -7718,7 +7720,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 
 		if (!mdwc->disable_xhci_runtime_pm) {
 			pm_runtime_use_autosuspend(&dwc->xhci->dev);
-			pm_runtime_set_autosuspend_delay(&dwc->xhci->dev, 0);
+			pm_runtime_set_autosuspend_delay(&dwc->xhci->dev, 2000);
 			pm_runtime_allow(&dwc->xhci->dev);
 			pm_runtime_mark_last_busy(&dwc->xhci->dev);
 		}
