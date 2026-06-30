@@ -4003,8 +4003,10 @@ static int dwc3_msm_altmode_safe(struct dwc3_msm *mdwc)
 {
 	struct typec_retimer_state retimer_state;
 
-	if (!mdwc->retimer || mdwc->dp_state)
+	if (!mdwc->retimer || mdwc->dp_state != DP_NONE)
 		return 0;
+
+	dbg_log_string("RTMR: Altmode safe\n");
 
 	retimer_state.alt = NULL;
 	retimer_state.data = NULL;
@@ -4017,8 +4019,10 @@ static int dwc3_msm_altmode_enable_usb(struct dwc3_msm *mdwc)
 {
 	struct typec_retimer_state retimer_state;
 
-	if (!mdwc->retimer || mdwc->dp_state)
+	if (!mdwc->retimer || mdwc->dp_state != DP_NONE)
 		return 0;
+
+	dbg_log_string("RTMR: Altmode enable usb\n");
 
 	retimer_state.alt = NULL;
 	retimer_state.data = NULL;
@@ -4036,6 +4040,8 @@ static int dwc3_msm_altmode_enable_dp(struct dwc3_msm *mdwc, u16 svid, int pin_a
 
 	if (!mdwc->retimer)
 		return 0;
+
+	dbg_log_string("RTMR: Altmode enable dp mode:%d\n", pin_assign + 1);
 
 	dp_data.status = DP_STATUS_ENABLED;
 	if (hpd_state)
@@ -6135,6 +6141,7 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes, int o
 	flush_workqueue(mdwc->sm_usb_wq);
 
 	mutex_lock(&mdwc->role_switch_mutex);
+	mdwc->dp_state = DP_4_LANE;
 	/* 4 lanes handling */
 	if (mdwc->id_state == DWC3_ID_GROUND) {
 		/* stop USB host mode */
@@ -6160,12 +6167,12 @@ int dwc3_msm_set_dp_mode(struct device *dev, bool dp_connected, int lanes, int o
 		dwc3_msm_set_dp_only_params(mdwc);
 	}
 
-	if (mdwc->dp_state != DP_2_LANE)
+	if (mdwc->dp_state != DP_2_LANE && !ret)
 		mdwc->refcnt_dp_usb++;
 
-	mdwc->dp_state = DP_4_LANE;
-
 exit:
+	if (ret)
+		mdwc->dp_state = DP_NONE;
 	dbg_log_string("Set DP 4 lanes: %d refcnt:%d\n", ret, mdwc->refcnt_dp_usb);
 	mutex_unlock(&mdwc->role_switch_mutex);
 	return ret;
