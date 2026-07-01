@@ -11,6 +11,10 @@
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
+#include <linux/iopoll.h>
+
+#define DMA_BUS_MODE			0x00001000
+#define DMA_BUS_MODE_SFT_RESET		(0x1 << 0)
 
 #define RGMII_IO_MACRO_CONFIG		0x0
 #define SDCC_HC_REG_DLL_CONFIG		0x4
@@ -960,6 +964,28 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 	return ethqos->configure_func(ethqos);
 }
 
+/* QCOM GMAC4 DMA soft reset requires an internal clock reference (SGMII
+ * TX-to-RX loopback) when the external PHY clock is unavailable (e.g. after
+ * a safety error brings the link down). Without this loopback, the DMA
+ * reset bit never auto-clears and the reset times out.
+ */
+static int qcom_ethqos_dma_reset(void *priv, void __iomem *ioaddr)
+{
+	struct plat_stmmacenet_data *plat = priv;
+	struct qcom_ethqos *ethqos = plat->bsp_priv;
+	u32 value;
+
+	ethqos_set_func_clk_en(ethqos);
+
+	value = readl(ioaddr + DMA_BUS_MODE);
+	value |= DMA_BUS_MODE_SFT_RESET;
+	writel(value, ioaddr + DMA_BUS_MODE);
+
+	return readl_poll_timeout(ioaddr + DMA_BUS_MODE, value,
+				  !(value & DMA_BUS_MODE_SFT_RESET),
+				  10000, 1000000);
+}
+
 static void ethqos_safety_feature(struct stmmac_priv *priv, bool en)
 {
 	if (priv->sfty_irq > 0) {
@@ -1088,6 +1114,41 @@ static void qcom_ethqos_get_queue_and_tc_from_vdma(struct stmmac_priv *priv,
 	if (!*queue_mask)
 		netdev_warn(priv->dev, "No PDMA channel found for VDMA %u (TC %u)\n",
 			    vdma_ch, *tc);
+}
+
+static void ethqos_report_uevents(struct stmmac_priv *priv, enum stmmac_uevent_type event)
+{
+	char phy_mode[32];
+	char event_type[32];
+	char *envp[3];
+	int i = 0;
+
+	switch (event) {
+	case FUSA_ERROR:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=FUSA_ERROR");
+		break;
+	case MAC_DOWN:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=MAC_DOWN");
+		break;
+	case MAC_UP:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=MAC_UP");
+		break;
+	default:
+		dev_warn(priv->device, "Unknown UMD event %d\n", event);
+		return;
+	}
+
+	envp[i++] = event_type;
+
+	if (event != FUSA_ERROR) {
+		snprintf(phy_mode, sizeof(phy_mode), "PHY_MODE=%s",
+			 phy_modes(priv->plat->phy_interface));
+		envp[i++] = phy_mode;
+	}
+
+	envp[i] = NULL;
+
+	kobject_uevent_env(&priv->device->kobj, KOBJ_CHANGE, envp);
 }
 
 static int qcom_ethqos_hdma_cfg(struct platform_device *pdev, struct plat_stmmacenet_data *plat)
@@ -1292,6 +1353,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ethqos_update_link_clk(ethqos, SPEED_1000);
 	ethqos_set_func_clk_en(ethqos);
 
+	if (stmmac_res.sfty_irq > 0)
+		plat_dat->report_uevents = ethqos_report_uevents;
 	plat_dat->bsp_priv = ethqos;
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
 	plat_dat->dump_debug_regs = rgmii_dump;
@@ -1314,6 +1377,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 				qcom_ethqos_get_queue_and_tc_from_vdma;
 		}
 	}
+	if (plat_dat->has_gmac4)
+		plat_dat->fix_soc_reset = qcom_ethqos_dma_reset;
 	if (of_property_present(dev->of_node, "qcom-xpcs-handle")) {
 		plat_dat->pcs_init = ethqos_xpcs_init;
 		plat_dat->pcs_exit = ethqos_xpcs_exit;

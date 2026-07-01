@@ -460,6 +460,11 @@ static void adv7511_hpd_work(struct work_struct *work)
 			drm_kms_helper_hotplug_event(adv7511->connector.dev);
 		} else {
 			drm_bridge_hpd_notify(&adv7511->bridge, status);
+
+			adv7511->status = status;
+			if (adv7511->plugged_cb && adv7511->codec_dev)
+				adv7511->plugged_cb(adv7511->codec_dev,
+						    status == connector_status_connected);
 		}
 	}
 }
@@ -644,6 +649,13 @@ static int adv7511_get_modes(struct adv7511 *adv7511,
 
 	drm_connector_update_edid_property(connector, edid);
 	count = drm_add_edid_modes(connector, edid);
+
+	if (edid) {
+		mutex_lock(&adv7511->eld_lock);
+		memcpy(adv7511->connector.eld, connector->eld,
+		       sizeof(adv7511->connector.eld));
+		mutex_unlock(&adv7511->eld_lock);
+	}
 
 	kfree(edid);
 
@@ -957,8 +969,18 @@ static struct edid *adv7511_bridge_get_edid(struct drm_bridge *bridge,
 					    struct drm_connector *connector)
 {
 	struct adv7511 *adv = bridge_to_adv7511(bridge);
+	struct edid *edid;
 
-	return adv7511_get_edid(adv, connector);
+	edid = adv7511_get_edid(adv, connector);
+	if (edid) {
+		drm_connector_update_edid_property(connector, edid);
+		mutex_lock(&adv->eld_lock);
+		memcpy(adv->connector.eld, connector->eld,
+		       sizeof(adv->connector.eld));
+		mutex_unlock(&adv->eld_lock);
+	}
+
+	return edid;
 }
 
 static void adv7511_bridge_hpd_notify(struct drm_bridge *bridge,
@@ -1293,6 +1315,8 @@ static int adv7511_probe(struct i2c_client *i2c)
 
 	INIT_WORK(&adv7511->hpd_work, adv7511_hpd_work);
 
+	mutex_init(&adv7511->eld_lock);
+
 	adv7511_power_off(adv7511);
 
 	i2c_set_clientdata(i2c, adv7511);
@@ -1372,6 +1396,7 @@ static void adv7511_remove(struct i2c_client *i2c)
 
 	i2c_unregister_device(adv7511->i2c_packet);
 	i2c_unregister_device(adv7511->i2c_edid);
+	mutex_destroy(&adv7511->eld_lock);
 }
 
 static const struct i2c_device_id adv7511_i2c_ids[] = {
