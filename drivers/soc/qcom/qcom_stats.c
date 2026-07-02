@@ -135,7 +135,7 @@ static struct subsystem_data subsystems[] = {
 	{ "dcp", 607, 22 },
 	{ "am", 679, 24 },
 	{ "wm", 678, 23 },
-	{ "lmcu", 607, 2 },
+	{ "lmcu", 607, 26 },
 };
 
 struct stats_config {
