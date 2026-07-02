@@ -674,6 +674,7 @@ static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
 
 	INIT_LIST_HEAD(&ctx->node);
 	ctx->fl = user;
+	ctx->sc = sc;
 	ctx->nscalars = REMOTE_SCALARS_LENGTH(sc);
 	ctx->nbufs = REMOTE_SCALARS_INBUFS(sc) +
 		     REMOTE_SCALARS_OUTBUFS(sc);
@@ -701,7 +702,6 @@ static struct fastrpc_invoke_ctx *fastrpc_context_alloc(
 	/* Take a reference to user, released in fastrpc_context_free() */
 	fastrpc_user_get(user);
 
-	ctx->sc = sc;
 	ctx->retval = -1;
 	ctx->pid = current->pid;
 	ctx->client_id = user->client_id;
@@ -873,8 +873,6 @@ static int fastrpc_map_attach(struct fastrpc_user *fl, int fd,
 		err = PTR_ERR(map->attach);
 		goto attach_err;
 	}
-	if (!sess->coherent)
-		map->attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
 	table = dma_buf_map_attachment_unlocked(map->attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR(table)) {
 		err = PTR_ERR(table);
@@ -1070,7 +1068,7 @@ static int fastrpc_flush_args(struct fastrpc_invoke_ctx *ctx)
 		if (!map || !map->buf)
 			continue;
 
-		if (rpra[raix].buf.len && ctx->olaps[i].mstart) {
+		if (rpra[raix].buf.len && (ctx->olaps[i].mstart || ctx->olaps[i].do_cmo)) {
 			dma_buf_begin_cpu_access(map->buf, DMA_TO_DEVICE);
 			dma_buf_end_cpu_access(map->buf, DMA_TO_DEVICE);
 		}
@@ -1105,9 +1103,9 @@ static int fastrpc_inv_args(struct fastrpc_invoke_ctx *ctx)
 			((uintptr_t)rpra[raix].buf.pv & PAGE_MASK))
 			continue;
 
-		if (ctx->olaps[i].mstart) {
+		if (ctx->olaps[i].mstart || ctx->olaps[i].do_cmo) {
 			dma_buf_begin_cpu_access(map->buf, DMA_FROM_DEVICE);
-			dma_buf_end_cpu_access(map->buf, DMA_TO_DEVICE);
+			dma_buf_end_cpu_access(map->buf, DMA_FROM_DEVICE);
 		}
 	}
 	return 0;
