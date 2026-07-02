@@ -63,6 +63,9 @@
 #define EARLY_BOOT_RETRY_COUNT 5
 #define EARLY_BOOT_RETRY_INTERVAL_MS 1000
 
+/* Bit set in the early_boot SMEM item when the bootloader boots the subsystem. */
+#define EARLY_BOOT_SMEM_BIT		BIT(0)
+
 struct q6_subdev {
 	const char *firmware_name;
 	const char *dtb_firmware_name;
@@ -108,6 +111,7 @@ struct adsp_data {
 	const char *sysmon_name;
 	int ssctl_id;
 	unsigned int smem_host_id;
+	unsigned int early_boot_smem_id;
 
 	int region_assign_idx;
 	int region_assign_count;
@@ -1982,6 +1986,43 @@ static int q6v5_debugfs_init(struct qcom_q6v5 *q6v5)
 	return 0;
 }
 
+/**
+ * adsp_use_early_boot() - decide whether to take the early-boot path
+ * @adsp: PAS remoteproc instance to query
+ * @early_boot: subsystem is statically flagged for the early-boot path
+ * @early_boot_smem_id: per-subsystem SMEM item id, or 0 if unused
+ *
+ * The early-boot path is used when the subsystem is statically flagged for it
+ * (@early_boot), or when the bootloader advertises at runtime that it has
+ * already brought the subsystem out of reset. The latter is published in bit 0
+ * of the per-subsystem SMEM item @early_boot_smem_id, which lives in the
+ * subsystem's own SMEM host partition.
+ *
+ * Return: true if the early-boot path should be taken, false otherwise.
+ */
+static bool adsp_use_early_boot(struct qcom_adsp *adsp, bool early_boot,
+				unsigned int early_boot_smem_id)
+{
+	size_t size = 0;
+	u32 *flag;
+
+	if (early_boot)
+		return true;
+
+	if (!early_boot_smem_id)
+		return false;
+
+	flag = qcom_smem_get(adsp->smem_host_id, early_boot_smem_id, &size);
+	if (IS_ERR(flag)) {
+		dev_err(adsp->dev,
+			"failed to read early-boot SMEM flag (host=%u item=%u err=%pe size=%zu)\n",
+			adsp->smem_host_id, early_boot_smem_id, flag, size);
+		return false;
+	}
+
+	return !!(*flag & EARLY_BOOT_SMEM_BIT);
+}
+
 static int adsp_probe(struct platform_device *pdev)
 {
 	const struct adsp_data *desc;
@@ -2060,6 +2101,10 @@ static int adsp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, adsp);
 
+	/* Take the early-boot path only if the bootloader booted the subsystem. */
+	adsp->q6v5.early_boot = adsp_use_early_boot(adsp, desc->early_boot,
+						    desc->early_boot_smem_id);
+
 	ret = device_init_wakeup(adsp->dev, true);
 	if (ret)
 		goto free_rproc;
@@ -2092,7 +2137,7 @@ static int adsp_probe(struct platform_device *pdev)
 
 	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem,
 			     desc->crash_reason_stack, desc->smem_host_id,
-			     desc->load_state, desc->early_boot, qcom_pas_handover);
+			     desc->load_state, adsp->q6v5.early_boot, qcom_pas_handover);
 	if (ret)
 		goto detach_proxy_pds;
 
@@ -2990,6 +3035,7 @@ static const struct adsp_data vienna_adsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
+	.early_boot_smem_id = 695,
 };
 
 static const struct adsp_data vienna_cdsp_resource = {
