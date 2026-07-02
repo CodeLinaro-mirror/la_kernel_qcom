@@ -74,3 +74,4 @@ gic_intr_routing.ko
 qcom_dpd_proxy.ko
 qcom_dpd_proxy_iommu.ko
 qcom_scm_smci.ko
+pkvm-secure-memory-manager.ko
