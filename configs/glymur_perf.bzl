@@ -106,6 +106,8 @@ glymur_perf_config = {
     "CONFIG_QCOM_MEM_BUF": "m",
     "CONFIG_QCOM_MEM_BUF_DEV": "m",
     "CONFIG_QCOM_PDC": "m",
+    "CONFIG_QCOM_PDR_HELPERS": "m",
+    "CONFIG_QCOM_PDR_MSG": "m",
     "CONFIG_QCOM_PIL_INFO": "m",
     "CONFIG_QCOM_PMU_LIB": "m",
     "CONFIG_QCOM_Q6V5_COMMON": "m",
