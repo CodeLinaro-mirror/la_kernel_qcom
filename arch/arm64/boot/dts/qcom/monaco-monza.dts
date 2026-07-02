@@ -89,6 +89,19 @@
 		};
 	};
 
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio_sleep_button_default>;
+
+		sleep-button {
+			label = "Sleep Button";
+			gpios = <&tlmm 69 GPIO_ACTIVE_HIGH>;
+			linux,code = <KEY_SLEEP>;
+			wakeup-source;
+		};
+	};
+
 	hdmi-connector {
 		compatible = "hdmi-connector";
 		label = "hdmi";
@@ -726,6 +739,13 @@
 			drive-strength = <16>;
 			bias-pull-up;
 		};
+	};
+
+	gpio_sleep_button_default: gpio_sleep_button_default {
+		pins = "gpio69";
+		function = "gpio";
+		input-enable;
+		bias-pull-down;
 	};
 
 	pcie0_default_state: pcie0-default-state {
