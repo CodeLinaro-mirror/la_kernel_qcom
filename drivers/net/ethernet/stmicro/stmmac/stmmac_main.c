@@ -7220,6 +7220,23 @@ static const struct net_device_ops stmmac_netdev_ops = {
 	.ndo_xsk_wakeup = stmmac_xsk_wakeup,
 };
 
+static void stmmac_disable_perch_irq(struct stmmac_priv *priv)
+{
+	int i = 0;
+	u32 maxq;
+
+	maxq = max(priv->plat->rx_queues_to_use, priv->plat->tx_queues_to_use);
+
+	for (i = 0; i < maxq; i++) {
+		if (i >= STMMAC_CH_MAX)
+			break;
+		if (priv->tx_rx_irq[i] <= 0)
+			continue;
+
+		disable_irq(priv->tx_rx_irq[i]);
+	}
+}
+
 static void stmmac_reset_subtask(struct stmmac_priv *priv)
 {
 	if (!test_and_clear_bit(STMMAC_RESET_REQUESTED, &priv->state))
@@ -7235,6 +7252,7 @@ static void stmmac_reset_subtask(struct stmmac_priv *priv)
 		usleep_range(1000, 2000);
 
 	disable_irq(priv->dev->irq);
+	stmmac_disable_perch_irq(priv);
 	set_bit(STMMAC_DOWN, &priv->state);
 	dev_close(priv->dev);
 	dev_open(priv->dev, NULL);
