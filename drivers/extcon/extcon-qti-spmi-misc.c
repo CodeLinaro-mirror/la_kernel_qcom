@@ -16,6 +16,8 @@
 #include <linux/workqueue.h>
 
 #define USB_ID_DEBOUNCE_MS	5	/* ms */
+#define CHG1_INT_LATCHED_CLR	0x2714
+#define VBUS_LATCH_BIT		BIT(0)
 
 /* CHG1_POLARITY register: selects polarity of the PAD input to debouncer */
 #define CHG1_POLARITY_REG	0x2747
@@ -236,7 +238,10 @@ static int qcom_usb_extcon_restore(struct device *dev)
 		}
 	}
 
-	queue_delayed_work(system_power_efficient_wq, &info->wq_detcable, info->debounce_jiffies);
+	qcom_usb_extcon_detect_cable(&info->wq_detcable.work);
+
+	/* Write BIT(0) to CLR to rearm VBUS interrupt after queue */
+	ret = regmap_write(info->regmap, CHG1_INT_LATCHED_CLR, VBUS_LATCH_BIT);
 
 	return 0;
 }
