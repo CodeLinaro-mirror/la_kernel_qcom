@@ -817,7 +817,7 @@ static int set_ethernet_qos_cfg(char *qoscfg)
 	if (!qoscfg)
 		return 1;
 
-	if ((strlen(qoscfg) == 0) || (strlen(qoscfg) > 4))
+	if ((strlen(qoscfg) == 0) || (strlen(qoscfg) > 6))
 		return 1;
 
 	strscpy(mparams.qoscfg_name, qoscfg, sizeof(mparams.qoscfg_name));

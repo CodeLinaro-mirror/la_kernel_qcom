@@ -377,7 +377,7 @@ struct plat_stmmacenet_data {
 	int tx_qos_queues_to_use;
 	bool is_config_supp;
 	unsigned int flags;
-	char qoscfg[4];
+	char qoscfg[6];
 	char rsscfg[4];
 	bool qos_active;
 	struct ch_to_tc_map qos_ch_map;
