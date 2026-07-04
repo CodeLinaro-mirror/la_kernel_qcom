@@ -7274,6 +7274,9 @@ static void dwc3_msm_shutdown(struct platform_device *pdev)
 {
 	struct dwc3_msm	*mdwc = platform_get_drvdata(pdev);
 
+	if (mdwc->hibernate_skip_thaw)
+		return;
+
 	dbg_log_string("Entry\n");
 	dwc3_msm_set_role(mdwc, USB_ROLE_NONE);
 	mdwc->dis_role_switch = true;
@@ -8316,15 +8319,27 @@ static int dwc3_msm_pm_resume(struct device *dev)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
 	struct generic_pm_domain *genpd;
+	struct dwc3 *dwc = NULL;
+
+	if (mdwc->dwc3)
+		dwc = platform_get_drvdata(mdwc->dwc3);
 
 	dev_dbg(dev, "dwc3-msm PM resume\n");
 	dbg_event(0xFF, "PM Res", 0);
 
 	atomic_set(&mdwc->pm_suspended, 0);
 
-	/* Let DWC3 core complete determine if resume is needed */
-	if (!mdwc->in_host_mode)
-		return 0;
+	/*
+	 * The expectation is to let DWC3 core complete determine if resume is needed.
+	 * But if power.syscore flag is set, then complete() callbacks won't be called,
+	 * so kickstart otg_sm_work from here instead of relying on core_complete().
+	 */
+	if (!mdwc->in_host_mode) {
+		if (dwc && dwc->dev->power.syscore)
+			goto out;
+		else
+			return 0;
+	}
 
 	if (mdwc->host_poweroff_in_pm_suspend && mdwc->in_host_mode) {
 		/* Restore PHY flags if hibernated in host mode */
@@ -8349,6 +8364,10 @@ static int dwc3_msm_pm_resume(struct device *dev)
 			}
 		}
 	}
+
+out:
+	/* kick in otg state machine */
+	queue_work(mdwc->dwc3_wq, &mdwc->resume_work);
 
 	return 0;
 }
