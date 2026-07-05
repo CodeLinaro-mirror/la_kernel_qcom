@@ -3,7 +3,6 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
-#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
@@ -34,6 +33,7 @@
 #define GPIO_LOW                        0
 
 #define DPIN_CONFIGURE_MASK (0x1f)
+#define DPIN_MUXCTRL_USB3P1  0x01
 #define USB_SID_DISPLAYPORT  0xff01
 
 /*
@@ -55,6 +55,9 @@ struct lt7911uxc_data {
 	struct mutex device_lock;
 	struct delayed_work info_work;
 	struct work_struct dpalt_work;
+	struct work_struct fw_upgrade_work;
+	atomic_t fw_upgrade_in_progress;
+	bool fw_upgrade_from_sysfs;
 	atomic_t int_event_cnt;
 	int lt7911_reset_gpio;
 	int lt7911_1v1_en_gpio;
@@ -64,14 +67,13 @@ struct lt7911uxc_data {
 	struct regulator *lt7911_vdd;         /* LT7911 VDD supply (L4B) */
 	bool connected;
 	bool lt7911_poweron;
+	bool usb_mux_only;        /* USB-only connect: just switch PS8822, no LT7911 ops */
 	int lanes;
 	int orientation;
 	u8 pan_ack_port_index;    /* port_index to use when sending PAN ACKs from dpalt_work */
 	struct cci_util_handle *cci_handle;   /* handle to dpin_cci_util device, set at probe */
 	struct usbmux_handle *usbmux_handle; /* handle to usbmux_ps8822 device, set at probe */
 };
-
-static struct lt7911uxc_data *s_lt7911uxc;
 
 enum dpin_pin_assignment {
 	DPAM_HPD_OUT,
@@ -102,15 +104,10 @@ enum dpin_send_msg_type {
  * path.  Protected by the driver-wide device_lock where concurrent access
  * is possible.
  */
-static int  lt7911_bootup_probe_flag;
 static int  lt7911_firmware_debug_flag;
 static bool lt7911_sysfs_registered;
 
-/* Completion used to synchronise the boot-time firmware upgrade wait */
-static DECLARE_COMPLETION(lt7911_fw_upgrade_done);
-
-static int lt7911_run_boot_upgrade(void);
-static int lt7911_mipi_enable(int enable);
+static int lt7911_mipi_enable(struct lt7911uxc_data *lt7911, int enable);
 
 static int lt7911_power_up(struct lt7911uxc_data *lt7911)
 {
@@ -215,14 +212,14 @@ static int lt7911_power_down(struct lt7911uxc_data *data)
 	return 0;
 }
 
-static void lt7911_notify_event(int irq, int w, int h, int fps,
+static void lt7911_notify_event(struct lt7911uxc_data *lt7911, int irq, int w, int h, int fps,
 					int format, int afreq, int ach)
 {
 	char action[32], state[32], width[32], height[32], media_fps[32];
 	char media_format[32], media_afreq[32], media_ach[32];
 	char *envp[9];
 
-	if (!s_lt7911uxc || !s_lt7911uxc->dev)
+	if (!lt7911 || !lt7911->dev)
 		return;
 
 	snprintf(action, sizeof(action), "ACTION=DPIN_HOST_INFO");
@@ -264,12 +261,12 @@ static void lt7911_notify_event(int irq, int w, int h, int fps,
 	envp[7] = media_ach;
 	envp[8] = NULL;
 
-	dev_dbg(s_lt7911uxc->dev, "irq:%d, w:%d, h:%d, fps:%d.%02d, format:%d, afreq:%d, ach:%d\n",
+	dev_dbg(lt7911->dev, "irq:%d, w:%d, h:%d, fps:%d.%02d, format:%d, afreq:%d, ach:%d\n",
 			irq, w, h, fps / 100, fps % 100, format, afreq, ach);
-	kobject_uevent_env(&s_lt7911uxc->dev->kobj, KOBJ_CHANGE, envp);
+	kobject_uevent_env(&lt7911->dev->kobj, KOBJ_CHANGE, envp);
 }
 
-static void lt7911uxc_send_pan_ack(struct altmode_client *amclient,
+static void lt7911uxc_send_pan_ack(struct lt7911uxc_data *lt7911,
 				u8 msg_type, u8 port_index)
 {
 	int rc;
@@ -278,13 +275,13 @@ static void lt7911uxc_send_pan_ack(struct altmode_client *amclient,
 	ack.cmd_type = msg_type;
 	ack.port_index = port_index;
 
-	rc = altmode_send_data(amclient, &ack, sizeof(ack));
+	rc = altmode_send_data(lt7911->amclient, &ack, sizeof(ack));
 	if (rc < 0) {
-		dev_err(s_lt7911uxc->dev, "failed to send data, rc:%d\n", rc);
+		dev_err(lt7911->dev, "failed to send data, rc:%d\n", rc);
 		return;
 	}
 
-	dev_dbg(s_lt7911uxc->dev, "msg_type:%d port=%d\n", msg_type, port_index);
+	dev_dbg(lt7911->dev, "msg_type:%d port=%d\n", msg_type, port_index);
 }
 
 /**
@@ -300,6 +297,7 @@ static void lt7911uxc_dpalt_work_fn(struct work_struct *work)
 		container_of(work, struct lt7911uxc_data, dpalt_work);
 	int rc;
 	bool connected;
+	bool usb_mux;
 	int lanes, orientation;
 	u8 port_index;
 
@@ -308,7 +306,21 @@ static void lt7911uxc_dpalt_work_fn(struct work_struct *work)
 	lanes       = lt7911->lanes;
 	orientation = lt7911->orientation;
 	port_index  = lt7911->pan_ack_port_index;
+	usb_mux     = lt7911->usb_mux_only;
+	lt7911->usb_mux_only = false;
 	mutex_unlock(&lt7911->device_lock);
+
+	/*
+	 * A true usb_mux means a non-DP source is connected.
+	 * In this case, we only set the orientation and return,
+	 * skipping the remaining DP setup steps.
+	 */
+	if (usb_mux && !connected) {
+		dev_dbg(lt7911->dev, "dpalt_work: PS8822 switch orientation=%d\n",
+			    orientation);
+		usbmux_setmode(lt7911->usbmux_handle, 0, orientation);
+		return;
+	}
 
 	if (!connected) {
 		/* Cable detach */
@@ -324,8 +336,8 @@ static void lt7911uxc_dpalt_work_fn(struct work_struct *work)
 		 * Notify userspace that the stream is gone: all fields zeroed
 		 * signals VIDEO_OR_AUDIO_NOT_READY / disconnected.
 		 */
-		lt7911_notify_event(0, 0, 0, 0, 0, 0, 0);
-		lt7911uxc_send_pan_ack(lt7911->amclient, DPIN_PAN_ACK, port_index);
+		lt7911_notify_event(lt7911, 0, 0, 0, 0, 0, 0, 0);
+		lt7911uxc_send_pan_ack(lt7911, DPIN_PAN_ACK, port_index);
 	} else {
 		/* Cable attach */
 		dev_dbg(lt7911->dev, "dpalt_work: cable attached, lanes=%d orientation=%d\n",
@@ -347,9 +359,9 @@ static void lt7911uxc_dpalt_work_fn(struct work_struct *work)
 			    lanes, orientation);
 		usbmux_setmode(lt7911->usbmux_handle, lanes, orientation);
 		usbmux_sethpd(lt7911->usbmux_handle, true);
-		lt7911uxc_send_pan_ack(lt7911->amclient, DPIN_PAN_ACK, port_index);
+		lt7911uxc_send_pan_ack(lt7911, DPIN_PAN_ACK, port_index);
 		dev_dbg(lt7911->dev, "sending the Attention Message ack to ADSP PD\n");
-		lt7911uxc_send_pan_ack(lt7911->amclient, DPIN_SEND_ATTENTION, port_index);
+		lt7911uxc_send_pan_ack(lt7911, DPIN_SEND_ATTENTION, port_index);
 	}
 }
 
@@ -399,19 +411,6 @@ static void lt7911_info_work_fn(struct work_struct *work)
 		cci_util_lt7911_enable_i2c(lt7911->cci_handle);
 		cci_util_lt7911_get_interrupt_type(lt7911->cci_handle, &irq);
 		if (irq) {
-			rc = lt7911_run_boot_upgrade();
-			if (rc > 0) {
-				/*
-				 * Firmware was upgraded and the device has been
-				 * power-cycled.  The interrupt state and all I2C
-				 * registers read so far are stale — stop here and
-				 * let the next GPIO0 IRQ trigger a fresh read.
-				 */
-				dev_dbg(lt7911->dev,
-					 "firmware upgrade complete, skipping stale info read\n");
-				cci_util_lt7911_disable_i2c(lt7911->cci_handle);
-				return;
-			}
 			rc = cci_util_lt7911_get_information(lt7911->cci_handle,
 							     &irq, &width, &height, &fps,
 							     &format, &afreq, &ach);
@@ -426,9 +425,9 @@ static void lt7911_info_work_fn(struct work_struct *work)
 			dev_dbg(lt7911->dev,
 				"Ignore notification when connected and registers indicate 0\n");
 		} else {
-			lt7911_mipi_enable(1);
+			lt7911_mipi_enable(lt7911, 1);
 			cci_util_lt7911_enable_i2c(lt7911->cci_handle);
-			lt7911_notify_event(irq, width, height, fps, format, afreq, ach);
+			lt7911_notify_event(lt7911, irq, width, height, fps, format, afreq, ach);
 		}
 
 		/* No new IRQs arrived while we were reading — we are done. */
@@ -449,6 +448,8 @@ static int lt7911uxc_dpalt_notify(void *priv, void *payload_data, size_t len)
 	struct lt7911uxc_data *lt7911 = (struct lt7911uxc_data *) priv;
 	u8 port_index, dp_data, pin;
 	u8 *payload = (u8 *) payload_data;
+	int  local_lanes;
+	bool newly_connected = false;
 
 	if (len < 9) {
 		dev_err(lt7911->dev, "payload too short: %zu\n", len);
@@ -481,15 +482,42 @@ static int lt7911uxc_dpalt_notify(void *priv, void *payload_data, size_t len)
 
 			lt7911->pan_ack_port_index = port_index;
 			mutex_unlock(&lt7911->device_lock);
-			schedule_work(&lt7911->dpalt_work);
+			/*
+			 * Using the freezable workqueue guarantees that background tasks are
+			 * automatically frozen during suspend and only thawed after all drivers
+			 * have completed their system resume callbacks (restoring runtime PM),
+			 * preventing race-prone I2C transactions.
+			 */
+			queue_work(system_freezable_wq, &lt7911->dpalt_work);
+			return rc;
+		}
+
+		/*
+		 * If we receive 'not configured' and 'not dp connected',
+		 * we must process the orientation immediately rather than waiting for
+		 * DP alt mode completion.
+		 *
+		 * This ensures non-DP sources get the correct orientation.
+		 *
+		 * When payload[2] is DPIN_MUXCTRL_USB3P1, usb_mux_only is set to true,
+		 * the correct port is populated, and dpalt_work is scheduled for
+		 * subsequent processing.
+		 *
+		 * CC orientation PAN for PS8822 mux switching (mux_ctrl == USB3P1)
+		 */
+		if (payload[2] == DPIN_MUXCTRL_USB3P1) {
+			lt7911->usb_mux_only = true;
+			lt7911->pan_ack_port_index = port_index;
+			mutex_unlock(&lt7911->device_lock);
+			queue_work(system_freezable_wq, &lt7911->dpalt_work);
 			return rc;
 		}
 		mutex_unlock(&lt7911->device_lock);
 		return rc;
 	}
 
-	/* Configure */
 	if (!lt7911->connected) {
+		lt7911->usb_mux_only = false;
 		lt7911->connected = true;
 		dev_dbg(lt7911->dev, "DPIN cable is connected...\n");
 		if ((pin == DPAM_HPD_B) || (pin == DPAM_HPD_D) || (pin == DPAM_HPD_F)) {
@@ -502,15 +530,18 @@ static int lt7911uxc_dpalt_notify(void *priv, void *payload_data, size_t len)
 		}
 
 		dev_dbg(lt7911->dev, "number of lanes:%d\n", lt7911->lanes);
+
+		newly_connected = lt7911->connected;
 	}
+
+	local_lanes = lt7911->lanes;
+	lt7911->pan_ack_port_index = port_index;
 
 	mutex_unlock(&lt7911->device_lock);
 
-	if (lt7911->lanes > 0 && lt7911->connected) {
-		mutex_lock(&lt7911->device_lock);
-		lt7911->pan_ack_port_index = port_index;
-		mutex_unlock(&lt7911->device_lock);
-		schedule_work(&lt7911->dpalt_work);
+	if (newly_connected && local_lanes > 0) {
+		lt7911_notify_event(lt7911, -1, 0, 0, 0, 0, 0, 0);
+		queue_work(system_freezable_wq, &lt7911->dpalt_work);
 	}
 
 	return rc;
@@ -627,6 +658,19 @@ static irqreturn_t lt7911_gpio0_irq_handler(int irq, void *dev_id)
 	struct lt7911uxc_data *lt7911 = dev_id;
 
 	dev_dbg(lt7911->dev, "GPIO0 IRQ fired (irq=%d)\n", irq);
+
+	/*
+	 * Suppress stream-state processing while a firmware upgrade is in
+	 * progress.  The chip is being reflashed and its I2C registers are
+	 * not in a valid state; scheduling info_work now would produce
+	 * spurious reads.  lt7911uxc_firmware_cb() clears the flag and
+	 * schedules info_work itself once the upgrade is complete.
+	 */
+	if (atomic_read(&lt7911->fw_upgrade_in_progress)) {
+		dev_dbg(lt7911->dev, "GPIO0 IRQ suppressed: firmware upgrade in progress\n");
+		return IRQ_HANDLED;
+	}
+
 	/*
 	 * Atomically record that an interrupt has arrived.  The drain-loop in
 	 * lt7911_info_work_fn() reads this counter before and after the I2C
@@ -635,8 +679,8 @@ static irqreturn_t lt7911_gpio0_irq_handler(int irq, void *dev_id)
 	 */
 	atomic_inc(&lt7911->int_event_cnt);
 	cancel_delayed_work(&lt7911->info_work);
-	schedule_delayed_work(&lt7911->info_work, msecs_to_jiffies(LT7911_DRAIN_SETTLE_MS));
-
+	queue_delayed_work(system_freezable_wq, &lt7911->info_work,
+			msecs_to_jiffies(LT7911_DRAIN_SETTLE_MS));
 	return IRQ_HANDLED;
 }
 
@@ -681,56 +725,60 @@ static int lt7911uxc_register_gpio0_irq(struct lt7911uxc_data *lt7911)
  * lt7911uxc_firmware_cb - async firmware load callback.
  * @fw:      firmware blob supplied by the kernel firmware loader, or NULL
  *           if the load timed out
- * @context: unused context pointer (always NULL)
+ * @context: pointer to the lt7911uxc_data instance
  *
  * Called by the kernel firmware loader once "lt7911_fw.bin" has been
  * located (or the load has timed out).  Performs the actual flash upgrade
- * via cci_util_lt7911_do_firmware_upgrade(), then powers the chip back
- * down through the lt7911uxc driver.
+ * via cci_util_lt7911_do_firmware_upgrade(), power-cycles the chip so the
+ * new firmware takes effect, then schedules info_work to set the DP state.
  */
-static void lt7911uxc_firmware_cb(const struct firmware *fw,
-				  void *context __always_unused)
+static void lt7911uxc_firmware_cb(const struct firmware *fw, void *context)
 {
+	struct lt7911uxc_data *lt7911 = context;
+	bool from_sysfs;
 	int rc;
 
 	if (!fw) {
-		dev_err(s_lt7911uxc->dev, "firmware load failed (fw == NULL)\n");
-		goto done;
+		dev_err(lt7911->dev, "firmware load failed (fw == NULL)\n");
+		goto powerdown;
 	}
 
-	dev_dbg(s_lt7911uxc->dev, "firmware loaded (%zu bytes), starting upgrade\n", fw->size);
+	dev_dbg(lt7911->dev, "firmware loaded (%zu bytes), starting upgrade\n", fw->size);
 
-	if (!s_lt7911uxc->cci_handle) {
-		dev_err(s_lt7911uxc->dev, "cci_handle not available, cannot upgrade firmware\n");
-		goto done;
+	if (!lt7911->cci_handle) {
+		dev_err(lt7911->dev, "cci_handle not available, cannot upgrade firmware\n");
+		goto release;
 	}
 
-	rc = cci_util_lt7911_do_firmware_upgrade(s_lt7911uxc->cci_handle, fw);
+	rc = cci_util_lt7911_do_firmware_upgrade(lt7911->cci_handle, fw);
 	if (rc < 0) {
-		dev_err(s_lt7911uxc->dev, "firmware upgrade failed rc=%d\n", rc);
-	} else {
-		dev_dbg(s_lt7911uxc->dev, "firmware upgrade succeeded\n");
-		/* Power-cycle the device so the new firmware takes effect */
-		dev_dbg(s_lt7911uxc->dev, "power cycling LT7911 after firmware upgrade\n");
-
-		/* Disable DP state before powering down */
-		if (usbmux_setdpstate(s_lt7911uxc->usbmux_handle, false))
-			dev_warn(s_lt7911uxc->dev,
-				 "post-upgrade usbmux_setdpstate(false) failed\n");
-
-		mutex_lock(&s_lt7911uxc->device_lock);
-		rc = lt7911_power_down(s_lt7911uxc);
-		mutex_unlock(&s_lt7911uxc->device_lock);
-		if (rc)
-			dev_err(s_lt7911uxc->dev,
-				"post-upgrade power down failed rc=%d\n", rc);
-		schedule_delayed_work(&s_lt7911uxc->info_work,
-				      msecs_to_jiffies(LT7911_DP_STATE_MS));
+		dev_err(lt7911->dev, "firmware upgrade failed rc=%d\n", rc);
+		goto release;
 	}
 
+	dev_dbg(lt7911->dev, "firmware upgrade succeeded, power cycling LT7911\n");
+
+release:
 	release_firmware(fw);
-done:
-	complete(&lt7911_fw_upgrade_done);
+powerdown:
+	/* Ensure the chip is powered down on every error path */
+	mutex_lock(&lt7911->device_lock);
+	lt7911_power_down(lt7911);
+	from_sysfs = lt7911->fw_upgrade_from_sysfs;
+	lt7911->fw_upgrade_from_sysfs = false;
+	mutex_unlock(&lt7911->device_lock);
+	/*
+	 * Clear the upgrade flag before (optionally) scheduling info_work so
+	 * the GPIO0 IRQ handler resumes normal operation from this point on.
+	 */
+	atomic_set(&lt7911->fw_upgrade_in_progress, 0);
+	if (!from_sysfs) {
+		queue_delayed_work(system_freezable_wq, &lt7911->info_work,
+				      msecs_to_jiffies(LT7911_DP_STATE_MS));
+	} else {
+		dev_dbg(lt7911->dev,
+			"sysfs-triggered upgrade complete, skipping info_work scheduling\n");
+	}
 }
 
 /**
@@ -749,35 +797,63 @@ static ssize_t firmware_upgrade_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int ret, update_data = 0;
 	uint32_t fw_version;
+	bool powered_up_here = false;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
-		dev_err(dev, "lt7911 not powered on\n");
-		return -ENODEV;
+	mutex_lock(&lt7911->device_lock);
+	if (lt7911->connected) {
+		mutex_unlock(&lt7911->device_lock);
+		dev_err(dev, "firmware upgrade not allowed while DP is connected\n");
+		return -EBUSY;
+	}
+	mutex_unlock(&lt7911->device_lock);
+
+	if (atomic_cmpxchg(&lt7911->fw_upgrade_in_progress, 0, 1) != 0) {
+		dev_err(dev, "firmware upgrade already in progress\n");
+		return -EBUSY;
 	}
 
 	ret = kstrtoint(buf, 10, &update_data);
 	if (ret) {
 		dev_err(dev, "kstrtoint error rc=%d\n", ret);
-		return ret;
+		goto err_clear_flag;
 	}
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_clear_flag;
 	}
+
+	mutex_lock(&lt7911->device_lock);
+	if (!lt7911->lt7911_poweron) {
+		ret = lt7911_power_up(lt7911);
+		if (ret) {
+			mutex_unlock(&lt7911->device_lock);
+			dev_err(dev, "lt7911 power up failed rc=%d\n", ret);
+			goto err_clear_flag;
+		}
+		powered_up_here = true;
+	}
+	mutex_unlock(&lt7911->device_lock);
+
+	ret = cci_util_lt7911_read_chip_id(lt7911->cci_handle);
+	if (ret)
+		dev_err(dev, "Failed to read chip id from LT7911: %d\n", ret);
 
 	if (update_data == 1) {
 		/* Version-check: skip upgrade if firmware is already current */
-		fw_version = cci_util_lt7911_get_version(s_lt7911uxc->cci_handle);
+		fw_version = cci_util_lt7911_get_version(lt7911->cci_handle);
 		if (fw_version == LT7911UXC_VERSION_NUM) {
 			dev_dbg(dev, "version 0x%x already current, skipping upgrade\n",
 				    LT7911UXC_VERSION_NUM);
-			return count;
+			ret = 0;
+			goto err_powerdown;
 		}
 		dev_dbg(dev, "version mismatch (got 0x%x expected 0x%x), upgrading\n",
 			    fw_version, LT7911UXC_VERSION_NUM);
@@ -785,16 +861,33 @@ static ssize_t firmware_upgrade_store(struct device *dev,
 		dev_dbg(dev, "forced firmware upgrade requested\n");
 	}
 
-	msleep(500);
-	ret = request_firmware_nowait(THIS_MODULE, true, LT7911_FW_NAME,
-				      dev, GFP_KERNEL,
-				      s_lt7911uxc, lt7911uxc_firmware_cb);
-	if (ret)
-		dev_err(dev, "request_firmware_nowait failed rc=%d\n", ret);
-	else
-		dev_dbg(dev, "firmware loader invoked\n");
+	mutex_lock(&lt7911->device_lock);
+	lt7911->fw_upgrade_from_sysfs = true;
+	mutex_unlock(&lt7911->device_lock);
 
+	ret = request_firmware_nowait(THIS_MODULE, true, LT7911_FW_NAME,
+				      lt7911->dev, GFP_KERNEL,
+				      lt7911, lt7911uxc_firmware_cb);
+	if (ret) {
+		dev_err(dev, "request_firmware_nowait failed rc=%d\n", ret);
+		mutex_lock(&lt7911->device_lock);
+		lt7911->fw_upgrade_from_sysfs = false;
+		mutex_unlock(&lt7911->device_lock);
+		goto err_powerdown;
+	}
+
+	dev_dbg(dev, "firmware loader invoked\n");
 	return count;
+
+err_powerdown:
+	if (powered_up_here) {
+		mutex_lock(&lt7911->device_lock);
+		lt7911_power_down(lt7911);
+		mutex_unlock(&lt7911->device_lock);
+	}
+err_clear_flag:
+	atomic_set(&lt7911->fw_upgrade_in_progress, 0);
+	return ret ? ret : count;
 }
 
 /**
@@ -808,26 +901,39 @@ static ssize_t firmware_upgrade_store(struct device *dev,
 static ssize_t firmware_upgrade_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	uint32_t fw_version;
 	uint8_t hdcp_key[LT7911_HDCPKEY_SIZE] = { 0 };
 	char key_content[LT7911_HDCPKEY_SIZE * 5 + 1] = { 0 };
+	bool powered_up_here = false;
 	int i, rc;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
-		dev_err(dev, "lt7911 not powered on\n");
-		return -ENODEV;
-	}
-
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	fw_version = cci_util_lt7911_get_version(s_lt7911uxc->cci_handle);
-	rc = cci_util_lt7911_read_hdcpkey(s_lt7911uxc->cci_handle, hdcp_key, LT7911_HDCPKEY_SIZE);
+	mutex_lock(&lt7911->device_lock);
+	if (!lt7911->lt7911_poweron) {
+		rc = lt7911_power_up(lt7911);
+		if (rc) {
+			mutex_unlock(&lt7911->device_lock);
+			dev_err(dev, "lt7911 power up failed rc=%d\n", rc);
+			return rc;
+		}
+		powered_up_here = true;
+	}
+	mutex_unlock(&lt7911->device_lock);
+
+	rc = cci_util_lt7911_read_chip_id(lt7911->cci_handle);
+	if (rc)
+		dev_err(dev, "Failed to read chip id from LT7911: %d\n", rc);
+
+	fw_version = cci_util_lt7911_get_version(lt7911->cci_handle);
+	rc = cci_util_lt7911_read_hdcpkey(lt7911->cci_handle, hdcp_key, LT7911_HDCPKEY_SIZE);
 	if (rc < 0)
 		dev_err(dev, "HDCP key read failed rc=%d\n", rc);
 
@@ -837,6 +943,12 @@ static ssize_t firmware_upgrade_show(struct device *dev,
 	else
 		dev_err(dev, "firmware version mismatch: got 0x%x expected 0x%x\n",
 			   fw_version, LT7911UXC_VERSION_NUM);
+
+	if (powered_up_here) {
+		mutex_lock(&lt7911->device_lock);
+		lt7911_power_down(lt7911);
+		mutex_unlock(&lt7911->device_lock);
+	}
 
 	for (i = 0; i < LT7911_HDCPKEY_SIZE; i++)
 		snprintf(key_content + i * 5, 6, "0x%02x ", hdcp_key[i]);
@@ -896,6 +1008,7 @@ static ssize_t lt7911_cc_switch_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int ret, switch_data = 0;
 	struct dpin_cci_util_i2c_reg_array sw[] = {
 		{ .reg_addr = 0xff, .reg_data = 0xe0, .delay = 0, .data_mask = 0 },
@@ -903,10 +1016,10 @@ static ssize_t lt7911_cc_switch_store(struct device *dev,
 		{ .reg_addr = 0xb8, .reg_data = 0x01, .delay = 0, .data_mask = 0 },
 	};
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
@@ -921,12 +1034,12 @@ static ssize_t lt7911_cc_switch_store(struct device *dev,
 	if (switch_data == 2)
 		sw[1].reg_data = 1;
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	ret = cci_util_lt7911_reg_write(s_lt7911uxc->cci_handle, sw, ARRAY_SIZE(sw));
+	ret = cci_util_lt7911_reg_write(lt7911->cci_handle, sw, ARRAY_SIZE(sw));
 	if (ret < 0)
 		dev_err(dev, "cc_switch write failed rc=%d\n", ret);
 
@@ -936,22 +1049,23 @@ static ssize_t lt7911_cc_switch_store(struct device *dev,
 static ssize_t lt7911_cc_switch_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int rc, val = 0;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	rc = cci_util_lt7911_reg_read(s_lt7911uxc->cci_handle, 0xb7, &val);
+	rc = cci_util_lt7911_reg_read(lt7911->cci_handle, 0xb7, &val);
 	if (rc < 0)
 		dev_err(dev, "reg read 0xb7 failed rc=%d\n", rc);
 
@@ -973,6 +1087,7 @@ static ssize_t lt7911_swap_apply_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int ret, switch_data = 0;
 	struct dpin_cci_util_i2c_reg_array sw[] = {
 		{ .reg_addr = 0xff, .reg_data = 0xe0, .delay = 0, .data_mask = 0 },
@@ -982,10 +1097,10 @@ static ssize_t lt7911_swap_apply_store(struct device *dev,
 		{ .reg_addr = 0xee, .reg_data = 0x00, .delay = 0, .data_mask = 0 },
 	};
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
@@ -999,12 +1114,12 @@ static ssize_t lt7911_swap_apply_store(struct device *dev,
 	if (switch_data == 1)
 		sw[2].reg_data = 1;
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	ret = cci_util_lt7911_reg_write(s_lt7911uxc->cci_handle, sw, ARRAY_SIZE(sw));
+	ret = cci_util_lt7911_reg_write(lt7911->cci_handle, sw, ARRAY_SIZE(sw));
 	if (ret < 0)
 		dev_err(dev, "swap_apply write failed rc=%d\n", ret);
 
@@ -1014,22 +1129,23 @@ static ssize_t lt7911_swap_apply_store(struct device *dev,
 static ssize_t lt7911_swap_apply_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int rc, val = 0;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	rc = cci_util_lt7911_reg_read(s_lt7911uxc->cci_handle, 0xb8, &val);
+	rc = cci_util_lt7911_reg_read(lt7911->cci_handle, 0xb8, &val);
 	if (rc < 0)
 		dev_err(dev, "reg read 0xb8 failed rc=%d\n", rc);
 
@@ -1047,22 +1163,23 @@ static ssize_t lt7911_swap_apply_show(struct device *dev,
 static ssize_t lt7911_dp_traning_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int rc, val = 0;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	rc = cci_util_lt7911_reg_read(s_lt7911uxc->cci_handle, 0xa4, &val);
+	rc = cci_util_lt7911_reg_read(lt7911->cci_handle, 0xa4, &val);
 	if (rc < 0)
 		dev_err(dev, "dp training reg read failed rc=%d\n", rc);
 
@@ -1080,22 +1197,23 @@ static ssize_t lt7911_dp_traning_show(struct device *dev,
 static ssize_t lt7911_hdcp_version_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int rc, val = 0;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	rc = cci_util_lt7911_reg_read(s_lt7911uxc->cci_handle, 0x95, &val);
+	rc = cci_util_lt7911_reg_read(lt7911->cci_handle, 0x95, &val);
 	if (rc < 0)
 		dev_err(dev, "HDCP version reg read failed rc=%d\n", rc);
 
@@ -1119,32 +1237,33 @@ static ssize_t lt7911_hdcp_version_show(struct device *dev,
 static ssize_t lt7911_stream_info_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int rc;
 	int irq = 0, width = 0, height = 0, fps = 0, format = 0, afreq = 0, ach = 0;
 	const char *state_str;
 	const char *fmt_str;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	rc = cci_util_lt7911_read_chip_id(s_lt7911uxc->cci_handle);
+	rc = cci_util_lt7911_read_chip_id(lt7911->cci_handle);
 	if (rc)
 		dev_err(dev, "Failed to read chip id from LT7911: %d\n", rc);
-	cci_util_lt7911_enable_i2c(s_lt7911uxc->cci_handle);
-	rc = cci_util_lt7911_get_information(s_lt7911uxc->cci_handle,
+	cci_util_lt7911_enable_i2c(lt7911->cci_handle);
+	rc = cci_util_lt7911_get_information(lt7911->cci_handle,
 					     &irq, &width, &height, &fps,
 					     &format, &afreq, &ach);
-	cci_util_lt7911_disable_i2c(s_lt7911uxc->cci_handle);
+	cci_util_lt7911_disable_i2c(lt7911->cci_handle);
 
 	if (rc) {
 		dev_err(dev, "cci_util_lt7911_get_information failed rc=%d\n", rc);
@@ -1203,7 +1322,7 @@ static ssize_t lt7911_stream_info_show(struct device *dev,
  *
  * Return: 0 on success, negative errno on failure.
  */
-static int lt7911_mipi_enable(int enable)
+static int lt7911_mipi_enable(struct lt7911uxc_data *lt7911, int enable)
 {
 	int rc;
 	/*
@@ -1221,15 +1340,15 @@ static int lt7911_mipi_enable(int enable)
 
 	mipi_ctrl[3].reg_data = (u8)!!enable;
 
-	if (!s_lt7911uxc->cci_handle) {
-		dev_err(s_lt7911uxc->dev, "cci_handle not available\n");
+	if (!lt7911->cci_handle) {
+		dev_err(lt7911->dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	rc = cci_util_lt7911_reg_write(s_lt7911uxc->cci_handle,
+	rc = cci_util_lt7911_reg_write(lt7911->cci_handle,
 				       mipi_ctrl, ARRAY_SIZE(mipi_ctrl));
 	if (rc < 0)
-		dev_err(s_lt7911uxc->dev, "mipi %s write failed rc=%d\n",
+		dev_err(lt7911->dev, "mipi %s write failed rc=%d\n",
 			   enable ? "enable" : "disable", rc);
 	return rc;
 }
@@ -1249,12 +1368,13 @@ static ssize_t lt7911_mipi_status_store(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int rc, mipi_en = 0;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
@@ -1268,7 +1388,7 @@ static ssize_t lt7911_mipi_status_store(struct device *dev,
 	dev_dbg(dev, "mipi status %d (1=enable 0=disable)\n", mipi_en);
 
 	if (mipi_en == 1 || mipi_en == 0)
-		lt7911_mipi_enable(mipi_en);
+		lt7911_mipi_enable(lt7911, mipi_en);
 
 	return count;
 }
@@ -1276,22 +1396,23 @@ static ssize_t lt7911_mipi_status_store(struct device *dev,
 static ssize_t lt7911_mipi_status_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
 	int rc, val = 0;
 
-	if (!s_lt7911uxc)
+	if (!lt7911)
 		return -ENODEV;
 
-	if (!s_lt7911uxc->lt7911_poweron) {
+	if (!lt7911->lt7911_poweron) {
 		dev_err(dev, "lt7911 not powered on\n");
 		return -ENODEV;
 	}
 
-	if (!s_lt7911uxc->cci_handle) {
+	if (!lt7911->cci_handle) {
 		dev_err(dev, "cci_handle not available\n");
 		return -ENODEV;
 	}
 
-	rc = cci_util_lt7911_reg_read(s_lt7911uxc->cci_handle, 0xb0, &val);
+	rc = cci_util_lt7911_reg_read(lt7911->cci_handle, 0xb0, &val);
 	if (rc < 0)
 		dev_err(dev, "mipi status reg read failed rc=%d\n", rc);
 
@@ -1349,101 +1470,95 @@ static int lt7911_create_sysfs(struct lt7911uxc_data *lt7911)
 }
 
 /**
- * lt7911_firmware_upgrade_flow - boot-time automatic firmware upgrade.
+ * lt7911_fw_upgrade_work_fn - worker that runs the post-probe firmware upgrade.
+ * @work: embedded work_struct from struct lt7911uxc_data
  *
- * Called once from the CAM_START_DEV path (via the camera sensor driver)
- * when the LT7911 sensor ID is detected.  Skipped if:
- *   - lt7911_firmware_debug_flag is set (debug mode), or
- *   - the firmware version already matches LT7911UXC_VERSION_NUM.
+ * Scheduled once at the end of lt7911uxc_probe().  Powers up the LT7911,
+ * reads the firmware version, and — if a mismatch is detected — hands off
+ * to request_firmware_nowait() so the actual flash write happens
+ * asynchronously in lt7911uxc_firmware_cb().  If no upgrade is needed,
+ * schedules info_work directly so the driver becomes fully operational.
  *
- * Return:
- *   0        - no upgrade was needed (version already current, or skipped)
- *   1        - upgrade was performed and the device has been power-cycled;
- *              the caller must not continue using stale I2C state
- *   negative - error
+ * The function is a no-op when lt7911_firmware_debug_flag is set.
  */
-static int lt7911_firmware_upgrade_flow(void)
+static void lt7911_fw_upgrade_work_fn(struct work_struct *work)
 {
+	struct lt7911uxc_data *lt7911 =
+		container_of(work, struct lt7911uxc_data, fw_upgrade_work);
 	uint32_t fw_version;
 	int ret;
 
-	if (!s_lt7911uxc)
-		return -ENODEV;
+	atomic_set(&lt7911->fw_upgrade_in_progress, 1);
 
 	if (lt7911_firmware_debug_flag) {
-		dev_dbg(s_lt7911uxc->dev, "debug flag set, skipping auto firmware upgrade\n");
-		return 0;
+		dev_dbg(lt7911->dev, "debug flag set, skipping auto firmware upgrade\n");
+		goto schedule;
 	}
 
-	if (!s_lt7911uxc->lt7911_poweron) {
-		dev_err(s_lt7911uxc->dev, "lt7911 not powered on\n");
-		return -ENODEV;
+	/* Power up the chip so we can read the firmware version over I2C */
+	mutex_lock(&lt7911->device_lock);
+	ret = lt7911_power_up(lt7911);
+	mutex_unlock(&lt7911->device_lock);
+	if (ret) {
+		dev_err(lt7911->dev, "fw_upgrade_work: power up failed rc=%d\n", ret);
+		goto schedule;
 	}
 
-	if (!s_lt7911uxc->cci_handle) {
-		dev_err(s_lt7911uxc->dev, "cci_handle not available\n");
-		return -ENODEV;
+	if (!lt7911->cci_handle) {
+		dev_err(lt7911->dev, "cci_handle not available, skipping firmware upgrade\n");
+		goto powerdown;
 	}
 
-	fw_version = cci_util_lt7911_get_version(s_lt7911uxc->cci_handle);
+	ret = cci_util_lt7911_read_chip_id(lt7911->cci_handle);
+	if (ret)
+		dev_err(lt7911->dev, "Failed to read chip id from LT7911: %d\n", ret);
+
+	fw_version = cci_util_lt7911_get_version(lt7911->cci_handle);
 	if (fw_version == 0) {
-		dev_dbg(s_lt7911uxc->dev, "version read returned 0, skipping upgrade\n");
-		return 0;
+		dev_dbg(lt7911->dev, "version read returned 0, skipping upgrade\n");
+		goto powerdown;
 	}
 	if (fw_version == LT7911UXC_VERSION_NUM) {
-		dev_dbg(s_lt7911uxc->dev,
+		dev_dbg(lt7911->dev,
 			    "firmware version 0x%x is current, no upgrade needed\n",
 			    LT7911UXC_VERSION_NUM);
-		return 0;
+		goto powerdown;
 	}
 
-	dev_dbg(s_lt7911uxc->dev,
-		    "version mismatch (got 0x%x expected 0x%x), starting upgrade\n",
+	dev_dbg(lt7911->dev,
+		"version mismatch (got 0x%x expected 0x%x), requesting firmware\n",
 		    fw_version, LT7911UXC_VERSION_NUM);
-
+	/*
+	 * Hand off to the kernel firmware loader.  lt7911uxc_firmware_cb()
+	 * will flash the image, power-cycle the chip, clear the in-progress
+	 * flag, and schedule info_work when it is done — no blocking here.
+	 */
 	ret = request_firmware_nowait(THIS_MODULE, true, LT7911_FW_NAME,
-				      s_lt7911uxc->dev, GFP_KERNEL,
-				      s_lt7911uxc, lt7911uxc_firmware_cb);
+				      lt7911->dev, GFP_KERNEL,
+				      lt7911, lt7911uxc_firmware_cb);
 	if (ret) {
-		dev_err(s_lt7911uxc->dev, "request_firmware_nowait failed rc=%d\n", ret);
-		return ret;
+		dev_err(lt7911->dev, "request_firmware_nowait failed rc=%d\n", ret);
+		goto powerdown;
 	}
 
-	dev_dbg(s_lt7911uxc->dev, "firmware loader invoked, waiting for completion\n");
-	/*
-	 * Block until lt7911uxc_firmware_cb() signals completion or the
-	 * 45 seconds timeout expires (erase ~1.4 s + write ~30 s + verify).
+	/* lt7911uxc_firmware_cb() will power down, clear the flag, and
+	 * schedule info_work on completion
 	 */
-	reinit_completion(&lt7911_fw_upgrade_done);
-	if (!wait_for_completion_timeout(&lt7911_fw_upgrade_done,
-					 msecs_to_jiffies(45000)))
-		dev_err(s_lt7911uxc->dev, "firmware upgrade timed out\n");
+	return;
 
+powerdown:
+	/* Power down the chip on any error path after a successful power-up */
+	mutex_lock(&lt7911->device_lock);
+	lt7911_power_down(lt7911);
+	mutex_unlock(&lt7911->device_lock);
+schedule:
+	atomic_set(&lt7911->fw_upgrade_in_progress, 0);
 	/*
-	 * Return 1 to signal that an upgrade was performed and the device has
-	 * been power-cycled.  The caller must not continue using the I2C state
-	 * that was read before the upgrade.
+	 * No upgrade was performed (version current, power-up failed, etc.).
+	 * Schedule info_work so the DP state is set and the driver is ready.
 	 */
-	return 1;
-}
-
-/**
- * lt7911_run_boot_upgrade - run the boot-time firmware upgrade exactly once.
- *
- * lt7911_bootup_probe_flag guards re-entry so subsequent calls are no-ops.
- *
- * Return: value from lt7911_firmware_upgrade_flow():
- *   0        - no upgrade needed
- *   1        - upgrade performed; device has been power-cycled
- *   negative - error
- */
-static int lt7911_run_boot_upgrade(void)
-{
-	if (lt7911_bootup_probe_flag)
-		return 0;
-
-	lt7911_bootup_probe_flag = 1;
-	return lt7911_firmware_upgrade_flow();
+	queue_delayed_work(system_freezable_wq, &lt7911->info_work,
+					msecs_to_jiffies(LT7911_DP_STATE_MS));
 }
 
 static int lt7911uxc_probe(struct platform_device *pdev)
@@ -1458,6 +1573,8 @@ static int lt7911uxc_probe(struct platform_device *pdev)
 	mutex_init(&lt7911->device_lock);
 	INIT_DELAYED_WORK(&lt7911->info_work, lt7911_info_work_fn);
 	INIT_WORK(&lt7911->dpalt_work, lt7911uxc_dpalt_work_fn);
+	INIT_WORK(&lt7911->fw_upgrade_work, lt7911_fw_upgrade_work_fn);
+	atomic_set(&lt7911->fw_upgrade_in_progress, 0);
 	atomic_set(&lt7911->int_event_cnt, 0);
 	dev_set_drvdata(&pdev->dev, lt7911);
 	lt7911->dev = &pdev->dev;
@@ -1531,8 +1648,13 @@ static int lt7911uxc_probe(struct platform_device *pdev)
 	}
 
 	dev_dbg(lt7911->dev, "Successfully probed..\n");
-	s_lt7911uxc = lt7911;
-	schedule_delayed_work(&lt7911->info_work, msecs_to_jiffies(LT7911_DP_STATE_MS));
+	/*
+	 * Schedule the firmware upgrade worker.  It will power up the chip,
+	 * check the version, and either flash new firmware asynchronously or
+	 * fall straight through to scheduling info_work — all without blocking
+	 * the probe path.
+	 */
+	queue_work(system_freezable_wq, &lt7911->fw_upgrade_work);
 	return rc;
 }
 
@@ -1548,6 +1670,7 @@ static int lt7911uxc_remove(struct platform_device *pdev)
 		if (lt7911->lt7911_gpio0_irq > 0)
 			disable_irq(lt7911->lt7911_gpio0_irq);
 		cancel_delayed_work_sync(&lt7911->info_work);
+		cancel_work_sync(&lt7911->fw_upgrade_work);
 		cancel_work_sync(&lt7911->dpalt_work);
 		atomic_set(&lt7911->int_event_cnt, 0);
 		if (lt7911_sysfs_registered) {
@@ -1564,7 +1687,6 @@ static int lt7911uxc_remove(struct platform_device *pdev)
 		usbmux_put_device(lt7911->usbmux_handle);
 		lt7911->usbmux_handle = NULL;
 	}
-	s_lt7911uxc = NULL;
 	return 0;
 }
 
