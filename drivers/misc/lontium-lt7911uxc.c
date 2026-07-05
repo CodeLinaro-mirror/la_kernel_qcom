@@ -22,6 +22,10 @@
 #include "dpin_cci_util.h"
 #include "usbmux_ps8822.h"
 
+/* Instantiate all tracepoints defined in lontium-lt7911uxc-trace.h */
+#define CREATE_TRACE_POINTS
+#include "lontium-lt7911uxc-trace.h"
+
 /* LT7911 Power Sequence Delays (milliseconds) */
 #define LT7911_VDD_DELAY_MS             20
 #define LT7911_RST_HIGH_DELAY_MS        10
@@ -263,6 +267,7 @@ static void lt7911_notify_event(struct lt7911uxc_data *lt7911, int irq, int w, i
 
 	dev_dbg(lt7911->dev, "irq:%d, w:%d, h:%d, fps:%d.%02d, format:%d, afreq:%d, ach:%d\n",
 			irq, w, h, fps / 100, fps % 100, format, afreq, ach);
+	trace_lt7911_uevent_sent(irq, w, h, fps, format, afreq, ach);
 	kobject_uevent_env(&lt7911->dev->kobj, KOBJ_CHANGE, envp);
 }
 
@@ -361,6 +366,7 @@ static void lt7911uxc_dpalt_work_fn(struct work_struct *work)
 		usbmux_sethpd(lt7911->usbmux_handle, true);
 		lt7911uxc_send_pan_ack(lt7911, DPIN_PAN_ACK, port_index);
 		dev_dbg(lt7911->dev, "sending the Attention Message ack to ADSP PD\n");
+		trace_lt7911_attention_ack(port_index, DPIN_SEND_ATTENTION);
 		lt7911uxc_send_pan_ack(lt7911, DPIN_SEND_ATTENTION, port_index);
 	}
 }
@@ -530,6 +536,8 @@ static int lt7911uxc_dpalt_notify(void *priv, void *payload_data, size_t len)
 		}
 
 		dev_dbg(lt7911->dev, "number of lanes:%d\n", lt7911->lanes);
+		trace_lt7911_dpin_connected(port_index, lt7911->lanes,
+					    lt7911->orientation);
 
 		newly_connected = lt7911->connected;
 	}
@@ -656,6 +664,7 @@ static int lt7911uxc_parse_dts(struct lt7911uxc_data *lt7911)
 static irqreturn_t lt7911_gpio0_irq_handler(int irq, void *dev_id)
 {
 	struct lt7911uxc_data *lt7911 = dev_id;
+	int event_cnt;
 
 	dev_dbg(lt7911->dev, "GPIO0 IRQ fired (irq=%d)\n", irq);
 
@@ -677,7 +686,8 @@ static irqreturn_t lt7911_gpio0_irq_handler(int irq, void *dev_id)
 	 * transaction; if it changed, at least one interrupt was coalesced and
 	 * the loop re-reads the hardware state.
 	 */
-	atomic_inc(&lt7911->int_event_cnt);
+	event_cnt = atomic_inc_return(&lt7911->int_event_cnt);
+	trace_lt7911_gpio0_irq(irq, event_cnt);
 	cancel_delayed_work(&lt7911->info_work);
 	queue_delayed_work(system_freezable_wq, &lt7911->info_work,
 			msecs_to_jiffies(LT7911_DRAIN_SETTLE_MS));
