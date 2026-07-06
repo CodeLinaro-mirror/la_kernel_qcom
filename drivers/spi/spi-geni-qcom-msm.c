@@ -179,8 +179,7 @@ static int get_spi_clk_cfg(unsigned int speed_hz,
 	return ret;
 }
 
-static void handle_se_timeout(struct spi_controller *spi,
-			      struct spi_message *msg)
+static void handle_se_timeout(struct spi_controller *spi)
 {
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
 	unsigned long time_left;
@@ -196,24 +195,20 @@ static void handle_se_timeout(struct spi_controller *spi,
 	xfer = mas->cur_xfer;
 	mas->cur_xfer = NULL;
 
-	if (spi->target) {
-		/*
-		 * skip CMD Cancel sequnece since spi target
-		 * doesn`t support CMD Cancel sequnece
-		 */
+	/* The controller doesn't support the Cancel commnand in target mode */
+	if (!spi->target) {
+		reinit_completion(&mas->cancel_done);
+		geni_se_cancel_m_cmd(se);
+
 		spin_unlock_irq(&mas->lock);
-		goto reset_if_dma;
+
+		time_left = wait_for_completion_timeout(&mas->cancel_done, HZ);
+		if (time_left)
+			goto reset_if_dma;
+
+		spin_lock_irq(&mas->lock);
 	}
 
-	reinit_completion(&mas->cancel_done);
-	geni_se_cancel_m_cmd(se);
-	spin_unlock_irq(&mas->lock);
-
-	time_left = wait_for_completion_timeout(&mas->cancel_done, HZ);
-	if (time_left)
-		goto reset_if_dma;
-
-	spin_lock_irq(&mas->lock);
 	reinit_completion(&mas->abort_done);
 	geni_se_abort_m_cmd(se);
 	spin_unlock_irq(&mas->lock);
@@ -261,7 +256,7 @@ reset_if_dma:
 	}
 }
 
-static void handle_gpi_timeout(struct spi_controller *spi, struct spi_message *msg)
+static void handle_gpi_timeout(struct spi_controller *spi)
 {
 	struct spi_geni_master *mas = spi_controller_get_devdata(spi);
 
@@ -276,10 +271,10 @@ static void spi_geni_handle_err(struct spi_controller *spi, struct spi_message *
 	switch (mas->cur_xfer_mode) {
 	case GENI_SE_FIFO:
 	case GENI_SE_DMA:
-		handle_se_timeout(spi, msg);
+		handle_se_timeout(spi);
 		break;
 	case GENI_GPI_DMA:
-		handle_gpi_timeout(spi, msg);
+		handle_gpi_timeout(spi);
 		break;
 	default:
 		dev_err(mas->dev, "Abort on Mode:%d not supported\n", mas->cur_xfer_mode);
@@ -318,55 +313,6 @@ static bool spi_geni_is_abort_still_pending(struct spi_geni_master *mas)
 	mas->abort_failed = false;
 
 	return false;
-}
-
-static void spi_geni_set_cs(struct spi_device *slv, bool set_flag)
-{
-	struct spi_geni_master *mas = spi_controller_get_devdata(slv->controller);
-	struct spi_controller *spi = dev_get_drvdata(mas->dev);
-	struct geni_se *se = &mas->se;
-	unsigned long time_left;
-
-	if (!(slv->mode & SPI_CS_HIGH))
-		set_flag = !set_flag;
-
-	if (set_flag == mas->cs_flag)
-		return;
-
-	pm_runtime_get_sync(mas->dev);
-
-	if (spi_geni_is_abort_still_pending(mas)) {
-		dev_err(mas->dev, "Can't set chip select\n");
-		goto exit;
-	}
-
-	spin_lock_irq(&mas->lock);
-	if (mas->cur_xfer) {
-		dev_err(mas->dev, "Can't set CS when prev xfer running\n");
-		spin_unlock_irq(&mas->lock);
-		goto exit;
-	}
-
-	mas->cs_flag = set_flag;
-	/* set xfer_mode to FIFO to complete cs_done in isr */
-	mas->cur_xfer_mode = GENI_SE_FIFO;
-	geni_se_select_mode(se, mas->cur_xfer_mode);
-
-	reinit_completion(&mas->cs_done);
-	if (set_flag)
-		geni_se_setup_m_cmd(se, SPI_CS_ASSERT, 0);
-	else
-		geni_se_setup_m_cmd(se, SPI_CS_DEASSERT, 0);
-	spin_unlock_irq(&mas->lock);
-
-	time_left = wait_for_completion_timeout(&mas->cs_done, HZ);
-	if (!time_left) {
-		dev_warn(mas->dev, "Timeout setting chip select\n");
-		handle_se_timeout(spi, NULL);
-	}
-
-exit:
-	pm_runtime_put(mas->dev);
 }
 
 static void spi_setup_word_len(struct spi_geni_master *mas, u16 mode,
@@ -469,7 +415,7 @@ static int setup_fifo_params(struct spi_device *spi_slv,
 		mas->last_mode = spi_slv->mode;
 	}
 
-	return mas->dev_data->geni_spi_set_rate(mas->se.dev, spi_slv->max_speed_hz);
+	return 0;
 }
 
 static void
@@ -762,7 +708,7 @@ static int spi_geni_init(struct spi_geni_master *mas)
 		break;
 	}
 
-	/* We always control CS manually */
+	/* We never control CS manually */
 	if (!spi->target) {
 		spi_tx_cfg = readl(se->base + SE_SPI_TRANS_CFG);
 		spi_tx_cfg &= ~CS_TOGGLE;
@@ -875,6 +821,7 @@ static int setup_se_xfer(struct spi_transfer *xfer,
 				u16 mode, struct spi_controller *spi)
 {
 	u32 m_cmd = 0;
+	u32 m_params = 0;
 	u32 len;
 	struct geni_se *se = &mas->se;
 	int ret;
@@ -947,12 +894,17 @@ static int setup_se_xfer(struct spi_transfer *xfer,
 
 	geni_se_select_mode(se, mas->cur_xfer_mode);
 
+	if (!xfer->cs_change) {
+		if (!list_is_last(&xfer->transfer_list, &spi->cur_msg->transfers))
+			m_params = FRAGMENTATION;
+	}
+
 	/*
 	 * Lock around right before we start the transfer since our
 	 * interrupt could come in at any time now.
 	 */
 	spin_lock_irq(&mas->lock);
-	geni_se_setup_m_cmd(se, m_cmd, FRAGMENTATION);
+	geni_se_setup_m_cmd(se, m_cmd, m_params);
 
 	if (mas->cur_xfer_mode == GENI_SE_DMA) {
 		if (m_cmd & SPI_RX_ONLY)
@@ -1099,6 +1051,17 @@ static irqreturn_t geni_spi_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int spi_geni_target_abort(struct spi_controller *spi)
+{
+	if (!spi->cur_msg)
+		return 0;
+
+	handle_se_timeout(spi);
+	spi_finalize_current_transfer(spi);
+
+	return 0;
+}
+
 static int geni_spi_set_level(struct device *dev, unsigned long clk_freq)
 {
 	struct spi_controller *spi = dev_get_drvdata(dev);
@@ -1242,7 +1205,11 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	spi = devm_spi_alloc_host(dev, sizeof(*mas));
+	if (device_property_read_bool(dev, "spi-slave"))
+		spi = devm_spi_alloc_target(dev, sizeof(*mas));
+	else
+		spi = devm_spi_alloc_host(dev, sizeof(*mas));
+
 	if (!spi)
 		return -ENOMEM;
 
@@ -1287,27 +1254,19 @@ static int spi_geni_probe(struct platform_device *pdev)
 	init_completion(&mas->rx_reset_done);
 	spin_lock_init(&mas->lock);
 
+	if (spi->target)
+		spi->target_abort = spi_geni_target_abort;
+
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 250);
 	ret = devm_pm_runtime_enable(dev);
 	if (ret)
 		return ret;
 
-	if (device_property_read_bool(&pdev->dev, "spi-slave"))
-		spi->target = true;
-
 	mas->cur_xfer_mode = GENI_SE_INVALID;
 	ret = spi_geni_init(mas);
 	if (ret)
 		return ret;
-
-	/*
-	 * check the mode supported and set_cs for fifo mode only
-	 * for dma (gsi) mode, the gsi will set cs based on params passed in
-	 * TRE
-	 */
-	if (!spi->target && mas->cur_xfer_mode == GENI_SE_FIFO)
-		spi->set_cs = spi_geni_set_cs;
 
 	/*
 	 * TX is required per GSI spec, see setup_gsi_xfer().
@@ -1344,6 +1303,9 @@ static int __maybe_unused spi_geni_suspend(struct device *dev)
 {
 	struct spi_controller *spi = dev_get_drvdata(dev);
 	int ret;
+
+	if (spi->target)
+		spi_geni_target_abort(spi);
 
 	ret = spi_controller_suspend(spi);
 	if (ret)
