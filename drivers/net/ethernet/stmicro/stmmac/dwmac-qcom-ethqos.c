@@ -8,6 +8,8 @@
 #include <linux/phy.h>
 #include <linux/phy/phy.h>
 #include <linux/pcs-xpcs-qcom.h>
+#include <linux/of_irq.h>
+#include <linux/irqdomain.h>
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
@@ -154,6 +156,7 @@ struct qcom_ethqos {
 	unsigned int speed;
 	int serdes_speed;
 	phy_interface_t phy_mode;
+	int switch_reset_detect_irq;
 
 	const struct ethqos_emac_por *por;
 	unsigned int num_por;
@@ -1012,6 +1015,92 @@ static void ethqos_fix_mac_speed(void *priv_n, unsigned int speed, unsigned int 
 				  DUPLEX_FULL);
 }
 
+static int qcom_ethqos_map_switch_reset_detect_irq(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	struct device_node *irq_np;
+	int irq;
+
+	irq_np = of_parse_phandle(np, "switch-reset-detect-source", 0);
+	if (!irq_np) {
+		dev_dbg(dev, "switch-reset-detect-source node not found\n");
+		return 0;
+	}
+
+	if (!of_property_present(irq_np, "interrupts") &&
+	    !of_property_present(irq_np, "interrupts-extended")) {
+		dev_dbg(dev, "No interrupts in switch reset detect node\n");
+		of_node_put(irq_np);
+		return 0;
+	}
+
+	irq = irq_of_parse_and_map(irq_np, 0);
+	of_node_put(irq_np);
+
+	if (!irq) {
+		dev_dbg(dev, "Map switch reset detect IRQ failed\n");
+		return 0;
+	}
+
+	return irq;
+}
+
+static void qcom_ethqos_unmap_switch_reset_detect_irq(void *data)
+{
+	irq_dispose_mapping((unsigned int)(unsigned long)data);
+}
+
+static irqreturn_t qcom_ethqos_switch_reset_detect_irq_handler(int irq, void *data)
+{
+	struct qcom_ethqos *ethqos = data;
+	struct net_device *ndev = platform_get_drvdata(ethqos->pdev);
+	struct stmmac_priv *priv;
+
+	if (!ndev)
+		return IRQ_NONE;
+
+	priv = netdev_priv(ndev);
+	stmmac_handle_switch_reset(priv);
+
+	return IRQ_HANDLED;
+}
+
+static void qcom_ethqos_setup_switch_reset_detect_irq(struct device *dev,
+						      struct qcom_ethqos *ethqos)
+{
+	int irq, ret;
+
+	ethqos->switch_reset_detect_irq = 0;
+
+	irq = qcom_ethqos_map_switch_reset_detect_irq(dev);
+	if (irq <= 0)
+		return;
+
+	ret = devm_add_action_or_reset(dev,
+				       qcom_ethqos_unmap_switch_reset_detect_irq,
+				       (void *)(unsigned long)irq);
+	if (ret) {
+		dev_warn(dev, "Failed to register IRQ cleanup: %d\n", ret);
+		/* The action will be called on failure; irq mapping already cleaned up */
+		return;
+	}
+
+	ret = devm_request_irq(dev, irq,
+			       qcom_ethqos_switch_reset_detect_irq_handler,
+			       IRQF_TRIGGER_FALLING | IRQF_SHARED,
+			       "qcom-ethqos-detect", ethqos);
+	if (ret) {
+		dev_warn(dev, "Failed to request switch reset detect IRQ %d: %d\n",
+			 irq, ret);
+		return;
+	}
+
+	ethqos->switch_reset_detect_irq = irq;
+
+	dev_info(dev, "Registered switch reset detect IRQ %d\n",
+		 ethqos->switch_reset_detect_irq);
+}
+
 static int qcom_ethqos_serdes_powerup(struct net_device *ndev, void *priv)
 {
 	struct qcom_ethqos *ethqos = priv;
@@ -1407,7 +1496,13 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	for (i = 1; i < plat_dat->tx_queues_to_use; i++)
 		plat_dat->tx_queues_cfg[i].tbs_en = 1;
 
-	return devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	ret = devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+
+	/* Register switch reset detect IRQ */
+	if (!ret)
+		qcom_ethqos_setup_switch_reset_detect_irq(dev, ethqos);
+
+	return ret;
 }
 
 static const struct of_device_id qcom_ethqos_match[] = {
