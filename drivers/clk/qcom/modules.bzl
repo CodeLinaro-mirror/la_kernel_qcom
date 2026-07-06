@@ -1510,6 +1510,45 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/clk/qcom/dispcc-glymur",
+        out = "dispcc-glymur.ko",
+        config = "CONFIG_CLK_GLYMUR_DISPCC",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-alpha-pll.h",
+            "drivers/clk/qcom/clk-branch.h",
+            "drivers/clk/qcom/clk-pll.h",
+            "drivers/clk/qcom/clk-rcg.h",
+            "drivers/clk/qcom/clk-regmap-divider.h",
+            "drivers/clk/qcom/clk-regmap-mux.h",
+            "drivers/clk/qcom/clk-regmap.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/dispcc-glymur.c",
+            "drivers/clk/qcom/gdsc.h",
+            "drivers/clk/qcom/reset.h",
+            "drivers/clk/qcom/vdd-class.h",
+            "drivers/clk/qcom/vdd-level.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-qcom",
+            "drivers/clk/qcom/gdsc-regulator",
+            "drivers/regulator/debug-regulator",
+            "drivers/regulator/proxy-consumer",
+            "drivers/soc/qcom/crm-v2",
+            "kernel/trace/qcom_ipc_logging",
+            "drivers/soc/qcom/minidump",
+            "drivers/soc/qcom/smem",
+            "drivers/soc/qcom/debug_symbol",
+            "drivers/dma-buf/heaps/qcom_dma_heaps",
+            "drivers/iommu/msm_dma_iommu_mapping",
+            "drivers/soc/qcom/mem_buf/mem_buf_dev",
+            "drivers/soc/qcom/secure_buffer",
+            "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
+
+    registry.register(
         name = "drivers/clk/qcom/dispcc-khaje",
         out = "dispcc-khaje.ko",
         config = "CONFIG_SM_DISPCC_KHAJE",
