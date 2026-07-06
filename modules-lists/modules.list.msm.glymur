@@ -41,3 +41,14 @@ phy-qcom-qmp-combo.ko
 dwc3-msm.ko
 pci-msm-drv.ko
 spmi-pmic-arb.ko
+regmap-spmi.ko
+qti-regmap-debugfs.ko
+qcom-spmi-pmic.ko
+pinctrl-spmi-gpio.ko
+nvmem_qcom-spmi-sdam.ko
+rtc-pm8xxx.ko
+pmic-pon-log.ko
+msm_gpi.ko
+i2c-msm-geni.ko
+msm_geni_serial.ko
+spi-msm-geni.ko
