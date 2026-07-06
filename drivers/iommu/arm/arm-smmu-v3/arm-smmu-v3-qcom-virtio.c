@@ -696,6 +696,10 @@ static int arm_vsmmu_device_probe(struct platform_device *pdev)
 		return ret;
 	/* Record our private device structure */
 	platform_set_drvdata(pdev, smmu);
+
+	mutex_init(&smmu->streams_mutex);
+	smmu->streams = RB_ROOT;
+
 	/* And we're up. */
 	vdev = dev_to_virtio(dev->parent);
 	ret = iommu_device_sysfs_add(&smmu->iommu, dev, NULL,

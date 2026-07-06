@@ -68,7 +68,7 @@ int qcom_smci_call(struct si_object *service, unsigned long op,
 		pr_err("Failed to do invoke for %lu with result %d(ret = %d)\n",
 			op, *result, ret);
 
-	return ret ? ret : qcom_scmi_remap_error(*result);
+	return ret;
 }
 
 int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
@@ -94,7 +94,8 @@ int qcom_smci_smo_call(struct si_object *image_service, struct si_object *smo,
 	 * get_si_object	--- rercount +1
 	 * si_object_do_invoke	--- refcount -1, regardless of success or failure
 	 */
-	return qcom_smci_call(image_service, op, args, &result);
+	ret = qcom_smci_call(image_service, op, args, &result);
+	return qcom_scmi_remap_error(ret, result);
 }
 
 int qcom_smci_init_client_service(u32 uid, struct si_object **service)
@@ -157,6 +158,7 @@ static int qcom_smci_get_client_image_service(u32 peripheral, unsigned long op,
 	args[2].type = SI_AT_END;
 
 	ret = qcom_smci_call(service, op, args, &result);
+	ret = qcom_scmi_remap_error(ret, result);
 	if (ret)
 		return ret;
 

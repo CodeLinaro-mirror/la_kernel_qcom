@@ -74,6 +74,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/mmc/host/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/net/Kconfig"
 
+source "$(KCONFIG_EXT_PREFIX)drivers/nvmem/layouts/Kconfig"
+
 source "$(KCONFIG_EXT_PREFIX)drivers/pci/controller/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/perf/Kconfig"
@@ -91,6 +93,8 @@ source "$(KCONFIG_EXT_PREFIX)drivers/power/supply/Kconfig"
 source "$(KCONFIG_EXT_PREFIX)drivers/powercap/qcom/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/ptp/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/pwm/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)drivers/regulator/Kconfig"
 
