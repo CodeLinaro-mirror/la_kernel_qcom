@@ -70,3 +70,5 @@ deferred-free-helper.ko
 msm_dma_iommu_mapping.ko
 nvmem_qfprom.ko
 gic_intr_routing.ko
+qcom_dpd_proxy.ko
+qcom_dpd_proxy_iommu.ko
