@@ -9460,8 +9460,10 @@ static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
 	pcie_dev->crm_dev = crm_get_device("pcie_crm");
 
 	if (IS_ERR(pcie_dev->crm_dev)) {
-		PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev\n",
-				pcie_dev->rc_idx);
+		ret = PTR_ERR(pcie_dev->crm_dev);
+		pcie_dev->crm_dev = NULL;
+		PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev: %d\n",
+				pcie_dev->rc_idx, ret);
 		return ret;
 	}
 
