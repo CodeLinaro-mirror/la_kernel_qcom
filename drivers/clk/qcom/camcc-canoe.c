@@ -3024,21 +3024,21 @@ static int cam_cc_canoe_fixup_whale(struct platform_device *pdev, struct regmap 
 		return -EINVAL;
 
 	if (!strcmp(compat, "qcom,whale-camcc")) {
-		cam_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
+		cam_cc_pll0_config.config_ctl_hi_val = 0x0a826060;
 		cam_cc_pll0_config.cal_l = 0x48;
-		cam_cc_pll1_config.config_ctl_hi_val = 0x0a8060e0;
+		cam_cc_pll1_config.config_ctl_hi_val = 0x0a826060;
 		cam_cc_pll1_config.cal_l = 0x48;
-		cam_cc_pll2_config.config_ctl_hi_val = 0x0a8060e0;
+		cam_cc_pll2_config.config_ctl_hi_val = 0x0a826060;
 		cam_cc_pll2_config.cal_l = 0x48;
-		cam_cc_pll3_config.config_ctl_hi_val = 0x0a8060e0;
+		cam_cc_pll3_config.config_ctl_hi_val = 0x0a826060;
 		cam_cc_pll3_config.cal_l = 0x48;
-		cam_cc_pll4_config.config_ctl_hi_val = 0x0a8060e0;
+		cam_cc_pll4_config.config_ctl_hi_val = 0x0a826060;
 		cam_cc_pll4_config.cal_l = 0x48;
-		cam_cc_pll5_config.config_ctl_hi_val = 0x0a8060e0;
+		cam_cc_pll5_config.config_ctl_hi_val = 0x0a826060;
 		cam_cc_pll5_config.cal_l = 0x48;
-		cam_cc_pll6_config.config_ctl_hi_val = 0x0a8060e0;
+		cam_cc_pll6_config.config_ctl_hi_val = 0x0a826060;
 		cam_cc_pll6_config.cal_l = 0x48;
-		cam_cc_pll7_config.config_ctl_hi_val = 0x0a8060e0;
+		cam_cc_pll7_config.config_ctl_hi_val = 0x0a826060;
 		cam_cc_pll7_config.cal_l = 0x48;
 	}
 

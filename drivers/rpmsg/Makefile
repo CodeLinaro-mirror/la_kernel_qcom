@@ -20,3 +20,5 @@ obj-$(CONFIG_RPMSG_QCOM_GLINK_RPM) += qcom_glink_rpm.o
 
 obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd.o
 
+obj-$(CONFIG_MSM_RPM_SMD) += rpm_dump.o
+

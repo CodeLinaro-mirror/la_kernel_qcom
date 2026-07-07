@@ -1,5 +1,6 @@
 lahaina_perf_config = {
     # keep sorted
+    "CONFIG_AQUANTIA_PHY": "m",
     "CONFIG_ARCH_LAHAINA": "y",
     "CONFIG_ARCH_YUPIK": "y",
     "CONFIG_ARM64_AMU_EXTN": "n",
@@ -45,6 +46,7 @@ lahaina_perf_config = {
     "CONFIG_CPU_IDLE_GOV_QCOM_LPM": "m",
     "CONFIG_DEVFREQ_GOV_QCOM_ADRENO_TZ": "m",
     "CONFIG_DEVFREQ_GOV_QCOM_GPUBW_MON": "m",
+    "CONFIG_DRM_AUX_BRIDGE": "m",
     "CONFIG_DRM_DISPLAY_DP_HELPER": "y",
     "CONFIG_DRM_DISPLAY_HELPER": "m",
     "CONFIG_DRM_LONTIUM_LT9611UXC": "m",
@@ -360,6 +362,7 @@ lahaina_perf_config = {
     "CONFIG_STM_SOURCE_FTRACE": "m",
     "CONFIG_SYN_COOKIES": "y",
     "CONFIG_TOUCHSCREEN_CAP1296": "m",
+    "CONFIG_TYPEC_MUX_NB7VPQ904M": "m",
     "CONFIG_UAPI_HEADER_TEST": "y",
     "CONFIG_UCSI_QTI_GLINK": "m",
     "CONFIG_UIO_MSM_SHAREDMEM": "m",
@@ -380,7 +383,6 @@ lahaina_perf_config = {
     "CONFIG_USB_MSM_SSPHY_QMP": "m",
     "CONFIG_USB_QCOM_EMU_PHY": "m",
     "CONFIG_USB_REDRIVER": "m",
-    "CONFIG_USB_REDRIVER_NB7VPQ904M": "m",
     "CONFIG_VIDEO_QCOM_VENUS": "n",
     "CONFIG_VIRT_DRIVERS": "y",
     "CONFIG_VIRT_WIFI": "n",

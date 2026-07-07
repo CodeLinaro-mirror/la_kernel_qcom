@@ -3253,8 +3253,10 @@ int arm_smmu_init_structures(struct arm_smmu_device *smmu)
 {
 	int ret;
 
-	mutex_init(&smmu->streams_mutex);
-	smmu->streams = RB_ROOT;
+	if (!(smmu->options & ARM_SMMU_OPT_VIRTIO)) {
+		mutex_init(&smmu->streams_mutex);
+		smmu->streams = RB_ROOT;
+	}
 
 	ret = arm_smmu_init_queues(smmu);
 	if (ret)

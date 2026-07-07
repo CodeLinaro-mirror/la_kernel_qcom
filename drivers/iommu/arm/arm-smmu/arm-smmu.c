@@ -4142,12 +4142,13 @@ static int __maybe_unused arm_smmu_pm_freeze_late(struct device *dev)
 	int idx, ret;
 
 	/*
-	 * Power on unconditionally to access SMMU registers for freeing
-	 * secure page tables, regardless of the current runtime PM state.
-	 * arm_smmu_runtime_suspend() at the end will power off and leave
-	 * the device in a suspended state before hibernation.
+	 * Power on the SMMU to access registers for freeing secure page
+	 * tables. arm_smmu_rpm_get() properly handles any concurrent
+	 * runtime PM state transitions, avoiding clock enable failures.
+	 * arm_smmu_rpm_put() at the end will power off the device
+	 * before hibernation completes.
 	 */
-	ret = arm_smmu_runtime_resume(dev);
+	ret = arm_smmu_rpm_get(smmu);
 	if (ret) {
 		dev_err(smmu->dev, "Couldn't power on the smmu during pm freeze: %d\n", ret);
 		return ret;
@@ -4163,11 +4164,7 @@ static int __maybe_unused arm_smmu_pm_freeze_late(struct device *dev)
 			}
 		}
 	}
-	ret = arm_smmu_runtime_suspend(dev);
-	if (ret) {
-		dev_err(dev, "Failed to suspend\n");
-		return ret;
-	}
+	arm_smmu_rpm_put(smmu);
 	return 0;
 }
 

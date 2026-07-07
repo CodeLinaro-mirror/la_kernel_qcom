@@ -559,19 +559,7 @@ static int smmu_attach_stage_2(void)
 	       FIELD_PREP(ARM_SMMU_VTCR_T0SZ, pt_cfg->arm_lpae_s2_cfg.vtcr.tsz);
 
 	for_each_smmu(smmu) {
-		u64 page_pa;
 		u32 sctlr_val;
-		int ret;
-
-		page_pa = (u64)arm_smmu_page_pa(smmu, smmu->host_s2_cb_idx);
-
-		/* Donate the S2 context bank page to hypervisor */
-		ret = ___pkvm_host_donate_hyp(page_pa >> PAGE_SHIFT, 1, true);
-		if (ret) {
-			smmu_v2_debug_print("Failed to donate CB page: %d\n",
-					    ret);
-			return ret;
-		}
 
 		/* Configure the stage-2 translation registers */
 		arm_smmu_cb_writeq(smmu, smmu->host_s2_cb_idx,
@@ -797,6 +785,7 @@ static struct smmu_vendor_driver smmuv2_driver = {
 int smmuv2_hyp_nesting_init(void)
 {
 	int smmu_arr_size = PAGE_ALIGN(sizeof(*smmu_v2_nested_base) * smmu_v2_nested_count);
+	struct smmu_v2_nested *smmu;
 	int ret;
 
 	/* Register this driver with the common vendor module */
@@ -809,7 +798,7 @@ int smmuv2_hyp_nesting_init(void)
 	u32 page_count = smmu_arr_size >> PAGE_SHIFT;
 
 	ret = ___pkvm_host_donate_hyp((hyp_virt_to_phys(smmu_v2_nested_base) >> PAGE_SHIFT),
-				      page_count, true);
+				      page_count, false);
 	if (ret)
 		return ret;
 
@@ -818,6 +807,21 @@ int smmuv2_hyp_nesting_init(void)
 		return ret;
 
 	ret = hw_profile_init();
+	if (ret)
+		return ret;
+
+	for_each_smmu(smmu) {
+		u64 page_pa;
+
+		page_pa = (u64)arm_smmu_page_pa(smmu, smmu->host_s2_cb_idx);
+
+		/* Donate the S2 context bank page to hypervisor */
+		ret = ___pkvm_host_donate_hyp(page_pa >> PAGE_SHIFT, 1, true);
+		if (ret) {
+			smmu_v2_debug_print("Failed to donate CB page: %d\n", ret);
+			return ret;
+		}
+	}
 
 	return ret;
 }

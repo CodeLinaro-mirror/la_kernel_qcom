@@ -4,6 +4,7 @@ qcom-scm.ko
 cmd-db.ko
 qcom_rpmh.ko
 arm_smmu.ko
+arm_smmu_v3.ko
 smem.ko
 qcom_iommu_util.ko
 socinfo.ko
@@ -15,3 +16,10 @@ pinctrl-glymur.ko
 debug_symbol.ko
 qcom-dload-mode.ko
 qcom_cpu_vendor_hooks.ko
+debug-regulator.ko
+proxy-consumer.ko
+qti-fixed-regulator.ko
+rpmh-regulator.ko
+pkvm-geni.ko
+pkvm-smc-filter.ko
+qcom_smmu_v2_v3_dispatcher.ko
