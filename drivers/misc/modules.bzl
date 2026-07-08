@@ -38,3 +38,13 @@ def register_modules(registry):
             "drivers/firmware/qcom/qcom-scm",
         ],
     )
+
+    registry.register(
+        name = "drivers/misc/tps6286",
+        out = "tps6286.ko",
+        config = "CONFIG_TPS6286_STEP_DOWN_CONV",
+        srcs = [
+            # do not sort
+            "drivers/misc/tps6286.c",
+        ],
+    )
