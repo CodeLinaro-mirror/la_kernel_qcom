@@ -70,3 +70,4 @@ blocklist qca_cld3_qcn7605
 # other lunch targets to avoid bloat and conflicts (e.g. virtio_blk vs virtio_block).
 blocklist virtio_blk
 blocklist virtio_snd
+blocklist virtio_dma_buf

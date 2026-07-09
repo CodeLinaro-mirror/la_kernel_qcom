@@ -181,6 +181,7 @@ autogvm_perf_config = {
     "CONFIG_VIRTIO_BLK_QTI_CRYPTO": "m",
     "CONFIG_VIRTIO_CLK": "m",
     "CONFIG_VIRTIO_CONSOLE": "m",
+    "CONFIG_VIRTIO_DMA_SHARED_BUFFER": "m",
     "CONFIG_VIRTIO_INPUT": "m",
     "CONFIG_VIRTIO_IOMMU": "m",
     "CONFIG_VIRTIO_MMIO": "m",
