@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include <linux/suspend.h>
 
 #define USB_ID_DEBOUNCE_MS	5	/* ms */
 
@@ -221,6 +222,9 @@ static int qcom_usb_extcon_resume(struct device *dev)
 	int ret = 0, vbus_ret = 0, id_ret = 0;
 	bool id_state = false, vbus_state = false;
 	bool needs_detection = false;
+
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return qcom_usb_extcon_restore(dev);
 
 	if (device_may_wakeup(dev)) {
 		if (info->id_irq > 0)
