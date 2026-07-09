@@ -6,7 +6,6 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/iommu/arm/arm-smmu/arm-smmu-impl.c",
-            "drivers/iommu/arm/arm-smmu/arm-smmu-nvidia.c",
             "drivers/iommu/arm/arm-smmu/arm-smmu-trace.h",
             "drivers/iommu/arm/arm-smmu/arm-smmu.c",
             "drivers/iommu/arm/arm-smmu/arm-smmu.h",
@@ -28,6 +27,12 @@ def register_modules(registry):
                     # do not sort
                     "drivers/iommu/arm/arm-smmu/arm-smmu-qcom-debug.c",
                     "drivers/iommu/arm/arm-smmu/arm-smmu-qcom.h",
+                ],
+            },
+            "CONFIG_ARM_SMMU_NVIDIA": {
+                True: [
+                    # do not sort
+                    "drivers/iommu/arm/arm-smmu/arm-smmu-nvidia.c",
                 ],
             },
         },

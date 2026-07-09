@@ -7,6 +7,9 @@ obj-y += ethernet/stmicro/stmmac/
 obj-y += mdio_fe/
 obj-y += pcs/
 obj-y += phy/aquantia/
+obj-y += phy/qcom/
+
+obj-$(CONFIG_DP83867_PHY) += phy/dp83867.o
 
 obj-$(CONFIG_FAILOVER) += failover.o
 failover-objs += ../../net/core/failover.o

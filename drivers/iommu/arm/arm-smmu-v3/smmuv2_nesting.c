@@ -18,7 +18,6 @@ extern unsigned long kvm_nvhe_sym(smmu_v2_nested_count);
 extern struct smmu_v2_nested *kvm_nvhe_sym(smmu_v2_nested_base);
 #define smmu_v2_nested_base kvm_nvhe_sym(smmu_v2_nested_base)
 struct smmu_v2_nested *smmu_v2_host_nested_base; /* Host kernel's view of nested SMMU base */
-u32 host_s2_cb_idx;
 
 extern struct kvm_iommu_ops kvm_nvhe_sym(smmuv2_hyp_nesting_ops);
 
@@ -204,7 +203,7 @@ int smmuv2_post_boot_init(void)
 		if (ret) {
 			pr_err("Failed to register IRQ handler for SMMU at 0x%llx, IRQ %d: %d\n",
 			       smmu->base_pa, virq, ret);
-			break;
+			continue;
 		}
 
 		pr_info("Registered CB fault IRQ handler for SMMU at 0x%llx: cb_irq=%d, virt_irq=%d, CB=%d, hwirq=%d\n",

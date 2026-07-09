@@ -104,6 +104,7 @@ hamoa_la_perf_config = {
     "CONFIG_MSM_GPI_DMA": "m",
     "CONFIG_MSM_PERFORMANCE": "m",
     "CONFIG_MSM_QMP": "m",
+    "CONFIG_MSM_RDBG": "m",
     "CONFIG_MSM_SYSSTATS": "m",
     "CONFIG_NL80211_TESTMODE": "y",
     "CONFIG_NVMEM_QCOM_QFPROM": "m",

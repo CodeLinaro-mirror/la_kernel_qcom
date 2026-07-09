@@ -17,3 +17,5 @@ stm_heartbeat-objs += heartbeat.o
 obj-$(CONFIG_STM_PROTO_OST) += stm_p_ost.o
 stm_p_ost-objs += p_ost.o
 
+obj-$(CONFIG_STM_PASSTHROUGH) += stm_passthrough.o
+
