@@ -1484,11 +1484,26 @@ static int wait_for_transfers_inflight(struct uart_port *uport)
 		rx_len_in =
 			geni_read_reg(uport->membase, SE_DMA_RX_LEN_IN);
 		if (rx_len_in) {
+			/*
+			 * During wakeup-byte detection, RX may remain active with rx_len_in
+			 * set while wakeup_comp is still pending. Allow suspend to continue
+			 * so the normal suspend path can stop the RX sequencer.
+			 */
+			if (port->wakeup_byte && port->wakeup_irq &&
+			    atomic_read(&port->check_wakeup_byte) &&
+			    !completion_done(&port->wakeup_comp)) {
+				UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+					     "%s: rx_len_in=%u wakeup byte pending\n",
+					     __func__, rx_len_in);
+				return 0;
+			}
+
 			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-				"%s: Bailout rx_len_in is set %d\n", __func__, rx_len_in);
+				     "%s: Bailout rx_len_in is set %u\n",
+				     __func__, rx_len_in);
 			return -EBUSY;
 		}
-		geni_se_dump_dbg_regs(uport);
+			geni_se_dump_dbg_regs(uport);
 	}
 	return 0;
 }
@@ -4528,6 +4543,7 @@ static void msm_geni_wakeup_work(struct work_struct *work)
 	/* wait to receive wakeup byte in rx path */
 	if (!wait_for_completion_timeout(&port->wakeup_comp,
 					 msecs_to_jiffies(WAKEBYTE_TIMEOUT_MSEC)))
+		/* Wakeup byte was not received before the timeout. */
 		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
 			     "%s completion of wakeup_comp task timedout %dmsec\n",
 			     __func__, WAKEBYTE_TIMEOUT_MSEC);
@@ -6620,10 +6636,15 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 			/* Flow on from UART only for In band sleep(IBS)
 			 * Avoid manual RFR FLOW ON for Out of band sleep(OBS)
 			 */
-			if (port->wakeup_byte && port->wakeup_irq)
+			if (port->wakeup_byte && port->wakeup_irq) {
+			/* Port is open; wakeup IRQ was received but no wakeup byte was
+			 * detected. Continue to suspend the driver.
+			 */
 				msm_geni_serial_allow_rx(port);
-			ret = -EBUSY;
-			goto exit_runtime_suspend;
+			} else {
+				ret = -EBUSY;
+				goto exit_runtime_suspend;
+			}
 		}
 	}
 	/*
