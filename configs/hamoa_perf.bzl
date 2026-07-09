@@ -180,6 +180,7 @@ hamoa_perf_config = {
     "CONFIG_QCOM_PMU_LIB": "m",
     "CONFIG_QCOM_Q6V5_COMMON": "m",
     "CONFIG_QCOM_Q6V5_PAS": "m",
+    "CONFIG_QCOM_QDSS_BRIDGE": "m",
     "CONFIG_QCOM_QMI_HELPERS": "m",
     "CONFIG_QCOM_QPT_RPMSG_POWERCAP": "m",
     "CONFIG_QCOM_RAMDUMP": "m",
