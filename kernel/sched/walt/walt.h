@@ -1281,8 +1281,16 @@ static inline bool task_fits_capacity(struct task_struct *p,
 	if (!fits)
 		return false;
 
-	/* rq->clock is sufficiently current; avoids walt_sched_clock() overhead. */
-	now = cpu_rq(dst_cpu)->clock;
+	/*
+	 * cpu_rq(dst_cpu)->clock is a cheap per-CPU clock but only advances
+	 * while that rq is active, so a later read against a stale dst_cpu can
+	 * be smaller than the sf_misfit_time stamped from a different dst_cpu.
+	 * Clamp to the stored stamp so the unsigned subtraction below never
+	 * underflows. The value is intentionally imprecise but always monotone
+	 * w.r.t. sf_misfit_time. On first detection sf_misfit_time is 0, so the
+	 * max() reduces to the raw clock and the stamp keeps full precision.
+	 */
+	now = max_t(u64, cpu_rq(dst_cpu)->clock, wts->sf_misfit_time);
 
 	/* First detection: arm the timer and suppress migration. */
 	if (!wts->sf_misfit_time) {
