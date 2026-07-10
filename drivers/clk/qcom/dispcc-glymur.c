@@ -177,12 +177,12 @@ static const struct parent_map disp_cc_parent_map_0[] = {
 
 static const struct clk_parent_data disp_cc_parent_data_0[] = {
 	{ .index = DT_BI_TCXO },
-	{ .index = DT_STANDALONE_PHY_PLL0_VCO_DIV_CLK },
-	{ .index = DT_DP0_PHY_PLL_VCO_DIV_CLK },
-	{ .index = DT_DP3_PHY_PLL_VCO_DIV_CLK },
-	{ .index = DT_DP1_PHY_PLL_VCO_DIV_CLK },
-	{ .index = DT_STANDALONE_PHY_PLL1_VCO_DIV_CLK },
-	{ .index = DT_DP2_PHY_PLL_VCO_DIV_CLK },
+	{ .fw_name = "standalone_phy_pll0_vco_div_clk", .name = "standalone_phy_pll0_vco_div_clk" },
+	{ .fw_name = "dp0_phy_pll_vco_div_clk", .name = "dp0_phy_pll_vco_div_clk" },
+	{ .fw_name = "dp3_phy_pll_vco_div_clk", .name = "dp3_phy_pll_vco_div_clk" },
+	{ .fw_name = "dp1_phy_pll_vco_div_clk", .name = "dp1_phy_pll_vco_div_clk" },
+	{ .fw_name = "standalone_phy_pll1_vco_div_clk", .name = "standalone_phy_pll1_vco_div_clk" },
+	{ .fw_name = "dp2_phy_pll_vco_div_clk", .name = "dp2_phy_pll_vco_div_clk" },
 };
 
 static const struct parent_map disp_cc_parent_map_1[] = {
@@ -203,10 +203,10 @@ static const struct parent_map disp_cc_parent_map_2[] = {
 
 static const struct clk_parent_data disp_cc_parent_data_2[] = {
 	{ .index = DT_BI_TCXO },
-	{ .index = DT_DSI0_PHY_PLL_OUT_DSICLK },
-	{ .index = DT_DSI0_PHY_PLL_OUT_BYTECLK },
-	{ .index = DT_DSI1_PHY_PLL_OUT_DSICLK },
-	{ .index = DT_DSI1_PHY_PLL_OUT_BYTECLK },
+	{ .fw_name = "dsi0_phy_pll_out_dsiclk", .name = "dsi0_phy_pll_out_dsiclk" },
+	{ .fw_name = "dsi0_phy_pll_out_byteclk", .name = "dsi0_phy_pll_out_byteclk" },
+	{ .fw_name = "dsi1_phy_pll_out_dsiclk", .name = "dsi1_phy_pll_out_dsiclk" },
+	{ .fw_name = "dsi1_phy_pll_out_byteclk", .name = "dsi1_phy_pll_out_byteclk" },
 };
 
 static const struct parent_map disp_cc_parent_map_3[] = {
@@ -221,12 +221,12 @@ static const struct parent_map disp_cc_parent_map_3[] = {
 
 static const struct clk_parent_data disp_cc_parent_data_3[] = {
 	{ .index = DT_BI_TCXO },
-	{ .index = DT_DP0_PHY_PLL_LINK_CLK },
-	{ .index = DT_DP1_PHY_PLL_LINK_CLK },
-	{ .index = DT_DP2_PHY_PLL_LINK_CLK },
-	{ .index = DT_DP3_PHY_PLL_LINK_CLK },
-	{ .index = DT_STANDALONE_PHY_PLL1_LINK_CLK },
-	{ .index = DT_STANDALONE_PHY_PLL0_LINK_CLK },
+	{ .fw_name = "dp0_phy_pll_link_clk", .name = "dp0_phy_pll_link_clk" },
+	{ .fw_name = "dp1_phy_pll_link_clk", .name = "dp1_phy_pll_link_clk" },
+	{ .fw_name = "dp2_phy_pll_link_clk", .name = "dp2_phy_pll_link_clk" },
+	{ .fw_name = "dp3_phy_pll_link_clk", .name = "dp3_phy_pll_link_clk" },
+	{ .fw_name = "standalone_phy_pll1_link_clk", .name = "standalone_phy_pll1_link_clk" },
+	{ .fw_name = "standalone_phy_pll0_link_clk", .name = "standalone_phy_pll0_link_clk" },
 };
 
 static const struct parent_map disp_cc_parent_map_4[] = {
@@ -237,8 +237,8 @@ static const struct parent_map disp_cc_parent_map_4[] = {
 
 static const struct clk_parent_data disp_cc_parent_data_4[] = {
 	{ .index = DT_BI_TCXO },
-	{ .index = DT_DSI0_PHY_PLL_OUT_DSICLK },
-	{ .index = DT_DSI1_PHY_PLL_OUT_DSICLK },
+	{ .fw_name = "dsi0_phy_pll_out_dsiclk", .name = "dsi0_phy_pll_out_dsiclk" },
+	{ .fw_name = "dsi1_phy_pll_out_dsiclk", .name = "dsi1_phy_pll_out_dsiclk" },
 };
 
 static const struct parent_map disp_cc_parent_map_5[] = {
@@ -249,8 +249,8 @@ static const struct parent_map disp_cc_parent_map_5[] = {
 
 static const struct clk_parent_data disp_cc_parent_data_5[] = {
 	{ .index = DT_BI_TCXO },
-	{ .index = DT_DSI0_PHY_PLL_OUT_BYTECLK },
-	{ .index = DT_DSI1_PHY_PLL_OUT_BYTECLK },
+	{ .fw_name = "dsi0_phy_pll_out_byteclk", .name = "dsi0_phy_pll_out_byteclk" },
+	{ .fw_name = "dsi1_phy_pll_out_byteclk", .name = "dsi1_phy_pll_out_byteclk" },
 };
 
 static const struct parent_map disp_cc_parent_map_6[] = {
