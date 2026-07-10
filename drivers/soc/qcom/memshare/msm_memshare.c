@@ -1052,7 +1052,7 @@ static int memshare_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	qcom_register_ssr_notifier("mpss", &nb);
+	qcom_register_ssr_notifier("modem", &nb);
 	dev_dbg(memsh_drv->dev, "memshare: Memshare inited\n");
 
 	return 0;
