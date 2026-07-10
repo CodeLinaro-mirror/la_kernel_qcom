@@ -190,6 +190,7 @@ struct qusb_phy {
 	struct delayed_work	port_det_w;
 	enum port_state		port_state;
 	unsigned int		dcd_timeout;
+	bool			dcp_charger;
 
 	/* debugfs entries */
 	struct dentry		*root;
@@ -1310,6 +1311,7 @@ static void qusb_phy_port_state_work(struct work_struct *w)
 		return;
 	case PORT_DISCONNECTED:
 		qusb_phy_disable_phy(qphy);
+		qphy->dcp_charger = false;
 		qphy->port_state = PORT_UNKNOWN;
 		break;
 	case PORT_DCD_IN_PROGRESS:
@@ -1363,19 +1365,25 @@ static void qusb_phy_port_state_work(struct work_struct *w)
 		if (status) {
 			qusb_phy_notify_charger(qphy,
 						POWER_SUPPLY_TYPE_USB_DCP);
+			qphy->dcp_charger = true;
 		} else {
 			qusb_phy_notify_charger(qphy,
 						POWER_SUPPLY_TYPE_USB_CDP);
+			qusb_phy_disable_phy(qphy);
 			qusb_phy_notify_extcon(qphy, EXTCON_USB, 1);
 		}
 
-		qusb_phy_disable_phy(qphy);
 		qphy->port_state = PORT_CHG_DET_DONE;
 		break;
 	case PORT_CHG_DET_DONE:
 		if (!qphy->vbus_active) {
+			if (qphy->dcp_charger) {
+				qphy->dcp_charger = false;
+				qusb_phy_disable_phy(qphy);
+			} else {
+				qusb_phy_notify_extcon(qphy, EXTCON_USB, 0);
+			}
 			qphy->port_state = PORT_UNKNOWN;
-			qusb_phy_notify_extcon(qphy, EXTCON_USB, 0);
 		}
 
 		return;
