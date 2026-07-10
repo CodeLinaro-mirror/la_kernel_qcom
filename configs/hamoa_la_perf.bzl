@@ -301,6 +301,8 @@ hamoa_la_perf_config = {
     "CONFIG_UCSI_QTI_GLINK": "m",
     "CONFIG_USB_CONFIGFS_F_QDSS": "m",
     "CONFIG_USB_DWC3_MSM": "m",
+    "CONFIG_USB_DWC3_QCOM": "n",
+    "CONFIG_USB_DWC3_QCOM_MP": "m",
     "CONFIG_USB_F_FS_IPC_LOGGING": "n",
     "CONFIG_USB_F_QDSS": "m",
     "CONFIG_VIRT_WIFI": "n",
