@@ -4695,18 +4695,44 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				(&msm_port->xfer,
 				msecs_to_jiffies(GSI_STOP_RX_TIMEOUT));
 
-			if (!timeout)
+			if (!timeout) {
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev,
 					     "%s: Timeout for Rx reset\n",
 					     __func__);
+				/*
+				 * rx_cancel_work may still be running concurrently, so
+				 * flush it first to avoid racing with it over
+				 * dmaengine_terminate_all() and the gsi_rx_done/
+				 * stop_rx_inprogress flags below. After the flush,
+				 * rx_cancel_work has either already terminated the
+				 * channel (gsi_rx_done now 0) or never got to run
+				 * (gsi_rx_done still 1), so it's safe to check the
+				 * flag here without racing.
+				 */
+				if (msm_port->rx_wq)
+					flush_workqueue(msm_port->rx_wq);
+
+				/*
+				 * If rx_cancel_work didn't get to terminate the GSI
+				 * channel before the timeout, the DMA engine may
+				 * still be actively writing to the Rx buffers below.
+				 * Terminate it here to avoid unmapping/releasing the
+				 * channel out from under an in-flight transfer, which
+				 * faults the SMMU.
+				 */
+				if (atomic_read(&msm_port->gsi_rx_done)) {
+					if (msm_port->gsi->rx_c)
+						dmaengine_terminate_all(msm_port->gsi->rx_c);
+					atomic_set(&msm_port->gsi_rx_done, 0);
+				}
+				atomic_set(&msm_port->stop_rx_inprogress, 0);
+			}
 
 			if (msm_port->gsi->rx_c) {
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev,
 					     "%s:GSI DMA-Rx ch\n", __func__);
-				if (msm_port->rx_wq)
-					flush_workqueue(msm_port->rx_wq);
 
 				for (i = 0; i < NUM_RX_BUF; i++) {
 					if (msm_port->dma_addr[i]) {
