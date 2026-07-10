@@ -1294,16 +1294,17 @@ static void iommu_debug_device_profiling(struct seq_file *s, struct iommu_debug_
 {
 	const size_t *sz;
 	struct iommu_domain *domain;
-	struct device *dev;
+	struct iommu_debug_usecase_device *dev;
 	unsigned long iova = 0x10000;
 	phys_addr_t paddr = 0x80000000;
+	struct iommu_debug_mem *mem;
 
 	mutex_lock(&ddev->state_lock);
 	if (!iommu_debug_usecase_reset(ddev))
 		goto out;
 
 	domain = ddev->domain;
-	dev = ddev->test_dev;
+	dev = dev_get_drvdata(ddev->test_dev);
 
 	seq_printf(s, "(average over %d iterations)\n", ddev->nr_iters);
 	seq_printf(s, "%8s %19s %16s\n", "size", "iommu_map", "iommu_unmap");
@@ -1317,13 +1318,20 @@ static void iommu_debug_device_profiling(struct seq_file *s, struct iommu_debug_
 		int i;
 		unsigned long align_mask = iommu_debug_get_align_mask(size);
 
+		mem = iommu_debug_mem_alloc_contig(dev, size);
+		if (IS_ERR_OR_NULL(mem)) {
+			seq_puts(s, "couldn't alloc contig memory! bailing...\n");
+			continue;
+		}
+		paddr = page_to_phys(mem->page);
+
 		for (i = 0; i < ddev->nr_iters; ++i) {
 			tbefore = ktime_get();
 			if (iommu_map(domain, __ALIGN_MASK(iova, align_mask),
 				      ALIGN(paddr, size), size,
 				      IOMMU_READ | IOMMU_WRITE, GFP_KERNEL)) {
 				seq_puts(s, "Failed to map\n");
-				continue;
+				goto next_contig;
 			}
 			tafter = ktime_get();
 			diff = ktime_sub(tafter, tbefore);
@@ -1337,7 +1345,7 @@ static void iommu_debug_device_profiling(struct seq_file *s, struct iommu_debug_
 				seq_printf(s,
 					   "Only unmapped %zx instead of %zx\n",
 					   unmapped, size);
-				continue;
+				goto next_contig;
 			}
 			tafter = ktime_get();
 			diff = ktime_sub(tafter, tbefore);
@@ -1354,6 +1362,9 @@ static void iommu_debug_device_profiling(struct seq_file *s, struct iommu_debug_
 		seq_printf(s, "%8s %12lld.%03d us %9lld.%03d us\n",
 			   _size_to_string(size), map_elapsed_us, map_elapsed_rem,
 			   unmap_elapsed_us, unmap_elapsed_rem);
+
+next_contig:
+		iommu_debug_mem_free(dev, mem);
 	}
 
 	seq_putc(s, '\n');
@@ -1365,21 +1376,20 @@ static void iommu_debug_device_profiling(struct seq_file *s, struct iommu_debug_
 		u64 map_elapsed_us = 0, unmap_elapsed_us = 0;
 		u32 map_elapsed_rem = 0, unmap_elapsed_rem = 0;
 		ktime_t tbefore, tafter, diff;
-		struct sg_table table;
 		unsigned long chunk_size = SZ_4K;
 		int i;
 		unsigned long align_mask = iommu_debug_get_align_mask(size);
 
-		if (iommu_debug_build_phoney_sg_table(dev, &table, size,
-						      chunk_size)) {
-			seq_puts(s, "couldn't build phoney sg table! bailing...\n");
-			goto out;
+		mem = iommu_debug_mem_alloc_sgt(dev, size, chunk_size);
+		if (IS_ERR_OR_NULL(mem)) {
+			seq_puts(s, "couldn't build sg table! bailing...\n");
+			continue;
 		}
 
 		for (i = 0; i < ddev->nr_iters; ++i) {
 			tbefore = ktime_get();
 			if (iommu_map_sgtable(domain, __ALIGN_MASK(iova, align_mask),
-					      &table, IOMMU_READ | IOMMU_WRITE) != size) {
+					      &mem->sgt, IOMMU_READ | IOMMU_WRITE) != size) {
 				seq_puts(s, "Failed to map_sg\n");
 				goto next;
 			}
@@ -1412,7 +1422,7 @@ static void iommu_debug_device_profiling(struct seq_file *s, struct iommu_debug_
 			   map_elapsed_us, map_elapsed_rem, unmap_elapsed_us, unmap_elapsed_rem);
 
 next:
-		iommu_debug_destroy_phoney_sg_table(dev, &table, chunk_size);
+		iommu_debug_mem_free(dev, mem);
 	}
 
 out:

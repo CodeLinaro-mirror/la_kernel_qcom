@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define pr_fmt(fmt) "iommu-debug: %s: " fmt, __func__
@@ -346,11 +346,28 @@ static struct platform_driver iommu_debug_driver = {
  */
 static int iommu_debug_usecase_probe(struct platform_device *pdev)
 {
-	return iommu_debug_usecase_register(&pdev->dev);
+	struct iommu_debug_usecase_device *udev;
+	const struct iommu_debug_allocator_ops *ops;
+	struct device *dev = &pdev->dev;
+
+	udev = devm_kzalloc(dev, sizeof(*udev), GFP_KERNEL);
+	if (!udev)
+		return -ENOMEM;
+
+	udev->dev = dev;
+	mutex_init(&udev->mem_lock);
+	INIT_LIST_HEAD(&udev->mem_list);
+
+	ops = of_device_get_match_data(dev);
+	if (ops)
+		udev->ops = ops;
+	platform_set_drvdata(pdev, udev);
+
+	return iommu_debug_usecase_register(dev);
 }
 
 static const struct of_device_id iommu_debug_usecase_of_match[] = {
-	{ .compatible = "qcom,iommu-debug-usecase" },
+	{ .compatible = "qcom,iommu-debug-usecase", .data = NULL },
 	{ },
 };
 
