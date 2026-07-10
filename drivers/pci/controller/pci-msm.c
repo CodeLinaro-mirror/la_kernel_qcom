@@ -296,7 +296,7 @@
 #define PARF_XMLH_LINK_UP (BIT(30))
 #define MAX_PROP_SIZE (32)
 #define MAX_RC_NAME_LEN (15)
-#define MSM_PCIE_MAX_VREG (6)
+#define MSM_PCIE_MAX_VREG (7)
 #define MAX_RC_NUM (8)
 #define MSM_PCIE_RESET_NAME_MAX_LEN 40
 #define MAX_DEVICE_NUM (20)
@@ -1431,6 +1431,7 @@ static struct msm_pcie_vreg_info_t msm_pcie_vreg_info[MSM_PCIE_MAX_VREG] = {
 	{NULL, "vreg-cx", 0, 0, 0, false},
 	{NULL, "vreg-mx", 0, 0, 0, false},
 	{NULL, "vreg-qref", 880000, 880000, 25700, false},
+	{NULL, "vreg-qref1", 880000, 880000, 25700, false},
 };
 
 /* GPIOs */
