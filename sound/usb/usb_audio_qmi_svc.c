@@ -1492,7 +1492,7 @@ static int check_valid_request(struct qmi_uaudio_stream_req_msg_v01 *req_msg,
 
 	if (req_msg->enable && (*info_idx < 0)) {
 		uaudio_err("interface# %d already in use card# %d\n",
-				subs->cur_audiofmt->iface, pcm_card_num);
+			subs->cur_audiofmt ? subs->cur_audiofmt->iface : -1, pcm_card_num);
 		return -EBUSY;
 	}
 
@@ -1613,7 +1613,7 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 response:
 	if (!req_msg->enable && ret != -EINVAL && ret != -ENODEV) {
 		mutex_lock(&chip->mutex);
-		if (info_idx >= 0) {
+		if (info_idx >= 0 && uadev[pcm_card_num].info) {
 			info = &uadev[pcm_card_num].info[info_idx];
 			uaudio_dev_intf_cleanup(
 					uadev[pcm_card_num].udev,

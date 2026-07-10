@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #define pr_fmt(fmt) "VendorHooks: " fmt
 
@@ -40,6 +40,8 @@ static void trace_ipi_stop(void *unused, struct pt_regs *regs)
 	unsigned long flags;
 
 	per_cpu(regs_before_stop, cpu) = *regs;
+	if (!oops_in_progress)
+		return;
 	raw_spin_lock_irqsave(&stop_lock, flags);
 	pr_crit("CPU%u: stopping\n", cpu);
 	show_regs(regs);

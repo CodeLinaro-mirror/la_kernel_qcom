@@ -807,10 +807,6 @@ again:
 		if (qcom_tzmem_try_grow_pool(pool, size, gfp))
 			goto again;
 
-		/* No runtime allocation for QTVM */
-		if (IS_ENABLED(CONFIG_ARCH_QTI_VM))
-			return NULL;
-
 		if (qcom_tzmem_area_alloc(pool, size, gfp, &area))
 			return NULL;
 

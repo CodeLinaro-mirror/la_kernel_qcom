@@ -305,7 +305,7 @@
 #define PCIE_CONF_SPACE_DW (1024)
 #define PCIE_CLEAR (0xdeadbeef)
 #define PCIE_LINK_DOWN (0xffffffff)
-#define PARF_VER_WITH_NO_LANE_UPCONFIG_BIT (0x1470)
+#define PARF_VER_WITH_NO_LANE_UPCONFIG_BIT (0x13C0)
 
 #define MSM_PCIE_MAX_RESET (5)
 #define MSM_PCIE_MAX_PIPE_RESET (1)
@@ -6232,9 +6232,8 @@ static int msm_pcie_get_iommu_map(struct msm_pcie_dev_t *pcie_dev)
 
 	of_get_property(pdev->dev.of_node, "iommu-map", &size);
 	if (!size) {
-		PCIE_DBG(pcie_dev,
-			"PCIe: RC%d: iommu-map is not present in DT.\n",
-			pcie_dev->rc_idx);
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: iommu-map is not present in DT.\n",
+			 pcie_dev->rc_idx);
 		return 0;
 	}
 
@@ -6242,8 +6241,39 @@ static int msm_pcie_get_iommu_map(struct msm_pcie_dev_t *pcie_dev)
 	if (!map)
 		return -ENOMEM;
 
-	of_property_read_u32_array(pdev->dev.of_node,
-		"iommu-map", (u32 *)map, size / sizeof(u32));
+	of_property_read_u32_array(pdev->dev.of_node, "iommu-map", (u32 *)map, size / sizeof(u32));
+
+	/*
+	 * Detect SMMUv3 (pcie_smmu): look up the SMMU phandle from the first iommu-map entry and
+	 * check its compatible string.  SMMUv3 manages stream-ID assignment internally;
+	 * no BDF-to-SID table programming is required from the PCIe driver.
+	 */
+	if (size >= (int)sizeof(*map)) {
+		struct device_node *smmu_node = of_find_node_by_phandle(map[0].phandle);
+
+		if (smmu_node) {
+			bool is_smmuv3 = of_device_is_compatible(smmu_node, "arm,smmu-v3");
+
+			of_node_put(smmu_node);
+
+			if (is_smmuv3) {
+				PCIE_DBG(pcie_dev,
+					"PCIe: RC%d: SMMUv3 detected skip SID table programming.\n",
+					pcie_dev->rc_idx);
+				kfree(map);
+				return 0;
+			}
+		}
+	}
+
+	/*
+	 * smmu_sid_base (from qcom,smmu-sid-base) is required to derive the PCIe-local
+	 * SID from the global SMMU SID.  Warn loudly if it was not provided alongside iommu-map.
+	 */
+	if (!pcie_dev->smmu_sid_base)
+		PCIE_ERR(pcie_dev,
+			 "PCIe: RC%d: smmu-sid-base is 0, sid calculation may be incorrect.\n",
+			 pcie_dev->rc_idx);
 
 	pcie_dev->sid_info_len = size / (sizeof(*map));
 	pcie_dev->sid_info = devm_kcalloc(&pdev->dev, pcie_dev->sid_info_len,
@@ -6832,12 +6862,14 @@ static int msm_pcie_enable_link(struct msm_pcie_dev_t *dev)
 			msleep(dev->switch_latency);
 	}
 
-	if (!dev->tc2bdf_tc_count)
-		ret = msm_pcie_config_sid(dev);
-	else
-		ret = msm_pcie_config_tc_bdf_sid_map(dev);
-	if (ret)
-		return ret;
+	if (dev->sid_info && !dev->save_sid_config) {
+		if (!dev->tc2bdf_tc_count)
+			ret = msm_pcie_config_sid(dev);
+		else
+			ret = msm_pcie_config_tc_bdf_sid_map(dev);
+		if (ret)
+			return ret;
+	}
 
 	msm_pcie_config_controller(dev);
 
@@ -7234,6 +7266,11 @@ static int msm_pcie_save_sid_config(struct msm_pcie_dev_t *dev)
 	if (!dev)
 		return -EINVAL;
 
+	if (!dev->sid_info) {
+		PCIE_DBG(dev, "PCIe: RC%d: SID info not available .\n", dev->rc_idx);
+		return 0;
+	}
+
 	sid_table_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 	sid_table_size = CRC8_TABLE_SIZE * sizeof(u32);
 
@@ -7263,6 +7300,17 @@ static int msm_pcie_restore_sid_config(struct msm_pcie_dev_t *dev)
 	if (!dev)
 		return -EINVAL;
 
+	if (!dev->sid_info) {
+		PCIE_DBG(dev, "PCIe: RC%d: SID info not available .\n", dev->rc_idx);
+		return 0;
+	}
+
+	if (!dev->save_sid_config) {
+		PCIE_DBG(dev,
+			 "PCIe: RC%d: SID config not saved yet, skipping restore.\n", dev->rc_idx);
+		return 0;
+	}
+
 	sid_table_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 	sid_table_size = CRC8_TABLE_SIZE * sizeof(u32);
 
@@ -7284,13 +7332,6 @@ static int msm_pcie_config_sid(struct msm_pcie_dev_t *dev)
 {
 	void __iomem *bdf_to_sid_base;
 	int i;
-
-	/* Perform SID mapping only if the configuration hasn't been saved yet */
-	if (dev->save_sid_config)
-		return 0;
-
-	if (!dev->sid_info)
-		return -EINVAL;
 
 	bdf_to_sid_base = dev->parf + PCIE20_PARF_BDF_TO_SID_TABLE_N;
 
@@ -7356,13 +7397,6 @@ static int msm_pcie_config_tc_bdf_sid_map(struct msm_pcie_dev_t *dev)
 {
 	void __iomem *tc_bdf_to_sid_lut_base;
 	int i, tc, lut_offset = 0;
-
-	/* Perform SID mapping only if the configuration hasn't been saved yet */
-	if (dev->save_sid_config)
-		return 0;
-
-	if (!dev->sid_info)
-		return -ENODEV;
 
 	tc_bdf_to_sid_lut_base = dev->parf + PCIE20_PARF_TC_BDF_TO_SID_LUT_N;
 
@@ -9597,8 +9631,10 @@ static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
 	pcie_dev->crm_dev = crm_get_device("pcie_crm");
 
 	if (IS_ERR(pcie_dev->crm_dev)) {
-		PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev\n",
-				pcie_dev->rc_idx);
+		ret = PTR_ERR(pcie_dev->crm_dev);
+		pcie_dev->crm_dev = NULL;
+		PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev: %d\n",
+				pcie_dev->rc_idx, ret);
 		return ret;
 	}
 

@@ -267,7 +267,7 @@ def define_single_android_build(
         dtbo(
             name = "{}_{}_dtbo_image".format(stem, dtbo_img["name"]),
             srcs = [":{}_dtb_build/{}".format(stem, dtbo) for dtbo in dtbo_img["src"]] if dtbo_img["src"] else None,
-            out = "{}_{}_dtbo.img".format(dtbo_img["name"], variant),
+            out = "{}/{}_dtbo.img".format(stem, dtbo_img["name"]),
             config_file = dtbo_img["config_file"],
             kernel_build = "{}_dtb_build".format(stem),
             tool = "mkdtboimg",

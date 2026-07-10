@@ -69,4 +69,15 @@ config QTI_FASTRPC
 	  applications DSP processor. Say M if you want to enable this
 	  module.
 
+config TPS6286_STEP_DOWN_CONV
+	tristate "TPS6286_I2C_Driver"
+	select REGMAP_I2C
+	depends on I2C
+	help
+	  Support for TPS6286 synchronous Step-Down Converter with I2C
+	  interface. User can set different output voltage presets using
+	  I2C and Ramp speed.
+
+	  Say Y if you want to enable TPS6286 driver.
+
 endmenu
