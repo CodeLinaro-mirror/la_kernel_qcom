@@ -1786,6 +1786,7 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 	struct stmmac_priv *priv;
 	int ret = 0;
 
+	dev_info(dev, "%s: Enter\n", __func__);
 	ethqos = get_stmmac_bsp_priv(dev);
 	if (!ethqos)
 		return -ENODEV;
@@ -1812,24 +1813,31 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		goto err_restore;
 	}
 
-	ret = stmmac_bus_clks_config(priv, true);
+	ret = pm_runtime_force_resume(dev);
 	if (ret) {
 		dev_err(dev, "%s: Clock Enablement Failed\n", __func__);
+		ethqos_free_gpios(ethqos);
+		ethqos_disable_regulators(ethqos);
 		goto err_restore;
 	}
-
-	ethqos_set_func_clk_en(ethqos);
 
 	/* issue netdev up to device */
 
 	if (!netif_running(ndev)) {
 		rtnl_lock();
-		dev_open(ndev, NULL);
+		ret = dev_open(ndev, NULL);
 		rtnl_unlock();
+		if (ret) {
+			dev_err(dev, "%s: dev_open failed with ret = %d\n", __func__, ret);
+			pm_runtime_force_suspend(dev);
+			ethqos_free_gpios(ethqos);
+			ethqos_disable_regulators(ethqos);
+			goto err_restore;
+		}
 	}
 
 	mutex_unlock(&priv->lock);
-
+	dev_info(dev, "%s: Exis\n", __func__);
 	return ret;
 err_restore:
 	mutex_unlock(&priv->lock);
@@ -1843,6 +1851,7 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 	struct stmmac_priv *priv;
 	int ret = 0;
 
+	dev_info(dev, "%s: Enter\n", __func__);
 	ethqos = get_stmmac_bsp_priv(dev);
 	if (!ethqos)
 		return -ENODEV;
@@ -1860,7 +1869,7 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 		rtnl_unlock();
 	}
 
-	ret = stmmac_bus_clks_config(priv, false);
+	ret = pm_runtime_force_suspend(dev);
 	if (ret) {
 		dev_err(dev, "%s: Clock Disablement Failed\n", __func__);
 		goto err_freeze;
@@ -1871,8 +1880,8 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 
 	priv->speed = SPEED_UNKNOWN;
 	mutex_unlock(&priv->lock);
-
-	return ret;
+	dev_info(dev, "%s: Exit\n", __func__);
+	return 0;
 err_freeze:
 	mutex_unlock(&priv->lock);
 	return ret;
