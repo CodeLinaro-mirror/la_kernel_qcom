@@ -5087,6 +5087,27 @@ static int msm_nand_boost_mode_enable(struct msm_nand_info *info)
 	return err;
 }
 
+/* Clear QPIC_EBI2_CFG.DRIVE_OE_EN once at probe on M.2 boards so data
+ * lanes float when idle during low-power modes
+ */
+static int msm_nand_ebi2_lpm_configure(struct msm_nand_info *info)
+{
+	int err = 0;
+	uint32_t reg = 0;
+
+	if (info->nand_chip.caps & MSM_NAND_CAP_EBI2_DRIVE_OE_DISABLE) {
+		err = msm_nand_flash_rd_rw_reg(info, QPIC_EBI2_CFG(info),
+				&reg, READ);
+		if (!err) {
+			reg &= ~QPIC_EBI2_CFG_DRIVE_OE_EN;
+			err = msm_nand_flash_rd_rw_reg(info, QPIC_EBI2_CFG(info),
+					&reg, WRITE);
+		}
+	}
+
+	return err;
+}
+
 static int msm_nand_parse_smem_ptable(int *nr_parts)
 {
 
@@ -5311,6 +5332,9 @@ static int msm_nand_probe(struct platform_device *pdev)
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,boost_mode"))
 		info->nand_chip.caps |= MSM_NAND_CAP_BOOST_MODE;
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,ebi2-lpm-cfg"))
+		info->nand_chip.caps |= MSM_NAND_CAP_EBI2_DRIVE_OE_DISABLE;
+
 	/* Enable Interrupt mode based on flags
 	 * Update bam_irq_type.
 	 */
@@ -5450,6 +5474,10 @@ static int msm_nand_probe(struct platform_device *pdev)
 	err = msm_nand_boost_mode_enable(info);
 	if (unlikely(err))
 		pr_err("Failed to enable Boost Mode Err: %d\n", err);
+
+	err = msm_nand_ebi2_lpm_configure(info);
+	if (unlikely(err))
+		pr_err("Failed to disable EBI2 drive OE Err: %d\n", err);
 
 	for (i = 0; i < nr_parts; i++) {
 		mtd_part[i].offset *= info->mtd.erasesize;
