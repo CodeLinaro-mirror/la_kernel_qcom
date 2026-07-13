@@ -202,11 +202,17 @@ static int virtio_glink_bridge_send_msg_ack(struct virtio_glink_bridge *vgbridge
 
 static void virtio_glink_bridge_ssr_after_powerup(struct virtio_glink_bridge_dsp_info *dsp_info)
 {
+	if (!dsp_info || !dsp_info->vgbridge) {
+		pr_err("%s: vgbridge uninitialized\n", __func__);
+		return;
+	}
 	virtio_glink_bridge_send_msg(dsp_info->vgbridge, MSG_SSR_AFTER_POWERUP, dsp_info->label);
 }
 
 static void virtio_glink_bridge_ssr_after_shutdown(struct virtio_glink_bridge_dsp_info *dsp_info)
 {
+	if (!dsp_info || !dsp_info->gdev)
+		return;
 	qcom_glink_cma_unregister(dsp_info->gdev);
 	dsp_info->gdev = NULL;
 }
@@ -352,8 +358,8 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 		VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "ssr register");
 		handle = qcom_register_ssr_notifier(dsp_info->label_str, &dsp_info->nb);
 		if (IS_ERR_OR_NULL(handle)) {
-			dev_err(dev, "fail to register with SSR notifier for %d\n",
-				dsp_info->label);
+			dev_err(dev, "fail to register with SSR notifier for %s\n",
+				dsp_info->label_str);
 			rc = VIRTIO_GLINK_BRIDGE_EINVAL;
 			goto unlock;
 		}
@@ -493,8 +499,10 @@ static void virtio_glink_bridge_remove(struct virtio_device *vdev)
 	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "Enter");
 
 	list_for_each_entry(dsp_info, &vgbridge->dsp_infos, node) {
-		qcom_glink_cma_unregister(dsp_info->gdev);
-		dsp_info->gdev = NULL;
+		if (dsp_info->gdev) {
+			qcom_glink_cma_unregister(dsp_info->gdev);
+			dsp_info->gdev = NULL;
+		}
 	}
 
 	cancel_work_sync(&vgbridge->rx_work);
