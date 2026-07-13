@@ -61,6 +61,7 @@ mem_buf.ko
 mem_buf_dev.ko
 mem_buf_msgq.ko
 msm_dma_iommu_mapping.ko
+sc_tcm.ko
 qcom_dma_heaps.ko
 gh_arm_drv.ko
 gh_dbl.ko
@@ -115,5 +116,4 @@ crm-v2.ko
 kryo_arm64_edac.ko
 qcom_secure_hibernation.ko
 si_core_module.ko
-leds-user-aw21104.ko
-leds-bys-aw21104.ko
+pwm-qcom.ko

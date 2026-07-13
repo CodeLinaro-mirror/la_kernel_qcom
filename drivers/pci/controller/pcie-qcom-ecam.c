@@ -184,7 +184,7 @@ static void qcom_msi_unmask_irq(struct irq_data *data)
 }
 
 static struct irq_chip qcom_msi_irq_chip = {
-	.name		= "qcom_pci_msi",
+	.name		= "gic_qcom_pci_msi",
 	.irq_enable	= qcom_msi_unmask_irq,
 	.irq_disable	= qcom_msi_mask_irq,
 	.irq_mask	= qcom_msi_mask_irq,

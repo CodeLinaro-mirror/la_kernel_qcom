@@ -3370,10 +3370,12 @@ static int qcom_scm_probe(struct platform_device *pdev)
 				     "Failed to enable the TrustZone memory allocator\n");
 
 	memset(&pool_config, 0, sizeof(pool_config));
-	pool_config.initial_size = 0;
-	pool_config.policy = QCOM_TZMEM_POLICY_ON_DEMAND;
-	pool_config.max_size = SZ_256K;
-
+	if (IS_ENABLED(CONFIG_ARCH_QTI_VM))
+		pool_config.initial_size = SZ_16K;
+	else
+		pool_config.initial_size = SZ_512K;
+	pool_config.policy = QCOM_TZMEM_POLICY_STATIC;
+	pool_config.max_size = pool_config.initial_size;
 	__scm->mempool = devm_qcom_tzmem_pool_new(__scm->dev, &pool_config);
 	if (IS_ERR(__scm->mempool))
 		return dev_err_probe(__scm->dev, PTR_ERR(__scm->mempool),
