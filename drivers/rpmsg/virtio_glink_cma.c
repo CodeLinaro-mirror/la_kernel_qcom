@@ -38,6 +38,11 @@
 enum {
 	CDSP0,
 	CDSP1,
+	CDSP2,
+	CDSP3,
+	ADSP0,
+	ADSP1,
+	ADSP2,
 	DSP_MAX,
 	DSP_ERR = 0xff
 };
@@ -45,6 +50,11 @@ enum {
 static const char * const to_dsp_str[DSP_MAX] = {
 	[CDSP0] = "cdsp",
 	[CDSP1] = "cdsp1",
+	[CDSP2] = "cdsp2",
+	[CDSP3] = "cdsp3",
+	[ADSP0] = "adsp",
+	[ADSP1] = "adsp1",
+	[ADSP2] = "adsp2",
 };
 
 #define DSP_LABEL_TO_STR(dsp) (((dsp) >= DSP_MAX) ? "INVALID DSP" : to_dsp_str[(dsp)])
@@ -80,7 +90,7 @@ struct virtio_glink_bridge_dsp_info {
 	struct virtio_glink_bridge *vgbridge;
 
 	struct glink_cma_config config;
-	struct qcom_glink *glink;
+	struct glink_cma_dev *gdev;
 
 	struct notifier_block nb;
 	void *notifier_handle;
@@ -197,8 +207,8 @@ static void virtio_glink_bridge_ssr_after_powerup(struct virtio_glink_bridge_dsp
 
 static void virtio_glink_bridge_ssr_after_shutdown(struct virtio_glink_bridge_dsp_info *dsp_info)
 {
-	qcom_glink_cma_unregister(dsp_info->glink);
-	dsp_info->glink = NULL;
+	qcom_glink_cma_unregister(dsp_info->gdev);
+	dsp_info->gdev = NULL;
 }
 
 static int virtio_glink_bridge_ssr_cb(struct notifier_block *nb,
@@ -302,7 +312,7 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 
 	switch (msg_type) {
 	case MSG_SETUP:
-		if (dsp_info->glink) {
+		if (dsp_info->gdev) {
 			dev_err(dev, "DSP already registered\n");
 			rc = VIRTIO_GLINK_BRIDGE_EINVAL;
 			goto unlock;
@@ -329,10 +339,10 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 		config->size = size;
 
 		VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "glink cma register");
-		dsp_info->glink = qcom_glink_cma_register(dev, dsp_info->np, config);
-		if (IS_ERR(dsp_info->glink)) {
+		dsp_info->gdev = qcom_glink_cma_register(dev, dsp_info->np, config);
+		if (IS_ERR(dsp_info->gdev)) {
 			dev_err(dev, "fail to register with GLINK CMA core\n");
-			dsp_info->glink = NULL;
+			dsp_info->gdev = NULL;
 			rc = VIRTIO_GLINK_BRIDGE_EINVAL;
 			goto unlock;
 		}
@@ -351,10 +361,10 @@ static void virtio_glink_bridge_rx_work(struct work_struct *work)
 		dsp_info->notifier_handle = handle;
 		break;
 	case MSG_SSR_SETUP:
-		dsp_info->glink = qcom_glink_cma_register(dev, dsp_info->np, &dsp_info->config);
-		if (IS_ERR(dsp_info->glink)) {
+		dsp_info->gdev = qcom_glink_cma_register(dev, dsp_info->np, &dsp_info->config);
+		if (IS_ERR(dsp_info->gdev)) {
 			dev_err(dev, "fail to register with GLINK CMA core\n");
-			dsp_info->glink = NULL;
+			dsp_info->gdev = NULL;
 			rc = VIRTIO_GLINK_BRIDGE_EINVAL;
 			goto unlock;
 		}
@@ -483,8 +493,8 @@ static void virtio_glink_bridge_remove(struct virtio_device *vdev)
 	VIRTIO_GLINK_DEBUG_LOG(vgbridge->ilc, "Enter");
 
 	list_for_each_entry(dsp_info, &vgbridge->dsp_infos, node) {
-		qcom_glink_cma_unregister(dsp_info->glink);
-		dsp_info->glink = NULL;
+		qcom_glink_cma_unregister(dsp_info->gdev);
+		dsp_info->gdev = NULL;
 	}
 
 	cancel_work_sync(&vgbridge->rx_work);
