@@ -132,7 +132,7 @@ carveout_setup_vmperm(struct carveout_heap *carveout_heap,
 
 	if (!carveout_heap->is_secure) {
 		vmperm = mem_buf_vmperm_alloc(&buffer->sg_table, qcom_sg_release,
-				&buffer->kref);
+				(void *)buffer);
 		return vmperm;
 	}
 
@@ -145,7 +145,7 @@ carveout_setup_vmperm(struct carveout_heap *carveout_heap,
 		return ERR_PTR(ret);
 
 	vmperm = mem_buf_vmperm_alloc_staticvm(&buffer->sg_table, vmids, perms, nr,
-				qcom_sg_release, &buffer->kref);
+				qcom_sg_release, (void *)buffer);
 	kfree(vmids);
 	kfree(perms);
 
@@ -516,7 +516,7 @@ static int sc_tcm_carveout_heap_init(struct platform_heap *heap_data,
 	void *base;
 
 	base = sc_tcm_mem_alloc(heap_data->size);
-	if (!base) {
+	if (IS_ERR_OR_NULL(base)) {
 		pr_err("sc_tcm_carveout: unable to allocate memory of size %pa\n",
 				&heap_data->size);
 		return -ENOMEM;
