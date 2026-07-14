@@ -254,6 +254,7 @@ hamoa_perf_config = {
     "CONFIG_QTI_QMI_COOLING_DEVICE": "m",
     "CONFIG_QTI_SCMI_VENDOR_PROTOCOL": "m",
     "CONFIG_QTI_SYS_PM_VX": "m",
+    "CONFIG_QTI_THERMAL_VENDOR_HOOK": "m",
     "CONFIG_R8712U": "n",
     "CONFIG_REBOOT_MODE": "m",
     "CONFIG_REGMAP_QTI_DEBUGFS": "m",
