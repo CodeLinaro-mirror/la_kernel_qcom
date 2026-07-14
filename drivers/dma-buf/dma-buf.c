@@ -731,6 +731,7 @@ int dma_buf_begin_new_exec(struct files_struct *old_files)
 	if (my_files) {
 		size_t num_dmabuf_fds, num_dmabuf_fds_check;
 		unsigned int retries = 0;
+		unsigned int max_fds;
 
 		/* Attempt to count dmabuf FDs locklessly before allocating */
 		rcu_read_lock();
@@ -759,7 +760,8 @@ retry:
 			goto retry;
 		}
 
-		for (unsigned int n = 0; n < files_fdtable(my_files)->max_fds; n++) {
+		max_fds = files_fdtable(my_files)->max_fds;
+		for (unsigned int n = 0; n < max_fds; n++) {
 			struct file *file = files_lookup_fd_locked(my_files, n);
 			int err;
 
@@ -832,7 +834,14 @@ static int dma_buf_mmap_internal(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	ret = dmabuf->ops->mmap(dmabuf, vma);
-	if (!ret) {
+	if (!ret && vma->vm_file == file) {
+		/*
+		 * dmabuf VMAs must not be mergeable. If the exporter forgot to set a VM_SPECIAL
+		 * flag, force one now.
+		 */
+		if (WARN_ON(!(vma->vm_flags & VM_SPECIAL)))
+			vm_flags_set(vma, VM_DONTEXPAND);
+
 		int err = dma_buf_account_task(dmabuf, vma->vm_mm->dmabuf_info);
 
 		if (err)
@@ -2236,7 +2245,14 @@ int dma_buf_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma,
 	vma->vm_pgoff = pgoff;
 
 	ret = dmabuf->ops->mmap(dmabuf, vma);
-	if (!ret) {
+	if (!ret && vma->vm_file == dmabuf->file) {
+		/*
+		 * dmabuf VMAs must not be mergeable. If the exporter forgot to set a VM_SPECIAL
+		 * flag, force one now.
+		 */
+		if (WARN_ON(!(vma->vm_flags & VM_SPECIAL)))
+			vm_flags_set(vma, VM_DONTEXPAND);
+
 		int err = dma_buf_account_task(dmabuf, vma->vm_mm->dmabuf_info);
 
 		if (err)

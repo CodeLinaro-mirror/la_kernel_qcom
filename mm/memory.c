@@ -5187,14 +5187,14 @@ static vm_fault_t do_fault_around(struct vm_fault *vmf)
 	pgoff_t from_pte, to_pte;
 	vm_fault_t ret;
 
-	trace_android_vh_do_fault_around(vmf, &nr_pages);
-
 	/*
 	 * Fault occurred in the padding region. There are no file-cache pages
 	 * to map in this region, so skip fault-around.
 	 */
 	if (vma_off >= nr_data_pages)
 		return 0;
+
+	trace_android_vh_do_fault_around(vmf, &nr_pages);
 
 	/* The PTE offset of the start address, clamped to the VMA. */
 	from_pte = max(ALIGN_DOWN(pte_off, nr_pages),
