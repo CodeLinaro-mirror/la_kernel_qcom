@@ -15,6 +15,9 @@
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/of_gpio.h>
+#include <linux/of_irq.h>
+#include <linux/gunyah/gh_dbl.h>
+#include <linux/workqueue.h>
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
@@ -186,6 +189,11 @@ struct qcom_ethqos {
 	phy_interface_t phy_mode;
 
 	int gpio_phy_intr_redirect;
+	int switch_reset_detect_irq;
+	gh_label_t dbl_label;
+	void *dbl_rx_desc;
+	struct work_struct dbl_rx_work;
+	bool dbl_rx_enabled;
 	u32 phy_intr;
 
 	struct regulator *gdsc_emac;
@@ -1608,6 +1616,129 @@ static int qcom_ethqos_init(struct platform_device *pdev, void *prv)
 	return 0;
 }
 
+static void qcom_ethqos_dbl_rx_work(struct work_struct *work)
+{
+	struct qcom_ethqos *ethqos =
+		container_of(work, struct qcom_ethqos, dbl_rx_work);
+	struct device *dev = &ethqos->pdev->dev;
+	struct net_device *ndev = platform_get_drvdata(ethqos->pdev);
+	struct stmmac_priv *priv;
+
+	if (!ethqos->dbl_rx_enabled) {
+		dev_dbg(dev, "RX doorbell work skipped: doorbell disabled\n");
+		return;
+	}
+
+	if (!ndev) {
+		dev_err(dev, "ndev is NULL in dbl_rx_work\n");
+		return;
+	}
+
+	priv = netdev_priv(ndev);
+
+	dev_dbg(dev, "RX doorbell work: handling switch reset\n");
+	stmmac_handle_switch_reset(priv);
+}
+
+static void qcom_ethqos_dbl_rx_callback(int irq, void *data)
+{
+	struct qcom_ethqos *ethqos = data;
+	gh_dbl_flags_t clear_flags = ~0U;
+	int ret;
+
+	if (!ethqos->dbl_rx_enabled) {
+		dev_dbg(&ethqos->pdev->dev,
+			"RX doorbell callback skipped: doorbell disabled\n");
+		return;
+	}
+
+	if (IS_ERR_OR_NULL(ethqos->dbl_rx_desc)) {
+		dev_warn(&ethqos->pdev->dev,
+			 "RX doorbell callback skipped: invalid desc\n");
+		return;
+	}
+
+	ret = gh_dbl_read_and_clean(ethqos->dbl_rx_desc, &clear_flags, 0);
+	if (ret) {
+		dev_err(&ethqos->pdev->dev,
+			"gh_dbl_read_and_clean failed: %d\n", ret);
+		return;
+	}
+
+	dev_dbg(&ethqos->pdev->dev,
+		"RX doorbell callback: flags=0x%llx\n", clear_flags);
+
+	schedule_work(&ethqos->dbl_rx_work);
+}
+
+static void qcom_ethqos_dbl_rx_cleanup(void *data)
+{
+	struct qcom_ethqos *ethqos = data;
+
+	ethqos->dbl_rx_enabled = false;
+
+	if (!IS_ERR_OR_NULL(ethqos->dbl_rx_desc)) {
+		gh_dbl_rx_unregister(ethqos->dbl_rx_desc);
+		ethqos->dbl_rx_desc = NULL;
+	}
+
+	cancel_work_sync(&ethqos->dbl_rx_work);
+}
+
+static void qcom_ethqos_setup_dbl_rx(struct device *dev, struct qcom_ethqos *ethqos)
+{
+	struct device_node *np = dev->of_node;
+	int ret;
+
+	ethqos->dbl_rx_enabled = false;
+	ethqos->dbl_rx_desc = NULL;
+
+	ret = of_property_read_u32(np, "qcom,dbl-label", &ethqos->dbl_label);
+	if (ret) {
+		dev_dbg(dev, "qcom,dbl-label not found\n");
+		return;
+	}
+
+	INIT_WORK(&ethqos->dbl_rx_work, qcom_ethqos_dbl_rx_work);
+	dev_dbg(dev, "Setting up RX doorbell label=0x%x\n", ethqos->dbl_label);
+
+	ethqos->dbl_rx_desc = gh_dbl_rx_register(ethqos->dbl_label,
+						 qcom_ethqos_dbl_rx_callback,
+						 ethqos);
+	if (IS_ERR(ethqos->dbl_rx_desc)) {
+		dev_warn(dev, "gh_dbl_rx_register failed for label=0x%x: %ld\n",
+			 ethqos->dbl_label, PTR_ERR(ethqos->dbl_rx_desc));
+		ethqos->dbl_rx_desc = NULL;
+		return;
+	}
+
+	ret = gh_dbl_set_mask(ethqos->dbl_rx_desc, BIT(0), 0, GH_DBL_NONBLOCK);
+	if (ret) {
+		dev_warn(dev, "gh_dbl_set_mask failed for label=0x%x: %d\n",
+			 ethqos->dbl_label, ret);
+		gh_dbl_rx_unregister(ethqos->dbl_rx_desc);
+		ethqos->dbl_rx_desc = NULL;
+		cancel_work_sync(&ethqos->dbl_rx_work);
+		return;
+	}
+
+	ret = devm_add_action_or_reset(dev, qcom_ethqos_dbl_rx_cleanup, ethqos);
+	if (ret) {
+		/* The qcom_ethqos_dbl_rx_cleanup will be called on failure,
+		 * which unregisters dbl_rx_desc and cancels dbl_rx_work.
+		 */
+		dev_warn(dev,
+			 "Failed to register RX doorbell cleanup for label=0x%x: %d\n",
+			 ethqos->dbl_label, ret);
+		return;
+	}
+
+	ethqos->dbl_rx_enabled = true;
+
+	dev_info(dev, "RX doorbell setup done label=0x%x\n",
+		 ethqos->dbl_label);
+}
+
 static int qcom_ethqos_serdes_powerup(struct net_device *ndev, void *priv)
 {
 	struct qcom_ethqos *ethqos = priv;
@@ -2372,6 +2503,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_probe;
 
+	qcom_ethqos_setup_dbl_rx(dev, ethqos);
 	return ret;
 err_probe:
 	ethqos_disable_regulators(ethqos);
