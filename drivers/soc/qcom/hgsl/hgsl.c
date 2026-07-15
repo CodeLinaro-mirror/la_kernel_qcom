@@ -1535,6 +1535,7 @@ static inline void _destroy_context(struct kref *kref)
 	dma_wmb();
 
 	ctxt->destroyed = true;
+	wake_up_all(&ctxt->destroyed_wq);
 }
 
 struct hgsl_context *hgsl_get_context(struct qcom_hgsl *hgsl,
@@ -1963,13 +1964,19 @@ static int hgsl_ctxt_destroy(struct hgsl_priv *priv,
 	}
 
 	/* unblock all waiting threads on this context */
+
+	/* fast-retire all pending GPU submissions so _retire_drawobjs can
+	 * drain dispatch->drawobj_list without contacting the hypervisor
+	 */
+	ctxt->is_killed = true;
 	ctxt->in_destroy = true;
 	wake_up_all(&ctxt->wait_q);
 
 	hgsl_put_context(ctxt);
 
-	while (!ctxt->destroyed)
-		cpu_relax();
+	wait_event_killable_timeout(ctxt->destroyed_wq,
+		READ_ONCE(ctxt->destroyed), msecs_to_jiffies(5000));
+
 
 	if (!hab_channel) {
 		ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
@@ -2080,6 +2087,7 @@ static int hgsl_ioctl_ctxt_create(
 
 	kref_init(&ctxt->kref);
 	init_waitqueue_head(&ctxt->wait_q);
+	init_waitqueue_head(&ctxt->destroyed_wq);
 	mutex_init(&ctxt->lock);
 
 	hgsl_get_shadowts_mem(hab_channel, ctxt);
