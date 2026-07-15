@@ -606,7 +606,6 @@ struct dwc3_msm {
 	bool			usb3_phy_off;
 	bool			enable_host_slow_suspend;
 	bool			force_suspend;
-	bool			hibernate_skip_thaw;
 	unsigned long		lpm_flags;
 	unsigned int		vbus_draw;
 #define MDWC3_SS_PHY_SUSPEND		BIT(0)
@@ -6461,9 +6460,6 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 		ret = PTR_ERR(mdwc->dwc3_drd_sw);
 		goto depopulate;
 	}
-
-	if (mdwc->hibernate_skip_thaw)
-		dev_pm_syscore_device(dwc->dev, true);
 
 	mdwc->dwc3_pm_ops = kzalloc(sizeof(struct dev_pm_ops), GFP_ATOMIC);
 	if (!mdwc->dwc3_pm_ops)
