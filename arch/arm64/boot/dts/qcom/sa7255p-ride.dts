@@ -66,6 +66,7 @@
 &pcie1 {
 	power-domains = <&scmi6_pd 0>;
 	power-domain-names = "power";
+	safety-supported;
 	status = "okay";
 };
 
