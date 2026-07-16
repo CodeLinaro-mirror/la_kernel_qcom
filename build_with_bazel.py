@@ -439,6 +439,7 @@ class BazelBuilder:
             os.makedirs(out_dir, exist_ok=True)
 
             env = os.environ.copy()
+            env["BUILD_WORKSPACE_DIRECTORY"] = self.workspace
             runfiles_dir = script + ".runfiles"
             if os.path.isdir(runfiles_dir):
                 env["RUNFILES_DIR"] = runfiles_dir
