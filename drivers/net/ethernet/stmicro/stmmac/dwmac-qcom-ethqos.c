@@ -1639,6 +1639,11 @@ static void ethqos_clks_disable(void *data)
 	ethqos_clks_config(data, false);
 }
 
+static void ethqos_disable_regulators_action(void *data)
+{
+	ethqos_disable_regulators(data);
+}
+
 static void ethqos_ptp_clk_freq_config(struct stmmac_priv *priv)
 {
 	struct plat_stmmacenet_data *plat_dat = priv->plat;
@@ -2191,13 +2196,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		if (ret)
 			return dev_err_probe(dev, ret, "ethqos_init_regulators failed\n");
 
+		ret = devm_add_action_or_reset(dev, ethqos_disable_regulators_action, ethqos);
+		if (ret)
+			return ret;
+
 		ret = ethqos_init_gpio(ethqos);
 
-		if (ret) {
-			ethqos_disable_regulators(ethqos);
+		if (ret)
 			return dev_err_probe(dev, ret, "%s: init_gpio failed with ret = %d\n",
 					     __func__, ret);
-		}
 
 		ethqos->link_clk = devm_clk_get(dev, data->link_clk_name ?: "rgmii");
 		if (IS_ERR(ethqos->link_clk))
@@ -2284,11 +2291,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ret =  devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
 	if (ret)
-		goto err_probe;
+		return ret;
 
-	return ret;
-err_probe:
-	ethqos_disable_regulators(ethqos);
 	return ret;
 }
 
