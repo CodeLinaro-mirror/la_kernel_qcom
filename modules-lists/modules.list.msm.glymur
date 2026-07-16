@@ -83,3 +83,5 @@ qmi_helpers.ko
 qcom_soc_wdt.ko
 qcom_wdt_core.ko
 qcom_cpucp.ko
+sched-walt.ko
+sched-walt-debug.ko

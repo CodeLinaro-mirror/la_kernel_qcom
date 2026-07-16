@@ -133,6 +133,8 @@ glymur_perf_config = {
     "CONFIG_REGULATOR_QTI_FIXED_VOLTAGE": "m",
     "CONFIG_REGULATOR_RPMH": "m",
     "CONFIG_RTC_DRV_PM8XXX": "m",
+    "CONFIG_SCHED_WALT": "m",
+    "CONFIG_SCHED_WALT_NR_CPUS": "12",
     "CONFIG_SERIAL_MSM_GENI": "m",
     "CONFIG_SERIAL_PKVM_GENI": "m",
     "CONFIG_SPI_MSM_GENI": "m",
