@@ -82,3 +82,4 @@ mdt_loader.ko
 qmi_helpers.ko
 qcom_soc_wdt.ko
 qcom_wdt_core.ko
+qcom_cpucp.ko
