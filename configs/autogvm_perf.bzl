@@ -85,6 +85,7 @@ autogvm_perf_config = {
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
     "CONFIG_PINCTRL_SA8797P": "m",
+    "CONFIG_PINCTRL_SECA": "m",
     "CONFIG_POWER_RESET_QCOM_VM": "m",
     "CONFIG_PTP_QCOM_CLOCK_TSC_VM": "m",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
