@@ -56,3 +56,9 @@ msm_geni_serial.ko
 spi-msm-geni.ko
 arm_ffa.ko
 arm_ffa_transport.ko
+gpucc-glymur.ko
+gxclkctl-kaanapali.ko
+dispcc-glymur.ko
+camcc-glymur.ko
+evacc-glymur.ko
+videocc-glymur.ko
