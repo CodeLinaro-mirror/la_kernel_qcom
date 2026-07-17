@@ -830,7 +830,7 @@ static struct qcom_icc_qosbox xm_gic_qos = {
 	.offsets = { 0x33000 },
 	.config = &(struct qos_config) {
 		.prio = 0,
-		.urg_fwd = 0,
+		.urg_fwd = 1,
 		.prio_fwd_disable = 0,
 	},
 };
