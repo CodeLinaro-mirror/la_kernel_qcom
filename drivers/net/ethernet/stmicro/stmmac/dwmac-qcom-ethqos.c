@@ -2240,7 +2240,7 @@ static int qcom_ethqos_runtime_resume(struct device *dev)
 	return stmmac_bus_clks_config(priv, true);
 }
 
-static const struct dev_pm_ops qcom_ethqos_pm_ops = {
+static const struct dev_pm_ops qcom_ethqos_dsqb_pm_ops = {
 	.freeze = qcom_ethqos_hib_freeze,
 	.restore = qcom_ethqos_hib_restore,
 	.thaw = qcom_ethqos_hib_restore,
@@ -2275,6 +2275,60 @@ static int qcom_ethqos_init_noc_clks(struct qcom_ethqos *ethqos,
 
 	return 0;
 }
+
+static int qcom_ethqos_lpm_sys_suspend(struct device *dev)
+{
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv;
+	int ret;
+
+	if (!ndev)
+		return -EINVAL;
+
+	priv = netdev_priv(ndev);
+
+	ret = stmmac_suspend(dev);
+	if (ret)
+		return ret;
+
+	clk_disable_unprepare(priv->plat->clk_ptp_ref);
+
+	if (pm_runtime_status_suspended(dev))
+		return 0;
+
+	return pm_runtime_force_suspend(dev);
+}
+
+static int qcom_ethqos_lpm_sys_resume(struct device *dev)
+{
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv;
+	int ret;
+
+	if (!ndev)
+		return -EINVAL;
+
+	priv = netdev_priv(ndev);
+
+	ret = pm_runtime_force_resume(dev);
+	if (ret)
+		return ret;
+
+	ret = clk_prepare_enable(priv->plat->clk_ptp_ref);
+	if (ret) {
+		pm_runtime_force_suspend(dev);
+		return ret;
+	}
+
+	return stmmac_resume(dev);
+}
+
+static const struct dev_pm_ops qcom_ethqos_lpm_pm_ops = {
+	.suspend = qcom_ethqos_lpm_sys_suspend,
+	.resume = qcom_ethqos_lpm_sys_resume,
+	.runtime_suspend = qcom_ethqos_runtime_suspend,
+	.runtime_resume = qcom_ethqos_runtime_resume,
+};
 
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
@@ -2402,7 +2456,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	if (!ethqos->use_domains) {
-		pdev->dev.driver->pm = &qcom_ethqos_pm_ops;
+		if (of_device_is_compatible(np, "qcom,shikra-ethqos"))
+			pdev->dev.driver->pm = &qcom_ethqos_lpm_pm_ops;
+		else
+			pdev->dev.driver->pm = &qcom_ethqos_dsqb_pm_ops;
 		ret = ethqos_init_regulators(ethqos);
 
 		if (ret)
