@@ -260,6 +260,7 @@ int      cci_util_lt7911_reg_write(struct cci_util_handle *handle,
 				   struct dpin_cci_util_i2c_reg_array *reg_cfg, int reg_sz);
 void     cci_util_lt7911_enable_i2c(struct cci_util_handle *handle);
 void     cci_util_lt7911_disable_i2c(struct cci_util_handle *handle);
+void     cci_util_lt7911_release_cci(struct cci_util_handle *handle);
 int      cci_util_lt7911_get_information(struct cci_util_handle *handle,
 					 int *irq, int *width, int *height,
 					 int *fps, int *format, int *afreq, int *ach);

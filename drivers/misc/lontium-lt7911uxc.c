@@ -187,6 +187,10 @@ static int lt7911_power_down(struct lt7911uxc_data *data)
 
 	lockdep_assert_held(&data->device_lock);
 
+	/* Release CCI power domain and clocks so SoC / AOSD can enter sleep */
+	if (data->cci_handle)
+		cci_util_lt7911_release_cci(data->cci_handle);
+
 	if (!data->lt7911_poweron) {
 		dev_dbg(data->dev, "LT7911 already powered off\n");
 		return 0;
@@ -1704,21 +1708,30 @@ static int lt7911uxc_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int lt7911uxc_suspend(struct device *dev)
+{
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
+
+	if (!lt7911)
+		return 0;
+
+	mutex_lock(&lt7911->device_lock);
+	if (lt7911->cci_handle)
+		cci_util_lt7911_release_cci(lt7911->cci_handle);
+	mutex_unlock(&lt7911->device_lock);
+
+	return 0;
+}
+
 static int lt7911uxc_resume(struct device *dev)
 {
 	return 0;
 }
 
-static int lt7911uxc_suspend(struct device *dev)
-{
-	return 0;
-}
-
 static const struct dev_pm_ops lt7911uxc_pm_ops = {
-	.runtime_suspend = lt7911uxc_suspend,
-	.runtime_resume = lt7911uxc_resume,
+	SET_SYSTEM_SLEEP_PM_OPS(lt7911uxc_suspend, lt7911uxc_resume)
+		SET_RUNTIME_PM_OPS(lt7911uxc_suspend, lt7911uxc_resume, NULL)
 };
-
 
 static const struct of_device_id lt7911uxc_id_table[] = {
 	{ .compatible = "lontium,lt7911uxc",},
