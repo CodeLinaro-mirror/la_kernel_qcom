@@ -200,8 +200,7 @@ static void virthab_recv_txq(struct virtqueue *vq)
 			pr_err("failed to match txq %pK expecting %pK\n",
 				vq, vpc->vq[HAB_PCHAN_TX_VQ]);
 
-		hd = (struct vh_buf_header *)virtqueue_get_buf(vq, &len);
-		while (hd != NULL) {
+		while ((hd = (struct vh_buf_header *)virtqueue_get_buf(vq, &len)) != NULL) {
 			if ((hd->index < 0) || (hd->pool_type < 0) ||
 				(hd->pool_type > PT_OUT_DYNA_KMALLOC))
 				pr_err("corrupted outbuf %pK %d %d %d\n",
@@ -295,8 +294,7 @@ static void virthab_recv_rxq(unsigned long p)
 
 	spin_lock(&vpc->lock[HAB_PCHAN_RX_VQ]);
 
-	hd = virtqueue_get_buf(vpc->vq[HAB_PCHAN_RX_VQ], &len);
-	while (hd != NULL) {
+	while ((hd = virtqueue_get_buf(vpc->vq[HAB_PCHAN_RX_VQ], &len)) != NULL) {
 		vpc->in_cnt--;
 
 		/* sanity check */
@@ -943,8 +941,9 @@ static void virthab_remove(struct virtio_device *vdev)
 		struct vq_pchan *vpc = &vh->vqpchans[i];
 
 		j = 0;
-		buf = virtqueue_detach_unused_buf(vpc->vq[HAB_PCHAN_RX_VQ]);
-		while (buf != NULL) {
+		while ((buf =
+			virtqueue_detach_unused_buf(vpc->vq[HAB_PCHAN_RX_VQ]))
+								!= NULL) {
 			pr_debug("free vq-pchan %s %d buf %d %pK\n",
 				vpc->vq[HAB_PCHAN_RX_VQ]->name, i, j, buf);
 		}
