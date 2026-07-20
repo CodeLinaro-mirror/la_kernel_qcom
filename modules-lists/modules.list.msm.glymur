@@ -16,6 +16,7 @@ qcom-pdc.ko
 pinctrl-msm.ko
 pinctrl-glymur.ko
 debug_symbol.ko
+qcom-dcvs.ko
 qcom-dload-mode.ko
 qcom_cpu_vendor_hooks.ko
 icc-bcm-voter.ko
@@ -71,6 +72,7 @@ secure_buffer.ko
 qcom_dma_heaps.ko
 deferred-free-helper.ko
 msm_dma_iommu_mapping.ko
+qcom-pmu-lib.ko
 nvmem_qfprom.ko
 gic_intr_routing.ko
 qcom_dpd_proxy.ko
