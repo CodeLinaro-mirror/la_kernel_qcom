@@ -461,6 +461,7 @@ static struct gdsc video_cc_mvs0c_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct gdsc video_cc_mvs0_gdsc = {
@@ -474,6 +475,7 @@ static struct gdsc video_cc_mvs0_gdsc = {
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
 	.parent = &video_cc_mvs0c_gdsc.pd,
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct gdsc video_cc_mvs1_gdsc = {
@@ -486,6 +488,7 @@ static struct gdsc video_cc_mvs1_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_mm_mxc_voter",
 };
 
 static struct clk_regmap *video_cc_glymur_clocks[] = {
@@ -522,6 +525,7 @@ static const struct qcom_reset_map video_cc_glymur_resets[] = {
 	[VIDEO_CC_MVS0_FREERUN_CLK_ARES] = { 0x808c, 2 },
 	[VIDEO_CC_MVS1_FREERUN_CLK_ARES] = { 0x80c8, 2 },
 	[VIDEO_CC_MVS1_BCR] = { 0x80a0 },
+	[VIDEO_CC_XO_CLK_ARES] = { 0x8110, 2 },
 };
 
 static const u32 video_cc_glymur_critical_cbcrs[] = {
