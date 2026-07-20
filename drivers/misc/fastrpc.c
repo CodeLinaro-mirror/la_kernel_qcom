@@ -356,6 +356,8 @@ static void fastrpc_free_map(struct kref *ref)
 	map = container_of(ref, struct fastrpc_map, refcount);
 
 	if (map->table) {
+		struct device *dev = map->attach->dev;
+
 		if (map->attr & FASTRPC_ATTR_SECUREMAP) {
 			struct qcom_scm_vmperm perm;
 			int vmid = map->fl->cctx->vmperms[0].vmid;
@@ -375,6 +377,8 @@ static void fastrpc_free_map(struct kref *ref)
 		dma_buf_unmap_attachment_unlocked(map->attach, map->table,
 						  DMA_BIDIRECTIONAL);
 		dma_buf_detach(map->buf, map->attach);
+		/* Release the reference taken in fastrpc_map_attach() */
+		put_device(dev);
 		dma_buf_put(map->buf);
 	}
 
@@ -873,6 +877,15 @@ static int fastrpc_map_attach(struct fastrpc_user *fl, int fd,
 		err = PTR_ERR(map->attach);
 		goto attach_err;
 	}
+	/*
+	 * dma_buf_attach() only stores a raw pointer to sess->dev in the
+	 * attachment; it takes no reference. Pin the device for as long as
+	 * the attachment is alive so that SSR (of_platform_depopulate()
+	 * freeing the context-bank device in fastrpc_rpmsg_remove()) cannot
+	 * free it while a global dma_buf walk (e.g. dma_buf_debug_show())
+	 * still dereferences attach->dev.
+	 */
+	get_device(sess->dev);
 	table = dma_buf_map_attachment_unlocked(map->attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR(table)) {
 		err = PTR_ERR(table);
@@ -927,6 +940,7 @@ static int fastrpc_map_attach(struct fastrpc_user *fl, int fd,
 
 map_err:
 	dma_buf_detach(map->buf, map->attach);
+	put_device(sess->dev);
 attach_err:
 	dma_buf_put(map->buf);
 get_err:
