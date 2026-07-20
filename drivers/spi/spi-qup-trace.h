@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only
- *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #undef TRACE_SYSTEM
@@ -27,9 +27,15 @@ TRACE_EVENT(spi_log_info,
 
 		TP_fast_assign(
 			__assign_str(name, name);
-			WARN_ON_ONCE(vsnprintf(__get_dynamic_array(msg),
-									MAX_MSG_LEN, vaf->fmt,
-									*vaf->va) >= MAX_MSG_LEN);
+			if (strnlen(vaf->fmt, MAX_MSG_LEN) >= MAX_MSG_LEN) {
+				/* Suspicious format string */
+				WARN_ON_ONCE(1);
+			} else {
+				int len = vsnprintf(__get_dynamic_array(msg), MAX_MSG_LEN,
+										vaf->fmt, *vaf->va);
+				/* Handle error or truncation */
+				WARN_ON_ONCE(len < 0 || len >= MAX_MSG_LEN);
+				}
 		),
 
 		TP_printk("%s: %s", __get_str(name), __get_str(msg))

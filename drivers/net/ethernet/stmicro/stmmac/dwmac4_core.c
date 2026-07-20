@@ -686,12 +686,19 @@ static void dwmac4_set_filter(struct mac_device_info *hw,
 	} else {
 		struct netdev_hw_addr *ha;
 		int reg = 1;
+		if (!netdev_uc_empty(dev)) {
+			netdev_for_each_uc_addr(ha, dev) {
+				if (reg > GMAC_MAX_PERFECT_ADDRESSES)
+					break;
 
-		netdev_for_each_uc_addr(ha, dev) {
-			dwmac4_set_umac_addr(hw, ha->addr, reg);
-			reg++;
+				dwmac4_set_umac_addr(hw, ha->addr, reg);
+				reg++;
+			}
+		} else {
+			pr_debug("%s: UC list empty, clearing slots\n", __func__);
 		}
 
+		/* clear the rest */
 		while (reg < GMAC_MAX_PERFECT_ADDRESSES) {
 			writel(0, ioaddr + GMAC_ADDR_HIGH(reg));
 			writel(0, ioaddr + GMAC_ADDR_LOW(reg));

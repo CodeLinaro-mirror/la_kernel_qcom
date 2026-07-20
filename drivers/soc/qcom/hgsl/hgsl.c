@@ -1015,7 +1015,7 @@ static int hgsl_dbcq_open(struct hgsl_priv *priv,
 		goto err;
 	}
 
-	dbcq->queue_mem = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	dbcq->queue_mem = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (!dbcq->queue_mem) {
 		LOGE("out of memory");
 		ret = -ENOMEM;
@@ -2220,17 +2220,15 @@ static int hgsl_ioctl_hyp_generic_transaction(
 	int ret_value = 0;
 	int *pRval = NULL;
 
-	memset(pSend, 0, sizeof(pSend));
-	memset(pReply, 0, sizeof(pReply));
-
-
 	if ((params->send_num > HGSL_HYP_GENERAL_MAX_SEND_NUM) ||
 		(params->reply_num > HGSL_HYP_GENERAL_MAX_REPLY_NUM)) {
-		ret = -EINVAL;
-		LOGE("invalid Send %d or reply %d number\n",
+		LOGE("invalid Send %d or reply %d number",
 			params->send_num, params->reply_num);
-		goto out;
+		return -EINVAL;
 	}
+
+	memset(pSend, 0, sizeof(pSend));
+	memset(pReply, 0, sizeof(pReply));
 
 	for (i = 0; i < params->send_num; i++) {
 		if ((params->send_size[i] > HGSL_HYP_GENERAL_MAX_SIZE) ||
@@ -2238,19 +2236,28 @@ static int hgsl_ioctl_hyp_generic_transaction(
 			LOGE("Invalid size 0x%x for %d\n", params->send_size[i], i);
 			ret = -EINVAL;
 			goto out;
-		} else {
-			pSend[i] = hgsl_malloc(params->send_size[i]);
-			if (pSend[i] == NULL) {
-				ret = -ENOMEM;
-				goto out;
-			}
-			if (copy_from_user(pSend[i],
-				USRPTR(params->send_data[i]),
-				params->send_size[i])) {
-				LOGE("Failed to copy send data %d\n", i);
-				ret = -EFAULT;
-				goto out;
-			}
+		}
+
+		if (hgsl_check_userparams(params->send_data[i],
+			params->send_size[i])) {
+			LOGE("invalid send data or size (0x%llx, 0x%x)",
+				params->send_data[i],
+				params->send_size[i]);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		pSend[i] = hgsl_malloc(params->send_size[i]);
+		if (pSend[i] == NULL) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		if (copy_from_user(pSend[i],
+			USRPTR(params->send_data[i]),
+			params->send_size[i])) {
+			LOGE("Failed to copy send data %d\n", i);
+			ret = -EFAULT;
+			goto out;
 		}
 	}
 
@@ -2259,18 +2266,33 @@ static int hgsl_ioctl_hyp_generic_transaction(
 			(params->reply_size[i] == 0)) {
 			ret = -EINVAL;
 			goto out;
-		} else {
-			pReply[i] = hgsl_malloc(params->reply_size[i]);
-			if (pReply[i] == NULL) {
-				ret = -ENOMEM;
-				goto out;
-			}
-			memset(pReply[i], 0, params->reply_size[i]);
+		}
+
+		if (hgsl_check_userparams(params->reply_data[i],
+			params->reply_size[i])) {
+			LOGE("invalid reply data or size (0x%llx, 0x%x)",
+				params->reply_data[i],
+				params->reply_size[i]);
+			ret = -EINVAL;
+			goto out;
+		}
+
+		pReply[i] = hgsl_zalloc(params->reply_size[i]);
+		if (pReply[i] == NULL) {
+			ret = -ENOMEM;
+			goto out;
 		}
 	}
 
-	if (params->ret_value)
+	if (params->ret_value) {
+		if (hgsl_check_userparams(
+			params->ret_value, sizeof(ret_value))) {
+			LOGE("invalid ret data (0x%llx)", params->ret_value);
+			ret = -EINVAL;
+			goto out;
+		}
 		pRval = &ret_value;
+	}
 
 	ret = hgsl_hyp_generic_transaction(&priv->hyp_priv,
 					params, pSend, pReply, pRval);
@@ -2316,6 +2338,13 @@ static int hgsl_ioctl_mem_alloc(
 		goto out;
 	}
 
+	if (hgsl_check_userparams(
+		params->memdesc, sizeof(struct gsl_memdesc_t))) {
+		LOGE("invalid input memdesc (0x%llx)", params->memdesc);
+		ret = -EINVAL;
+		goto out;
+	}
+
 	if (params->sizebytes == 0) {
 		LOGE("requested size is 0");
 		ret = -EINVAL;
@@ -2329,7 +2358,7 @@ static int hgsl_ioctl_mem_alloc(
 		goto out;
 	}
 
-	mem_node = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	mem_node = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (mem_node == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -2340,7 +2369,6 @@ static int hgsl_ioctl_mem_alloc(
 	ret = hgsl_sharedmem_alloc(hgsl->dev, params->sizebytes, params->flags, mem_node);
 	if (ret)
 		goto out;
-
 	ret = hgsl_hyp_mem_map_smmu(hab_channel, mem_node->memdesc.size, 0, mem_node);
 	LOGD("%d, %d, gpuaddr 0x%llx",
 		ret, mem_node->export_id, mem_node->memdesc.gpuaddr);
@@ -2390,6 +2418,12 @@ static int hgsl_ioctl_mem_free(
 	int ret = 0;
 	struct hgsl_mem_node *node_found = NULL;
 	struct hgsl_hab_channel_t *hab_channel = NULL;
+
+	if (hgsl_check_userparams(
+		params->memdesc, sizeof(memdesc))) {
+		LOGE("invalid input memdesc (0x%llx)", params->memdesc);
+		return -EINVAL;
+	}
 
 	ret = hgsl_hyp_channel_pool_get(&priv->hyp_priv, 0, &hab_channel);
 	if (ret) {
@@ -2447,9 +2481,15 @@ static int hgsl_ioctl_set_metainfo(
 
 	if (params->metainfo_len > HGSL_MEM_META_MAX_SIZE) {
 		LOGE("metainfo_len %d exceeded max", params->metainfo_len);
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
+
+	if (hgsl_check_userparams(
+		params->metainfo, params->metainfo_len)) {
+		LOGE("invalid input metainfo (0x%llx)", params->metainfo);
+		return -EINVAL;
+	}
+
 	if (copy_from_user(metainfo, USRPTR(params->metainfo),
 					params->metainfo_len)) {
 		LOGE("failed to copy metainfo from user");
@@ -2501,7 +2541,7 @@ static int hgsl_ioctl_mem_map_smmu(
 		goto out;
 	}
 
-	mem_node = hgsl_mem_node_zalloc(hgsl->default_iocoherency);
+	mem_node = hgsl_mem_node_zalloc(hgsl->cache_flags);
 	if (mem_node == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -2639,6 +2679,12 @@ static int hgsl_ioctl_mem_get_fd(
 	struct gsl_memdesc_t memdesc;
 	struct hgsl_mem_node *node_found = NULL;
 	int ret = 0;
+
+	if (hgsl_check_userparams(
+		params->memdesc, sizeof(memdesc))) {
+		LOGE("invalid input memdesc 0x%llx", params->memdesc);
+		return -EINVAL;
+	}
 
 	if (copy_from_user(&memdesc, USRPTR(params->memdesc),
 		sizeof(memdesc))) {
@@ -2782,6 +2828,13 @@ static int hgsl_ioctl_issueib(
 		remote_issueib = true;
 	} else {
 		ib_size = params->num_ibs * sizeof(struct hgsl_ibdesc);
+		if (hgsl_check_userparams(params->ibs, ib_size)) {
+			LOGE("invalid input ibs (0x%llx, 0x%llx)",
+				params->ibs, ib_size);
+			ret = -EINVAL;
+			goto out;
+		}
+
 		ibs = hgsl_malloc(ib_size);
 		if (ibs == NULL) {
 			ret = -ENOMEM;
@@ -2839,6 +2892,13 @@ static int hgsl_ioctl_issueib_with_alloc_list(
 		remote_issueib = true;
 	} else {
 		ib_size = params->num_ibs * sizeof(struct gsl_command_buffer_object_t);
+		if (hgsl_check_userparams(params->ibs, ib_size)) {
+			LOGE("invalid input ib list (0x%llx, 0x%llx)",
+				params->ibs, ib_size);
+			ret = -EINVAL;
+			goto out;
+		}
+
 		ibs = hgsl_malloc(ib_size);
 		if (ibs == NULL) {
 			ret = -ENOMEM;
@@ -2852,6 +2912,14 @@ static int hgsl_ioctl_issueib_with_alloc_list(
 		if (params->num_allocations != 0) {
 			allocation_size = params->num_allocations *
 				sizeof(struct gsl_memory_object_t);
+			if (hgsl_check_userparams(
+				params->allocations, allocation_size)) {
+				LOGE("invalid input allocations (0x%llx, 0x%llx)",
+					params->allocations, allocation_size);
+				ret = -EINVAL;
+				goto out;
+			}
+
 			allocations = hgsl_malloc(allocation_size);
 			if (allocations == NULL) {
 				ret = -ENOMEM;
@@ -2872,6 +2940,14 @@ static int hgsl_ioctl_issueib_with_alloc_list(
 		}
 		be_data_size = (params->num_ibs + params->num_allocations) *
 			(sizeof(struct gsl_memdesc_t) + sizeof(uint64_t));
+		if (hgsl_check_userparams(
+			params->be_data, be_data_size)) {
+			LOGE("invalid input be_data (0x%llx, 0x%llx)",
+				params->be_data, be_data_size);
+			ret = -EINVAL;
+			goto out;
+		}
+
 		be_descs = (struct gsl_memdesc_t *)hgsl_malloc(be_data_size);
 		if (be_descs == NULL) {
 			ret = -ENOMEM;
@@ -3038,10 +3114,16 @@ static int hgsl_ioctl_syncobj_wait_multiple(
 		(param->num_syncobjs > (SIZE_MAX / sizeof(int32_t)))) {
 		LOGE("invalid num_syncobjs %zu", param->num_syncobjs);
 		return -EINVAL;
-		goto out;
 	}
 
 	rpc_syncobj_size = sizeof(uint64_t) * param->num_syncobjs;
+	if (hgsl_check_userparams(
+		param->rpc_syncobj, rpc_syncobj_size)) {
+		LOGE("invalid input rpc_syncobj (0x%llx, 0x%llx)",
+			param->rpc_syncobj, rpc_syncobj_size);
+		return -EINVAL;
+	}
+
 	rpc_syncobj = (uint64_t *)hgsl_malloc(rpc_syncobj_size);
 	if (rpc_syncobj == NULL) {
 		LOGE("failed to allocate memory");
@@ -3056,13 +3138,12 @@ static int hgsl_ioctl_syncobj_wait_multiple(
 	}
 
 	status_size = sizeof(int32_t) * param->num_syncobjs;
-	status = (int32_t *)hgsl_malloc(status_size);
+	status = (int32_t *)hgsl_zalloc(status_size);
 	if (status == NULL) {
 		LOGE("failed to allocate memory");
 		ret = -ENOMEM;
 		goto out;
 	}
-	memset(status, 0, status_size);
 
 	ret = hgsl_hyp_syncobj_wait_multiple(&priv->hyp_priv, rpc_syncobj,
 		param->num_syncobjs, param->timeout_ms, status, &param->result);
@@ -3091,16 +3172,29 @@ static int hgsl_ioctl_perfcounter_select(
 	uint32_t *counter_ids = NULL;
 	uint32_t *counter_val_regs = NULL;
 	uint32_t *counter_val_hi_regs = NULL;
+	uint32_t usize = sizeof(uint32_t) * param->num_counters;
 
 	if ((param->num_counters <= 0) ||
-		(param->num_counters > (SIZE_MAX / (sizeof(int32_t) * 4)))) {
+		(param->num_counters > (S32_MAX / (sizeof(int32_t) * 4)))) {
 		LOGE("invalid num_counters %zu", param->num_counters);
 		return -EINVAL;
-		goto out;
 	}
 
-	groups = (uint32_t *)hgsl_malloc(
-		sizeof(int32_t) * 4 * param->num_counters);
+	if (hgsl_check_userparams(param->groups, usize) ||
+		hgsl_check_userparams(param->counter_ids, usize) ||
+		hgsl_check_userparams(param->counter_val_regs, usize) ||
+		(param->counter_val_hi_regs &&
+			hgsl_check_userparams(param->counter_val_hi_regs, usize))) {
+		LOGE("invalid input uaddr or usize (0x%llx, 0x%llx, 0x%llx, 0x%llx 0x%x)",
+			param->groups,
+			param->counter_ids,
+			param->counter_val_regs,
+			param->counter_val_hi_regs,
+			usize);
+		return -EINVAL;
+	}
+
+	groups = (uint32_t *)hgsl_malloc(usize * 4);
 	if (groups == NULL) {
 		LOGE("failed to allocate memory");
 		ret = -ENOMEM;
@@ -3112,13 +3206,13 @@ static int hgsl_ioctl_perfcounter_select(
 	counter_val_hi_regs = counter_val_regs + param->num_counters;
 
 	if (copy_from_user(groups, USRPTR(param->groups),
-		sizeof(uint32_t) * param->num_counters)) {
+		usize)) {
 		LOGE("failed to copy groups from user");
 		ret = -EFAULT;
 		goto out;
 	}
 	if (copy_from_user(counter_ids, USRPTR(param->counter_ids),
-		sizeof(uint32_t) * param->num_counters)) {
+		usize)) {
 		LOGE("failed to copy counter_ids from user");
 		ret = -EFAULT;
 		goto out;
@@ -3130,14 +3224,14 @@ static int hgsl_ioctl_perfcounter_select(
 	if (!ret) {
 		if (copy_to_user(USRPTR(param->counter_val_regs),
 			counter_val_regs,
-			sizeof(uint32_t) * param->num_counters)) {
+			usize)) {
 			ret = -EFAULT;
 			goto out;
 		}
 		if (param->counter_val_hi_regs) {
 			if (copy_to_user(USRPTR(param->counter_val_hi_regs),
 				counter_val_hi_regs,
-				sizeof(uint32_t) * param->num_counters)) {
+				usize)) {
 				ret = -EFAULT;
 				goto out;
 			}
@@ -3159,16 +3253,24 @@ static int hgsl_ioctl_perfcounter_deselect(
 	int ret = 0;
 	uint32_t *groups = NULL;
 	uint32_t *counter_ids = NULL;
+	uint32_t usize = sizeof(uint32_t) * param->num_counters;
 
 	if ((param->num_counters <= 0) ||
-		(param->num_counters > (SIZE_MAX / (sizeof(int32_t) * 2)))) {
+		(param->num_counters > (S32_MAX / (sizeof(int32_t) * 2)))) {
 		LOGE("invalid num_counters %zu", param->num_counters);
 		return -EINVAL;
-		goto out;
 	}
 
-	groups = (uint32_t *)hgsl_malloc(
-		sizeof(int32_t) * 2 * param->num_counters);
+	if (hgsl_check_userparams(param->groups, usize) ||
+		hgsl_check_userparams(param->counter_ids, usize)) {
+		LOGE("invalid input uaddr or usize (0x%llx, 0x%llx, 0x%x)",
+			param->groups,
+			param->counter_ids,
+			usize);
+		return -EINVAL;
+	}
+
+	groups = (uint32_t *)hgsl_malloc(usize * 2);
 	if (groups == NULL) {
 		LOGE("failed to allocate memory");
 		ret = -ENOMEM;
@@ -3178,13 +3280,13 @@ static int hgsl_ioctl_perfcounter_deselect(
 	counter_ids = groups + param->num_counters;
 
 	if (copy_from_user(groups, USRPTR(param->groups),
-				sizeof(uint32_t) * param->num_counters)) {
+		usize)) {
 		LOGE("failed to copy groups from user");
 		ret = -EFAULT;
 		goto out;
 	}
 	if (copy_from_user(counter_ids, USRPTR(param->counter_ids),
-				sizeof(uint32_t) * param->num_counters)) {
+		usize)) {
 		LOGE("failed to copy counter_ids from user");
 		ret = -EFAULT;
 		goto out;
@@ -3206,22 +3308,27 @@ static int hgsl_ioctl_perfcounter_query_selection(
 		*param = data;
 	int ret = 0;
 	int32_t *selections = NULL;
+	uint32_t size = sizeof(int32_t) * param->num_counters;
 
 	if ((param->num_counters <= 0) ||
-		(param->num_counters > (SIZE_MAX / sizeof(int32_t)))) {
+		(param->num_counters > (S32_MAX / sizeof(int32_t)))) {
 		LOGE("invalid num_counters %zu", param->num_counters);
 		return -EINVAL;
-		goto out;
 	}
 
-	selections = (int32_t *)hgsl_malloc(
-		sizeof(int32_t) * param->num_counters);
+	if (param->selections && hgsl_check_userparams(
+			param->selections, size)) {
+		LOGE("invalid input selections (0x%llx, 0x%x)",
+			param->selections, size);
+		return -EINVAL;
+	}
+
+	selections = (int32_t *)hgsl_zalloc(size);
 	if (selections == NULL) {
 		LOGE("failed to allocate memory");
 		ret = -ENOMEM;
 		goto out;
 	}
-	memset(selections, 0, sizeof(int32_t)  * param->num_counters);
 
 	ret = hgsl_hyp_perfcounter_query_selections(&priv->hyp_priv,
 							param, selections);
@@ -3229,12 +3336,10 @@ static int hgsl_ioctl_perfcounter_query_selection(
 	if (ret)
 		goto out;
 
-	if (param->selections != 0) {
-		if (copy_to_user(USRPTR(param->selections), selections,
-			sizeof(int32_t) * param->num_counters)) {
-			ret = -EFAULT;
-			goto out;
-		}
+	if (param->selections && copy_to_user(
+			USRPTR(param->selections), selections, size)) {
+		ret = -EFAULT;
+		goto out;
 	}
 
 out:
@@ -3627,6 +3732,11 @@ static int hgsl_ioctl_timeline_signal(
 		param->timelines_size = sizeof(struct hgsl_timeline_val);
 
 	timelines = param->timelines;
+	if (hgsl_check_userparams(timelines,
+		param->timelines_size * param->count)) {
+		LOGE("invalid signal timelines (0x%llx)", timelines);
+		return -EINVAL;
+	}
 
 	for (i = 0; i < param->count; i++) {
 		struct hgsl_timeline_val val;
@@ -3662,6 +3772,11 @@ static int hgsl_ioctl_timeline_query(
 		param->timelines_size = sizeof(struct hgsl_timeline_val);
 
 	timelines = param->timelines;
+	if (hgsl_check_userparams(timelines,
+		param->timelines_size * param->count)) {
+		LOGE("invalid input timelines (0x%llx)", timelines);
+		return -EINVAL;
+	}
 
 	for (i = 0; i < param->count; i++) {
 		struct hgsl_timeline_val val;
@@ -3703,9 +3818,15 @@ static int hgsl_ioctl_gslprofiler_per_proc_gpu_busy(struct file *filep, void *da
 	struct hgsl_priv *priv = filep->private_data;
 	struct hgsl_ioctl_gslprofiler_per_proc_gpu_busy_params *param = data;
 	struct gsl_profiler_get_per_proc_gpu_busy_percentage_t *busy = NULL;
+	uint32_t usize = sizeof(*busy);
 	int ret = 0;
 
-	busy = hgsl_malloc(sizeof(struct gsl_profiler_get_per_proc_gpu_busy_percentage_t));
+	if (hgsl_check_userparams(param->busy, usize)) {
+		LOGE("invalid input busy data (0x%llx)", param->busy);
+		return -EINVAL;
+	}
+
+	busy = hgsl_malloc(usize);
 	if (busy == NULL) {
 		LOGE("failed to allocate memory");
 		ret = -ENOMEM;
@@ -3714,8 +3835,7 @@ static int hgsl_ioctl_gslprofiler_per_proc_gpu_busy(struct file *filep, void *da
 
 	ret = hgsl_hyp_gslprofiler_per_proc_gpu_busy(&priv->hyp_priv, param, busy);
 	if (ret == 0) {
-		if (copy_to_user(USRPTR(param->busy), busy,
-				sizeof(struct gsl_profiler_get_per_proc_gpu_busy_percentage_t))) {
+		if (copy_to_user(USRPTR(param->busy), busy, usize)) {
 			LOGE("failed to copy busy to user");
 			ret = -EFAULT;
 			goto out;
@@ -3732,9 +3852,15 @@ static int hgsl_ioctl_gslprofiler_per_proc_gpu_pmem(struct file *filep, void *da
 	struct hgsl_priv *priv = filep->private_data;
 	struct hgsl_ioctl_gslprofiler_per_proc_gpu_pmem_params *param = data;
 	struct gsl_profiler_get_per_proc_gpu_pmem_usage_t *pmem = NULL;
+	uint32_t usize = sizeof(*pmem);
 	int ret = 0;
 
-	pmem = hgsl_malloc(sizeof(struct gsl_profiler_get_per_proc_gpu_pmem_usage_t));
+	if (hgsl_check_userparams(param->pmem, usize)) {
+		LOGE("invalid input pmem data (0x%llx)", param->pmem);
+		return -EINVAL;
+	}
+
+	pmem = hgsl_malloc(usize);
 	if (pmem == NULL) {
 		LOGE("failed to allocate memory");
 		ret = -ENOMEM;
@@ -3743,8 +3869,7 @@ static int hgsl_ioctl_gslprofiler_per_proc_gpu_pmem(struct file *filep, void *da
 
 	ret = hgsl_hyp_gslprofiler_per_proc_gpu_pmem(&priv->hyp_priv, param, pmem);
 	if (ret == 0) {
-		if (copy_to_user(USRPTR(param->pmem), pmem,
-				sizeof(struct gsl_profiler_get_per_proc_gpu_pmem_usage_t))) {
+		if (copy_to_user(USRPTR(param->pmem), pmem, usize)) {
 			LOGE("failed to copy pmem to user");
 			ret = -EFAULT;
 			goto out;
@@ -4014,9 +4139,14 @@ exit:
 
 static int hgsl_suspend(struct device *dev)
 {
-	/* Do nothing */
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_hgsl *hgsl = platform_get_drvdata(pdev);
 
-	// TODO: shall we disable the interrupt from GMU? and enable them after resume?
+	LOGD("+");
+	if (hgsl->wq)
+		flush_workqueue(hgsl->wq);
+
+	/* TODO: shall we disable the interrupt from GMU? and enable them after resume? */
 	return 0;
 }
 
@@ -4025,30 +4155,64 @@ static int hgsl_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct qcom_hgsl *hgsl = platform_get_drvdata(pdev);
 	struct hgsl_tcsr *tcsr = NULL;
-	int tcsr_idx = 0;
+	int tcsr_idx = 0, ret = 0, rval = 0;
 
-	if (pm_suspend_target_state == PM_SUSPEND_MEM) {
-		for (tcsr_idx = 0; tcsr_idx < HGSL_TCSR_NUM; tcsr_idx++) {
-			tcsr = hgsl->tcsr[tcsr_idx][HGSL_TCSR_ROLE_RECEIVER];
-			if (tcsr != NULL) {
-				hgsl_tcsr_irq_enable(tcsr,
-					GLB_DB_DEST_TS_RETIRE_IRQ_MASK, true);
-			}
+	LOGD("+");
+	for (tcsr_idx = 0; tcsr_idx < HGSL_TCSR_NUM; tcsr_idx++) {
+		tcsr = hgsl->tcsr[tcsr_idx][HGSL_TCSR_ROLE_RECEIVER];
+		if (tcsr != NULL) {
+			hgsl_tcsr_irq_enable(tcsr,
+				GLB_DB_DEST_TS_RETIRE_IRQ_MASK, true);
 		}
-		/*
-		 * There could be a scenario when GVM submit some work to GMU
-		 * just before going to suspend, in this case, the GMU will
-		 * not submit it to RB and when GMU resume(FW reload) happens,
-		 * it submits the work to GPU and fire the ts_retire to GVM.
-		 * At this point, the GVM is not up so it may miss the
-		 * interrupt from GMU so check if there is any ts_retire by
-		 * reading the shadow timestamp.
-		 */
-		if (hgsl->wq != NULL)
-			queue_work(hgsl->wq, &hgsl->ts_retire_work);
 	}
+	/*
+	 * There could be a scenario when GVM submit some work to GMU
+	 * just before going to suspend, in this case, the GMU will
+	 * not submit it to RB and when GMU resume(FW reload) happens,
+	 * it submits the work to GPU and fire the ts_retire to GVM.
+	 * At this point, the GVM is not up so it may miss the
+	 * interrupt from GMU so check if there is any ts_retire by
+	 * reading the shadow timestamp.
+	 */
+	if (hgsl->wq != NULL)
+		queue_work(hgsl->wq, &hgsl->ts_retire_work);
+
+	/* TODO: should we notify for second device here? */
+	ret = hgsl_hyp_notify_pm_state(&hgsl->global_hyp, GSL_RPC_PM_RESUME,
+								GSL_HANDLE_NULL, &rval);
+	if (ret)
+		LOGE("Failed to reregister context after resume ret %d\n", ret);
 
 	return 0;
+}
+
+static int hgsl_pm_suspend(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_suspend(dev);
+}
+
+static int hgsl_pm_resume(struct device *dev)
+{
+	int ret = 0;
+
+	LOGD("+");
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		ret = hgsl_resume(dev);
+
+	return ret;
+}
+
+static int hgsl_hibernation_suspend(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_suspend(dev);
+}
+
+static int hgsl_hibernation_resume(struct device *dev)
+{
+	LOGD("+");
+	return hgsl_resume(dev);
 }
 
 static int qcom_hgsl_probe(struct platform_device *pdev)
@@ -4101,8 +4265,10 @@ static int qcom_hgsl_probe(struct platform_device *pdev)
 	if (!hgsl_dev->db_off)
 		hgsl_init_global_hyp_channel(hgsl_dev);
 
-	hgsl_dev->default_iocoherency = of_property_read_bool(pdev->dev.of_node,
+	hgsl_dev->cache_flags.default_iocoherency = of_property_read_bool(pdev->dev.of_node,
 							"default_iocoherency");
+	hgsl_dev->cache_flags.writecombine_enable = of_property_read_bool(pdev->dev.of_node,
+							"writecombine_enable");
 	platform_set_drvdata(pdev, hgsl_dev);
 	hgsl_sysfs_init(pdev);
 	hgsl_debugfs_init(pdev);
@@ -4167,8 +4333,12 @@ static int qcom_hgsl_remove(struct platform_device *pdev)
 }
 
 static const struct dev_pm_ops hgsl_pm_ops = {
-	.suspend         = hgsl_suspend,
-	.resume          = hgsl_resume,
+	.suspend     = hgsl_pm_suspend,
+	.resume      = hgsl_pm_resume,
+	.freeze      = hgsl_hibernation_suspend,
+	.thaw        = hgsl_hibernation_resume,
+	.poweroff    = hgsl_hibernation_suspend,
+	.restore     = hgsl_hibernation_resume,
 };
 
 static const struct of_device_id qcom_hgsl_of_match[] = {
