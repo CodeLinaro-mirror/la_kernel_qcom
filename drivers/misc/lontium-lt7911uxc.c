@@ -1715,6 +1715,11 @@ static int lt7911uxc_suspend(struct device *dev)
 	if (!lt7911)
 		return 0;
 
+	if (atomic_read(&lt7911->fw_upgrade_in_progress)) {
+		dev_warn(dev, "Suspend aborted: firmware upgrade in progress\n");
+		return -EBUSY;
+	}
+
 	mutex_lock(&lt7911->device_lock);
 	if (lt7911->cci_handle)
 		cci_util_lt7911_release_cci(lt7911->cci_handle);
