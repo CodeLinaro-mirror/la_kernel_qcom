@@ -201,7 +201,7 @@ static int dpin_cci_util_read(struct dpin_cci_util_sensor_client *client,
 {
 	int rc;
 	struct dpin_cci_util_ctrl ctrl;
-	unsigned char buf[4];
+	unsigned char buf[4] = { 0 };
 
 	if (!out_buf || num_bytes == 0 || num_bytes > sizeof(buf))
 		return -EINVAL;
@@ -1400,9 +1400,10 @@ int cci_util_lt7911_do_firmware_upgrade(struct cci_util_handle *handle,
 	if (!handle || !handle->dev)
 		return -EINVAL;
 
-	if (!fw || !fw->data || fw->size == 0) {
+	if (!fw || !fw->data || fw->size == 0 || fw->size >= LT7911UXC_FW_AREA_SIZE) {
 		dev_err(&handle->dev->ppdev->dev,
-			"[lt7911_fw] invalid firmware blob\n");
+			"[lt7911_fw] invalid firmware blob (size=%zu)\n",
+			fw ? fw->size : 0);
 		return -EINVAL;
 	}
 
