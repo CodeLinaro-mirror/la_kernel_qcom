@@ -667,6 +667,14 @@ static uint32_t socinfo_get_chip_family(void)
 		: 0;
 }
 
+static uint32_t socinfo_get_raw_device_num(void)
+{
+	return socinfo ?
+		(socinfo_format >= SOCINFO_VERSION(0, 12) ?
+		 le32_to_cpu(socinfo->raw_device_num) : 0)
+		: 0;
+}
+
 /* Version 13 */
 static char *socinfo_get_chip_name(void)
 {
@@ -674,6 +682,14 @@ static char *socinfo_get_chip_name(void)
 		(socinfo_format >= SOCINFO_VERSION(0, 13) ?
 		 socinfo->chip_id : "N/A")
 		: "N/A";
+}
+
+static uint32_t socinfo_get_nproduct_id(void)
+{
+	return socinfo ?
+		(socinfo_format >= SOCINFO_VERSION(0, 13) ?
+		 le32_to_cpu(socinfo->nproduct_id) : 0)
+		: 0;
 }
 
 /* Version 14 */
@@ -1078,6 +1094,16 @@ msm_get_chip_family(struct device *dev,
 }
 ATTR_DEFINE(chip_family);
 
+static ssize_t
+msm_get_raw_device_number(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+			socinfo_get_raw_device_num());
+}
+ATTR_DEFINE(raw_device_number);
+
 /* Version 13 */
 static ssize_t
 msm_get_chip_id(struct device *dev,
@@ -1088,6 +1114,16 @@ msm_get_chip_id(struct device *dev,
 			socinfo_get_chip_name());
 }
 ATTR_DEFINE(chip_id);
+
+static ssize_t
+msm_get_nproduct_id(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0x%x\n",
+			socinfo_get_nproduct_id());
+}
+ATTR_DEFINE(nproduct_id);
 
 /* Version 14 */
 static ssize_t
@@ -1259,9 +1295,11 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 		fallthrough;
 	case SOCINFO_VERSION(0, 13):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_chip_id.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_nproduct_id.attr;
 		fallthrough;
 	case SOCINFO_VERSION(0, 12):
 		msm_custom_socinfo_attrs[i++] = &dev_attr_chip_family.attr;
+		msm_custom_socinfo_attrs[i++] = &dev_attr_raw_device_number.attr;
 		fallthrough;
 	case SOCINFO_VERSION(0, 11):
 	case SOCINFO_VERSION(0, 10):
