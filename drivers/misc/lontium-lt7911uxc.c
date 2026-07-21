@@ -33,6 +33,7 @@
 #define LT7911_3V3_EN_DELAY_MS          40
 #define LT7911_RST_LOW_DELAY_MS         20
 #define LT7911_POWER_DOWN_DELAY_MS      20
+#define LT7911_POWER_UP_DELAY_MS       500
 /* GPIO Values */
 #define GPIO_LOW                        0
 
@@ -849,6 +850,7 @@ static ssize_t firmware_upgrade_store(struct device *dev,
 			goto err_clear_flag;
 		}
 		powered_up_here = true;
+		msleep(LT7911_POWER_UP_DELAY_MS);
 	}
 	mutex_unlock(&lt7911->device_lock);
 
@@ -935,6 +937,7 @@ static ssize_t firmware_upgrade_show(struct device *dev,
 			return rc;
 		}
 		powered_up_here = true;
+		msleep(LT7911_POWER_UP_DELAY_MS);
 	}
 	mutex_unlock(&lt7911->device_lock);
 
@@ -1508,6 +1511,7 @@ static void lt7911_fw_upgrade_work_fn(struct work_struct *work)
 	/* Power up the chip so we can read the firmware version over I2C */
 	mutex_lock(&lt7911->device_lock);
 	ret = lt7911_power_up(lt7911);
+	msleep(LT7911_POWER_UP_DELAY_MS);
 	mutex_unlock(&lt7911->device_lock);
 	if (ret) {
 		dev_err(lt7911->dev, "fw_upgrade_work: power up failed rc=%d\n", ret);
