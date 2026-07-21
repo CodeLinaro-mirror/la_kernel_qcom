@@ -1078,13 +1078,13 @@ enum msm_pcie_cesta_perf_idx {
 
 /* CESTA curr perf ol to strings */
 static const char * const msm_pcie_cesta_curr_perf_lvl[] = {
-	"D3 cold state",
-	"L1ss sleep state",
-	"Gen1 speed",
-	"Gen2 speed",
-	"Gen3 speed",
-	"Gen4 speed",
-	"Invalid state",
+	[PERF_LVL_D3COLD] = "D3 cold state",
+	[PERF_LVL_L1SS] = "L1ss sleep state",
+	[PERF_LVL_GEN1] = "Gen1 speed",
+	[PERF_LVL_GEN2] = "Gen2 speed",
+	[PERF_LVL_GEN3] = "Gen3 speed",
+	[PERF_LVL_GEN4] = "Gen4 speed",
+	[MAX_PERF_LVL] = "Invalid state",
 };
 
 /* CESTA usage scenarios */
@@ -1097,17 +1097,10 @@ enum msm_pcie_cesta_map_idx {
 
 /* CESTA states debug info */
 static const char * const msm_pcie_cesta_states[] = {
-	"D3 Cold state",
-	"D0 state",
-	"DRV state",
-	"Invalid state",
-};
-
-/* CESTA Power state to Perf level mapping w.r.t CESTA usage scenarios */
-static u32 msm_pcie_cesta_map[MAX_MAP_IDX][MAX_POWER_STATE] = {
-	{PERF_LVL_D3COLD, PERF_LVL_D3COLD},
-	{MAX_PERF_LVL, MAX_PERF_LVL},
-	{PERF_LVL_L1SS, MAX_PERF_LVL},
+	[D3COLD_STATE] = "D3 Cold state",
+	[D0_STATE] = "D0 state",
+	[DRV_STATE] = "DRV state",
+	[MAX_MAP_IDX] = "Invalid state",
 };
 
 /* i2c control interface for a i2c client device */
@@ -1356,6 +1349,8 @@ struct msm_pcie_dev_t {
 	struct pm_qos_request pcie_pm_qos;
 
 	/* CESTA related structs */
+	/* CESTA Power state to Perf level mapping w.r.t CESTA usage scenarios */
+	u32 msm_pcie_cesta_map[MAX_MAP_IDX][MAX_POWER_STATE];
 	/* Device handler when using the crm driver APIs */
 	const struct device *crm_dev;
 	/* Register space of pcie state manager */
@@ -4404,18 +4399,35 @@ static const char * msm_pcie_cesta_curr_perf_ol(struct msm_pcie_dev_t *dev)
 }
 
 /*
+ * Initialize the cesta power state <--> perf ol mappings for each cesta scenario.
+ *
+ * Power state mappings to MAX_PERF_OL in D0 and DRV scenarios are temporary
+ * mappings and are updated to an appropriate perf OL from the
+ * msm_pcie_cesta_map_save() API during dynamic PCI gen speed switching.
+ */
+static void msm_pcie_cesta_map_init(struct msm_pcie_dev_t *dev)
+{
+	dev->msm_pcie_cesta_map[D3COLD_STATE][POWER_STATE_0] = PERF_LVL_D3COLD;
+	dev->msm_pcie_cesta_map[D3COLD_STATE][POWER_STATE_1] = PERF_LVL_D3COLD;
+	dev->msm_pcie_cesta_map[D0_STATE][POWER_STATE_0] = MAX_PERF_LVL;
+	dev->msm_pcie_cesta_map[D0_STATE][POWER_STATE_1] = MAX_PERF_LVL;
+	dev->msm_pcie_cesta_map[DRV_STATE][POWER_STATE_0] = PERF_LVL_L1SS;
+	dev->msm_pcie_cesta_map[DRV_STATE][POWER_STATE_1] = MAX_PERF_LVL;
+}
+
+/*
  * This function is used for configuring the CESTA power state
  * to the perf level mapping based on the Gen speed provided in
  * the argument
  */
-static void msm_pcie_cesta_map_save(int gen_speed)
+static void msm_pcie_cesta_map_save(struct msm_pcie_dev_t *dev, int gen_speed)
 {
-	/* Gen1 speed is equal to perf levle 2 */
+	/* Gen1 speed is equal to perf level 2 */
 	gen_speed += PERF_LVL_L1SS;
 
-	msm_pcie_cesta_map[D0_STATE][POWER_STATE_0] = gen_speed;
-	msm_pcie_cesta_map[D0_STATE][POWER_STATE_1] = gen_speed;
-	msm_pcie_cesta_map[DRV_STATE][POWER_STATE_1] = gen_speed;
+	dev->msm_pcie_cesta_map[D0_STATE][POWER_STATE_0] = gen_speed;
+	dev->msm_pcie_cesta_map[D0_STATE][POWER_STATE_1] = gen_speed;
+	dev->msm_pcie_cesta_map[DRV_STATE][POWER_STATE_1] = gen_speed;
 }
 
 /*
@@ -4436,12 +4448,12 @@ static int msm_pcie_cesta_map_apply(struct msm_pcie_dev_t *dev, u32 cesta_st)
 
 	PCIE_DBG(dev, "Setting the scenario to %s and perf_idx %d\n",
 			msm_pcie_cesta_states[cesta_st],
-			msm_pcie_cesta_map[cesta_st][POWER_STATE_1]);
+			dev->msm_pcie_cesta_map[cesta_st][POWER_STATE_1]);
 
 	for (pwr_st = 0; pwr_st < MAX_POWER_STATE; pwr_st++) {
 		cmd.pwr_state.hw = pwr_st;
 		cmd.resource_idx = dev->rc_idx;
-		cmd.data = msm_pcie_cesta_map[cesta_st][pwr_st];
+		cmd.data = dev->msm_pcie_cesta_map[cesta_st][pwr_st];
 
 		ret = crm_write_perf_ol(dev->crm_dev, CRM_HW_DRV, dev->rc_idx,
 									&cmd);
@@ -6512,10 +6524,10 @@ static void msm_pcie_scale_link_bandwidth(struct msm_pcie_dev_t *pcie_dev,
 
 		/* If CESTA already voted for required speed then bail out */
 		if (target_link_speed + PERF_LVL_L1SS ==
-				msm_pcie_cesta_map[D0_STATE][POWER_STATE_1])
+				pcie_dev->msm_pcie_cesta_map[D0_STATE][POWER_STATE_1])
 			return;
 
-		msm_pcie_cesta_map_save(target_link_speed);
+		msm_pcie_cesta_map_save(pcie_dev, target_link_speed);
 		ret = msm_pcie_cesta_map_apply(pcie_dev, D0_STATE);
 		if (ret)
 			PCIE_ERR(pcie_dev, "Failed to move to D0 state %d\n",
@@ -6919,7 +6931,7 @@ static int msm_pcie_enable_cesta(struct msm_pcie_dev_t *dev)
 		 * possible Gen speed and scale down the resources if link
 		 * up happens in lower speeds.
 		 */
-		msm_pcie_cesta_map_save(dev->bw_gen_max);
+		msm_pcie_cesta_map_save(dev, dev->bw_gen_max);
 
 		ret = msm_pcie_cesta_map_apply(dev, D0_STATE);
 		if (ret)
@@ -9647,7 +9659,8 @@ static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
 		return ret;
 	}
 
-	msm_pcie_cesta_map_save(pcie_dev->bw_gen_max);
+	msm_pcie_cesta_map_init(pcie_dev);
+	msm_pcie_cesta_map_save(pcie_dev, pcie_dev->bw_gen_max);
 	INIT_WORK(&pcie_dev->drv_connect_work,
 			msm_pcie_drv_cesta_connect_worker);
 
