@@ -881,7 +881,7 @@ static ssize_t firmware_upgrade_store(struct device *dev,
 	lt7911->fw_upgrade_from_sysfs = true;
 	mutex_unlock(&lt7911->device_lock);
 
-	ret = request_firmware_nowait(THIS_MODULE, true, LT7911_FW_NAME,
+	ret = request_firmware_nowait(THIS_MODULE, false, LT7911_FW_NAME,
 				      lt7911->dev, GFP_KERNEL,
 				      lt7911, lt7911uxc_firmware_cb);
 	if (ret) {
@@ -1551,7 +1551,7 @@ static void lt7911_fw_upgrade_work_fn(struct work_struct *work)
 	 * will flash the image, power-cycle the chip, clear the in-progress
 	 * flag, and schedule info_work when it is done — no blocking here.
 	 */
-	ret = request_firmware_nowait(THIS_MODULE, true, LT7911_FW_NAME,
+	ret = request_firmware_nowait(THIS_MODULE, false, LT7911_FW_NAME,
 				      lt7911->dev, GFP_KERNEL,
 				      lt7911, lt7911uxc_firmware_cb);
 	if (ret) {
