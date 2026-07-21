@@ -68,3 +68,4 @@ secure_buffer.ko
 qcom_dma_heaps.ko
 deferred-free-helper.ko
 msm_dma_iommu_mapping.ko
+nvmem_qfprom.ko
