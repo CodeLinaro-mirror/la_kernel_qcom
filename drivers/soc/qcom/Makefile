@@ -95,6 +95,8 @@ obj-$(CONFIG_QCOM_PCIE_PDC) += pcie-pdc.o
 
 obj-$(CONFIG_MSM_POWER_STATE) += power_state.o
 
+obj-$(CONFIG_QCOM_POWER_MODE) += power_mode.o
+
 obj-$(CONFIG_QCOM_PD_MAPPER) += qcom_pd_mapper.o
 
 obj-$(CONFIG_QCOM_PDR_MSG) += qcom_pdr_msg.o
@@ -211,6 +213,8 @@ obj-$(CONFIG_QCOM_SECURE_HIBERNATION) += qcom_secure_hibernation.o
 
 obj-$(CONFIG_QCOM_MINIDUMP_VIRTIO) += minidump_virtio.o
 
+obj-$(CONFIG_QCOM_DHMS_RPMSG) += dhms_rpmsg.o
+
 obj-$(CONFIG_MSM_CORE_HANG_DETECT) += core_hang_detect.o
 
 obj-$(CONFIG_MSM_SLATECOM_EVENT) += slatecom_event.o
@@ -219,7 +223,19 @@ obj-$(CONFIG_MSM_SEB) += slate_events_bridge.o
 
 obj-$(CONFIG_MSM_SEB_RPMSG) += slate_events_bridge_rpmsg.o
 
+obj-$(CONFIG_MSM_SLATERSB) += slate_rsb.o
+
+obj-$(CONFIG_MSM_SLATERSB_RPMSG) += slatersb_rpmsg.o
+
+obj-$(CONFIG_MSM_SLATECOM) += slatecom_spi.o
+
+obj-$(CONFIG_MSM_SLATECOM_INTERFACE) += slatecom_interface.o
+
+obj-$(CONFIG_MSM_SLATECOM_RPMSG) += slatecom_rpmsg.o
+
 obj-$(CONFIG_QCOM_PBS) += qcom-pbs.o
 
 obj-$(CONFIG_MSM_BAM_DMUX) += bam_dmux.o
+
+obj-$(CONFIG_QCOM_POWER_MODE) += power_mode.o
 

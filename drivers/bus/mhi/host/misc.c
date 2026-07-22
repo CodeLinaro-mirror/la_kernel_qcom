@@ -1084,6 +1084,10 @@ static int mhi_get_capability_offset(struct mhi_controller *mhi_cntrl,
 				 MISC_CAP_MASK, offset);
 	if (ret)
 		return ret;
+
+	/* a zero capability pointer means the device has no capability list */
+	if (!*offset)
+		return -ENXIO;
 	do {
 		if (*offset >= MHI_REG_SIZE)
 			return -ENXIO;

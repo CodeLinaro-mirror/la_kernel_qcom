@@ -297,7 +297,7 @@
 #define PARF_XMLH_LINK_UP (BIT(30))
 #define MAX_PROP_SIZE (32)
 #define MAX_RC_NAME_LEN (15)
-#define MSM_PCIE_MAX_VREG (6)
+#define MSM_PCIE_MAX_VREG (7)
 #define MAX_RC_NUM (8)
 #define MSM_PCIE_RESET_NAME_MAX_LEN 40
 #define MAX_DEVICE_NUM (20)
@@ -306,7 +306,7 @@
 #define PCIE_CONF_SPACE_DW (1024)
 #define PCIE_CLEAR (0xdeadbeef)
 #define PCIE_LINK_DOWN (0xffffffff)
-#define PARF_VER_WITH_NO_LANE_UPCONFIG_BIT (0x1470)
+#define PARF_VER_WITH_NO_LANE_UPCONFIG_BIT (0x13C0)
 
 #define MSM_PCIE_MAX_RESET (5)
 #define MSM_PCIE_MAX_PIPE_RESET (1)
@@ -1433,6 +1433,7 @@ static struct msm_pcie_vreg_info_t msm_pcie_vreg_info[MSM_PCIE_MAX_VREG] = {
 	{NULL, "vreg-cx", 0, 0, 0, false},
 	{NULL, "vreg-mx", 0, 0, 0, false},
 	{NULL, "vreg-qref", 880000, 880000, 25700, false},
+	{NULL, "vreg-qref1", 880000, 880000, 25700, false},
 };
 
 /* GPIOs */
@@ -9660,6 +9661,20 @@ static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
 	 * enable to restore CESTA hardware state.
 	 */
 	msm_pcie_cesta_load_sm_seq(pcie_dev);
+
+	pcie_dev->crm_dev = crm_get_device("pcie_crm");
+
+	if (IS_ERR(pcie_dev->crm_dev)) {
+		ret = PTR_ERR(pcie_dev->crm_dev);
+		pcie_dev->crm_dev = NULL;
+		PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev: %d\n",
+				pcie_dev->rc_idx, ret);
+		return ret;
+	}
+
+	msm_pcie_cesta_map_save(pcie_dev->bw_gen_max);
+	INIT_WORK(&pcie_dev->drv_connect_work,
+			msm_pcie_drv_cesta_connect_worker);
 
 	return 0;
 }

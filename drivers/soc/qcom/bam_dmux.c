@@ -1656,6 +1656,9 @@ static void rx_timer_work_func(struct work_struct *work)
 static void bam_mux_tx_notify(struct sps_event_notify *notify)
 {
 	struct tx_pkt_info *pkt;
+	struct tx_pkt_info *iter;
+	unsigned long flags;
+	bool found = false;
 
 	DBG("%s: event %d notified\n", __func__, notify->event_id);
 
@@ -1665,6 +1668,25 @@ static void bam_mux_tx_notify(struct sps_event_notify *notify)
 	switch (notify->event_id) {
 	case SPS_EVENT_EOT:
 		pkt = notify->data.transfer.user;
+		/*
+		 * Defensive check: only queue completion work if this TX
+		 * packet is still tracked as in-flight.  This drops stale or
+		 * duplicate EOT callbacks that can otherwise queue work on
+		 * freed memory.
+		 */
+		spin_lock_irqsave(&bam_tx_pool_spinlock, flags);
+		list_for_each_entry(iter, &bam_tx_pool, list_node) {
+			if (iter == pkt) {
+				found = true;
+				break;
+			}
+		}
+		spin_unlock_irqrestore(&bam_tx_pool_spinlock, flags);
+		if (unlikely(!found)) {
+			DMUX_LOG_KERR("%s: dropping stale tx completion user=%p\n",
+				      __func__, pkt);
+			break;
+		}
 		/* No dma_unmap_single() is needed for CMA-coherent memory. */
 		queue_work(bam_mux_tx_workqueue, &pkt->work);
 		break;
@@ -2369,6 +2391,7 @@ static int restart_notifier_cb(struct notifier_block *this,
 		synchronize_srcu(&bam_dmux_srcu);
 		BAM_DMUX_LOG("%s: ssr signaling complete\n", __func__);
 		flush_workqueue(bam_mux_rx_workqueue);
+		flush_workqueue(bam_mux_tx_workqueue);
 	}
 	if (code == QCOM_SSR_BEFORE_POWERUP)
 		in_global_reset = 0;
@@ -2979,7 +3002,7 @@ static int bam_dmux_probe(struct platform_device *pdev)
 			create_singlethread_workqueue("bam_dmux_rx");
 	else
 		bam_mux_rx_workqueue = alloc_workqueue("bam_dmux_rx",
-					WQ_MEM_RECLAIM | WQ_CPU_INTENSIVE, 1);
+					WQ_MEM_RECLAIM | WQ_CPU_INTENSIVE | WQ_HIGHPRI, 1);
 	if (!bam_mux_rx_workqueue) {
 		rc = -ENOMEM;
 		goto free_cma;

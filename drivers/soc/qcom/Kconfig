@@ -1418,4 +1418,16 @@ config QCOM_VM_CRASH_DMESG_DUMP
 	  This is useful for debugging and post-mortem analysis of VM crashes.
 
 	  If not sure, say N.
+
+config QCOM_QDSS_BRIDGE
+	tristate "Qualcomm Technologies QDSS Bridge driver"
+	depends on MHI_BUS
+	help
+	  This driver provides a bridge between the QDSS hardware trace
+	  infrastructure (via MHI) and a host machine over USB or a
+	  user-space character device interface (/dev/mhi_qdss).
+	  Supports QDSS and IP_HW_QDSS channels.
+
+	  If not sure, say N.
+
 endmenu

@@ -738,6 +738,8 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
 			      i, msgs[i].len, time_left);
 
 		geni_i2c_gpi_unmap(gi2c, &msgs[i], tx_buf, tx_addr, rx_buf, rx_addr);
+		tx_buf = NULL;
+		rx_buf = NULL;
 	}
 
 	return num;

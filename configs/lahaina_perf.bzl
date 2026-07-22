@@ -1,5 +1,6 @@
 lahaina_perf_config = {
     # keep sorted
+    "CONFIG_AQUANTIA_PHY": "m",
     "CONFIG_ARCH_LAHAINA": "y",
     "CONFIG_ARCH_YUPIK": "y",
     "CONFIG_ARM64_AMU_EXTN": "n",
@@ -306,7 +307,9 @@ lahaina_perf_config = {
     "CONFIG_QTI_THERMALZONE_CONFIG_DEBUG": "m",
     "CONFIG_QTI_THERMAL_LIMITS_DCVS": "m",
     "CONFIG_QTI_USERSPACE_CDEV": "m",
+    "CONFIG_R8169": "m",
     "CONFIG_R8712U": "n",
+    "CONFIG_REALTEK_PHY": "m",
     "CONFIG_REBOOT_MODE": "m",
     "CONFIG_REGMAP_QTI_DEBUGFS": "m",
     "CONFIG_REGULATOR_DEBUG_CONTROL": "m",
