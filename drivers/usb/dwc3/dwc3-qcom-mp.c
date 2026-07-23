@@ -489,9 +489,18 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 {
 	u32 val;
 	int i, ret;
+	struct generic_pm_domain *genpd;
 
 	if (qcom->is_suspended)
 		return 0;
+
+	if (qcom->dev->pm_domain) {
+		genpd = pd_to_genpd(qcom->dev->pm_domain);
+		/* Keep PHY GDSC ON during host mode bus suspend */
+		genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
+		genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+		dev_dbg(qcom->dev, "GDSC flags ON\n");
+	}
 
 	for (i = 0; i < qcom->num_ports; i++) {
 		val = readl(qcom->qscratch_base + pwr_evnt_irq_stat_reg[i]);
@@ -531,6 +540,18 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 {
 	int ret;
 	int i;
+	struct generic_pm_domain *genpd;
+
+	if (qcom->dev->pm_domain) {
+		genpd = pd_to_genpd(qcom->dev->pm_domain);
+		/*
+		 * Reset the GDSC flags back, so that GDSC can be
+		 * turned off during cable disconnect.
+		 */
+		genpd->flags &= ~GENPD_FLAG_ACTIVE_WAKEUP;
+		genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
+		dev_dbg(qcom->dev, "GDSC flags OFF\n");
+	}
 
 	if (!qcom->is_suspended)
 		return 0;
