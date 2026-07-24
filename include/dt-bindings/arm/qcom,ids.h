@@ -277,7 +277,6 @@
 #define QCOM_ID_SM8650			557
 #define QCOM_ID_KHAJEP			561
 #define QCOM_ID_KHAJEQ			562
-#define QCOM_ID_SM4450			568
 #define QCOM_ID_RAVELIN			568
 #define QCOM_ID_QCS5430			575
 #define QCOM_ID_QCM5430			576

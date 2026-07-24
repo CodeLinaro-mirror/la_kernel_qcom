@@ -6,7 +6,9 @@
 #include <linux/clk-provider.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,glymur-videocc.h>
@@ -21,11 +23,21 @@
 #include "common.h"
 #include "gdsc.h"
 #include "reset.h"
+#include "vdd-level.h"
+
+static DEFINE_VDD_REGULATORS(vdd_mm, VDD_HIGH_L1 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_mxc, VDD_HIGH_L1 + 1, 1, vdd_corner);
+
+static struct clk_vdd_class *video_cc_glymur_regulators[] = {
+	&vdd_mm,
+	&vdd_mxc,
+};
 
 enum {
 	DT_BI_TCXO,
 	DT_BI_TCXO_AO,
 	DT_SLEEP_CLK,
+	DT_IFACE,
 };
 
 enum {
@@ -39,7 +51,7 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 };
 
 /* 720.0 MHz Configuration */
-static const struct alpha_pll_config video_cc_pll0_config = {
+static struct alpha_pll_config video_cc_pll0_config = {
 	.l = 0x25,
 	.alpha = 0x8000,
 	.config_ctl_val = 0x25c400e7,
@@ -63,6 +75,18 @@ static struct clk_alpha_pll video_cc_pll0 = {
 			},
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_taycan_eko_t_ops,
+		},
+		.vdd_data = {
+			.vdd_class = &vdd_mxc,
+			.num_rate_max = VDD_NUM,
+			.rate_max = (unsigned long[VDD_NUM]) {
+				[VDD_LOWER_D2] = 621000000,
+				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER] = 700000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
+				[VDD_NOMINAL] = 2000000000,
+				[VDD_HIGH] = 2500000000},
 		},
 	},
 };
@@ -104,12 +128,21 @@ static struct clk_rcg2 video_cc_ahb_clk_src = {
 	.hid_width = 5,
 	.parent_map = video_cc_parent_map_0,
 	.freq_tbl = ftbl_video_cc_ahb_clk_src,
+	.enable_safe_config = true,
+	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "video_cc_ahb_clk_src",
 		.parent_data = video_cc_parent_data_0,
 		.num_parents = ARRAY_SIZE(video_cc_parent_data_0),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_mm,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 19200000
+		},
 	},
 };
 
@@ -129,12 +162,26 @@ static struct clk_rcg2 video_cc_mvs0_clk_src = {
 	.hid_width = 5,
 	.parent_map = video_cc_parent_map_1,
 	.freq_tbl = ftbl_video_cc_mvs0_clk_src,
+	.enable_safe_config = true,
+	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "video_cc_mvs0_clk_src",
 		.parent_data = video_cc_parent_data_1,
 		.num_parents = ARRAY_SIZE(video_cc_parent_data_1),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_classes = video_cc_glymur_regulators,
+		.num_vdd_classes = ARRAY_SIZE(video_cc_glymur_regulators),
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 720000000,
+			[VDD_LOW] = 1014000000,
+			[VDD_LOW_L1] = 1098000000,
+			[VDD_NOMINAL] = 1332000000,
+			[VDD_HIGH] = 1600000000,
+			[VDD_HIGH_L1] = 1965000000},
 	},
 };
 
@@ -149,12 +196,19 @@ static struct clk_rcg2 video_cc_sleep_clk_src = {
 	.hid_width = 5,
 	.parent_map = video_cc_parent_map_2,
 	.freq_tbl = ftbl_video_cc_sleep_clk_src,
+	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "video_cc_sleep_clk_src",
 		.parent_data = video_cc_parent_data_2,
 		.num_parents = ARRAY_SIZE(video_cc_parent_data_2),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_mm,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 32000},
 	},
 };
 
@@ -169,7 +223,14 @@ static struct clk_rcg2 video_cc_xo_clk_src = {
 		.parent_data = video_cc_parent_data_0,
 		.num_parents = ARRAY_SIZE(video_cc_parent_data_0),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_mm,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 19200000
+		},
 	},
 };
 
@@ -463,10 +524,6 @@ static const struct qcom_reset_map video_cc_glymur_resets[] = {
 	[VIDEO_CC_MVS1_BCR] = { 0x80a0 },
 };
 
-static struct clk_alpha_pll *video_cc_glymur_plls[] = {
-	&video_cc_pll0,
-};
-
 static const u32 video_cc_glymur_critical_cbcrs[] = {
 	0x80e0, /* VIDEO_CC_AHB_CLK */
 	0x8138, /* VIDEO_CC_SLEEP_CLK */
@@ -481,30 +538,16 @@ static const struct regmap_config video_cc_glymur_regmap_config = {
 	.fast_io = true,
 };
 
-static void clk_glymur_regs_configure(struct device *dev, struct regmap *regmap)
-{
-	/* Update CTRL_IN register */
-	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
-}
-
-static const struct qcom_cc_driver_data video_cc_glymur_driver_data = {
-	.alpha_plls = video_cc_glymur_plls,
-	.num_alpha_plls = ARRAY_SIZE(video_cc_glymur_plls),
-	.clk_cbcrs = video_cc_glymur_critical_cbcrs,
-	.num_clk_cbcrs = ARRAY_SIZE(video_cc_glymur_critical_cbcrs),
-	.clk_regs_configure = clk_glymur_regs_configure,
-};
-
-static const struct qcom_cc_desc video_cc_glymur_desc = {
+static struct qcom_cc_desc video_cc_glymur_desc = {
 	.config = &video_cc_glymur_regmap_config,
 	.clks = video_cc_glymur_clocks,
 	.num_clks = ARRAY_SIZE(video_cc_glymur_clocks),
+	.clk_regulators = video_cc_glymur_regulators,
+	.num_clk_regulators = ARRAY_SIZE(video_cc_glymur_regulators),
 	.resets = video_cc_glymur_resets,
 	.num_resets = ARRAY_SIZE(video_cc_glymur_resets),
 	.gdscs = video_cc_glymur_gdscs,
 	.num_gdscs = ARRAY_SIZE(video_cc_glymur_gdscs),
-	.use_rpm = true,
-	.driver_data = &video_cc_glymur_driver_data,
 };
 
 static const struct of_device_id video_cc_glymur_match_table[] = {
@@ -515,18 +558,65 @@ MODULE_DEVICE_TABLE(of, video_cc_glymur_match_table);
 
 static int video_cc_glymur_probe(struct platform_device *pdev)
 {
-	return qcom_cc_probe(pdev, &video_cc_glymur_desc);
+	struct regmap *regmap;
+	int ret, i;
+
+	regmap = qcom_cc_map(pdev, &video_cc_glymur_desc);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	ret = qcom_cc_runtime_init(pdev, &video_cc_glymur_desc);
+	if (ret)
+		return ret;
+
+	ret = pm_runtime_resume_and_get(&pdev->dev);
+	if (ret)
+		return ret;
+
+	clk_taycan_eko_t_pll_configure(&video_cc_pll0, regmap, &video_cc_pll0_config);
+
+	for (i = 0; i < ARRAY_SIZE(video_cc_glymur_critical_cbcrs); i++)
+		qcom_branch_set_clk_en(regmap, video_cc_glymur_critical_cbcrs[i]);
+
+	/* Update CTRL_IN register */
+	regmap_update_bits(regmap, 0x9f24, BIT(0), BIT(0));
+
+	ret = qcom_cc_really_probe(&pdev->dev, &video_cc_glymur_desc, regmap);
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret, "Failed to register VIDEO CC clocks\n");
+		goto err;
+	}
+
+	dev_info(&pdev->dev, "Registered VIDEO CC clocks\n");
+
+err:
+	pm_runtime_put_sync(&pdev->dev);
+
+	return ret;
 }
+
+static void video_cc_glymur_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &video_cc_glymur_desc);
+}
+
+static const struct dev_pm_ops video_cc_glymur_pm_ops = {
+	SET_RUNTIME_PM_OPS(qcom_cc_runtime_suspend, qcom_cc_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend,
+				pm_runtime_force_resume)
+};
 
 static struct platform_driver video_cc_glymur_driver = {
 	.probe = video_cc_glymur_probe,
 	.driver = {
 		.name = "videocc-glymur",
 		.of_match_table = video_cc_glymur_match_table,
+		.sync_state = video_cc_glymur_sync_state,
+		.pm = &video_cc_glymur_pm_ops,
 	},
 };
 
 module_platform_driver(video_cc_glymur_driver);
 
-MODULE_DESCRIPTION("QTI VIDEOCC Glymur Driver");
+MODULE_DESCRIPTION("QTI VIDEOCC GLYMUR Driver");
 MODULE_LICENSE("GPL");

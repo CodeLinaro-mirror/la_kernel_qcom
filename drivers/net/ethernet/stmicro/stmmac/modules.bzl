@@ -102,5 +102,6 @@ def register_modules(registry):
             "drivers/net/ethernet/stmicro/stmmac/stmmac_platform",
             "drivers/net/ethernet/stmicro/stmmac",
             "drivers/net/pcs/pcs-xpcs-qcom",
+            "drivers/virt/gunyah/gh_dbl",
         ],
     )

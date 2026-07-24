@@ -1981,3 +1981,19 @@ def register_modules(registry):
             "drivers/soc/qcom/power_mode.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/soc/qcom/qdss_bridge",
+        out = "qdss_bridge.ko",
+        config = "CONFIG_QCOM_QDSS_BRIDGE",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qdss_bridge.h",
+            "drivers/soc/qcom/qdss_bridge.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/bus/mhi/host/mhi",
+            "drivers/usb/gadget/function/usb_f_qdss",
+        ],
+    )
