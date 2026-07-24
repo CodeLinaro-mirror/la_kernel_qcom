@@ -6836,6 +6836,7 @@ put_dwc3:
 	usb_role_switch_unregister(mdwc->role_switch);
 
 err:
+	msm_dwc3_perf_vote_enable(mdwc, false);
 	/*
 	 * destroy_workqueue() drains, so any pending dwc3_resume_work runs
 	 * here. It reaches dwc3_ext_event_notify() ->
