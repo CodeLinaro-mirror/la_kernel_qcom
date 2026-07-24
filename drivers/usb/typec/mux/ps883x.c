@@ -156,36 +156,11 @@ static void ps883x_reset(struct ps883x_retimer *retimer)
 	retimer->in_reset = true;
 }
 
-static int ps883x_configure(struct ps883x_retimer *retimer, int cfg0,
-			    int cfg1, int cfg2, bool reset)
+static int ps883x_reg_write(struct ps883x_retimer *retimer, int cfg0,
+			    int cfg1, int cfg2)
 {
 	struct device *dev = &retimer->client->dev;
 	int ret;
-
-	if (reset) {
-		ps883x_reset(retimer);
-
-		return 0;
-	} else if (retimer->in_reset) {
-		ret = ps883x_enable_vregs(retimer);
-		if (ret)
-			return ret;
-
-		gpiod_set_value(retimer->reset_gpio, 0);
-
-		/* firmware initialization delay */
-		msleep(65);
-
-		ret = clk_prepare_enable(retimer->xo_clk);
-		if (ret) {
-			dev_err(dev, "failed to enable XO: %d\n", ret);
-			ps883x_power_down(retimer, false);
-			retimer->in_reset = true;
-			return ret;
-		}
-		retimer->in_reset = false;
-	}
-
 
 	ret = regmap_write(retimer->regmap, REG_USB_PORT_CONN_STATUS_0, cfg0);
 	if (ret) {
@@ -202,6 +177,97 @@ static int ps883x_configure(struct ps883x_retimer *retimer, int cfg0,
 	ret = regmap_write(retimer->regmap, REG_USB_PORT_CONN_STATUS_2, cfg2);
 	if (ret) {
 		dev_err(dev, "failed to write conn_status_2: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int ps883x_safe_mode(struct ps883x_retimer *retimer)
+{
+	int ret;
+
+	ret = ps883x_reg_write(retimer, 0x01, 0x00, 0x00);
+	if (ret) {
+		dev_err(&retimer->client->dev, "failed to write safe mode: %d\n", ret);
+		return ret;
+	}
+	mdelay(30);
+
+	return 0;
+}
+
+static int ps883x_restore(struct ps883x_retimer *retimer)
+{
+	struct device *dev = &retimer->client->dev;
+	unsigned int val;
+	int ret;
+
+	ret = ps883x_enable_vregs(retimer);
+	if (ret)
+		return ret;
+
+	gpiod_set_value(retimer->reset_gpio, 0);
+
+	/* firmware initialization delay */
+	msleep(65);
+
+	ret = clk_prepare_enable(retimer->xo_clk);
+	if (ret) {
+		dev_err(dev, "failed to enable XO: %d\n", ret);
+		ps883x_power_down(retimer, false);
+		retimer->in_reset = true;
+		return ret;
+	}
+
+	/* make sure device is accessible */
+	ret = regmap_read(retimer->regmap, REG_USB_PORT_CONN_STATUS_0,
+			  &val);
+	if (ret) {
+		if (ret == -ENXIO) {
+			ps883x_power_down(retimer, false);
+			retimer->in_reset = true;
+			ret = -EIO;
+		}
+
+		return ret;
+	}
+
+	ret = ps883x_safe_mode(retimer);
+	if (ret)
+		return ret;
+
+	retimer->in_reset = false;
+	return ret;
+}
+
+static int ps883x_configure(struct ps883x_retimer *retimer, int cfg0,
+			    int cfg1, int cfg2, bool reset)
+{
+	struct device *dev = &retimer->client->dev;
+	int ret;
+
+	if (reset) {
+		ps883x_reset(retimer);
+
+		return 0;
+	} else if (retimer->in_reset) {
+		ret = ps883x_restore(retimer);
+		if (ret) {
+			dev_err(dev, "failed to restore the retimer:%d\n", ret);
+			return ret;
+		}
+	}
+
+	if (retimer->dp_4_lane) {
+		ret = ps883x_safe_mode(retimer);
+		if (ret)
+			return ret;
+	}
+
+	ret = ps883x_reg_write(retimer, cfg0, cfg1, cfg2);
+	if (ret) {
+		dev_err(dev, "failed write the retimer config:%d\n", ret);
 		return ret;
 	}
 
