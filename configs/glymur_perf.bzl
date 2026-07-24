@@ -177,6 +177,7 @@ glymur_perf_config = {
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB_DEBUG": "m",
     "CONFIG_UCSI_QTI_GLINK": "m",
+    "CONFIG_USB_CONFIGFS_F_QDSS": "m",
     "CONFIG_USB_DWC2": "n",
     "CONFIG_USB_DWC2_DEBUG": "n",
     "CONFIG_USB_DWC2_DUAL_ROLE": "n",
@@ -185,4 +186,5 @@ glymur_perf_config = {
     "CONFIG_USB_DWC2_PERIPHERAL": "n",
     "CONFIG_USB_DWC2_TRACK_MISSED_SOFS": "n",
     "CONFIG_USB_DWC3_MSM": "m",
+    "CONFIG_USB_F_QDSS": "m",
 }
