@@ -1147,26 +1147,6 @@ static int hab_dealloc_virtirq(struct local_vmid *settings)
 	return ret;
 }
 
-/* This function generates virt_irq based on labels read
- * from devicetree.
- */
-static int hab_generate_virtirq(struct local_vmid *settings)
-{
-	int i, j, ret = 0;
-
-	/* scan by valid VMs, then virtirq */
-	for (i = 0; i < HABCFG_VMID_MAX; i++) {
-		if ((HABCFG_GET_VMID(settings, i) != HABCFG_VMID_INVALID) &&
-				(HABCFG_GET_VMID(settings, i) != settings->self)) {
-			pr_debug("create virtirq for vm %d\n", i);
-
-			for (j = 0; j < virqsettings.cnt_virq; j++)
-				ret = hab_virq_alloc(j, i, virqsettings.label[j], 0, NULL);
-		}
-	}
-	return ret;
-}
-
 /*
  * This function checks hypervisor plug-in readiness, read in hab configs,
  * and configure pchans
@@ -1221,10 +1201,6 @@ int do_hab_parse(void)
 		pr_debug("ret %d, total %d pchans added, ndevices %d\n",
 				 result, pchan_total, hab_driver.ndevices);
 	}
-
-	result = hab_generate_virtirq(&hab_driver.settings);
-	if (result)
-		pr_err("generate virtirq failed ret %d\n", result);
 
 	return result;
 }
