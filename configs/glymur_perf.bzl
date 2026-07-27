@@ -95,6 +95,7 @@ glymur_perf_config = {
     "CONFIG_QCOM_FORCE_WDOG_BITE_ON_PANIC": "y",
     "CONFIG_QCOM_GLINK": "m",
     "CONFIG_QCOM_GLINK_PKT": "m",
+    "CONFIG_QCOM_HUNG_TASK_ENH": "m",
     "CONFIG_QCOM_IOMMU_DEBUG": "m",
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_IPCC": "m",
