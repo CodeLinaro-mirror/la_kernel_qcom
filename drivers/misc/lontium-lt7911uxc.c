@@ -187,6 +187,10 @@ static int lt7911_power_down(struct lt7911uxc_data *data)
 
 	lockdep_assert_held(&data->device_lock);
 
+	/* Release CCI power domain and clocks so SoC / AOSD can enter sleep */
+	if (data->cci_handle)
+		cci_util_lt7911_release_cci(data->cci_handle);
+
 	if (!data->lt7911_poweron) {
 		dev_dbg(data->dev, "LT7911 already powered off\n");
 		return 0;
@@ -877,7 +881,7 @@ static ssize_t firmware_upgrade_store(struct device *dev,
 	lt7911->fw_upgrade_from_sysfs = true;
 	mutex_unlock(&lt7911->device_lock);
 
-	ret = request_firmware_nowait(THIS_MODULE, true, LT7911_FW_NAME,
+	ret = request_firmware_nowait(THIS_MODULE, false, LT7911_FW_NAME,
 				      lt7911->dev, GFP_KERNEL,
 				      lt7911, lt7911uxc_firmware_cb);
 	if (ret) {
@@ -1547,7 +1551,7 @@ static void lt7911_fw_upgrade_work_fn(struct work_struct *work)
 	 * will flash the image, power-cycle the chip, clear the in-progress
 	 * flag, and schedule info_work when it is done — no blocking here.
 	 */
-	ret = request_firmware_nowait(THIS_MODULE, true, LT7911_FW_NAME,
+	ret = request_firmware_nowait(THIS_MODULE, false, LT7911_FW_NAME,
 				      lt7911->dev, GFP_KERNEL,
 				      lt7911, lt7911uxc_firmware_cb);
 	if (ret) {
@@ -1704,21 +1708,35 @@ static int lt7911uxc_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int lt7911uxc_suspend(struct device *dev)
+{
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
+
+	if (!lt7911)
+		return 0;
+
+	if (atomic_read(&lt7911->fw_upgrade_in_progress)) {
+		dev_warn(dev, "Suspend aborted: firmware upgrade in progress\n");
+		return -EBUSY;
+	}
+
+	mutex_lock(&lt7911->device_lock);
+	if (lt7911->cci_handle)
+		cci_util_lt7911_release_cci(lt7911->cci_handle);
+	mutex_unlock(&lt7911->device_lock);
+
+	return 0;
+}
+
 static int lt7911uxc_resume(struct device *dev)
 {
 	return 0;
 }
 
-static int lt7911uxc_suspend(struct device *dev)
-{
-	return 0;
-}
-
 static const struct dev_pm_ops lt7911uxc_pm_ops = {
-	.runtime_suspend = lt7911uxc_suspend,
-	.runtime_resume = lt7911uxc_resume,
+	SET_SYSTEM_SLEEP_PM_OPS(lt7911uxc_suspend, lt7911uxc_resume)
+		SET_RUNTIME_PM_OPS(lt7911uxc_suspend, lt7911uxc_resume, NULL)
 };
-
 
 static const struct of_device_id lt7911uxc_id_table[] = {
 	{ .compatible = "lontium,lt7911uxc",},
