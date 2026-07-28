@@ -44,7 +44,6 @@
 #include <linux/rpmsg.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <linux/syscore_ops.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/kfifo.h>
@@ -11113,50 +11112,6 @@ static void msm_pcie_lock_init(struct msm_pcie_dev_t *pcie_dev)
 	INIT_LIST_HEAD(&pcie_dev->event_reg_list);
 }
 
-/*
- * Restore PWR_CTRL and PWR_MASK overrides for all PCIe instances after
- * hibernation. These overrides are initially set in pcie_init() for CXPC but
- * are lost when the register space is reset during hibernation.
- *
- * All instances are overridden unconditionally here. CESTA instances will
- * remove their own overrides via msm_pcie_cesta_load_sm_seq() when they come up.
- *
- * syscore_ops are used instead of the platform driver PM callbacks because
- * WLAN-managed PCIe instances are detached from the PM framework via
- * dev_pm_syscore_device() during enumeration, so the normal PM callbacks are
- * never invoked for them after hibernation exit.
- */
-static void msm_pcie_syscore_resume(void)
-{
-	void __iomem *base;
-	size_t map_size;
-	int i;
-
-	if (count != MAX_PCIE_SM_REGS)
-		return;
-
-	map_size = pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET] *
-		pcie_sm_regs[PCIE_SM_NUM_INSTANCES] + 4;
-	base = ioremap(pcie_sm_regs[PCIE_SM_BASE], map_size);
-	if (!base) {
-		pr_err("PCIe: syscore resume: ioremap failed, overrides not restored\n");
-		return;
-	}
-
-	for (i = 0; i < pcie_sm_regs[PCIE_SM_NUM_INSTANCES]; i++) {
-		msm_pcie_write_reg(base + pcie_sm_regs[PCIE_SM_PWR_CTRL_OFFSET] +
-				(i * pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET]), 0x0, 0x1);
-		msm_pcie_write_reg(base + pcie_sm_regs[PCIE_SM_PWR_MASK_OFFSET] +
-				(i * pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET]), 0x0, 0x1);
-	}
-
-	iounmap(base);
-}
-
-static struct syscore_ops msm_pcie_syscore_ops = {
-	.resume = msm_pcie_syscore_resume,
-};
-
 static int __init pcie_init(void)
 {
 	int ret = 0, i;
@@ -11191,8 +11146,6 @@ static int __init pcie_init(void)
 
 			iounmap(reg_addr);
 		}
-
-		register_syscore_ops(&msm_pcie_syscore_ops);
 	}
 
 	ret = pci_register_driver(&msm_pci_driver);
@@ -11234,9 +11187,6 @@ static void __exit pcie_exit(void)
 		destroy_workqueue(mpcie_wq);
 
 	platform_driver_unregister(&msm_pcie_driver);
-
-	if (count == MAX_PCIE_SM_REGS)
-		unregister_syscore_ops(&msm_pcie_syscore_ops);
 
 	msm_pcie_debugfs_exit();
 
