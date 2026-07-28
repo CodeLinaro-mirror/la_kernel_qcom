@@ -244,6 +244,7 @@
 				entry-latency-us = <549>;
 				exit-latency-us = <901>;
 				min-residency-us = <1774>;
+				boot-lpm-disable;
 				local-timer-stop;
 			};
 
@@ -254,6 +255,7 @@
 				entry-latency-us = <702>;
 				exit-latency-us = <1061>;
 				min-residency-us = <4488>;
+				boot-lpm-disable;
 				local-timer-stop;
 			};
 		};
