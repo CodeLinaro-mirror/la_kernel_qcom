@@ -20,6 +20,7 @@
 
 #define REG_BASE 0x100000
 #define REG_SIZE 0x1000
+#define REG_DIRCONN 0xF0000
 #define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, wake_off, bit)	\
 	{						\
 		.grp = PINCTRL_PINGROUP("gpio" #id,	\
@@ -30,6 +31,7 @@
 		.intr_cfg_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
 		.intr_status_reg = REG_BASE + 0xc + REG_SIZE * id,	\
 		.intr_target_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
+		.dir_conn_reg = REG_BASE + REG_DIRCONN,	\
 		.mux_bit = 2,			\
 		.pull_bit = 0,			\
 		.drv_bit = 6,			\
@@ -44,6 +46,7 @@
 		.intr_target_width = 4,	        \
 		.wake_reg = REG_BASE + wake_off,	\
 		.wake_bit = bit,		\
+		.dir_conn_en_bit = 5,	\
 		.intr_target_kpss_val = 3,	\
 		.intr_raw_status_bit = 4,	\
 		.intr_polarity_bit = 1,		\
@@ -3264,6 +3267,40 @@ static const struct msm_gpio_wakeirq_map seca_pdc_map[] = {
 	{ 160, 110 }, { 161, 79 }, { 166, 109 }, { 168, 111 },
 };
 
+static struct msm_dir_conn seca_dir_conn[] = {
+	{-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
+	{-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
+};
+
+static int seca_pinctrl_dirconn_list_probe(struct platform_device *pdev)
+{
+	int ret, n, dirconn_list_count, m;
+	struct device_node *np = pdev->dev.of_node;
+
+	n = of_property_count_elems_of_size(np, "qcom,dirconn-list", sizeof(u32));
+
+	if (n <= 0 || n % 2)
+		return -EINVAL;
+
+	m = ARRAY_SIZE(seca_dir_conn) - 1;
+	dirconn_list_count = n / 2;
+
+	for (n = 0; n < dirconn_list_count && m > 0; n++) {
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list",
+				n * 2 + 0, &seca_dir_conn[m].gpio);
+		if (ret)
+			return ret;
+
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list",
+				n * 2 + 1, &seca_dir_conn[m].irq);
+		if (ret)
+			return ret;
+		m--;
+	}
+	return 0;
+}
+
+
 static const struct msm_pinctrl_soc_data seca_tlmm = {
 	.pins = seca_pins,
 	.npins = ARRAY_SIZE(seca_pins),
@@ -3275,6 +3312,7 @@ static const struct msm_pinctrl_soc_data seca_tlmm = {
 	.wakeirq_map = seca_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(seca_pdc_map),
 	.egpio_func = 11,
+	.dir_conn = seca_dir_conn,
 };
 
 static const struct of_device_id seca_tlmm_of_match[] = {
@@ -3286,6 +3324,15 @@ static int seca_tlmm_probe(struct platform_device *pdev)
 {
 	const struct msm_pinctrl_soc_data *pinctrl_data;
 	struct device *dev = &pdev->dev;
+	int ret, len;
+
+	if (of_find_property(pdev->dev.of_node, "qcom,dirconn-list", &len)) {
+		ret = seca_pinctrl_dirconn_list_probe(pdev);
+		if (ret) {
+			dev_err(&pdev->dev, "Unable to parse Direct Connect List\n");
+			return ret;
+		}
+	}
 
 	pinctrl_data = of_device_get_match_data(dev);
 	if (!pinctrl_data)
