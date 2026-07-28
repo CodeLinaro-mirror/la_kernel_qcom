@@ -44,7 +44,6 @@
 #include <linux/rpmsg.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <linux/syscore_ops.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/kfifo.h>
@@ -1363,7 +1362,6 @@ struct msm_pcie_dev_t {
 	void __iomem *pcie_sm;
 	/* pcie state manager instructions sequence info */
 	struct msm_pcie_sm_info *sm_info;
-	bool cesta_initialized;
 	/* Need to configure the l1ss TO when using cesta */
 	u32 l1ss_timeout_us;
 	u32 l1ss_sleep_disable;
@@ -1517,8 +1515,6 @@ static void msm_pcie_config_link_pm(struct msm_pcie_dev_t *dev, bool enable);
 static int msm_pcie_set_link_width(struct msm_pcie_dev_t *pcie_dev,
 				   u16 target_link_width);
 
-static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
-			       struct device_node *of_node);
 static void msm_pcie_disable(struct msm_pcie_dev_t *dev);
 static int msm_pcie_enable(struct msm_pcie_dev_t *dev);
 static int msm_pcie_config_tc_bdf_sid_map(struct msm_pcie_dev_t *dev);
@@ -6982,13 +6978,6 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 		goto out;
 	}
 
-	/* Initialize CESTA state machine */
-	if (dev->pcie_sm) {
-		ret = msm_pcie_cesta_init(dev, dev->pdev->dev.of_node);
-		if (ret)
-			goto out;
-	}
-
 	/* enable power */
 	ret = msm_pcie_vreg_init(dev);
 	if (ret)
@@ -9628,47 +9617,25 @@ static int msm_pcie_cesta_init(struct msm_pcie_dev_t *pcie_dev,
 {
 	int ret = 0;
 
-	if (!pcie_dev->cesta_initialized) {
-		PCIE_DBG(pcie_dev, "PCIe: RC%d: CESTA is supported\n", pcie_dev->rc_idx);
-		ret = of_property_read_u32(of_node, "qcom,pcie-clkreq-pin",
-				&pcie_dev->clkreq_gpio);
-		if (ret) {
-			PCIE_ERR(pcie_dev, "Couldn't find clkreq gpio %d\n", ret);
-			return ret;
-		}
-
-		ret = msm_pcie_cesta_get_sm_seq(pcie_dev);
-		if (ret)
-			return ret;
-
-		pcie_dev->crm_dev = crm_get_device("pcie_crm");
-
-		if (IS_ERR(pcie_dev->crm_dev)) {
-			ret = PTR_ERR(pcie_dev->crm_dev);
-			pcie_dev->crm_dev = NULL;
-			PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev: %d\n",
-					pcie_dev->rc_idx, ret);
-			return ret;
-		}
-
-		msm_pcie_cesta_map_save(pcie_dev->bw_gen_max);
-		INIT_WORK(&pcie_dev->drv_connect_work, msm_pcie_drv_cesta_connect_worker);
-		pcie_dev->cesta_initialized = true;
+	ret = of_property_read_u32(of_node, "qcom,pcie-clkreq-pin",
+			&pcie_dev->clkreq_gpio);
+	if (ret) {
+		PCIE_ERR(pcie_dev, "Couldn't find clkreq gpio %d\n",
+								ret);
+		return ret;
 	}
 
-	/*
-	 * PCIE_SM sequence registers are reset by hibernation; reload on every
-	 * enable to restore CESTA hardware state.
-	 */
+	ret = msm_pcie_cesta_get_sm_seq(pcie_dev);
+	if (ret)
+		return ret;
+
 	msm_pcie_cesta_load_sm_seq(pcie_dev);
 
 	pcie_dev->crm_dev = crm_get_device("pcie_crm");
 
 	if (IS_ERR(pcie_dev->crm_dev)) {
-		ret = PTR_ERR(pcie_dev->crm_dev);
-		pcie_dev->crm_dev = NULL;
-		PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev: %d\n",
-				pcie_dev->rc_idx, ret);
+		PCIE_ERR(pcie_dev, "PCIe: RC%d: fail to get crm_dev\n",
+				pcie_dev->rc_idx);
 		return ret;
 	}
 
@@ -10114,6 +10081,15 @@ static int msm_pcie_probe(struct platform_device *pdev)
 
 	if (pcie_dev->rumi)
 		pcie_dev->rumi_init = msm_pcie_rumi_init;
+
+	if (pcie_dev->pcie_sm) {
+		PCIE_DBG(pcie_dev, "pcie CESTA is supported\n");
+
+		ret = msm_pcie_cesta_init(pcie_dev, of_node);
+		if (ret)
+			goto decrease_rc_num;
+
+	}
 
 	/* SW DRV case */
 	if (!pcie_dev->pcie_sm && pcie_dev->drv_supported) {
@@ -11113,50 +11089,6 @@ static void msm_pcie_lock_init(struct msm_pcie_dev_t *pcie_dev)
 	INIT_LIST_HEAD(&pcie_dev->event_reg_list);
 }
 
-/*
- * Restore PWR_CTRL and PWR_MASK overrides for all PCIe instances after
- * hibernation. These overrides are initially set in pcie_init() for CXPC but
- * are lost when the register space is reset during hibernation.
- *
- * All instances are overridden unconditionally here. CESTA instances will
- * remove their own overrides via msm_pcie_cesta_load_sm_seq() when they come up.
- *
- * syscore_ops are used instead of the platform driver PM callbacks because
- * WLAN-managed PCIe instances are detached from the PM framework via
- * dev_pm_syscore_device() during enumeration, so the normal PM callbacks are
- * never invoked for them after hibernation exit.
- */
-static void msm_pcie_syscore_resume(void)
-{
-	void __iomem *base;
-	size_t map_size;
-	int i;
-
-	if (count != MAX_PCIE_SM_REGS)
-		return;
-
-	map_size = pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET] *
-		pcie_sm_regs[PCIE_SM_NUM_INSTANCES] + 4;
-	base = ioremap(pcie_sm_regs[PCIE_SM_BASE], map_size);
-	if (!base) {
-		pr_err("PCIe: syscore resume: ioremap failed, overrides not restored\n");
-		return;
-	}
-
-	for (i = 0; i < pcie_sm_regs[PCIE_SM_NUM_INSTANCES]; i++) {
-		msm_pcie_write_reg(base + pcie_sm_regs[PCIE_SM_PWR_CTRL_OFFSET] +
-				(i * pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET]), 0x0, 0x1);
-		msm_pcie_write_reg(base + pcie_sm_regs[PCIE_SM_PWR_MASK_OFFSET] +
-				(i * pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET]), 0x0, 0x1);
-	}
-
-	iounmap(base);
-}
-
-static struct syscore_ops msm_pcie_syscore_ops = {
-	.resume = msm_pcie_syscore_resume,
-};
-
 static int __init pcie_init(void)
 {
 	int ret = 0, i;
@@ -11191,8 +11123,6 @@ static int __init pcie_init(void)
 
 			iounmap(reg_addr);
 		}
-
-		register_syscore_ops(&msm_pcie_syscore_ops);
 	}
 
 	ret = pci_register_driver(&msm_pci_driver);
@@ -11234,9 +11164,6 @@ static void __exit pcie_exit(void)
 		destroy_workqueue(mpcie_wq);
 
 	platform_driver_unregister(&msm_pcie_driver);
-
-	if (count == MAX_PCIE_SM_REGS)
-		unregister_syscore_ops(&msm_pcie_syscore_ops);
 
 	msm_pcie_debugfs_exit();
 
