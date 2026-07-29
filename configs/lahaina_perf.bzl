@@ -306,6 +306,7 @@ lahaina_perf_config = {
     "CONFIG_QTI_SYS_PM_VX": "m",
     "CONFIG_QTI_THERMALZONE_CONFIG_DEBUG": "m",
     "CONFIG_QTI_THERMAL_LIMITS_DCVS": "m",
+    "CONFIG_QTI_THERMAL_VENDOR_HOOK": "m",
     "CONFIG_QTI_USERSPACE_CDEV": "m",
     "CONFIG_R8169": "m",
     "CONFIG_R8712U": "n",
