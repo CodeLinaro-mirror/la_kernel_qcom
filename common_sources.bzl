@@ -11,6 +11,8 @@ module sources due to DDK limitations that exist today.
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 COPY_FILES = [
+    "drivers/leds/leds.h",
+    "drivers/leds/trigger/ledtrig-netdev.c",
     "drivers/leds/trigger/ledtrig-pattern.c",
     "drivers/char/virtio_console.c",
     "drivers/dma/qcom/gpi.c",
@@ -260,4 +262,14 @@ def define_common_upstream_files():
         ],
         outs = ["drivers/net/virtio_net_fixed.c"],
         cmd = "patch --follow-symlinks -o $@ -i $(execpath :drivers/net/virtio_net_fix.diff) $(execpath //common:drivers/net/virtio_net.c)",
+    )
+
+    native.genrule(
+        name = "patched-drivers/leds/trigger/ledtrig-netdev.c",
+        srcs = [
+            "//common:drivers/leds/trigger/ledtrig-netdev.c",
+            ":drivers/leds/ledtrig-netdev_fix.diff",
+        ],
+        outs = ["drivers/leds/trigger/ledtrig-netdev_fixed.c"],
+        cmd = "patch --follow-symlinks -o $@ -i $(execpath :drivers/leds/ledtrig-netdev_fix.diff) $(execpath //common:drivers/leds/trigger/ledtrig-netdev.c)",
     )
