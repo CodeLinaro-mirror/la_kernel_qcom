@@ -6,7 +6,9 @@ qcom_rpmh.ko
 arm_smmu.ko
 arm_smmu_v3.ko
 smem.ko
+qcom_iommu_debug.ko
 qcom_iommu_util.ko
+iommu-logger.ko
 socinfo.ko
 qcom_tzmem.ko
 qcom_hwspinlock.ko
@@ -75,3 +77,9 @@ qcom_dpd_proxy.ko
 qcom_dpd_proxy_iommu.ko
 qcom_scm_smci.ko
 pkvm-secure-memory-manager.ko
+rproc_qcom_common.ko
+mdt_loader.ko
+qmi_helpers.ko
+qcom_soc_wdt.ko
+qcom_wdt_core.ko
+qcom_cpucp.ko
