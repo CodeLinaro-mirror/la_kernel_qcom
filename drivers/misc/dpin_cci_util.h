@@ -222,7 +222,7 @@ struct dpin_cci_util_ctrl {
  * without any risk of operating on uninitialised state.
  */
 
-#define LT7911UXC_VERSION_NUM   0x4020000
+#define LT7911UXC_VERSION_NUM   0x4020100
 #define LT7911_HDCPKEY_SIZE     32
 
 struct firmware;
