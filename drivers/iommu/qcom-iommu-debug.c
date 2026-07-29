@@ -367,6 +367,7 @@ static int iommu_debug_usecase_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id iommu_debug_usecase_of_match[] = {
+	{ .compatible = "qcom,testcase-dpd-proxy", .data = &secure_allocator_ops },
 	{ .compatible = "qcom,iommu-debug-usecase", .data = NULL },
 	{ },
 };
