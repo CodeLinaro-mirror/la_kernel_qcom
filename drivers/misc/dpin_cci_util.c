@@ -133,7 +133,6 @@ struct lt7911_crc_info {
 /*
  * LT7911 firmware upgrade register / constant definitions
  */
-#define LT7911UXC_VERSION_NUM           0x20000
 #define LT7911UXC_VERSION_REG0          0x80
 #define LT7911UXC_VERSION_REG1          0x82
 #define LT7911UXC_HDCP_VERSION_REG      0x95
