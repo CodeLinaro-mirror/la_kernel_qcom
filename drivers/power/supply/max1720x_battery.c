@@ -6271,7 +6271,39 @@ static int max1720x_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(max1720x_pm_ops, max1720x_suspend, max1720x_resume);
+static int max1720x_restore(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct max1720x_priv *priv = i2c_get_clientdata(client);
+	int ret = 0;
+
+	if (client->irq) {
+		disable_irq_nosync(client->irq);
+		devm_free_irq(dev, client->irq, priv);
+
+	/* Re-trigger IRQ handler to sync state after hibernation exit */
+	irq_handlers[priv->driver_data](client->irq, priv);
+
+	ret = devm_request_threaded_irq(priv->dev, client->irq, NULL,
+					irq_handlers[priv->driver_data],
+					IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+					priv->battery->desc->name, priv);
+	if (ret < 0) {
+		dev_err(priv->dev, "Failed to request irq %d\n", client->irq);
+		return ret;
+	}
+
+	enable_irq_wake(client->irq);
+	}
+
+	return ret;
+}
+
+static const struct dev_pm_ops max1720x_pm_ops = {
+		SET_SYSTEM_SLEEP_PM_OPS(max1720x_suspend, max1720x_resume)
+		.restore = max1720x_restore,   /* hibernation restore override */
+};
+
 #define MAX1720X_PM_OPS (&max1720x_pm_ops)
 #else
 #define MAX1720X_PM_OPS NULL
