@@ -729,6 +729,11 @@ static const struct llcc_slice_config sun_data[] = {
 						0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 33},
 };
 
+static const struct llcc_slice_config shikra_data[] = {
+	{LLCC_ECC, 23, 256, 3, 1, 0x3, 0x0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 1, 0, 0},
+};
+
 static const struct llcc_slice_config canoe_data[] = {
 	{LLCC_CPUSS,           1, 5120, 1, 0, 0xFFFFFFFF, 0, 0, 0, 0,
 							  0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1,
@@ -1163,6 +1168,8 @@ static const struct llcc_slice_config alor_data[] = {
 };
 
 static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
+	.trp_ecc_error_inject_0 = 0x20400,
+	.trp_ecc_error_inject_1 = 0x20404,
 	.trp_ecc_error_status0 = 0x20344,
 	.trp_ecc_error_status1 = 0x20348,
 	.trp_ecc_sb_err_syn0 = 0x2304c,
@@ -1178,6 +1185,8 @@ static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
 	.cmn_interrupt_2_enable = 0x3003c,
 
 	/* LLCC DRP registers */
+	.drp_ecc_error_inject_0 = 0x40010,
+	.drp_ecc_error_inject_1 = 0x40014,
 	.drp_ecc_error_cfg = 0x40000,
 	.drp_ecc_error_cntr_clear = 0x40004,
 	.drp_interrupt_status = 0x41000,
@@ -1190,6 +1199,8 @@ static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
 };
 
 static const struct llcc_edac_reg_offset llcc_v2_1_edac_reg_offset = {
+	.trp_ecc_error_inject_0 = 0x20400,
+	.trp_ecc_error_inject_1 = 0x20404,
 	.trp_ecc_error_status0 = 0x20344,
 	.trp_ecc_error_status1 = 0x20348,
 	.trp_ecc_sb_err_syn0 = 0x2034c,
@@ -1205,6 +1216,8 @@ static const struct llcc_edac_reg_offset llcc_v2_1_edac_reg_offset = {
 	.cmn_interrupt_2_enable = 0x3403c,
 
 	/* LLCC DRP registers */
+	.drp_ecc_error_inject_0 = 0x50010,
+	.drp_ecc_error_inject_1 = 0x50014,
 	.drp_ecc_error_cfg = 0x50000,
 	.drp_ecc_error_cntr_clear = 0x50004,
 	.drp_interrupt_status = 0x50020,
@@ -1217,6 +1230,8 @@ static const struct llcc_edac_reg_offset llcc_v2_1_edac_reg_offset = {
 };
 
 static const struct llcc_edac_reg_offset llcc_v6_edac_reg_offset = {
+	.trp_ecc_error_inject_0 = 0x47400,
+	.trp_ecc_error_inject_1 = 0x47404,
 	.trp_ecc_error_status0 = 0x47448,
 	.trp_ecc_error_status1 = 0x47450,
 	.trp_ecc_sb_err_syn0 = 0x47490,
@@ -1232,6 +1247,8 @@ static const struct llcc_edac_reg_offset llcc_v6_edac_reg_offset = {
 	.cmn_interrupt_2_enable = 0x6403c,
 
 	/* LLCC DRP registers */
+	.drp_ecc_error_inject_0 = 0x80010,
+	.drp_ecc_error_inject_1 = 0x80014,
 	.drp_ecc_error_cfg = 0x80000,
 	.drp_ecc_error_cntr_clear = 0x80004,
 	.drp_interrupt_status = 0x80020,
@@ -1478,6 +1495,16 @@ static const struct qcom_llcc_config sun_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config shikra_cfg[] = {
+	{
+		.sct_data       = shikra_data,
+		.size           = ARRAY_SIZE(shikra_data),
+		.need_llcc_cfg	= true,
+		.reg_offset	= llcc_v2_1_reg_offset,
+		.edac_reg_offset = &llcc_v2_1_edac_reg_offset,
+	},
+};
+
 static const struct qcom_llcc_config canoe_cfg[] = {
 	{
 		.sct_data       = canoe_data,
@@ -1644,6 +1671,11 @@ static const struct qcom_sct_config pineapple_cfgs = {
 static const struct qcom_sct_config sun_cfgs = {
 	.llcc_config	= sun_cfg,
 	.num_config	= ARRAY_SIZE(sun_cfg),
+};
+
+static const struct qcom_sct_config shikra_cfgs = {
+	.llcc_config	= shikra_cfg,
+	.num_config	= ARRAY_SIZE(shikra_cfg),
 };
 
 static const struct qcom_sct_config canoe_cfgs = {
@@ -1950,6 +1982,50 @@ size_t llcc_tcm_get_slice_size(struct llcc_tcm_data *tcm_data)
 	return tcm_data->mem_size;
 }
 EXPORT_SYMBOL_GPL(llcc_tcm_get_slice_size);
+
+int llcc_tcm_trigger_access(struct llcc_tcm_data *tcm_data, size_t len,
+			    u32 pattern)
+{
+	void __iomem *virt_addr, *mapped = NULL;
+	size_t i;
+	u32 val;
+
+	if (IS_ERR(tcm_drv_data) || IS_ERR_OR_NULL(drv_data))
+		return -EPROBE_DEFER;
+
+	if (IS_ERR_OR_NULL(tcm_data))
+		return -EINVAL;
+
+	if (!len)
+		return 0;
+
+	len = min(len, tcm_data->mem_size);
+	if (!len)
+		return -EINVAL;
+
+	virt_addr = tcm_data->virt_addr;
+	if (drv_data->sct_initialized || IS_ERR_OR_NULL(virt_addr)) {
+		mapped = ioremap(tcm_data->phys_addr, len);
+		if (IS_ERR_OR_NULL(mapped))
+			return -ENOMEM;
+		virt_addr = mapped;
+	}
+
+	memset_io(virt_addr, pattern & 0xff, len);
+	for (i = 0; i + sizeof(u32) <= len; i += sizeof(u32)) {
+		val = readl_relaxed(virt_addr + i);
+		writel_relaxed(val ^ pattern ^ i, virt_addr + i);
+	}
+
+	/* To make sure data reflected in memory before unmap. */
+	wmb();
+
+	if (mapped)
+		iounmap(mapped);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(llcc_tcm_trigger_access);
 
 static struct llcc_slice_desc *llcc_slice_getd_sct_initialized(u32 uid)
 {
@@ -2935,9 +3011,13 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 	ret = regmap_read(regmap, cfg->reg_offset[LLCC_COMMON_STATUS0], &num_banks);
 	if (ret)
 		goto err;
-
 	num_banks &= LLCC_LB_CNT_MASK;
 	num_banks >>= LLCC_LB_CNT_SHIFT;
+	if (!num_banks) {
+		dev_err(dev, "Invalid LLCC bank count in COMMON_STATUS0\n");
+		ret = -EINVAL;
+		goto err;
+	}
 	drv_data->num_banks = num_banks;
 
 	drv_data->regmaps = devm_kcalloc(dev, num_banks, sizeof(*drv_data->regmaps), GFP_KERNEL);
@@ -3014,7 +3094,7 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 			if (llcc_cfg[i].slice_id > drv_data->max_slices)
 				drv_data->max_slices = llcc_cfg[i].slice_id;
 
-		drv_data->bitmap = devm_bitmap_zalloc(dev, drv_data->max_slices,
+		drv_data->bitmap = devm_bitmap_zalloc(dev, drv_data->max_slices + 1,
 						      GFP_KERNEL);
 		if (!drv_data->bitmap) {
 			ret = -ENOMEM;
@@ -3023,7 +3103,6 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 
 		drv_data->cfg = llcc_cfg;
 		drv_data->cfg_size = sz;
-
 		ret = qcom_llcc_cfg_program(pdev, cfg);
 		if (ret)
 			goto err;
@@ -3087,6 +3166,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,lahaina-llcc", .data = &lahaina_cfgs},
 	{ .compatible = "qcom,vienna-llcc", .data = &vienna_cfgs },
 	{ .compatible = "qcom,alor-llcc", .data = &alor_cfgs },
+	{ .compatible = "qcom,shikra-llcc", .data = &shikra_cfgs },
 	{ .compatible = "qcom,seraph-llcc", .data = &seraph_cfgs},
 	{ .compatible = "qcom,pikachu-llcc", .data = &pikachu_cfgs},
 	{ }

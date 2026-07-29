@@ -178,6 +178,8 @@ struct llcc_edac_reg_data {
 
 struct llcc_edac_reg_offset {
 	/* LLCC TRP registers */
+	u32 trp_ecc_error_inject_0;
+	u32 trp_ecc_error_inject_1;
 	u32 trp_ecc_error_status0;
 	u32 trp_ecc_error_status1;
 	u32 trp_ecc_sb_err_syn0;
@@ -193,6 +195,8 @@ struct llcc_edac_reg_offset {
 	u32 cmn_interrupt_2_enable;
 
 	/* LLCC DRP registers */
+	u32 drp_ecc_error_inject_0;
+	u32 drp_ecc_error_inject_1;
 	u32 drp_ecc_error_cfg;
 	u32 drp_ecc_error_cntr_clear;
 	u32 drp_interrupt_status;
@@ -357,6 +361,16 @@ size_t llcc_tcm_get_slice_size(struct llcc_tcm_data *tcm_data);
  * llcc_tcm_deactivate - Deactivate the llcc tcm
  */
 void llcc_tcm_deactivate(struct llcc_tcm_data *tcm_data);
+/**
+ * llcc_tcm_trigger_access - Issue bounded reads/writes into LLCC TCM
+ * @tcm_data: Pointer to the llcc tcm descriptor
+ * @len: Number of bytes to touch
+ * @pattern: Pattern seed used while generating traffic
+ *
+ * Returns zero on success or a negative errno.
+ */
+int llcc_tcm_trigger_access(struct llcc_tcm_data *tcm_data, size_t len,
+			    u32 pattern);
 int llcc_configure_staling_mode(struct llcc_slice_desc *desc,
 				struct llcc_staling_mode_params *p);
 /**
@@ -420,6 +434,12 @@ static inline size_t llcc_tcm_get_slice_size(struct llcc_tcm_data *tcm_data)
 static inline void llcc_tcm_deactivate(struct llcc_tcm_data *tcm_data)
 {
 
+}
+
+static inline int llcc_tcm_trigger_access(struct llcc_tcm_data *tcm_data,
+					  size_t len, u32 pattern)
+{
+	return -EINVAL;
 }
 
 static inline int llcc_configure_staling_mode(struct llcc_slice_desc *desc,
