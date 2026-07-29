@@ -1167,6 +1167,43 @@ static const struct llcc_slice_config alor_data[] = {
 							0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,  0},
 };
 
+static const struct llcc_slice_config glymur_data[] = {
+	{LLCC_CPUSS, 1, 4864, 1, 0, 0xfff, 0, 0x0, 0, 0, 0,
+		1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_VIDSC0, 2, 1024, 3, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_AUDIO, 6, 1024, 1, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_CMPT, 10, 4864, 1, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_GPUHTW, 11, 512, 1, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_GPU, 9, 5120, 1, 0, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_MMUHWT, 18, 768, 1, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_CVP, 8, 64, 3, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_WRCACHE, 31, 1024, 1, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_CMPTHCP, 17, 256, 3, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_LCPDARE, 30, 512, 3, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1},
+	{LLCC_AENPU, 3, 3072, 1, 1, 0xfff, 0, 0x2, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_ISLAND1, 12, 5633, 7, 1, 0x7ff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_VIDVSP, 28, 256, 3, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_OOBM_NS, 5, 512, 1, 0, 0xfff, 0, 0x0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_CPUSS_OPP, 32, 0, 0, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	{LLCC_PCIE_TCU, 19, 256, 1, 1, 0xfff, 0, 0x0, 0, 0, 0,
+		1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+};
+
 static const struct llcc_edac_reg_offset llcc_v1_edac_reg_offset = {
 	.trp_ecc_error_inject_0 = 0x20400,
 	.trp_ecc_error_inject_1 = 0x20404,
@@ -1583,6 +1620,16 @@ static const struct qcom_llcc_config pikachu_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config glymur_cfg[] = {
+	{
+	.sct_data       = glymur_data,
+	.size           = ARRAY_SIZE(glymur_data),
+	.reg_offset     = llcc_v6_reg_offset,
+	.edac_reg_offset = &llcc_v2_1_edac_reg_offset,
+	.no_edac        = true,
+	},
+};
+
 static const struct qcom_sct_config qdu1000_cfgs = {
 	.llcc_config	= qdu1000_cfg,
 	.num_config	= ARRAY_SIZE(qdu1000_cfg),
@@ -1712,6 +1759,11 @@ static const struct qcom_sct_config seraph_cfgs = {
 static const struct qcom_sct_config pikachu_cfgs = {
 	.llcc_config    = pikachu_cfg,
 	.num_config = ARRAY_SIZE(pikachu_cfg),
+};
+
+static const struct qcom_sct_config glymur_cfgs = {
+	.llcc_config    = glymur_cfg,
+	.num_config     = ARRAY_SIZE(glymur_cfg),
 };
 
 static struct llcc_drv_data *drv_data = (void *) -EPROBE_DEFER;
@@ -3169,6 +3221,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,shikra-llcc", .data = &shikra_cfgs },
 	{ .compatible = "qcom,seraph-llcc", .data = &seraph_cfgs},
 	{ .compatible = "qcom,pikachu-llcc", .data = &pikachu_cfgs},
+	{ .compatible = "qcom,glymur-llcc", .data = &glymur_cfgs},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_llcc_of_match);

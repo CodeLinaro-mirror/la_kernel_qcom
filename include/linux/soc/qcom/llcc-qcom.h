@@ -92,13 +92,14 @@
 #define LLCC_DCP              86
 #define LLCC_COMPUTE1         87
 #define LLCC_CPUSSMPAM        89
-#define LLCC_CPU_MTE          35
-#define LLCC_VIDEO_APV        83
-#define LLCC_COMPUTE1         87
+/* Backward-compatible aliases for the same usecase IDs. */
+#define LLCC_CPU_MTE          LLCC_CPUMTE
 #define LLCC_CPUSS_OPP        88
-#define LLCC_CPUSS_MPAM1      89
+#define LLCC_CPUSS_MPAM1      LLCC_CPUSSMPAM
 #define LLCC_PARTIALWRITES    90
 #define LLCC_CAM_IPE_STROV    92
+/* Target-specific alias sharing ID 89 on some SoCs. */
+#define LLCC_PCIE_TCU         LLCC_CPUSSMPAM
 #define LLCC_CAM_OFE_STROV    93
 #define LLCC_CPUSS_HEU        94
 #define LLCC_MDM_PNG_FIXED   100
