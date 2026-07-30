@@ -1,4 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/*
+Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+SPDX-License-Identifier: GPL-2.0-only
+*/
 
 #ifndef __QCOM_RPROC_H__
 #define __QCOM_RPROC_H__
