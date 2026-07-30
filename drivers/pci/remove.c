@@ -35,6 +35,7 @@ static void pci_destroy_dev(struct pci_dev *dev)
 	if (!dev->dev.kobj.parent)
 		return;
 
+	pci_doe_sysfs_teardown(dev);
 	device_del(&dev->dev);
 
 	down_write(&pci_bus_sem);

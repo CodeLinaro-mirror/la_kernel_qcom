@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+
+$id: http://devicetree.org/schemas/mfd/raspberrypi,sensehat.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Raspberry Pi Sense HAT
+
+maintainers:
+  - Sharvari Mishra <sharmish@qti.qualcomm.com>
+
+description: |
+  Raspberry Pi Sense HAT is an I2C-attached multi-function device.
+  It can expose a joystick child node on supported platforms.
+
+properties:
+  compatible:
+    const: raspberrypi,sensehat
+
+  reg:
+    maxItems: 1
+
+  status: true
+
+patternProperties:
+  "^joystick$":
+    type: object
+    description: Sense HAT joystick child node
+
+    properties:
+      compatible:
+        const: raspberrypi,sensehat-joystick
+
+      status: true
+      pinctrl-names: true
+      pinctrl-0: true
+      interrupt-parent: true
+
+      interrupts:
+        maxItems: 1
+
+    required:
+      - compatible
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        sensehat@46 {
+            compatible = "raspberrypi,sensehat";
+            reg = <0x46>;
+
+            joystick {
+                compatible = "raspberrypi,sensehat-joystick";
+                interrupt-parent = <&gpio>;
+                interrupts = <23 1>; /* rising edge */
+            };
+        };
+    };
