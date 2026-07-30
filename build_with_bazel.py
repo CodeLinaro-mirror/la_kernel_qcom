@@ -202,6 +202,10 @@ class BazelBuilder:
 
     def get_build_targets(self):
         """Query for build targets, using a disk cache to avoid repeated Bazel queries."""
+        if self.out_dir and any(v == "ALL" for _, v in self.target_list):
+            logging.error("cannot specify multiple targets (ALL variants) with one out dir")
+            sys.exit(1)
+
         cache_file = os.path.join(
             self.cache_dir, "target_query_cache_{}.json".format(self._query_cache_key())
         )
@@ -232,10 +236,6 @@ class BazelBuilder:
         targets = []
         for t, v in self.target_list:
             if v == "ALL":
-                if self.out_dir:
-                    logging.error("cannot specify multiple targets (ALL variants) with one out dir")
-                    sys.exit(1)
-
                 skip_list_re = [
                     re.compile(r"//{}:{}_.*_{}_dist".format(self.kernel_dir, t, s))
                     for s in self.skip_list
