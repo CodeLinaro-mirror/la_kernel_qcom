@@ -3345,6 +3345,7 @@ static int arm_smmu_handoff_cbs(struct arm_smmu_device *smmu)
 
 		smr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_SMR(i));
 
+		smrs.pinned = false;
 		if (smmu->features & ARM_SMMU_FEAT_EXIDS) {
 			s2cr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_S2CR(i));
 			smrs.valid = FIELD_GET(ARM_SMMU_S2CR_EXIDVALID, s2cr);

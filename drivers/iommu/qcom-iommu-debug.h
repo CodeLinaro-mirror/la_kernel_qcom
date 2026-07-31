@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __DRIVERS_IOMMU_QCOM_IOMMU_DEBUG_H__
@@ -12,6 +12,7 @@
 #include <linux/iommu.h>
 #include <linux/completion.h>
 #include <linux/mutex.h>
+#include "qcom-iommu-debug-alloc.h"
 
 #define MSI_IOVA_BASE			0x8000000
 #define MSI_IOVA_LENGTH			0x100000

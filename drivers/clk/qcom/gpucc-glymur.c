@@ -6,6 +6,7 @@
 #include <linux/clk-provider.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 
@@ -21,6 +22,15 @@
 #include "common.h"
 #include "gdsc.h"
 #include "reset.h"
+#include "vdd-level.h"
+
+static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NOMINAL + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_mx, VDD_NOMINAL + 1, 1, vdd_corner);
+
+static struct clk_vdd_class *gpu_cc_glymur_regulators[] = {
+	&vdd_cx,
+	&vdd_mx,
+};
 
 enum {
 	DT_BI_TCXO,
@@ -44,6 +54,7 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 /* 1150.0 MHz Configuration */
 static const struct alpha_pll_config gpu_cc_pll0_config = {
 	.l = 0x3b,
+	.cal_l = 0x48,
 	.alpha = 0xe555,
 	.config_ctl_val = 0x25c400e7,
 	.config_ctl_hi_val = 0x0a8060e0,
@@ -54,7 +65,6 @@ static const struct alpha_pll_config gpu_cc_pll0_config = {
 
 static struct clk_alpha_pll gpu_cc_pll0 = {
 	.offset = 0x0,
-	.config = &gpu_cc_pll0_config,
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
@@ -66,6 +76,18 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 			},
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_taycan_eko_t_ops,
+		},
+		.vdd_data = {
+			.vdd_class = &vdd_cx,
+			.num_rate_max = VDD_NUM,
+			.rate_max = (unsigned long[VDD_NUM]) {
+				[VDD_LOWER_D2] = 621000000,
+				[VDD_LOWER_D1] = 621000000,
+				[VDD_LOWER] = 700000000,
+				[VDD_LOW] = 1066000000,
+				[VDD_LOW_L1] = 1600000000,
+				[VDD_NOMINAL] = 2000000000,
+				[VDD_HIGH] = 2500000000},
 		},
 	},
 };
@@ -134,12 +156,20 @@ static struct clk_rcg2 gpu_cc_ff_clk_src = {
 	.hid_width = 5,
 	.parent_map = gpu_cc_parent_map_0,
 	.freq_tbl = ftbl_gpu_cc_ff_clk_src,
+	.enable_safe_config = true,
+	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "gpu_cc_ff_clk_src",
 		.parent_data = gpu_cc_parent_data_0,
 		.num_parents = ARRAY_SIZE(gpu_cc_parent_data_0),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_cx,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 200000000},
 	},
 };
 
@@ -158,12 +188,24 @@ static struct clk_rcg2 gpu_cc_gmu_clk_src = {
 	.hid_width = 5,
 	.parent_map = gpu_cc_parent_map_1,
 	.freq_tbl = ftbl_gpu_cc_gmu_clk_src,
+	.enable_safe_config = true,
+	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "gpu_cc_gmu_clk_src",
 		.parent_data = gpu_cc_parent_data_1,
 		.num_parents = ARRAY_SIZE(gpu_cc_parent_data_1),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_classes = gpu_cc_glymur_regulators,
+		.num_vdd_classes = ARRAY_SIZE(gpu_cc_glymur_regulators),
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 575000000,
+			[VDD_LOW] = 700000000,
+			[VDD_LOW_L1] = 725000000,
+			[VDD_NOMINAL] = 750000000},
 	},
 };
 
@@ -180,12 +222,22 @@ static struct clk_rcg2 gpu_cc_hub_clk_src = {
 	.hid_width = 5,
 	.parent_map = gpu_cc_parent_map_1,
 	.freq_tbl = ftbl_gpu_cc_hub_clk_src,
+	.enable_safe_config = true,
+	.flags = HW_CLK_CTRL_MODE,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "gpu_cc_hub_clk_src",
 		.parent_data = gpu_cc_parent_data_1,
 		.num_parents = ARRAY_SIZE(gpu_cc_parent_data_1),
 		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_rcg2_shared_ops,
+		.ops = &clk_rcg2_ops,
+	},
+	.clkr.vdd_data = {
+		.vdd_class = &vdd_cx,
+		.num_rate_max = VDD_NUM,
+		.rate_max = (unsigned long[VDD_NUM]) {
+			[VDD_LOWER] = 200000000,
+			[VDD_LOW] = 300000000,
+			[VDD_LOW_L1] = 400000000},
 	},
 };
 
@@ -265,7 +317,7 @@ static struct clk_branch gpu_cc_cx_gmu_clk = {
 				&gpu_cc_gmu_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_DONT_HOLD_STATE | CLK_SET_RATE_PARENT,
 			.ops = &clk_branch2_aon_ops,
 		},
 	},
@@ -279,6 +331,7 @@ static struct clk_branch gpu_cc_cxo_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gpu_cc_cxo_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -451,7 +504,7 @@ static struct clk_branch gpu_cc_hub_cx_int_clk = {
 				&gpu_cc_hub_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_DONT_HOLD_STATE | CLK_SET_RATE_PARENT,
 			.ops = &clk_branch2_aon_ops,
 		},
 	},
@@ -488,19 +541,6 @@ static struct clk_branch gpu_cc_rscc_hub_aon_clk = {
 	},
 };
 
-static struct clk_branch gpu_cc_sleep_clk = {
-	.halt_reg = 0x90cc,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x90cc,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "gpu_cc_sleep_clk",
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct gdsc gpu_cc_cx_gdsc = {
 	.gdscr = 0x9080,
 	.gds_hw_ctrl = 0x9094,
@@ -512,6 +552,44 @@ static struct gdsc gpu_cc_cx_gdsc = {
 	},
 	.pwrsts = PWRSTS_OFF_ON,
 	.flags = POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.supply = "vdd_cx",
+};
+
+static int gdsc_cx_do_nothing(struct generic_pm_domain *domain)
+{
+	return 0;
+}
+
+static struct gdsc gpu_cc_cx_smmu_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x8,
+	.pd = {
+		.name = "gpu_cc_cx_smmu_gdsc",
+		.power_on = gdsc_cx_do_nothing,
+		.power_off = gdsc_cx_do_nothing,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.parent = &gpu_cc_cx_gdsc.pd,
+};
+
+static struct gdsc gpu_cc_cx_gmu_gdsc = {
+	.gdscr = 0x9080,
+	.gds_hw_ctrl = 0x9094,
+	.en_rest_wait_val = 0x2,
+	.en_few_wait_val = 0x2,
+	.clk_dis_wait_val = 0x8,
+	.pd = {
+		.name = "gpu_cc_cx_gmu_gdsc",
+		.power_on = gdsc_cx_do_nothing,
+		.power_off = gdsc_cx_do_nothing,
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.parent = &gpu_cc_cx_gdsc.pd,
 };
 
 static struct clk_regmap *gpu_cc_glymur_clocks[] = {
@@ -539,11 +617,12 @@ static struct clk_regmap *gpu_cc_glymur_clocks[] = {
 	[GPU_CC_PLL0] = &gpu_cc_pll0.clkr,
 	[GPU_CC_PLL0_OUT_EVEN] = &gpu_cc_pll0_out_even.clkr,
 	[GPU_CC_RSCC_HUB_AON_CLK] = &gpu_cc_rscc_hub_aon_clk.clkr,
-	[GPU_CC_SLEEP_CLK] = &gpu_cc_sleep_clk.clkr,
 };
 
 static struct gdsc *gpu_cc_glymur_gdscs[] = {
 	[GPU_CC_CX_GDSC] = &gpu_cc_cx_gdsc,
+	[GPU_CC_CX_SMMU_GDSC] = &gpu_cc_cx_smmu_gdsc,
+	[GPU_CC_CX_GMU_GDSC] = &gpu_cc_cx_gmu_gdsc,
 };
 
 static const struct qcom_reset_map gpu_cc_glymur_resets[] = {
@@ -556,14 +635,12 @@ static const struct qcom_reset_map gpu_cc_glymur_resets[] = {
 	[GPU_CC_XO_BCR] = { 0x9000 },
 };
 
-static struct clk_alpha_pll *gpu_cc_glymur_plls[] = {
-	&gpu_cc_pll0,
-};
-
 static const u32 gpu_cc_glymur_critical_cbcrs[] = {
 	0x93a4, /* GPU_CC_CB_CLK */
 	0x9008, /* GPU_CC_CXO_AON_CLK */
+	0x93e8, /* GPU_CC_RSCC_HUB_AON_CLK */
 	0x9004, /* GPU_CC_RSCC_XO_AON_CLK */
+	0x90cc, /* GPU_CC_SLEEP_CLK */
 };
 
 static const struct regmap_config gpu_cc_glymur_regmap_config = {
@@ -574,23 +651,16 @@ static const struct regmap_config gpu_cc_glymur_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_driver_data gpu_cc_glymur_driver_data = {
-	.alpha_plls = gpu_cc_glymur_plls,
-	.num_alpha_plls = ARRAY_SIZE(gpu_cc_glymur_plls),
-	.clk_cbcrs = gpu_cc_glymur_critical_cbcrs,
-	.num_clk_cbcrs = ARRAY_SIZE(gpu_cc_glymur_critical_cbcrs),
-};
-
 static const struct qcom_cc_desc gpu_cc_glymur_desc = {
 	.config = &gpu_cc_glymur_regmap_config,
 	.clks = gpu_cc_glymur_clocks,
 	.num_clks = ARRAY_SIZE(gpu_cc_glymur_clocks),
 	.resets = gpu_cc_glymur_resets,
 	.num_resets = ARRAY_SIZE(gpu_cc_glymur_resets),
+	.clk_regulators = gpu_cc_glymur_regulators,
+	.num_clk_regulators = ARRAY_SIZE(gpu_cc_glymur_regulators),
 	.gdscs = gpu_cc_glymur_gdscs,
 	.num_gdscs = ARRAY_SIZE(gpu_cc_glymur_gdscs),
-	.use_rpm = true,
-	.driver_data = &gpu_cc_glymur_driver_data,
 };
 
 static const struct of_device_id gpu_cc_glymur_match_table[] = {
@@ -601,7 +671,38 @@ MODULE_DEVICE_TABLE(of, gpu_cc_glymur_match_table);
 
 static int gpu_cc_glymur_probe(struct platform_device *pdev)
 {
-	return qcom_cc_probe(pdev, &gpu_cc_glymur_desc);
+	struct regmap *regmap;
+	int ret, i;
+
+	regmap = qcom_cc_map(pdev, &gpu_cc_glymur_desc);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	clk_taycan_eko_t_pll_configure(&gpu_cc_pll0, regmap, &gpu_cc_pll0_config);
+
+	/*
+	 * Keep clocks always enabled:
+	 *	gpu_cc_cb_clk
+	 *	gpu_cc_cxo_aon_clk
+	 *	gpu_cc_rscc_hub_aon_clk
+	 *	gpu_cc_rscc_xo_aon_clk
+	 *	gpu_cc_sleep_clk
+	 */
+	for (i = 0; i < ARRAY_SIZE(gpu_cc_glymur_critical_cbcrs); i++)
+		qcom_branch_set_clk_en(regmap, gpu_cc_glymur_critical_cbcrs[i]);
+
+	ret = qcom_cc_really_probe(&pdev->dev, &gpu_cc_glymur_desc, regmap);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Failed to register GPU CC clocks\n");
+
+	dev_info(&pdev->dev, "Registered GPU CC clocks\n");
+
+	return ret;
+}
+
+static void gpu_cc_glymur_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &gpu_cc_glymur_desc);
 }
 
 static struct platform_driver gpu_cc_glymur_driver = {
@@ -609,6 +710,7 @@ static struct platform_driver gpu_cc_glymur_driver = {
 	.driver = {
 		.name = "gpucc-glymur",
 		.of_match_table = gpu_cc_glymur_match_table,
+		.sync_state = gpu_cc_glymur_sync_state,
 	},
 };
 

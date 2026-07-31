@@ -15,6 +15,9 @@
 #include <linux/regulator/consumer.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/of_gpio.h>
+#include <linux/of_irq.h>
+#include <linux/gunyah/gh_dbl.h>
+#include <linux/workqueue.h>
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
@@ -35,6 +38,7 @@
 #define EMAC_WRAPPER_USXGMII_MUX_SEL 0x1D0
 #define RGMII_IO_MACRO_SCRATCH_2		0x44
 #define EMAC_WRAPPER_SGMII_PHY_CNTRL1_V4 0x174
+#define MACSEC_CTRL0_OFFSET			0x0
 
 /* RGMII_IO_MACRO_CONFIG fields */
 #define RGMII_CONFIG_FUNC_CLK_EN		BIT(30)
@@ -119,6 +123,9 @@
 #define RGMII_SCRATCH2_MAX_SPD_PRG_5		GENMASK(9, 6)
 #define RGMII_SCRATCH2_MAX_SPD_PRG_6		GENMASK(13, 10)
 
+/* MACSEC WRAPPER bits */
+#define MACSEC_BIT_DATA_BYPASS		BIT(2)
+
 #define SGMII_10M_RX_CLK_DVDR			0x31
 
 #define ETHQOS_MAX_NOC_CLKS			3
@@ -161,6 +168,7 @@ struct ethqos_emac_driver_data {
 	struct dwmac4_addrs dwmac4_addrs;
 	bool needs_sgmii_loopback;
 	bool has_hdma;
+	bool has_macsec;
 	const struct ethqos_noc_clk_cfg *noc_clk_cfg;
 	unsigned int num_noc_clks;
 	struct dev_pm_domain_attach_data pd_data;
@@ -169,6 +177,7 @@ struct ethqos_emac_driver_data {
 struct qcom_ethqos {
 	struct platform_device *pdev;
 	void __iomem *rgmii_base;
+	void __iomem *macsec_base;
 	void __iomem *mac_base;
 	int (*configure_func)(struct qcom_ethqos *ethqos);
 
@@ -180,6 +189,11 @@ struct qcom_ethqos {
 	phy_interface_t phy_mode;
 
 	int gpio_phy_intr_redirect;
+	int switch_reset_detect_irq;
+	gh_label_t dbl_label;
+	void *dbl_rx_desc;
+	struct work_struct dbl_rx_work;
+	bool dbl_rx_enabled;
 	u32 phy_intr;
 
 	struct regulator *gdsc_emac;
@@ -190,6 +204,7 @@ struct qcom_ethqos {
 	unsigned int num_por;
 	bool rgmii_config_loopback_en;
 	bool has_emac_ge_3;
+	bool has_macsec;
 	bool needs_sgmii_loopback;
 	bool use_domains;
 	struct dev_pm_domain_list *pd_list;
@@ -670,6 +685,16 @@ static const struct ethqos_emac_por emac_v6_6_0_por[] = {
 	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
 };
 
+static const struct ethqos_emac_por emac_v6_6_1_por[] = {
+	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0xC04D03 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
+	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040800 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
+	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
+	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x222060},
+	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
+};
+
 static const struct ethqos_emac_driver_data emac_v4_0_0_data = {
 	.por = emac_v4_0_0_por,
 	.num_por = ARRAY_SIZE(emac_v4_0_0_por),
@@ -735,6 +760,38 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.link_clk_name = "phyaux",
 	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
 	.has_hdma = true,
+	.axi_clk_rate = 380000000,
+	.ptp_clk_rate = 250000000,
+	.dwxgmac_addrs = {
+		.dma_even_chan_base  = 0x00008500,
+		.dma_odd_chan_base = 0x00008580,
+		.dma_chan_offset = 0x00001000,
+		.mtl_chan_base = 0x00008000,
+		.mtl_chan_offset =  0x00001000,
+		.timestamp_base = 0x00007000,
+		.pps_base = 0x00007080,
+		.pps_offset = 0x10,
+	},
+	.pd_data = {
+		.pd_flags = PD_FLAG_NO_DEV_LINK,
+		.pd_names = (const char*[]) {"power_core", "power_mdio", "perf_serdes",
+					     "perf_5g_serdes"},
+		.num_pd_names = 4,
+	},
+};
+
+/* emac_v6_6_1 is added because of the addition of new MACSEC
+ * block and the flags associated with it.
+ */
+static const struct ethqos_emac_driver_data emac_v6_6_1_data = {
+	.por = emac_v6_6_1_por,
+	.num_por = ARRAY_SIZE(emac_v6_6_1_por),
+	.rgmii_config_loopback_en = false,
+	.dma_addr_width = 40,
+	.link_clk_name = "phyaux",
+	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
+	.has_hdma = true,
+	.has_macsec = true,
 	.axi_clk_rate = 380000000,
 	.ptp_clk_rate = 250000000,
 	.dwxgmac_addrs = {
@@ -1218,6 +1275,21 @@ static void ethqos_set_serdes_speed(struct qcom_ethqos *ethqos, int speed)
 	}
 }
 
+static void ethqos_force_macsec_bypass(struct qcom_ethqos *ethqos)
+{
+	void __iomem *macsec_base = ethqos->macsec_base;
+	u32 val;
+
+	if (!macsec_base)
+		return;
+
+	val = readl_relaxed(macsec_base + MACSEC_CTRL0_OFFSET);
+
+	val |= MACSEC_BIT_DATA_BYPASS;
+
+	writel_relaxed(val, macsec_base + MACSEC_CTRL0_OFFSET);
+}
+
 /* On interface toggle MAC registers gets reset.
  * Configure MAC block for SGMII on ethernet phy link up
  */
@@ -1314,6 +1386,9 @@ static int  ethqos_configure_5gbaser(struct qcom_ethqos *ethqos)
 		      RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
 		      RGMII_IO_MACRO_CONFIG2);
 
+	if (ethqos->has_macsec)
+		ethqos_force_macsec_bypass(ethqos);
+
 	return 0;
 }
 
@@ -1401,6 +1476,10 @@ static int ethqos_configure_usxgmii(struct qcom_ethqos *ethqos)
 			"Invalid speed %d\n", ethqos->speed);
 		return -EINVAL;
 	}
+
+	if (ethqos->has_macsec)
+		ethqos_force_macsec_bypass(ethqos);
+
 	return 0;
 }
 
@@ -1537,6 +1616,129 @@ static int qcom_ethqos_init(struct platform_device *pdev, void *prv)
 	return 0;
 }
 
+static void qcom_ethqos_dbl_rx_work(struct work_struct *work)
+{
+	struct qcom_ethqos *ethqos =
+		container_of(work, struct qcom_ethqos, dbl_rx_work);
+	struct device *dev = &ethqos->pdev->dev;
+	struct net_device *ndev = platform_get_drvdata(ethqos->pdev);
+	struct stmmac_priv *priv;
+
+	if (!ethqos->dbl_rx_enabled) {
+		dev_dbg(dev, "RX doorbell work skipped: doorbell disabled\n");
+		return;
+	}
+
+	if (!ndev) {
+		dev_err(dev, "ndev is NULL in dbl_rx_work\n");
+		return;
+	}
+
+	priv = netdev_priv(ndev);
+
+	dev_dbg(dev, "RX doorbell work: handling switch reset\n");
+	stmmac_handle_switch_reset(priv);
+}
+
+static void qcom_ethqos_dbl_rx_callback(int irq, void *data)
+{
+	struct qcom_ethqos *ethqos = data;
+	gh_dbl_flags_t clear_flags = ~0U;
+	int ret;
+
+	if (!ethqos->dbl_rx_enabled) {
+		dev_dbg(&ethqos->pdev->dev,
+			"RX doorbell callback skipped: doorbell disabled\n");
+		return;
+	}
+
+	if (IS_ERR_OR_NULL(ethqos->dbl_rx_desc)) {
+		dev_warn(&ethqos->pdev->dev,
+			 "RX doorbell callback skipped: invalid desc\n");
+		return;
+	}
+
+	ret = gh_dbl_read_and_clean(ethqos->dbl_rx_desc, &clear_flags, 0);
+	if (ret) {
+		dev_err(&ethqos->pdev->dev,
+			"gh_dbl_read_and_clean failed: %d\n", ret);
+		return;
+	}
+
+	dev_dbg(&ethqos->pdev->dev,
+		"RX doorbell callback: flags=0x%llx\n", clear_flags);
+
+	schedule_work(&ethqos->dbl_rx_work);
+}
+
+static void qcom_ethqos_dbl_rx_cleanup(void *data)
+{
+	struct qcom_ethqos *ethqos = data;
+
+	ethqos->dbl_rx_enabled = false;
+
+	if (!IS_ERR_OR_NULL(ethqos->dbl_rx_desc)) {
+		gh_dbl_rx_unregister(ethqos->dbl_rx_desc);
+		ethqos->dbl_rx_desc = NULL;
+	}
+
+	cancel_work_sync(&ethqos->dbl_rx_work);
+}
+
+static void qcom_ethqos_setup_dbl_rx(struct device *dev, struct qcom_ethqos *ethqos)
+{
+	struct device_node *np = dev->of_node;
+	int ret;
+
+	ethqos->dbl_rx_enabled = false;
+	ethqos->dbl_rx_desc = NULL;
+
+	ret = of_property_read_u32(np, "qcom,dbl-label", &ethqos->dbl_label);
+	if (ret) {
+		dev_dbg(dev, "qcom,dbl-label not found\n");
+		return;
+	}
+
+	INIT_WORK(&ethqos->dbl_rx_work, qcom_ethqos_dbl_rx_work);
+	dev_dbg(dev, "Setting up RX doorbell label=0x%x\n", ethqos->dbl_label);
+
+	ethqos->dbl_rx_desc = gh_dbl_rx_register(ethqos->dbl_label,
+						 qcom_ethqos_dbl_rx_callback,
+						 ethqos);
+	if (IS_ERR(ethqos->dbl_rx_desc)) {
+		dev_warn(dev, "gh_dbl_rx_register failed for label=0x%x: %ld\n",
+			 ethqos->dbl_label, PTR_ERR(ethqos->dbl_rx_desc));
+		ethqos->dbl_rx_desc = NULL;
+		return;
+	}
+
+	ret = gh_dbl_set_mask(ethqos->dbl_rx_desc, BIT(0), 0, GH_DBL_NONBLOCK);
+	if (ret) {
+		dev_warn(dev, "gh_dbl_set_mask failed for label=0x%x: %d\n",
+			 ethqos->dbl_label, ret);
+		gh_dbl_rx_unregister(ethqos->dbl_rx_desc);
+		ethqos->dbl_rx_desc = NULL;
+		cancel_work_sync(&ethqos->dbl_rx_work);
+		return;
+	}
+
+	ret = devm_add_action_or_reset(dev, qcom_ethqos_dbl_rx_cleanup, ethqos);
+	if (ret) {
+		/* The qcom_ethqos_dbl_rx_cleanup will be called on failure,
+		 * which unregisters dbl_rx_desc and cancels dbl_rx_work.
+		 */
+		dev_warn(dev,
+			 "Failed to register RX doorbell cleanup for label=0x%x: %d\n",
+			 ethqos->dbl_label, ret);
+		return;
+	}
+
+	ethqos->dbl_rx_enabled = true;
+
+	dev_info(dev, "RX doorbell setup done label=0x%x\n",
+		 ethqos->dbl_label);
+}
+
 static int qcom_ethqos_serdes_powerup(struct net_device *ndev, void *priv)
 {
 	struct qcom_ethqos *ethqos = priv;
@@ -1637,6 +1839,11 @@ static int ethqos_clks_config(void *priv, bool enabled)
 static void ethqos_clks_disable(void *data)
 {
 	ethqos_clks_config(data, false);
+}
+
+static void ethqos_disable_regulators_action(void *data)
+{
+	ethqos_disable_regulators(data);
 }
 
 static void ethqos_ptp_clk_freq_config(struct stmmac_priv *priv)
@@ -1942,24 +2149,30 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		goto err_restore;
 	}
 
-	ret = stmmac_bus_clks_config(priv, true);
+	ret = pm_runtime_force_resume(dev);
 	if (ret) {
 		dev_err(dev, "%s: Clock Enablement Failed\n", __func__);
+		ethqos_free_gpios(ethqos);
+		ethqos_disable_regulators(ethqos);
 		goto err_restore;
 	}
-
-	ethqos_set_func_clk_en(ethqos);
 
 	/* issue netdev up to device */
 
 	if (!netif_running(ndev)) {
 		rtnl_lock();
-		dev_open(ndev, NULL);
+		ret = dev_open(ndev, NULL);
 		rtnl_unlock();
+		if (ret) {
+			dev_err(dev, "%s: dev_open failed with ret = %d\n", __func__, ret);
+			pm_runtime_force_suspend(dev);
+			ethqos_free_gpios(ethqos);
+			ethqos_disable_regulators(ethqos);
+			goto err_restore;
+		}
 	}
 
 	mutex_unlock(&priv->lock);
-
 	return ret;
 err_restore:
 	mutex_unlock(&priv->lock);
@@ -1990,7 +2203,7 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 		rtnl_unlock();
 	}
 
-	ret = stmmac_bus_clks_config(priv, false);
+	ret = pm_runtime_force_suspend(dev);
 	if (ret) {
 		dev_err(dev, "%s: Clock Disablement Failed\n", __func__);
 		goto err_freeze;
@@ -2001,8 +2214,7 @@ static int qcom_ethqos_hib_freeze(struct device *dev)
 
 	priv->speed = SPEED_UNKNOWN;
 	mutex_unlock(&priv->lock);
-
-	return ret;
+	return 0;
 err_freeze:
 	mutex_unlock(&priv->lock);
 	return ret;
@@ -2033,7 +2245,7 @@ static int qcom_ethqos_runtime_resume(struct device *dev)
 	return stmmac_bus_clks_config(priv, true);
 }
 
-static const struct dev_pm_ops qcom_ethqos_pm_ops = {
+static const struct dev_pm_ops qcom_ethqos_dsqb_pm_ops = {
 	.freeze = qcom_ethqos_hib_freeze,
 	.restore = qcom_ethqos_hib_restore,
 	.thaw = qcom_ethqos_hib_restore,
@@ -2068,6 +2280,60 @@ static int qcom_ethqos_init_noc_clks(struct qcom_ethqos *ethqos,
 
 	return 0;
 }
+
+static int qcom_ethqos_lpm_sys_suspend(struct device *dev)
+{
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv;
+	int ret;
+
+	if (!ndev)
+		return -EINVAL;
+
+	priv = netdev_priv(ndev);
+
+	ret = stmmac_suspend(dev);
+	if (ret)
+		return ret;
+
+	clk_disable_unprepare(priv->plat->clk_ptp_ref);
+
+	if (pm_runtime_status_suspended(dev))
+		return 0;
+
+	return pm_runtime_force_suspend(dev);
+}
+
+static int qcom_ethqos_lpm_sys_resume(struct device *dev)
+{
+	struct net_device *ndev = dev_get_drvdata(dev);
+	struct stmmac_priv *priv;
+	int ret;
+
+	if (!ndev)
+		return -EINVAL;
+
+	priv = netdev_priv(ndev);
+
+	ret = pm_runtime_force_resume(dev);
+	if (ret)
+		return ret;
+
+	ret = clk_prepare_enable(priv->plat->clk_ptp_ref);
+	if (ret) {
+		pm_runtime_force_suspend(dev);
+		return ret;
+	}
+
+	return stmmac_resume(dev);
+}
+
+static const struct dev_pm_ops qcom_ethqos_lpm_pm_ops = {
+	.suspend = qcom_ethqos_lpm_sys_suspend,
+	.resume = qcom_ethqos_lpm_sys_resume,
+	.runtime_suspend = qcom_ethqos_runtime_suspend,
+	.runtime_resume = qcom_ethqos_runtime_resume,
+};
 
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
@@ -2143,7 +2409,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(ethqos->rgmii_base),
 				     "Failed to map rgmii resource\n");
 
-	if (of_device_is_compatible(np, "qcom,sa8797p-ethqos")) {
+	if (of_device_is_compatible(np, "qcom,sa8797p-ethqos") ||
+	    of_device_is_compatible(np, "qcom,sa8787p-ethqos")) {
 		ret = qcom_ethqos_domain_attach(ethqos);
 		if (ret < 0) {
 			dev_err(dev, "Failed to attach domains.\n");
@@ -2172,8 +2439,17 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	if (data->has_macsec) {
+		ethqos->macsec_base = devm_platform_ioremap_resource_byname(pdev, "macsec");
+		if (IS_ERR(ethqos->macsec_base)) {
+			return dev_err_probe(dev, PTR_ERR(ethqos->macsec_base),
+					"Failed to map macsec resource\n");
+		}
+	}
+
 	ethqos->por = data->por;
 	ethqos->num_por = data->num_por;
+	ethqos->has_macsec = data->has_macsec;
 	ethqos->rgmii_config_loopback_en = data->rgmii_config_loopback_en;
 	ethqos->has_emac_ge_3 = data->has_emac_ge_3;
 	ethqos->needs_sgmii_loopback = data->needs_sgmii_loopback;
@@ -2185,19 +2461,24 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	if (!ethqos->use_domains) {
-		pdev->dev.driver->pm = &qcom_ethqos_pm_ops;
+		if (of_device_is_compatible(np, "qcom,shikra-ethqos"))
+			pdev->dev.driver->pm = &qcom_ethqos_lpm_pm_ops;
+		else
+			pdev->dev.driver->pm = &qcom_ethqos_dsqb_pm_ops;
 		ret = ethqos_init_regulators(ethqos);
 
 		if (ret)
 			return dev_err_probe(dev, ret, "ethqos_init_regulators failed\n");
 
+		ret = devm_add_action_or_reset(dev, ethqos_disable_regulators_action, ethqos);
+		if (ret)
+			return ret;
+
 		ret = ethqos_init_gpio(ethqos);
 
-		if (ret) {
-			ethqos_disable_regulators(ethqos);
+		if (ret)
 			return dev_err_probe(dev, ret, "%s: init_gpio failed with ret = %d\n",
 					     __func__, ret);
-		}
 
 		ethqos->link_clk = devm_clk_get(dev, data->link_clk_name ?: "rgmii");
 		if (IS_ERR(ethqos->link_clk))
@@ -2284,11 +2565,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ret =  devm_stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
 	if (ret)
-		goto err_probe;
+		return ret;
 
-	return ret;
-err_probe:
-	ethqos_disable_regulators(ethqos);
+	qcom_ethqos_setup_dbl_rx(dev, ethqos);
 	return ret;
 }
 
@@ -2299,6 +2578,7 @@ static const struct of_device_id qcom_ethqos_match[] = {
 	{ .compatible = "qcom,shikra-ethqos", .data = &shikra_data},
 	{ .compatible = "qcom,sm8150-ethqos", .data = &emac_v2_1_0_data},
 	{ .compatible = "qcom,sa8797p-ethqos", .data = &emac_v6_6_0_data},
+	{ .compatible = "qcom,sa8787p-ethqos", .data = &emac_v6_6_1_data},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_ethqos_match);

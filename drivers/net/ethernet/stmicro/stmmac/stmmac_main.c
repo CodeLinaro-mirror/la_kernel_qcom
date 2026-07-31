@@ -288,6 +288,14 @@ static void stmmac_global_err(struct stmmac_priv *priv)
 	stmmac_service_event_schedule(priv);
 }
 
+void stmmac_handle_switch_reset(struct stmmac_priv *priv)
+{
+	if (netif_running(priv->dev) &&
+	    !test_bit(STMMAC_RESET_REQUESTED, &priv->state))
+		stmmac_global_err(priv);
+}
+EXPORT_SYMBOL_GPL(stmmac_handle_switch_reset);
+
 /**
  * stmmac_clk_csr_set - dynamically set the MDC clock
  * @priv: driver private structure
@@ -8265,14 +8273,14 @@ int stmmac_resume(struct device *dev)
 	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret;
 
+	if (!netif_running(ndev))
+		return 0;
+
 	if (priv->plat->resume) {
 		ret = priv->plat->resume(dev, priv->plat->bsp_priv);
 		if (ret)
 			return ret;
 	}
-
-	if (!netif_running(ndev))
-		return 0;
 
 	/* Power Down bit, into the PM register, is cleared
 	 * automatically as soon as a magic packet or a Wake-up frame
