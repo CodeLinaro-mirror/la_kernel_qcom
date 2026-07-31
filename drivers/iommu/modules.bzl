@@ -38,6 +38,14 @@ def register_modules(registry):
             "drivers/iommu/qcom-iommu-debug-alloc.c",
             "drivers/iommu/qcom-iommu-debug-alloc.h",
         ],
+        conditional_srcs = {
+            "CONFIG_QCOM_DPD_PROXY": {
+                True: [
+                    # do not sort
+                    "drivers/iommu/qcom-iommu-debug-dpd.c",
+                ],
+            },
+        },
         deps = [
             # do not sort
             "drivers/iommu/qcom_iommu_util",
