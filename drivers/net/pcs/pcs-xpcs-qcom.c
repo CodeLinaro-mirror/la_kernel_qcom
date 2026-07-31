@@ -438,7 +438,7 @@ static int qcom_xpcs_config(struct phylink_pcs *pcs, unsigned int mode, phy_inte
 static int qcom_xpcs_get_link_status(struct dw_xpcs_qcom *qxpcs,
 				     struct phylink_link_state *state)
 {
-	unsigned int retries = 32;
+	unsigned int retries = 8;
 	unsigned int count = 0;
 	int ret = -EFAULT;
 
