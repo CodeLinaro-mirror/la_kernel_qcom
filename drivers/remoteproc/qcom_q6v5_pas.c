@@ -728,6 +728,65 @@ static void subdev_da_to_va(struct qcom_adsp *adsp, struct q6_subdev *subdev)
 	}
 }
 
+static void adsp_update_subdev_coredump_segments(struct qcom_adsp *adsp,
+						 struct q6_subdev *subdev)
+{
+	/*
+	 * Drop any segments left from a previous SSR so the table is rebuilt
+	 * from scratch for this recovery cycle.
+	 */
+	coredump_cleanup(&subdev->dump_segments);
+	if (register_dump_segments(&subdev->dump_segments, subdev->firmware) < 0) {
+		/*
+		 * register_dump_segments() may have added segments before
+		 * failing; discard the partial list so stale/incomplete
+		 * segments are not used during dump collection.
+		 */
+		dev_err(adsp->dev, "failed to register dump segments for subdev %s\n",
+			subdev->firmware_name);
+		coredump_cleanup(&subdev->dump_segments);
+		return;
+	}
+
+	subdev_da_to_va(adsp, subdev);
+}
+
+static void adsp_add_subdev_coredump_segments(struct qcom_adsp *adsp)
+{
+	int i;
+
+	if (!adsp->q6_subdev)
+		return;
+
+	for (i = 0; i < adsp->q6_subdev_count; i++)
+		adsp_update_subdev_coredump_segments(adsp, &adsp->q6_subdev[i]);
+}
+
+static void adsp_attach_subdev_coredump_segments(struct qcom_adsp *adsp)
+{
+	int i, ret;
+
+	if (!adsp->q6_subdev)
+		return;
+
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		ret = request_firmware(&adsp->q6_subdev[i].firmware,
+				       adsp->q6_subdev[i].firmware_name,
+				       adsp->dev);
+		if (ret) {
+			dev_err(adsp->dev,
+				"request_firmware failed for subdev %s during attach: %d\n",
+				adsp->q6_subdev[i].firmware_name, ret);
+			continue;
+		}
+
+		adsp_update_subdev_coredump_segments(adsp, &adsp->q6_subdev[i]);
+
+		release_firmware(adsp->q6_subdev[i].firmware);
+		adsp->q6_subdev[i].firmware = NULL;
+	}
+}
+
 static int adsp_start(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
@@ -797,17 +856,7 @@ static int adsp_start(struct rproc *rproc)
 	}
 
 	/* prepare subdev coredump segment table */
-	if (adsp->q6_subdev) {
-		for (i = 0; i < adsp->q6_subdev_count; i++) {
-			coredump_cleanup(&adsp->q6_subdev[i].dump_segments);
-			if (register_dump_segments(&adsp->q6_subdev[i].dump_segments,
-						adsp->q6_subdev[i].firmware) < 0) {
-				coredump_cleanup(&adsp->q6_subdev[i].dump_segments);
-				continue;
-			}
-			subdev_da_to_va(adsp, &adsp->q6_subdev[i]);
-		}
-	}
+	adsp_add_subdev_coredump_segments(adsp);
 
 	if (adsp->q6_subdev) {
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
@@ -1462,6 +1511,8 @@ static int adsp_attach(struct rproc *rproc)
 		} else {
 			adsp_add_coredump_segments(adsp, adsp->firmware);
 		}
+
+		adsp_attach_subdev_coredump_segments(adsp);
 	}
 
 	return ret;
