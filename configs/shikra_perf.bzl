@@ -195,6 +195,7 @@ shikra_perf_config = {
     "CONFIG_QPNP_QG": "m",
     "CONFIG_QPNP_SMBLITE": "m",
     "CONFIG_QRTR": "m",
+    "CONFIG_QRTR_GUNYAH": "m",
     "CONFIG_QRTR_SMD": "m",
     "CONFIG_QSEECOM_PROXY": "m",
     "CONFIG_QTI_CPUFREQ_CDEV": "m",
