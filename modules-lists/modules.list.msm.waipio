@@ -106,3 +106,4 @@ msm_gpi.ko
 msm_geni_serial.ko
 pinctrl-spmi-gpio.ko
 qcom_geni_serial.ko
+phy-qcom-ufs-qmp-v4-waipio.ko

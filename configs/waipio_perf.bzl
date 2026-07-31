@@ -138,6 +138,7 @@ waipio_perf_config = {
     "CONFIG_PHY_QCOM_QMP_COMBO": "m",
     "CONFIG_PHY_QCOM_UFS": "m",
     "CONFIG_PHY_QCOM_UFS_QRBTC_SDM845": "m",
+    "CONFIG_PHY_QCOM_UFS_V4_WAIPIO": "m",
     "CONFIG_PINCTRL_MSM": "m",
     "CONFIG_PINCTRL_QCOM_SPMI_PMIC": "m",
     "CONFIG_PINCTRL_WAIPIO": "m",
