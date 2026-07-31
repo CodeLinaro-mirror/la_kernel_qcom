@@ -3019,6 +3019,14 @@ static struct regmap *qcom_llcc_init_mmio(struct platform_device *pdev, u8 index
 	return devm_regmap_init_mmio(&pdev->dev, base, &llcc_regmap_config);
 }
 
+static int qcom_llcc_override_num_banks(struct device *dev, u32 *num_banks)
+{
+	if (!of_property_read_bool(dev->of_node, "qcom,override-fuse-num-banks"))
+		return 0;
+
+	return of_property_read_u32(dev->of_node, "qcom,num-banks", num_banks);
+}
+
 static int qcom_llcc_probe(struct platform_device *pdev)
 {
 	u32 num_banks;
@@ -3065,11 +3073,15 @@ static int qcom_llcc_probe(struct platform_device *pdev)
 		goto err;
 	num_banks &= LLCC_LB_CNT_MASK;
 	num_banks >>= LLCC_LB_CNT_SHIFT;
+	ret = qcom_llcc_override_num_banks(dev, &num_banks);
+	if (ret)
+		goto err;
 	if (!num_banks) {
-		dev_err(dev, "Invalid LLCC bank count in COMMON_STATUS0\n");
+		dev_err(dev, "Invalid LLCC bank count\n");
 		ret = -EINVAL;
 		goto err;
 	}
+
 	drv_data->num_banks = num_banks;
 
 	drv_data->regmaps = devm_kcalloc(dev, num_banks, sizeof(*drv_data->regmaps), GFP_KERNEL);
