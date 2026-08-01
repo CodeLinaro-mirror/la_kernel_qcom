@@ -26,6 +26,7 @@
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>
 #include <linux/wait.h>
+#include <linux/delay.h>
 
 #include "dhms_rpmsg.h"
 
@@ -962,6 +963,13 @@ static int dhms_handle_release_req(struct dhms_device *ctx,
 			 msg->client_id);
 		goto send_ack_single;
 	}
+
+	/*
+	 * WORKAROUND: Add a 1ms delay before tearing down the IOMMU mapping.
+	 * TODO: Remove once LMCU firmware adds fix
+	 *
+	 */
+	usleep_range(1000, 1500);
 
 	dhms_buf_free_resources(buf);
 
