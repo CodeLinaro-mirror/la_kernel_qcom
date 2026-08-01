@@ -437,7 +437,6 @@ static void lt7911_info_work_fn(struct work_struct *work)
 				"Ignore notification when connected and registers indicate 0\n");
 		} else {
 			lt7911_mipi_enable(lt7911, 1);
-			cci_util_lt7911_enable_i2c(lt7911->cci_handle);
 			lt7911_notify_event(lt7911, irq, width, height, fps, format, afreq, ach);
 		}
 
