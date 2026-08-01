@@ -18,6 +18,7 @@ import threading
 
 HOST_TARGETS = ["dtc"]
 PHONY_TARGETS = ["16k"]
+SUPPLEMENTARY_SUFFIXES = ("_abl_dist", "_kti_dist", "_openssl_dist")
 DEFAULT_SKIP_LIST = ["abi"]
 MSM_EXTENSIONS = "build/msm_kernel_extensions.bzl"
 ABL_EXTENSIONS = "build/abl_extensions.bzl"
@@ -202,6 +203,10 @@ class BazelBuilder:
 
     def get_build_targets(self):
         """Query for build targets, using a disk cache to avoid repeated Bazel queries."""
+        if self.out_dir and any(v == "ALL" for _, v in self.target_list):
+            logging.error("cannot specify multiple targets (ALL variants) with one out dir")
+            sys.exit(1)
+
         cache_file = os.path.join(
             self.cache_dir, "target_query_cache_{}.json".format(self._query_cache_key())
         )
@@ -213,7 +218,13 @@ class BazelBuilder:
                 if cached.get("version") == _QUERY_CACHE_VERSION:
                     logging.info("Using cached build targets (skipping Bazel query).")
                     targets = [
-                        Target(t["workspace"], t["target"], t["variant"], t["bazel_label"])
+                        Target(
+                            t["workspace"],
+                            t["target"],
+                            t["variant"],
+                            t["bazel_label"],
+                            self.out_dir,
+                        )
                         for t in cached["targets"]
                     ]
                     targets.sort()
@@ -226,10 +237,6 @@ class BazelBuilder:
         targets = []
         for t, v in self.target_list:
             if v == "ALL":
-                if self.out_dir:
-                    logging.error("cannot specify multiple targets (ALL variants) with one out dir")
-                    sys.exit(1)
-
                 skip_list_re = [
                     re.compile(r"//{}:{}_.*_{}_dist".format(self.kernel_dir, t, s))
                     for s in self.skip_list
@@ -482,17 +489,42 @@ class BazelBuilder:
                 logging.info(line)
             return proc.returncode, target, out_dir
 
-        workers = min(len(targets), _MAX_DIST_WORKERS)
-        logging.info(
-            "Running %d dist targets in parallel (%d workers).", len(targets), workers)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            results = list(pool.map(_run_one, targets))
+        # Split into two waves to avoid --wipe_dist_dir races:
+        # Wave 1: base *_dist targets (wipe dist dir) and *_dtc_dist (writes
+        #         to host dir, independent) run first in parallel.
+        # Wave 2: targets in SUPPLEMENTARY_SUFFIXES add files on top of the
+        #         already-populated dist dir (no wipe) and run after.
+        wave1 = [t for t in targets
+                 if not any(t.bazel_label.endswith(s) for s in SUPPLEMENTARY_SUFFIXES)]
+        wave2 = [t for t in targets
+                 if any(t.bazel_label.endswith(s) for s in SUPPLEMENTARY_SUFFIXES)]
 
-        failed = [(t, rc) for rc, t, _ in results if rc != 0]
-        if failed:
-            for t, rc in failed:
-                logging.error("Dist target failed (rc=%d): %s", rc, t.bazel_label)
-            sys.exit(failed[0][1])
+        results = []
+        if wave1:
+            w1 = min(len(wave1), _MAX_DIST_WORKERS)
+            logging.info("Running %d dist targets in parallel (wave 1).", len(wave1))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=w1) as pool:
+                results += list(pool.map(_run_one, wave1))
+
+            failed = [(t, rc) for rc, t, _ in results if rc != 0]
+            if failed:
+                for t, rc in failed:
+                    logging.error("Dist target failed (rc=%d): %s", rc, t.bazel_label)
+                sys.exit(failed[0][1])
+
+        wave2_results = []
+        if wave2:
+            w2 = min(len(wave2), _MAX_DIST_WORKERS)
+            logging.info("Running %d dist targets in parallel (wave 2).", len(wave2))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=w2) as pool:
+                wave2_results = list(pool.map(_run_one, wave2))
+            results += wave2_results
+
+            failed = [(t, rc) for rc, t, _ in wave2_results if rc != 0]
+            if failed:
+                for t, rc in failed:
+                    logging.error("Dist target failed (rc=%d): %s", rc, t.bazel_label)
+                sys.exit(failed[0][1])
 
         for _, target, out_dir in results:
             self.write_opts(out_dir, opts_content)
