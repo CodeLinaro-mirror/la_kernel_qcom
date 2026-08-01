@@ -265,6 +265,7 @@ hamoa_perf_config = {
     "CONFIG_RPMSG_QCOM_GLINK": "m",
     "CONFIG_RPMSG_QCOM_GLINK_SMEM": "m",
     "CONFIG_RTC_DRV_PM8XXX": "m",
+    "CONFIG_RTC_QTI_GLINK": "m",
     "CONFIG_RTL8723BS": "n",
     "CONFIG_SCHED_WALT": "m",
     "CONFIG_SCHED_WALT_DEBUG": "n",
