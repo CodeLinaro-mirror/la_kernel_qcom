@@ -44,6 +44,7 @@
 #include <linux/rpmsg.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <linux/syscore_ops.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/kfifo.h>
@@ -1045,6 +1046,16 @@ static int pcie_sm_regs[MAX_PCIE_SM_REGS];
 static int count;
 module_param_array(pcie_sm_regs, int, &count, 0644);
 MODULE_PARM_DESC(pcie_sm_regs, "This is needed to override the PWR_CTRL/MASK regs");
+
+/*
+ * Ioremap covering the full PCIE_SM PWR_CTRL/MASK override register range,
+ * sized and validated from pcie_sm_regs[]. Owned entirely by pcie_init() and
+ * pcie_exit() -- independent of any single PCIe instance's probe/remove
+ * lifecycle, so msm_pcie_syscore_resume() stays valid regardless of which
+ * (or how many) CESTA instances are currently probed.
+ */
+static void __iomem *pcie_sm_base;
+static bool pcie_sm_syscore_registered;
 
 /* PCIe State Manager instructions info */
 struct msm_pcie_sm_info {
@@ -11105,10 +11116,140 @@ static void msm_pcie_lock_init(struct msm_pcie_dev_t *pcie_dev)
 	INIT_LIST_HEAD(&pcie_dev->event_reg_list);
 }
 
+/*
+ * Program the PWR_CTRL/PWR_MASK override-enable for every configured PCIe
+ * instance over the pre-mapped pcie_sm_base. Shared by the boot-time
+ * programming in msm_pcie_sm_override_init() and the post-hibernation
+ * restore in msm_pcie_syscore_resume() so both paths use identical
+ * addressing and cannot drift apart.
+ */
+static void msm_pcie_write_sm_overrides(void)
+{
+	int i;
+	u32 stride;
+
+	for (i = 0; i < pcie_sm_regs[PCIE_SM_NUM_INSTANCES]; i++) {
+		stride = i * pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET];
+
+		msm_pcie_write_reg(pcie_sm_base,
+				   pcie_sm_regs[PCIE_SM_PWR_CTRL_OFFSET] + stride, 0x1);
+		msm_pcie_write_reg(pcie_sm_base,
+				   pcie_sm_regs[PCIE_SM_PWR_MASK_OFFSET] + stride, 0x1);
+	}
+}
+
+/*
+ * Restore PWR_CTRL and PWR_MASK overrides for all PCIe instances after
+ * hibernation. These overrides are initially set by msm_pcie_sm_override_init()
+ * for CXPC but are reset when the register space is reset during hibernation.
+ *
+ * All instances are overridden unconditionally here. CESTA instances will
+ * remove their own overrides via msm_pcie_cesta_load_sm_seq() when they come up.
+ *
+ * syscore_ops are used instead of the platform driver PM callbacks because
+ * WLAN-managed PCIe instances are detached from the PM framework via
+ * dev_pm_syscore_device() during enumeration, so the normal PM callbacks are
+ * never invoked for them after hibernation exit.
+ *
+ * Runs in syscore resume context: single CPU, IRQs disabled, all other CPUs
+ * offline. Must not sleep -- only atomic MMIO and pr_debug/pr_warn are
+ * permitted here.
+ */
+static void msm_pcie_syscore_resume(void)
+{
+	if (count != MAX_PCIE_SM_REGS)
+		return;
+
+	if (!pcie_sm_base) {
+		pr_warn("pcie: syscore resume: SM base not set, skipping restore\n");
+		return;
+	}
+
+	pr_debug("pcie:%s restoring PWR_CTRL/MASK overrides for %d instances\n", __func__,
+		 pcie_sm_regs[PCIE_SM_NUM_INSTANCES]);
+
+	msm_pcie_write_sm_overrides();
+
+	pr_debug("pcie:%s PWR_CTRL/MASK overrides restored\n", __func__);
+}
+
+/* .suspend not needed - overrides are re-applied unconditionally on resume */
+static struct syscore_ops msm_pcie_syscore_ops = {
+	.resume = msm_pcie_syscore_resume,
+};
+
+/*
+ * One-time setup for the PCIE_SM PWR_CTRL/PWR_MASK override mechanism: validate
+ * the pcie_sm_regs[] module param, ioremap the full override register range
+ * into pcie_sm_base, program the boot-time overrides, and register the
+ * syscore_ops that reapply them after hibernation. This is the single place
+ * that interprets pcie_sm_regs[]/count,  msm_pcie_syscore_resume() only
+ * consumes the already-validated pcie_sm_base set up here.
+ *
+ * No-op (and non-fatal) if pcie_sm_regs[] is not fully configured or fails
+ * validation, CESTA-enabled platforms without this module param configured
+ * are expected and unaffected.
+ */
+static void __init msm_pcie_sm_override_init(void)
+{
+	size_t map_size;
+
+	if (count != MAX_PCIE_SM_REGS)
+		return;
+
+	if (pcie_sm_regs[PCIE_SM_NUM_INSTANCES] <= 0 ||
+	    pcie_sm_regs[PCIE_SM_NUM_INSTANCES] > MAX_RC_NUM ||
+	    pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET] < 0) {
+		pr_err("pcie:%s invalid pcie_sm_regs: num_instances=%d instance_offset=%d\n",
+		       __func__, pcie_sm_regs[PCIE_SM_NUM_INSTANCES],
+		       pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET]);
+		return;
+	}
+
+	/*
+	 * map_size covers from base to the last PWR_MASK register.
+	 * PWR_MASK_OFFSET > PWR_CTRL_OFFSET (MASK follows CTRL within
+	 * each instance stride).
+	 */
+	map_size = pcie_sm_regs[PCIE_SM_PWR_MASK_OFFSET] +
+		((pcie_sm_regs[PCIE_SM_NUM_INSTANCES] - 1) *
+		 pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET]) +
+		sizeof(u32);
+
+	pcie_sm_base = ioremap(pcie_sm_regs[PCIE_SM_BASE], map_size);
+	if (!pcie_sm_base) {
+		pr_err("pcie:%s ioremap failed for PCIE_SM base 0x%x\n",
+		       __func__, pcie_sm_regs[PCIE_SM_BASE]);
+		return;
+	}
+
+	msm_pcie_write_sm_overrides();
+
+	register_syscore_ops(&msm_pcie_syscore_ops);
+	pcie_sm_syscore_registered = true;
+}
+
+/*
+ * Reverse of msm_pcie_sm_override_init(); safe to call even if init was a
+ * no-op. Not __exit-annotated: also called from pcie_init()'s error-unwind
+ * path, which runs from __init context.
+ */
+static void msm_pcie_sm_override_exit(void)
+{
+	if (pcie_sm_syscore_registered) {
+		unregister_syscore_ops(&msm_pcie_syscore_ops);
+		pcie_sm_syscore_registered = false;
+	}
+
+	if (pcie_sm_base) {
+		iounmap(pcie_sm_base);
+		pcie_sm_base = NULL;
+	}
+}
+
 static int __init pcie_init(void)
 {
 	int ret = 0, i;
-	void __iomem *reg_addr;
 
 	pr_debug("pcie:%s.\n", __func__);
 
@@ -11120,35 +11261,21 @@ static int __init pcie_init(void)
 
 	msm_pcie_debugfs_init();
 
-	if (count == MAX_PCIE_SM_REGS) {
-		for (i = 0; i < pcie_sm_regs[PCIE_SM_NUM_INSTANCES]; i++) {
-
-			reg_addr = ioremap(pcie_sm_regs[PCIE_SM_BASE] +
-				pcie_sm_regs[PCIE_SM_PWR_CTRL_OFFSET] +
-			(i * pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET]), 4);
-
-			msm_pcie_write_reg(reg_addr, 0x0, 0x1);
-
-			iounmap(reg_addr);
-
-			reg_addr = ioremap(pcie_sm_regs[PCIE_SM_BASE] +
-				pcie_sm_regs[PCIE_SM_PWR_MASK_OFFSET] +
-			(i * pcie_sm_regs[PCIE_SM_PWR_INSTANCE_OFFSET]), 4);
-
-			msm_pcie_write_reg(reg_addr, 0x0, 0x1);
-
-			iounmap(reg_addr);
-		}
-	}
+	msm_pcie_sm_override_init();
 
 	ret = pci_register_driver(&msm_pci_driver);
-	if (ret)
-		return ret;
+	if (ret) {
+		pr_err("pcie:%s pci_register_driver failed: %d\n", __func__, ret);
+		goto err_unregister_syscore;
+	}
 
 	mpcie_wq = alloc_ordered_workqueue("mpcie_wq",
 						WQ_MEM_RECLAIM | WQ_HIGHPRI);
-	if (!mpcie_wq)
-		return -ENOMEM;
+	if (!mpcie_wq) {
+		ret = -ENOMEM;
+		pr_err("pcie:%s failed to allocate mpcie_wq\n", __func__);
+		goto err_unregister_pci;
+	}
 
 	pcie_drv.nb.notifier_call = msm_pcie_ssr_notifier;
 	INIT_WORK(&pcie_drv.drv_connect_notify_all,
@@ -11164,9 +11291,18 @@ static int __init pcie_init(void)
 		pr_debug("pcie:%s msi driver registration failed\n", __func__);
 
 	ret = platform_driver_register(&msm_pcie_driver);
-	if (ret)
+	if (ret) {
+		pr_err("pcie:%s platform_driver_register failed: %d\n", __func__, ret);
 		destroy_workqueue(mpcie_wq);
+		goto err_unregister_pci;
+	}
 
+	return ret;
+
+err_unregister_pci:
+	pci_unregister_driver(&msm_pci_driver);
+err_unregister_syscore:
+	msm_pcie_sm_override_exit();
 	return ret;
 }
 
@@ -11178,6 +11314,8 @@ static void __exit pcie_exit(void)
 
 	if (mpcie_wq)
 		destroy_workqueue(mpcie_wq);
+
+	msm_pcie_sm_override_exit();
 
 	platform_driver_unregister(&msm_pcie_driver);
 
