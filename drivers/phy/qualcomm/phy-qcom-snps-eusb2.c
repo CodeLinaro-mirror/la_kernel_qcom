@@ -121,6 +121,19 @@ static const char * const eusb2_hsphy_vreg_names[] = {
 
 #define EUSB2_NUM_VREGS		ARRAY_SIZE(eusb2_hsphy_vreg_names)
 
+/*
+ * L2E (vdd) and L3E (vdda12) are pmic5 LDOs declared with
+ * qcom,mode-threshold-currents = <0 30000> (x1e80100-regulators.dtsi): an
+ * aggregate DRMS load >= 30 mA selects HPM, below it selects LPM. These rails
+ * are shared (L2E by three eUSB2 PHYs; L3E also by the USB-SS QMP PHYs and
+ * PCIe), so use regulator_set_load()/DRMS which aggregates across consumers -
+ * not regulator_set_mode(), which is last-writer-wins on a shared regulator.
+ * Vote the active load whenever the PHY is powered so a single active PHY keeps
+ * the rails in HPM, and vote 0 on suspend so they can fall to LPM.
+ */
+#define EUSB2_VDD_HPM_LOAD_UA		7757	/* vregs[0] = vdd    (L2E) */
+#define EUSB2_VDDA12_HPM_LOAD_UA	5905	/* vregs[1] = vdda12 (L3E) */
+
 struct qcom_snps_eusb2_hsphy {
 	struct phy *phy;
 	void __iomem *base;
@@ -231,6 +244,26 @@ static int qcom_eusb2_ref_clk_init(struct qcom_snps_eusb2_hsphy *phy)
 	return 0;
 }
 
+static int qcom_snps_eusb2_hsphy_set_active_load(struct qcom_snps_eusb2_hsphy *phy)
+{
+	int ret;
+
+	/* DRMS votes >= 30 mA knee -> HPM while the PHY is active */
+	ret = regulator_set_load(phy->vregs[0].consumer, EUSB2_VDD_HPM_LOAD_UA);
+	if (ret < 0) {
+		dev_err(&phy->phy->dev, "failed to set HPM load on vdd: %d\n", ret);
+		return ret;
+	}
+
+	ret = regulator_set_load(phy->vregs[1].consumer, EUSB2_VDDA12_HPM_LOAD_UA);
+	if (ret < 0) {
+		dev_err(&phy->phy->dev, "failed to set HPM load on vdda12: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static int qcom_snps_eusb2_hsphy_init(struct phy *p)
 {
 	struct qcom_snps_eusb2_hsphy *phy = phy_get_drvdata(p);
@@ -334,6 +367,11 @@ static int qcom_snps_eusb2_hsphy_init(struct phy *p)
 	qcom_snps_eusb2_hsphy_write_mask(phy->base, USB_PHY_HS_PHY_CTRL2,
 					 USB2_SUSPEND_N_SEL, 0);
 
+	/* Vote active load so an active PHY keeps L2E/L3E in HPM (DRMS) */
+	ret = qcom_snps_eusb2_hsphy_set_active_load(phy);
+	if (ret)
+		goto disable_ref_clk;
+
 	return 0;
 
 disable_ref_clk:
@@ -365,11 +403,62 @@ static const struct phy_ops qcom_snps_eusb2_hsphy_ops = {
 	.owner		= THIS_MODULE,
 };
 
+static int qcom_snps_eusb2_hsphy_enter_lpm(struct qcom_snps_eusb2_hsphy *phy)
+{
+	int ret;
+
+	/* Power down the HS-PHY analog block; SIDDQ_SEL was armed in .init */
+	qcom_snps_eusb2_hsphy_write_mask(phy->base, USB_PHY_HS_PHY_CTRL_COMMON0,
+					 SIDDQ, SIDDQ);
+
+	/* Drop the DRMS load so RPMH can move L2E/L3E to LPM in the sleep set */
+	ret = regulator_set_load(phy->vregs[0].consumer, 0);
+	if (ret < 0) {
+		dev_err(&phy->phy->dev, "failed to set LPM load on vdd: %d\n", ret);
+		goto err_restore_siddq;
+	}
+
+	ret = regulator_set_load(phy->vregs[1].consumer, 0);
+	if (ret < 0) {
+		dev_err(&phy->phy->dev, "failed to set LPM load on vdda12: %d\n", ret);
+		goto err_restore_vdd;
+	}
+
+	return 0;
+
+err_restore_vdd:
+	regulator_set_load(phy->vregs[0].consumer, EUSB2_VDD_HPM_LOAD_UA);
+err_restore_siddq:
+	qcom_snps_eusb2_hsphy_write_mask(phy->base, USB_PHY_HS_PHY_CTRL_COMMON0,
+					 SIDDQ, 0);
+	return ret;
+}
+
+static int qcom_snps_eusb2_hsphy_exit_lpm(struct qcom_snps_eusb2_hsphy *phy)
+{
+	int ret;
+
+	/* Restore the active (HPM) load before bringing the analog block up */
+	ret = qcom_snps_eusb2_hsphy_set_active_load(phy);
+	if (ret)
+		return ret;
+
+	qcom_snps_eusb2_hsphy_write_mask(phy->base, USB_PHY_HS_PHY_CTRL_COMMON0,
+					 SIDDQ, 0);
+
+	return 0;
+}
+
 static int qcom_snps_eusb2_hsphy_runtime_suspend(struct device *dev)
 {
 	struct qcom_snps_eusb2_hsphy *phy = dev_get_drvdata(dev);
+	int ret;
 
 	dev_dbg(dev, "Suspending qcom_snps_eusb2_hsphy\n");
+
+	ret = qcom_snps_eusb2_hsphy_enter_lpm(phy);
+	if (ret)
+		return ret;
 
 	clk_disable_unprepare(phy->ref_clk);
 
@@ -389,12 +478,19 @@ static int qcom_snps_eusb2_hsphy_runtime_resume(struct device *dev)
 		return ret;
 	}
 
+	ret = qcom_snps_eusb2_hsphy_exit_lpm(phy);
+	if (ret) {
+		clk_disable_unprepare(phy->ref_clk);
+		return ret;
+	}
+
 	return 0;
 }
 
 static int qcom_snps_eusb2_hsphy_pm_suspend(struct device *dev)
 {
 	struct qcom_snps_eusb2_hsphy *phy = dev_get_drvdata(dev);
+	int ret;
 
 	dev_dbg(dev, "Suspending qcom_snps_eusb2_hsphy\n");
 
@@ -402,6 +498,10 @@ static int qcom_snps_eusb2_hsphy_pm_suspend(struct device *dev)
 		dev_dbg(dev, "already runtime-suspended, skipping ref_clk disable\n");
 		return 0;
 	}
+
+	ret = qcom_snps_eusb2_hsphy_enter_lpm(phy);
+	if (ret)
+		return ret;
 
 	clk_disable_unprepare(phy->ref_clk);
 
@@ -415,9 +515,20 @@ static int qcom_snps_eusb2_hsphy_pm_resume(struct device *dev)
 
 	dev_dbg(dev, "Resuming qcom_snps_eusb2_hsphy\n");
 
+	if (pm_runtime_status_suspended(dev)) {
+		dev_dbg(dev, "already runtime-suspended, skipping ref_clk enable\n");
+		return 0;
+	}
+
 	ret = clk_prepare_enable(phy->ref_clk);
 	if (ret) {
 		dev_err(dev, "failed to enable ref clock, %d\n", ret);
+		return ret;
+	}
+
+	ret = qcom_snps_eusb2_hsphy_exit_lpm(phy);
+	if (ret) {
+		clk_disable_unprepare(phy->ref_clk);
 		return ret;
 	}
 
