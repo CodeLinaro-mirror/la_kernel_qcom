@@ -23,6 +23,7 @@ COPY_FILES = [
     "drivers/i2c/busses/i2c-qcom-geni.c",
     "drivers/i2c/busses/i2c-virtio.c",
     "drivers/spi/spi-geni-qcom.c",
+    "drivers/virtio/virtio_dma_buf.c",
     "drivers/virtio/virtio_input.c",
     # virtio_snd.ko files start
     "sound/virtio/virtio_card.c",
