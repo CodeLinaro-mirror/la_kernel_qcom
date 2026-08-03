@@ -1637,6 +1637,7 @@ static const struct msm_pinctrl_soc_data sa510m_pinctrl = {
 	.nqup_regs = ARRAY_SIZE(sa510m_qup_regs),
 	.wakeirq_map = sa510m_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(sa510m_pdc_map),
+	.wakeirq_dual_edge_errata = true,
 };
 
 static int sa510m_pinctrl_probe(struct platform_device *pdev)
