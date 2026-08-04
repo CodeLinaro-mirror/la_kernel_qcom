@@ -835,6 +835,13 @@
 };
 
 &tlmm {
+	cci_async_default: cci-async-state {
+		pins = "gpio70", "gpio71";
+		function = "cci_async";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
 	dp_hot_plug_det: dp-hot-plug-det-state {
 		pins = "gpio101";
 		function = "edp0_hot";
@@ -999,6 +1006,19 @@
 		function = "gpio";
 		bias-pull-up;
 	};
+};
+
+&tsc {
+	interrupts = <GIC_SPI 766 IRQ_TYPE_EDGE_RISING>;
+	interrupt-names = "etu_summary_irq";
+
+	qcom,etu-slice = <12 13>;
+	qcom,etu-event-sel = <12 13>;
+	qcom,etu-event-names = "gps_pps", "tod_pps";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&cci_async_default>;
+
 };
 
 /delete-node/ &qup_uart0_rts;
