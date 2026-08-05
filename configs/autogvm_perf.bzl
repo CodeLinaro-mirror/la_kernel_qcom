@@ -153,6 +153,7 @@ autogvm_perf_config = {
     "CONFIG_SERIAL_MSM_GENI": "m",
     "CONFIG_SERIAL_QCOM_GENI_MSM": "m",
     "CONFIG_SND_USB_AUDIO_QMI": "m",
+    "CONFIG_SND_VIRTIO": "m",
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPI_QCOM_GENI_MSM": "m",
     "CONFIG_SPI_SPIDEV": "m",

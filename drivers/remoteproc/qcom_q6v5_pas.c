@@ -63,6 +63,9 @@
 #define EARLY_BOOT_RETRY_COUNT 5
 #define EARLY_BOOT_RETRY_INTERVAL_MS 1000
 
+/* Bit set in the early_boot SMEM item when the bootloader boots the subsystem. */
+#define EARLY_BOOT_SMEM_BIT		BIT(0)
+
 struct q6_subdev {
 	const char *firmware_name;
 	const char *dtb_firmware_name;
@@ -108,6 +111,7 @@ struct adsp_data {
 	const char *sysmon_name;
 	int ssctl_id;
 	unsigned int smem_host_id;
+	unsigned int early_boot_smem_id;
 
 	int region_assign_idx;
 	int region_assign_count;
@@ -724,6 +728,65 @@ static void subdev_da_to_va(struct qcom_adsp *adsp, struct q6_subdev *subdev)
 	}
 }
 
+static void adsp_update_subdev_coredump_segments(struct qcom_adsp *adsp,
+						 struct q6_subdev *subdev)
+{
+	/*
+	 * Drop any segments left from a previous SSR so the table is rebuilt
+	 * from scratch for this recovery cycle.
+	 */
+	coredump_cleanup(&subdev->dump_segments);
+	if (register_dump_segments(&subdev->dump_segments, subdev->firmware) < 0) {
+		/*
+		 * register_dump_segments() may have added segments before
+		 * failing; discard the partial list so stale/incomplete
+		 * segments are not used during dump collection.
+		 */
+		dev_err(adsp->dev, "failed to register dump segments for subdev %s\n",
+			subdev->firmware_name);
+		coredump_cleanup(&subdev->dump_segments);
+		return;
+	}
+
+	subdev_da_to_va(adsp, subdev);
+}
+
+static void adsp_add_subdev_coredump_segments(struct qcom_adsp *adsp)
+{
+	int i;
+
+	if (!adsp->q6_subdev)
+		return;
+
+	for (i = 0; i < adsp->q6_subdev_count; i++)
+		adsp_update_subdev_coredump_segments(adsp, &adsp->q6_subdev[i]);
+}
+
+static void adsp_attach_subdev_coredump_segments(struct qcom_adsp *adsp)
+{
+	int i, ret;
+
+	if (!adsp->q6_subdev)
+		return;
+
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		ret = request_firmware(&adsp->q6_subdev[i].firmware,
+				       adsp->q6_subdev[i].firmware_name,
+				       adsp->dev);
+		if (ret) {
+			dev_err(adsp->dev,
+				"request_firmware failed for subdev %s during attach: %d\n",
+				adsp->q6_subdev[i].firmware_name, ret);
+			continue;
+		}
+
+		adsp_update_subdev_coredump_segments(adsp, &adsp->q6_subdev[i]);
+
+		release_firmware(adsp->q6_subdev[i].firmware);
+		adsp->q6_subdev[i].firmware = NULL;
+	}
+}
+
 static int adsp_start(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
@@ -793,17 +856,7 @@ static int adsp_start(struct rproc *rproc)
 	}
 
 	/* prepare subdev coredump segment table */
-	if (adsp->q6_subdev) {
-		for (i = 0; i < adsp->q6_subdev_count; i++) {
-			coredump_cleanup(&adsp->q6_subdev[i].dump_segments);
-			if (register_dump_segments(&adsp->q6_subdev[i].dump_segments,
-						adsp->q6_subdev[i].firmware) < 0) {
-				coredump_cleanup(&adsp->q6_subdev[i].dump_segments);
-				continue;
-			}
-			subdev_da_to_va(adsp, &adsp->q6_subdev[i]);
-		}
-	}
+	adsp_add_subdev_coredump_segments(adsp);
 
 	if (adsp->q6_subdev) {
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
@@ -1458,6 +1511,8 @@ static int adsp_attach(struct rproc *rproc)
 		} else {
 			adsp_add_coredump_segments(adsp, adsp->firmware);
 		}
+
+		adsp_attach_subdev_coredump_segments(adsp);
 	}
 
 	return ret;
@@ -1982,6 +2037,43 @@ static int q6v5_debugfs_init(struct qcom_q6v5 *q6v5)
 	return 0;
 }
 
+/**
+ * adsp_use_early_boot() - decide whether to take the early-boot path
+ * @adsp: PAS remoteproc instance to query
+ * @early_boot: subsystem is statically flagged for the early-boot path
+ * @early_boot_smem_id: per-subsystem SMEM item id, or 0 if unused
+ *
+ * The early-boot path is used when the subsystem is statically flagged for it
+ * (@early_boot), or when the bootloader advertises at runtime that it has
+ * already brought the subsystem out of reset. The latter is published in bit 0
+ * of the per-subsystem SMEM item @early_boot_smem_id, which lives in the
+ * subsystem's own SMEM host partition.
+ *
+ * Return: true if the early-boot path should be taken, false otherwise.
+ */
+static bool adsp_use_early_boot(struct qcom_adsp *adsp, bool early_boot,
+				unsigned int early_boot_smem_id)
+{
+	size_t size = 0;
+	u32 *flag;
+
+	if (early_boot)
+		return true;
+
+	if (!early_boot_smem_id)
+		return false;
+
+	flag = qcom_smem_get(adsp->smem_host_id, early_boot_smem_id, &size);
+	if (IS_ERR(flag)) {
+		dev_err(adsp->dev,
+			"failed to read early-boot SMEM flag (host=%u item=%u err=%pe size=%zu)\n",
+			adsp->smem_host_id, early_boot_smem_id, flag, size);
+		return false;
+	}
+
+	return !!(*flag & EARLY_BOOT_SMEM_BIT);
+}
+
 static int adsp_probe(struct platform_device *pdev)
 {
 	const struct adsp_data *desc;
@@ -2060,6 +2152,10 @@ static int adsp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, adsp);
 
+	/* Take the early-boot path only if the bootloader booted the subsystem. */
+	adsp->q6v5.early_boot = adsp_use_early_boot(adsp, desc->early_boot,
+						    desc->early_boot_smem_id);
+
 	ret = device_init_wakeup(adsp->dev, true);
 	if (ret)
 		goto free_rproc;
@@ -2092,7 +2188,7 @@ static int adsp_probe(struct platform_device *pdev)
 
 	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem,
 			     desc->crash_reason_stack, desc->smem_host_id,
-			     desc->load_state, desc->early_boot, qcom_pas_handover);
+			     desc->load_state, adsp->q6v5.early_boot, qcom_pas_handover);
 	if (ret)
 		goto detach_proxy_pds;
 
@@ -2457,7 +2553,6 @@ static const struct adsp_data x1e80100_adsp_resource = {
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
 	.minidump_id = 5,
-	.auto_boot = true,
 	.load_state = "adsp",
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
@@ -2474,7 +2569,6 @@ static const struct adsp_data x1e80100_cdsp_resource = {
 	.pas_id = 18,
 	.dtb_pas_id = 0x25,
 	.minidump_id = 7,
-	.auto_boot = true,
 	.load_state = "cdsp",
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
@@ -2992,6 +3086,7 @@ static const struct adsp_data vienna_adsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
+	.early_boot_smem_id = 695,
 };
 
 static const struct adsp_data vienna_cdsp_resource = {
@@ -3487,7 +3582,7 @@ static const struct adsp_data shikra_lpaicp_resource = {
 	.dtb_firmware_name = "lpaicp_dtb.mbn",
 	.pas_id = 0x56,
 	.dtb_pas_id = 0x57,
-	.minidump_id = 0,//TODO
+	.minidump_id = 33,
 	.ssr_name = "lpaicp",
 	.uses_elf64 = true,
 	.sysmon_name = "lpaicp",
@@ -3563,6 +3658,40 @@ static const struct adsp_data bourtzi_wpss_resource = {
 	.ssr_name = "wpss",
 	.sysmon_name = "wpss",
 	.ssctl_id = 0x19,
+};
+
+static const struct adsp_data glymur_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.auto_boot = true,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
+};
+
+static const struct adsp_data glymur_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.auto_boot = true,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
 };
 
 static const struct of_device_id adsp_of_match[] = {
@@ -3683,6 +3812,8 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,bourtzi-wpss-pas", .data = &bourtzi_wpss_resource},
 	{ .compatible = "qcom,bourtzi-adsp-pas", .data = &bourtzi_adsp_resource},
 	{ .compatible = "qcom,bourtzi-modem-pas", .data = &bourtzi_mpss_resource},
+	{ .compatible = "qcom,glymur-adsp-pas", .data = &glymur_adsp_resource},
+	{ .compatible = "qcom,glymur-cdsp-pas", .data = &glymur_cdsp_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);
