@@ -34,6 +34,7 @@ autogvm_perf_config = {
     "CONFIG_GUNYAH_DRIVERS": "y",
     "CONFIG_GUNYAH_PLATFORM_HOOKS": "m",
     "CONFIG_GUNYAH_QCOM_PLATFORM": "n",
+    "CONFIG_HW_RANDOM_VIRTIO": "m",
     "CONFIG_I2C_EUSB2_REPEATER": "m",
     "CONFIG_I2C_MSM_GENI": "m",
     "CONFIG_I2C_QCOM_GENI_MSM": "m",
