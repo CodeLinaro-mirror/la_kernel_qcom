@@ -668,6 +668,19 @@ static int prepare_qmi_response(struct snd_usb_substream *subs,
 	card_num = (req_msg->usb_token & SND_PCM_CARD_NUM_MASK) >> 16;
 	xfer_buf_len = req_msg->xfer_buff_size;
 
+	/*
+	 * uadev[card_num].sb can be torn down concurrently by uaudio_disconnect()
+	 * (under chip->mutex) since this path runs without holding chip->mutex.
+	 * Bail out early instead of discovering a NULL sb mid-allocation; the
+	 * xhci_sideband_* helpers below are still NULL-safe for the remaining
+	 * race window.
+	 */
+	if (!uadev[card_num].sb) {
+		uaudio_err("sideband not available for card# %d\n", card_num);
+		ret = -ENODEV;
+		goto err;
+	}
+
 	ret = uaudio_populate_uac_desc(subs, resp, card_num);
 	if (ret < 0)
 		goto err;
