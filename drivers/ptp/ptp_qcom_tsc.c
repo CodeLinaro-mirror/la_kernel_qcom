@@ -23,6 +23,7 @@
 
 /* Register offset definitions */
 #define TSCSS_TSC_CONTROL_CNTCR			0x0
+#define TSCSS_TSC_PIPELINE_STAGES               0x4
 #define TSCSS_TSC_CONTROL_CNTCV_LO		0x8
 #define TSCSS_TSC_CONTROL_CNTCV_HI		0xC
 #define TSCSS_TSC_CONTROL_CNTCV_FRAC		0x10
@@ -1041,7 +1042,7 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 {
 	struct qcom_ptp_tsc *timer;
 	struct resource *r_mem;
-	u32 cntr_val;
+	u32 cntr_val, pipeline_stages;
 	int fusa_irq, ret;
 
 	timer = devm_kzalloc(&pdev->dev, sizeof(*timer), GFP_KERNEL);
@@ -1142,6 +1143,9 @@ static int qcom_ptp_tsc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register ptp clock\n");
 		goto out;
 	}
+
+	if (!of_property_read_u32(pdev->dev.of_node, "qcom,tsc-pipeline-stages", &pipeline_stages))
+		writel_relaxed(pipeline_stages, timer->baseaddr + TSCSS_TSC_PIPELINE_STAGES);
 
 	qcom_tsc_etu_get_data(pdev, timer);
 
