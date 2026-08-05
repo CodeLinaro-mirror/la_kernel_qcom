@@ -6,6 +6,7 @@ obj-y += base/regmap/
 obj-y += block/
 obj-y += bus/
 obj-y += char/
+obj-y += char/hw_random/
 obj-y += clk/
 obj-y += cpufreq/
 obj-y += cpuidle/governors/
