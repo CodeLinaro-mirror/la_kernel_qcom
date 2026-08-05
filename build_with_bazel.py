@@ -213,7 +213,13 @@ class BazelBuilder:
                 if cached.get("version") == _QUERY_CACHE_VERSION:
                     logging.info("Using cached build targets (skipping Bazel query).")
                     targets = [
-                        Target(t["workspace"], t["target"], t["variant"], t["bazel_label"])
+                        Target(
+                            t["workspace"],
+                            t["target"],
+                            t["variant"],
+                            t["bazel_label"],
+                            self.out_dir,
+                        )
                         for t in cached["targets"]
                     ]
                     targets.sort()
