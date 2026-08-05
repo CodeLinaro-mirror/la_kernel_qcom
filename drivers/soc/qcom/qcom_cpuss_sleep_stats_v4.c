@@ -9,10 +9,8 @@
 #include <linux/platform_device.h>
 #include <soc/qcom/cpuss_telemetry.h>
 
-#define CPUNAME_SZ 6
+#define CPUNAME_SZ 8
 #define CLUSTERNAME_SZ 10
-#define MAX_POSSIBLE_CPUS 8
-#define MAX_POSSIBLE_CLUSTERS 2
 #define NAME_LENGTH 0x12
 #define REGS_MAX 3
 
@@ -93,8 +91,8 @@ struct qcom_stats_prvdata {
 	struct cluster_stats_id *cluster_id;
 	struct cpuss_stats_id *cpuss_id;
 	struct dentry *rootdir;
-	struct dentry *cpu_dir[MAX_POSSIBLE_CPUS];
-	struct dentry *cluster_dir[MAX_POSSIBLE_CLUSTERS];
+	struct dentry **cpu_dir;
+	struct dentry **cluster_dir;
 	struct dentry *cpuss_dir;
 };
 
@@ -308,9 +306,19 @@ static int qcom_cpuss_sleep_stats_v4_probe(struct platform_device *pdev)
 		int ret = 0;
 
 		pdata->ncpu = nr_cpu_ids;
+		pdata->cpu_dir = devm_kzalloc(&pdev->dev, sizeof(struct dentry *) *
+					pdata->ncpu, GFP_KERNEL);
+		if (!pdata->cpu_dir)
+			return -ENOMEM;
+
 		ret = of_property_read_u32(pdev->dev.of_node, "num-clusters", &pdata->ncluster);
 		if (ret < 0)
 			return -ENODEV;
+
+		pdata->cluster_dir = devm_kzalloc(&pdev->dev, sizeof(struct dentry *) *
+					pdata->ncluster, GFP_KERNEL);
+		if (!pdata->cluster_dir)
+			return -ENOMEM;
 
 		match_id = of_match_node(qcom_cpuss_regs_offset_tlb, pdev->dev.of_node);
 		if (!match_id)
