@@ -7,5 +7,6 @@ stmmac-objs += stmmac_main.o stmmac_ethtool.o stmmac_mdio.o ring_mode.o chain_mo
 
 obj-$(CONFIG_STMMAC_PLATFORM) += stmmac_platform.o
 
-obj-$(CONFIG_DWMAC_QCOM_ETHQOS) += dwmac-qcom-ethqos.o
+obj-$(CONFIG_DWMAC_QCOM_ETHQOS) += dwmac-qcom-eth.o
+dwmac-qcom-eth-objs += dwmac-qcom-ethqos.o
 

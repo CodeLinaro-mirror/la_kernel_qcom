@@ -1782,6 +1782,22 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/dhms_rpmsg",
+        out = "dhms_rpmsg.ko",
+        config = "CONFIG_QCOM_DHMS_RPMSG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/dhms_rpmsg.c",
+            "drivers/soc/qcom/dhms_rpmsg.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/rpmsg/qcom_glink_smem",
+            "drivers/rpmsg/qcom_glink",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/core_hang_detect",
         out = "core_hang_detect.ko",
         config = "CONFIG_MSM_CORE_HANG_DETECT",
@@ -1950,6 +1966,7 @@ def register_modules(registry):
             "drivers/soc/qcom/sps/sps_drv",
             "drivers/soc/qcom/smem",
             "drivers/soc/qcom/debug_symbol",
+            "drivers/firmware/qcom/qcom-scm",
             "drivers/remoteproc/rproc_qcom_common",
             "kernel/trace/qcom_ipc_logging",
         ],

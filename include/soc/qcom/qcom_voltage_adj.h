@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QCOM_VADJ_H__
@@ -24,17 +24,22 @@ struct qvadj_platform_data {
 };
 
 static struct qvadj_platform_data *pd;
+static u32 sdam_reg;
+
+struct qvadj_device_data {
+	u32 sdam_reg;
+};
 
 #if IS_ENABLED(CONFIG_QCOM_VADJ)
 
-int qvadj_get_cur_voltage_overrides(u8 *global_rails_index, u8 *cpu_rails_index);
-int qvadj_set_next_voltage_overrides(u8 global_rails_index, u8 cpu_rails_index);
+int qvadj_get_cur_voltage_overrides(u8 *global_rails_index, u8 *cpu_rails_index, u32 sdam_reg);
+int qvadj_set_next_voltage_overrides(u8 global_rails_index, u8 cpu_rails_index, u32 sdam_reg);
 
 #else
 
-int qvadj_get_cur_voltage_overrides(u8 *global_rails_index, u8 *cpu_rails_index)
+int qvadj_get_cur_voltage_overrides(u8 *global_rails_index, u8 *cpu_rails_index, u32 sdam_reg)
 { return -ENODEV; }
-int qvadj_set_next_voltage_overrides(u8 *global_rails_index, u8 *cpu_rails_index)
+int qvadj_set_next_voltage_overrides(u8 *global_rails_index, u8 *cpu_rails_index, u32 sdam_reg)
 { return -ENODEV; }
 
 #endif

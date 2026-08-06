@@ -60,3 +60,14 @@ obj-$(CONFIG_QTI_BCL_OFF_COOLING_DEVICE) += bcl_off_cdev.o
 obj-$(CONFIG_QTI_QMI_SENSOR) += qti_qmi_sensor.o
 qti_qmi_sensor-objs += qmi_sensors.o thermal_sensor_service_v01.o
 
+obj-$(CONFIG_QTI_CPU_VOLTAGE_COOLING_DEVICE) += cpu_voltage_cooling.o
+
+obj-$(CONFIG_QTI_SDPM_CLOCK_MONITOR) += sdpm_clk.o
+
+obj-$(CONFIG_QTI_POLICY_ENGINE_SENSOR) += policy_engine.o
+
+obj-$(CONFIG_GENERIC_ADC_THERMAL) += thermal-generic-adc.o
+thermal-generic-adc-objs += ../thermal-generic-adc.o
+
+obj-$(CONFIG_QTI_AOP_REG_COOLING_DEVICE) += regulator_aop_cdev.o
+

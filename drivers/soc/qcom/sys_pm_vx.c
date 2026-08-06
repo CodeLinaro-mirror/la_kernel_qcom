@@ -200,6 +200,15 @@ static const char * const drv_names_pikachu[][MAX_DRV_NAMES] = {
 			"COMPUTE", "TME", "RESERVED", "WLAN RF", "WLAN BB", "PCIE", "SOCCP", ""},
 };
 
+static const char * const drv_names_bourtzi[][MAX_DRV_NAMES] = {
+	[CXPC_DRV_NAME] = {"TZ", "L3", "HLOS", "HYP", "AUDIO",
+			"AOP", "DEBUG", "DISPLAY", "TME_HW", "TME_SW",
+			"WPSS", "MDM SW", "MDM HW", "WLAN RF", "WLAN BB",
+			"DDR AUX", "ARC CPRF", ""},
+	[AOSS_DRV_NAME] = {"APPS", "AUDIO", "AOP", "DEBUG", "DISPLAY",
+			"TME", "WPSS", "MODEM", "WLAN RF", "WLAN BB", ""},
+};
+
 static ssize_t debug_time_ms_show(struct device *dev,
 			struct device_attribute *attr, char *buf)
 {
@@ -626,6 +635,8 @@ static const struct of_device_id drv_match_table[] = {
 	  .data = drv_names_seraph },
 	{ .compatible = "qcom,sys-pm-pikachu",
 	  .data = drv_names_pikachu },
+	  { .compatible = "qcom,sys-pm-bourtzi",
+	  .data = drv_names_bourtzi },
 	{ }
 };
 

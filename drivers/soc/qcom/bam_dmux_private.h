@@ -146,6 +146,7 @@ struct bam_mux_hdr {
  * @list_node: list_head for placing this on a list
  * @sps_size: size of the sps_iovec for this packet
  * @len: total length of the buffer containing this packet
+ * @cma_buf_idx: index into the CMA RX buffer pool (-1 if unused)
  */
 struct rx_pkt_info {
 	struct sk_buff *skb;
@@ -154,6 +155,7 @@ struct rx_pkt_info {
 	struct list_head list_node;
 	uint16_t sps_size;
 	uint16_t len;
+	int cma_buf_idx;
 };
 
 /**
@@ -161,12 +163,12 @@ struct rx_pkt_info {
  * @skb: socket buffer containing the packet
  * @dma_address: dma mapped address of the packet
  * @is_cmd: signifies whether this is a command or data packet
- * @len: length og the packet
+ * @len: length of the packet
  * @work: work_struct for processing this packet
  * @list_node: list_head for placing this on a list
  * @ts_sec: seconds portion of the timestamp
  * @ts_nsec: nanoseconds portion of the timestamp
- *
+ * @cma_buf_idx: index into the CMA TX buffer pool (-1 if unused)
  */
 struct tx_pkt_info {
 	struct sk_buff *skb;
@@ -177,6 +179,7 @@ struct tx_pkt_info {
 	struct list_head list_node;
 	unsigned int ts_sec;
 	unsigned long ts_nsec;
+	int cma_buf_idx;
 };
 
 void msm_bam_dmux_set_bam_ops(struct bam_ops_if *ops);

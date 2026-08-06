@@ -920,12 +920,16 @@ static bool smmu_dabt_device(struct hyp_arm_smmu_v3_device *smmu,
 			 */
 			if (!last_evtq_en && is_evtq_enabled(smmu))
 				smmu_emulate_queue(smmu->evtq_base, EVTQ_ENT_SZ_SHIFT);
-			else if (last_evtq_en && !is_evtq_enabled(smmu))
-				WARN_ON(1);
+			else if (last_evtq_en && !is_evtq_enabled(smmu)) {
+				if (smmu->cr0 != 0)
+					WARN_ON(1);
+			}
 			if (!last_priq_en && is_priq_enabled(smmu))
 				smmu_emulate_queue(smmu->priq_base, PRIQ_ENT_SZ_SHIFT);
-			else if (last_priq_en && !is_priq_enabled(smmu))
-				WARN_ON(1);
+			else if (last_priq_en && !is_priq_enabled(smmu)) {
+				if (smmu->cr0 != 0)
+					WARN_ON(1);
+			}
 
 			if (!last_smmu_en && is_smmu_enabled(smmu))
 				smmu_emulate_enable(smmu);

@@ -918,6 +918,11 @@ static int parse_config(struct mhi_controller *mhi_cntrl,
 	if (!mhi_cntrl->timeout_ms)
 		mhi_cntrl->timeout_ms = MHI_TIMEOUT_MS;
 
+	mhi_cntrl->rddm_timeout_us = RDDM_TIMEOUT_US;
+	if (config->rddm_timeout_us &&
+		       config->rddm_timeout_us <= RDDM_MAX_TIMEOUT_US)
+		mhi_cntrl->rddm_timeout_us = config->rddm_timeout_us;
+
 	if (config->bhie_offset)
 		mhi_cntrl->bhie = mhi_cntrl->regs + config->bhie_offset;
 
@@ -947,6 +952,7 @@ int mhi_register_controller(struct mhi_controller *mhi_cntrl,
 	struct mhi_chan *mhi_chan;
 	struct mhi_cmd *mhi_cmd;
 	struct mhi_device *mhi_dev;
+	struct device *dev;
 	int ret, i;
 
 	if (!mhi_cntrl || !mhi_cntrl->cntrl_dev || !mhi_cntrl->regs ||
@@ -1055,6 +1061,8 @@ int mhi_register_controller(struct mhi_controller *mhi_cntrl,
 
 	mhi_cntrl->mhi_dev = mhi_dev;
 
+	dev = &mhi_cntrl->mhi_dev->dev;
+
 	ret = mhi_misc_register_controller(mhi_cntrl);
 	if (ret) {
 		dev_err(mhi_cntrl->cntrl_dev,
@@ -1080,6 +1088,9 @@ int mhi_register_controller(struct mhi_controller *mhi_cntrl,
 	mhi_cntrl->mhi_dev = mhi_dev;
 
 	mhi_create_debugfs(mhi_cntrl);
+
+	MHI_VERB(dev, "RDDM timeout value, rddm_timeout_us = %x\n",
+					mhi_cntrl->rddm_timeout_us);
 
 	return 0;
 

@@ -1327,6 +1327,18 @@ config QCOM_LPM_MONITOR
 	  then waits for the subsystem to return the data of the last ON/OFF timestamps
 	  for each clock.
 
+config QCOM_DHMS_RPMSG
+	tristate "Qualcomm DHMS RPMSG driver"
+	depends on RPMSG && DMA_SHARED_BUFFER
+	help
+	  This driver provides support for importing DMA-bufs and sharing them
+	  with remote processors via RPMSG channels. It creates a character
+	  device (/dev/dhms) through which userspace can import DMA-bufs and
+	  sends buffer information via RPMSG messages.
+
+	  Say M here to compile this driver as a module. The module will be
+	  called dhms_rpmsg.
+
 config QTI_HW_KEY_MANAGER_V1
 	tristate "Enable QTI Hardware Key Manager v1 for storage encryption"
 	default n

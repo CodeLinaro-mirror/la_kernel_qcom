@@ -15,3 +15,10 @@ pinctrl-glymur.ko
 debug_symbol.ko
 qcom-dload-mode.ko
 qcom_cpu_vendor_hooks.ko
+debug-regulator.ko
+proxy-consumer.ko
+qti-fixed-regulator.ko
+rpmh-regulator.ko
+pkvm-geni.ko
+pkvm-smc-filter.ko
+qcom_smmu_v2_v3_dispatcher.ko

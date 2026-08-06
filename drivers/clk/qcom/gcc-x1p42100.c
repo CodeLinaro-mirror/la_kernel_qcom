@@ -4487,14 +4487,14 @@ static struct clk_branch gcc_gpu_snoc_dvm_gfx_clk = {
 	},
 };
 
-static struct clk_branch gcc_mmu_tcu_vote_clk = {
+static struct clk_branch gcc_hlos1_vote_mmu_tcu_clk = {
 	.halt_reg = 0x7d02c,
 	.halt_check = BRANCH_HALT_VOTED,
 	.clkr = {
 		.enable_reg = 0x7d02c,
 		.enable_mask = BIT(0),
 		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_mmu_tcu_vote_clk",
+			.name = "gcc_hlos1_vote_mmu_tcu_clk",
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -7905,6 +7905,15 @@ static struct clk_branch gcc_video_axi1_clk = {
 	},
 };
 
+static struct gdsc gcc_hlos1_vote_mmu_tcu_gds = {
+	.gdscr = 0x7d068,
+	.pd = {
+		.name = "gcc_hlos1_vote_mmu_tcu_gds",
+	},
+	.pwrsts = PWRSTS_OFF_ON,
+	.flags = VOTABLE,
+};
+
 static struct gdsc gcc_pcie_0_tunnel_gdsc = {
 	.gdscr = 0xa0004,
 	.en_rest_wait_val = 0x2,
@@ -8309,7 +8318,7 @@ static struct clk_regmap *gcc_x1p42100_clocks[] = {
 	[GCC_GPU_MEMNOC_GFX_CLK] = &gcc_gpu_memnoc_gfx_clk.clkr,
 	[GCC_GPU_SMMU_VOTE_CLK] = &gcc_gpu_smmu_vote_clk.clkr,
 	[GCC_GPU_SNOC_DVM_GFX_CLK] = &gcc_gpu_snoc_dvm_gfx_clk.clkr,
-	[GCC_MMU_TCU_VOTE_CLK] = &gcc_mmu_tcu_vote_clk.clkr,
+	[GCC_HLOS1_VOTE_MMU_TCU_CLK] = &gcc_hlos1_vote_mmu_tcu_clk.clkr,
 	[GCC_PCIE0_PHY_RCHNG_CLK] = &gcc_pcie0_phy_rchng_clk.clkr,
 	[GCC_PCIE1_PHY_RCHNG_CLK] = &gcc_pcie1_phy_rchng_clk.clkr,
 	[GCC_PCIE2_PHY_RCHNG_CLK] = &gcc_pcie2_phy_rchng_clk.clkr,
@@ -8647,6 +8656,7 @@ static struct clk_regmap *gcc_x1p42100_clocks[] = {
 };
 
 static struct gdsc *gcc_x1p42100_gdscs[] = {
+	[GCC_HLOS1_VOTE_MMU_TCU_GDS] = &gcc_hlos1_vote_mmu_tcu_gds,
 	[GCC_PCIE_0_TUNNEL_GDSC] = &gcc_pcie_0_tunnel_gdsc,
 	[GCC_PCIE_1_TUNNEL_GDSC] = &gcc_pcie_1_tunnel_gdsc,
 	[GCC_PCIE_2_TUNNEL_GDSC] = &gcc_pcie_2_tunnel_gdsc,
@@ -8859,6 +8869,10 @@ static int gcc_x1p42100_probe(struct platform_device *pdev)
 	regmap_update_bits(regmap, 0x71004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x32004, BIT(0), BIT(0));
 	regmap_update_bits(regmap, 0x32030, BIT(0), BIT(0));
+
+	/* Enable clock settings required for SMMU QTB's */
+	regmap_update_bits(regmap, 0x7d058, BIT(0), 0);
+	regmap_update_bits(regmap, 0x7d01c, BIT(0), BIT(0));
 
 	ret = qcom_cc_really_probe(&pdev->dev, &gcc_x1p42100_desc, regmap);
 	if (ret) {

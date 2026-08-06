@@ -188,9 +188,14 @@ static bool find_filter_index(const char *token, u8 *filter_idx)
 	} else if (sysfs_streq(token, "FILTER1")) {
 		*filter_idx = FILTER_1;
 		return true;
-	} else {
+	} else if (sysfs_streq(token, "FILTER2")) {
+		*filter_idx = FILTER_2;
+		return true;
+	} else if (sysfs_streq(token, "FILTER3")) {
+		*filter_idx = FILTER_3;
+		return true;
+	} else
 		return false;
-	}
 }
 
 /* Find filter type from input */

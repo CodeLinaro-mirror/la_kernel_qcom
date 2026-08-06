@@ -26,3 +26,5 @@ obj-$(CONFIG_QCOM_BUS_LAT) += mem_lat_prof.o
 
 obj-$(CONFIG_QCOM_BWPROF_SCMI) += bwprof_scmi.o
 
+obj-$(CONFIG_QTI_CPUFREQ_STATS_SCMI_V2) += cpufreq_stats_scmi_v2.o
+

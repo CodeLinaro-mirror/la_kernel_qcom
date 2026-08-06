@@ -6,6 +6,8 @@ obj-$(CONFIG_PHY_QCOM_UFS) += phy-qcom-ufs.o
 
 obj-$(CONFIG_PHY_QCOM_UFS_V4_CANOE) += phy-qcom-ufs-qmp-v4-canoe.o
 
+obj-$(CONFIG_PHY_QCOM_UFS_V4_KALAMA) += phy-qcom-ufs-qmp-v4-kalama.o
+
 obj-$(CONFIG_PHY_QCOM_UFS_V4_YUPIK) += phy-qcom-ufs-qmp-v4-yupik.o
 
 obj-$(CONFIG_PHY_QCOM_SNPS_EUSB2) += phy-qcom-snps-eusb2.o

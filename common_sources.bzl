@@ -18,6 +18,7 @@ COPY_FILES = [
     "drivers/dma/virt-dma.h",
     "drivers/extcon/extcon-usb-gpio.c",
     "drivers/gpio/gpio-virtio.c",
+    "drivers/gpu/drm/bridge/aux-bridge.c",
     "drivers/i2c/busses/i2c-qcom-geni.c",
     "drivers/i2c/busses/i2c-virtio.c",
     "drivers/spi/spi-geni-qcom.c",
@@ -43,6 +44,7 @@ COPY_FILES = [
     "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v5.h",
     "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v5.h",
     "drivers/thermal/thermal-generic-adc.c",
+    "drivers/usb/typec/mux/nb7vpq904m.c",
     # cfg80211.ko files start
     "net/wireless/ap.c",
     "net/wireless/certs/sforshee.hex",
