@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/mmc/mmc.h>
+#include <linux/mmc/card.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_opp.h>
 #include <linux/slab.h>
@@ -1598,6 +1599,7 @@ static int sdhci_msm_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	u32 config;
 	struct mmc_ios ios = host->mmc->ios;
 	u32 core_vendor_spec;
+	bool hs400_tuning = false;
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
 	const struct sdhci_msm_offset *msm_offset = msm_host->offset;
@@ -1638,6 +1640,7 @@ static int sdhci_msm_execute_tuning(struct mmc_host *mmc, u32 opcode)
 	 * - program MCLK to 400MHz (or nearest supported) in GCC
 	 */
 	if (host->flags & SDHCI_HS400_TUNING) {
+		hs400_tuning = true;
 		sdhci_msm_hc_select_mode(host);
 		msm_set_clock_rate_for_bus_mode(host, ios.clock, ios.timing);
 		host->flags &= ~SDHCI_HS400_TUNING;
@@ -1729,6 +1732,28 @@ out:
 			msm_offset->core_vendor_spec)
 			| CORE_CLK_PWRSAVE), host->ioaddr +
 			msm_offset->core_vendor_spec);
+	}
+
+	/*
+	 * If tuning was done for HS400 (SDHCI_HS400_TUNING was set), the
+	 * host clock path was switched to MCLK/2 (GCC=~384MHz, MCLK_SEL=HS400)
+	 * so that CMD21 phase sweep runs at the HS400 target frequency.
+	 * Restore the host to the default clock path and reduce the clock to
+	 * HS frequency (52MHz) before returning.
+	 *
+	 * Per the eMMC spec, the host clock must be reduced to <=52MHz before
+	 * switching the card out of HS200 mode. Without this restore,
+	 * mmc_select_hs400() sends CMD6 (EXT_CSD_HS_TIMING=HS) while the host
+	 * is still on the HS400 divided-clock input path at 192MHz, causing a
+	 * command timeout (-110).
+	 *
+	 * Only restore when tuning succeeded and ios.timing is HS200 —
+	 * i.e. the initial HS200->HS400 transition, not a re-tune.
+	 */
+	if (hs400_tuning) {
+		msm_hc_select_default(host);
+		msm_set_clock_rate_for_bus_mode(host, MMC_HIGH_52_MAX_DTR,
+						MMC_TIMING_MMC_HS);
 	}
 
 	return rc;
