@@ -2296,6 +2296,11 @@ static void msm_geni_uart_gsi_tx_cb(void *ptr)
 	msm_port->xmit_size = 0;
 	complete(&msm_port->tx_xfer);
 	if (!kfifo_is_empty(&tport->xmit_fifo)) {
+		if (msm_port->port_state != UART_PORT_OPEN) {
+			UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+				     "%s: Port not open, skip re-queue\n", __func__);
+			return;
+		}
 		queue_work(msm_port->tx_wq, &msm_port->tx_xfer_work);
 		UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 			     "%s: End\n", __func__);
@@ -6558,6 +6563,14 @@ static void msm_geni_serial_remove(struct platform_device *pdev)
 	uart_remove_one_port(drv, &port->uport);
 
 	if (port->gsi_mode) {
+		/*
+		 * Mark port as shutting down before cancelling work. This prevents
+		 * msm_geni_uart_gsi_tx_cb() from re-queuing tx_xfer_work after
+		 * cancel_work_sync() returns, which would otherwise cause stale
+		 * GSI DMA TX transfers to continue after driver removal.
+		 */
+		port->port_state = UART_PORT_SHUTDOWN_IN_PROGRESS;
+
 		/* Cancel specific works and wait for any running instance to finish */
 		cancel_work_sync(&port->tx_xfer_work);
 		cancel_work_sync(&port->tx_cancel_work);

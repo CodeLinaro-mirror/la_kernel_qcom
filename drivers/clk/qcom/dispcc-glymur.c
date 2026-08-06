@@ -2011,42 +2011,6 @@ static struct clk_branch disp_cc_mdss_pclk2_clk = {
 	},
 };
 
-static struct clk_branch disp_cc_mdss_rscc_ahb_clk = {
-	.halt_reg = 0xc00c,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0xc00c,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "disp_cc_mdss_rscc_ahb_clk",
-			.parent_hws = (const struct clk_hw*[]) {
-				&disp_cc_mdss_ahb_clk_src.clkr.hw,
-			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
-static struct clk_branch disp_cc_mdss_rscc_vsync_clk = {
-	.halt_reg = 0xc008,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0xc008,
-		.enable_mask = BIT(0),
-		.hw.init = &(const struct clk_init_data) {
-			.name = "disp_cc_mdss_rscc_vsync_clk",
-			.parent_hws = (const struct clk_hw*[]) {
-				&disp_cc_mdss_vsync_clk_src.clkr.hw,
-			},
-			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch disp_cc_mdss_vsync1_clk = {
 	.halt_reg = 0xa024,
 	.halt_check = BRANCH_HALT,
@@ -2110,7 +2074,7 @@ static struct gdsc disp_cc_mdss_core_gdsc = {
 		.name = "disp_cc_mdss_core_gdsc",
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE,
+	.flags = HW_CTRL_TRIGGER | POLL_CFG_GDSCR | RETAIN_FF_ENABLE | SKIP_DIS,
 	.supply = "vdd_mm",
 };
 
@@ -2212,8 +2176,6 @@ static struct clk_regmap *disp_cc_glymur_clocks[] = {
 	[DISP_CC_MDSS_PCLK1_CLK_SRC] = &disp_cc_mdss_pclk1_clk_src.clkr,
 	[DISP_CC_MDSS_PCLK2_CLK] = &disp_cc_mdss_pclk2_clk.clkr,
 	[DISP_CC_MDSS_PCLK2_CLK_SRC] = &disp_cc_mdss_pclk2_clk_src.clkr,
-	[DISP_CC_MDSS_RSCC_AHB_CLK] = &disp_cc_mdss_rscc_ahb_clk.clkr,
-	[DISP_CC_MDSS_RSCC_VSYNC_CLK] = &disp_cc_mdss_rscc_vsync_clk.clkr,
 	[DISP_CC_MDSS_VSYNC1_CLK] = &disp_cc_mdss_vsync1_clk.clkr,
 	[DISP_CC_MDSS_VSYNC_CLK] = &disp_cc_mdss_vsync_clk.clkr,
 	[DISP_CC_MDSS_VSYNC_CLK_SRC] = &disp_cc_mdss_vsync_clk_src.clkr,
@@ -2239,6 +2201,8 @@ static const struct qcom_reset_map disp_cc_glymur_resets[] = {
 static const u32 disp_cc_glymur_critical_cbcrs[] = {
 	0xe07c, /* DISP_CC_SLEEP_CLK */
 	0xe05c, /* DISP_CC_XO_CLK */
+	0xc00c, /* DISP_CC_MDSS_RSCC_AHB_CLK */
+	0xc008, /* DISP_CC_MDSS_RSCC_VSYNC_CLK */
 };
 
 static const struct regmap_config disp_cc_glymur_regmap_config = {
@@ -2291,6 +2255,8 @@ static int disp_cc_glymur_probe(struct platform_device *pdev)
 	 * Keep clocks always enabled:
 	 *	disp_cc_sleep_clk
 	 *	disp_cc_xo_clk
+	 *	disp_cc_mdss_rscc_ahb_clk
+	 *	disp_cc_mdss_rscc_vsync_clk
 	 */
 	for (i = 0; i < ARRAY_SIZE(disp_cc_glymur_critical_cbcrs); i++)
 		qcom_branch_set_clk_en(regmap, disp_cc_glymur_critical_cbcrs[i]);

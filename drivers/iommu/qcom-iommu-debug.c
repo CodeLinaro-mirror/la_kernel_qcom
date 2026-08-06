@@ -265,6 +265,8 @@ static int iommu_debug_debugfs_setup(struct iommu_debug_device *ddev)
 	debugfs_create_file("test_virt_addr", 0400, dir, ddev, &iommu_debug_test_virt_addr_fops);
 	debugfs_create_file("profiling", 0400, dir, ddev, &iommu_debug_profiling_fops);
 
+	iommu_debug_debugfs_setup_dpd(ddev);
+
 	return 0;
 }
 
@@ -367,6 +369,7 @@ static int iommu_debug_usecase_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id iommu_debug_usecase_of_match[] = {
+	{ .compatible = "qcom,testcase-dpd-proxy", .data = &secure_allocator_ops },
 	{ .compatible = "qcom,iommu-debug-usecase", .data = NULL },
 	{ },
 };

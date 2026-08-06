@@ -7,6 +7,8 @@
 #include "hab_grantable.h"
 #include "hab_trace_os.h"
 
+static void hab_msg_drop(struct physical_channel *pchan, size_t sizebytes);
+
 static int hab_rx_queue_empty(struct virtual_channel *vchan)
 {
 	int ret;
@@ -87,8 +89,9 @@ hab_scatter_msg_alloc(struct physical_channel *pchan, size_t sizebytes)
 }
 
 static struct hab_message*
-hab_msg_alloc(struct physical_channel *pchan, size_t sizebytes)
+hab_msg_alloc(struct virtual_channel *vchan, size_t sizebytes)
 {
+	struct physical_channel *pchan = vchan->pchan;
 	struct hab_message *message;
 
 	if (sizebytes > HAB_HEADER_SIZE_MAX) {
@@ -104,6 +107,21 @@ hab_msg_alloc(struct physical_channel *pchan, size_t sizebytes)
 		 * Instead of one big consecutive kmem, try alloc one page at a time
 		 */
 		message = hab_scatter_msg_alloc(pchan, sizebytes);
+		if (!message) {
+			/*
+			 * All allocation attempts failed. Drain the channel data
+			 * so the channel remains consistent for subsequent messages.
+			 * Mark otherend_closed so the client gets -ENODEV (-19) on next
+			 * recv, since the dropped message leaves the vchan in an unreliable
+			 * state.
+			 */
+			pr_err("%s failed to alloc recv buf %zu bytes, forced to drop msg\n",
+				pchan->name, sizebytes);
+			hab_msg_drop(pchan, sizebytes);
+			pr_err("%s stopping vchan %x due to msg alloc failure\n",
+				pchan->name, vchan->id);
+			hab_vchan_stop_notify(vchan);
+		}
 	} else {
 		message->sizebytes =
 			physical_channel_read(pchan, message->data, sizebytes);
@@ -742,18 +760,26 @@ static void hab_recv_imp_req(struct physical_channel *pchan,
 
 static void hab_msg_drop(struct physical_channel *pchan, size_t sizebytes)
 {
-	uint8_t *data;
+	uint8_t chunk[HAB_DROP_CHUNK_SIZE];
+	size_t remaining = sizebytes;
 
 	if (sizebytes > HAB_HEADER_SIZE_MAX) {
 		pr_err("%s read size too large %zd\n", pchan->name, sizebytes);
 		return;
 	}
 
-	data = kmalloc(sizebytes, GFP_ATOMIC);
-	if (data == NULL)
-		return;
-	physical_channel_read(pchan, data, sizebytes);
-	kfree(data);
+	while (remaining > 0) {
+		size_t to_read = min(remaining, sizeof(chunk));
+		int ret;
+
+		ret = physical_channel_read(pchan, chunk, to_read);
+		if (ret <= 0) {
+			pr_err("%s drop read failed ret=%d, %zu bytes remained in channel\n",
+				pchan->name, ret, remaining);
+			break;
+		}
+		remaining -= ret;
+	}
 }
 
 static void hab_recv_unimport_msg(struct physical_channel *pchan, int vchan_exist)
@@ -896,7 +922,7 @@ static void hab_handle_profile_msg(struct virtual_channel *vchan, size_t sizebyt
 	}
 
 	/* pull down the incoming data */
-	message = hab_msg_alloc(pchan, sizebytes);
+	message = hab_msg_alloc(vchan, sizebytes);
 	if (!message) {
 		pr_debug("%s failed to allocate msg Arrived msg will be lost\n",
 				pchan->name);
@@ -922,7 +948,7 @@ static void hab_handle_sched_msg(struct virtual_channel *vchan, size_t sizebytes
 
 	rx_mpm_tv = msm_timer_get_sclk_ticks();
 	/* pull down the incoming data */
-	message = hab_msg_alloc(vchan->pchan, sizebytes);
+	message = hab_msg_alloc(vchan, sizebytes);
 	if (!message) {
 		pr_debug("%s failed to allocate msg Arrived msg will be lost\n",
 			vchan->pchan->name);
@@ -954,9 +980,11 @@ int hab_msg_recv(struct physical_channel *pchan,
 	case HAB_PAYLOAD_TYPE_MSG:
 	case HAB_PAYLOAD_TYPE_SCHE_RESULT_REQ:
 	case HAB_PAYLOAD_TYPE_SCHE_RESULT_RSP:
-		message = hab_msg_alloc(pchan, sizebytes);
-		if (!message)
+		message = hab_msg_alloc(vchan, sizebytes);
+		if (!message) {
+			ret = -ENOMEM;
 			break;
+		}
 
 		hab_msg_queue(vchan, message);
 		break;
