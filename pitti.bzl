@@ -1,6 +1,6 @@
-load(":target_variants.bzl", "la_variants")
-load(":msm_kernel_la.bzl", "define_msm_la")
 load(":image_opts.bzl", "boot_image_opts")
+load(":msm_kernel_la.bzl", "define_msm_la")
+load(":target_variants.bzl", "la_variants")
 
 target_name = "pitti"
 
@@ -46,6 +46,7 @@ def define_pitti():
         "drivers/hwtracing/stm/stm_p_ost.ko",
         "drivers/i2c/busses/i2c-msm-geni.ko",
         "drivers/iio/adc/qcom-spmi-adc5.ko",
+        "drivers/iio/adc/qcom-spmi-adc5-gen3.ko",
         "drivers/iio/adc/qcom-vadc-common.ko",
         "drivers/iio/adc/qti-glink-adc.ko",
         "drivers/input/misc/pm8941-pwrkey.ko",
