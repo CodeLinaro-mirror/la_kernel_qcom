@@ -101,6 +101,7 @@ glymur_perf_config = {
     "CONFIG_QCOM_IRQ_STAT": "y",
     "CONFIG_QCOM_LAZY_MAPPING": "m",
     "CONFIG_QCOM_LLCC": "m",
+    "CONFIG_QCOM_LOGBUF_BOOTLOG": "m",
     "CONFIG_QCOM_LOGBUF_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_MDT_LOADER": "m",
     "CONFIG_QCOM_MEMLAT": "m",
