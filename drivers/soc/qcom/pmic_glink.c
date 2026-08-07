@@ -120,6 +120,7 @@ int pmic_glink_send(struct pmic_glink_client *client, void *data, size_t len)
 	else
 		ret = rpmsg_send(pg->ept, data, len);
 	mutex_unlock(&pg->state_lock);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pmic_glink_send);

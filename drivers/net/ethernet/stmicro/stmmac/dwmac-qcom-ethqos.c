@@ -11,6 +11,10 @@
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
+#include <linux/iopoll.h>
+
+#define DMA_BUS_MODE			0x00001000
+#define DMA_BUS_MODE_SFT_RESET		(0x1 << 0)
 
 #define RGMII_IO_MACRO_CONFIG		0x0
 #define SDCC_HC_REG_DLL_CONFIG		0x4
@@ -28,6 +32,7 @@
 #define EMAC_WRAPPER_USXGMII_MUX_SEL 0x1D0
 #define RGMII_IO_MACRO_SCRATCH_2		0x44
 #define EMAC_WRAPPER_SGMII_PHY_CNTRL1_V4 0x174
+#define MACSEC_CTRL0_OFFSET			0x0
 
 /* RGMII_IO_MACRO_CONFIG fields */
 #define RGMII_CONFIG_FUNC_CLK_EN		BIT(30)
@@ -109,6 +114,9 @@
 #define RGMII_SCRATCH2_MAX_SPD_PRG_5		GENMASK(9, 6)
 #define RGMII_SCRATCH2_MAX_SPD_PRG_6		GENMASK(13, 10)
 
+/* MACSEC WRAPPER bits */
+#define MACSEC_BIT_DATA_BYPASS		BIT(2)
+
 #define SGMII_10M_RX_CLK_DVDR			0x31
 
 struct ethqos_emac_por {
@@ -129,11 +137,13 @@ struct ethqos_emac_driver_data {
 	struct dwmac4_addrs dwmac4_addrs;
 	bool needs_sgmii_loopback;
 	bool has_hdma;
+	bool has_macsec;
 	bool has_io_macro_ge_4;
 };
 
 struct qcom_ethqos {
 	struct platform_device *pdev;
+	void __iomem *macsec_base;
 	void __iomem *rgmii_base;
 	void __iomem *mac_base;
 	int (*configure_func)(struct qcom_ethqos *ethqos);
@@ -150,6 +160,7 @@ struct qcom_ethqos {
 	bool has_io_macro_ge_4;
 	bool rgmii_config_loopback_en;
 	bool has_emac_ge_3;
+	bool has_macsec;
 	bool needs_sgmii_loopback;
 	bool needs_rx_prog_swap;
 };
@@ -349,6 +360,16 @@ static const struct ethqos_emac_por emac_v6_6_0_por[] = {
 	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
 };
 
+static const struct ethqos_emac_por emac_v6_6_1_por[] = {
+	{ .offset = RGMII_IO_MACRO_CONFIG,	.value = 0xC04D03 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG,	.value = 0x2004642C },
+	{ .offset = SDCC_HC_REG_DDR_CONFIG,	.value = 0x80040800 },
+	{ .offset = SDCC_HC_REG_DLL_CONFIG2,	.value = 0x00200000 },
+	{ .offset = SDCC_USR_CTL,		.value = 0x00010800 },
+	{ .offset = RGMII_IO_MACRO_CONFIG2,	.value = 0x222060},
+	{ .offset = RGMII_IO_MACRO_SCRATCH_2, .value = 0x4c },
+};
+
 static const struct ethqos_emac_driver_data emac_v4_0_0_data = {
 	.por = emac_v4_0_0_por,
 	.num_por = ARRAY_SIZE(emac_v4_0_0_por),
@@ -384,6 +405,33 @@ static const struct ethqos_emac_driver_data emac_v6_6_0_data = {
 	.link_clk_name = "phyaux",
 	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
 	.has_hdma = true,
+	.needs_sgmii_loopback = true,
+	.has_io_macro_ge_4 = true,
+	.axi_clk_rate = 380000000,
+	.dwxgmac_addrs = {
+		.dma_even_chan_base  = 0x00008500,
+		.dma_odd_chan_base = 0x00008580,
+		.dma_chan_offset = 0x00001000,
+		.mtl_chan_base = 0x00008000,
+		.mtl_chan_offset =  0x00001000,
+		.timestamp_base = 0x00007000,
+		.pps_base = 0x00007080,
+		.pps_offset = 0x10,
+	},
+};
+
+/* emac_v6_6_1 is added because of the addition of new MACSEC
+ * block and the flags associated with it.
+ */
+static const struct ethqos_emac_driver_data emac_v6_6_1_data = {
+	.por = emac_v6_6_1_por,
+	.num_por = ARRAY_SIZE(emac_v6_6_1_por),
+	.rgmii_config_loopback_en = false,
+	.dma_addr_width = 40,
+	.link_clk_name = "phyaux",
+	.has_flags = STMMAC_FLAG_USE_THREADED_NAPI,
+	.has_hdma = true,
+	.has_macsec = true,
 	.needs_sgmii_loopback = true,
 	.has_io_macro_ge_4 = true,
 	.axi_clk_rate = 380000000,
@@ -704,6 +752,21 @@ static int ethqos_configure_rgmii(struct qcom_ethqos *ethqos)
 	return 0;
 }
 
+static void ethqos_force_macsec_bypass(struct qcom_ethqos *ethqos)
+{
+	void __iomem *macsec_base = ethqos->macsec_base;
+	u32 val;
+
+	if (!macsec_base)
+		return;
+
+	val = readl_relaxed(macsec_base + MACSEC_CTRL0_OFFSET);
+
+	val |= MACSEC_BIT_DATA_BYPASS;
+
+	writel_relaxed(val, macsec_base + MACSEC_CTRL0_OFFSET);
+}
+
 /* On interface toggle MAC registers gets reset.
  * Configure MAC block for SGMII on ethernet phy link up
  */
@@ -889,12 +952,38 @@ static int ethqos_configure_usxgmii(struct qcom_ethqos *ethqos)
 			"Invalid speed %d\n", ethqos->speed);
 		return -EINVAL;
 	}
+
+	if (ethqos->has_macsec)
+		ethqos_force_macsec_bypass(ethqos);
+
 	return 0;
 }
 
 static int ethqos_configure(struct qcom_ethqos *ethqos)
 {
 	return ethqos->configure_func(ethqos);
+}
+
+/* QCOM GMAC4 DMA soft reset requires an internal clock reference (SGMII
+ * TX-to-RX loopback) when the external PHY clock is unavailable (e.g. after
+ * a safety error brings the link down). Without this loopback, the DMA
+ * reset bit never auto-clears and the reset times out.
+ */
+static int qcom_ethqos_dma_reset(void *priv, void __iomem *ioaddr)
+{
+	struct plat_stmmacenet_data *plat = priv;
+	struct qcom_ethqos *ethqos = plat->bsp_priv;
+	u32 value;
+
+	ethqos_set_func_clk_en(ethqos);
+
+	value = readl(ioaddr + DMA_BUS_MODE);
+	value |= DMA_BUS_MODE_SFT_RESET;
+	writel(value, ioaddr + DMA_BUS_MODE);
+
+	return readl_poll_timeout(ioaddr + DMA_BUS_MODE, value,
+				  !(value & DMA_BUS_MODE_SFT_RESET),
+				  10000, 1000000);
 }
 
 static void ethqos_safety_feature(struct stmmac_priv *priv, bool en)
@@ -1025,6 +1114,41 @@ static void qcom_ethqos_get_queue_and_tc_from_vdma(struct stmmac_priv *priv,
 	if (!*queue_mask)
 		netdev_warn(priv->dev, "No PDMA channel found for VDMA %u (TC %u)\n",
 			    vdma_ch, *tc);
+}
+
+static void ethqos_report_uevents(struct stmmac_priv *priv, enum stmmac_uevent_type event)
+{
+	char phy_mode[32];
+	char event_type[32];
+	char *envp[3];
+	int i = 0;
+
+	switch (event) {
+	case FUSA_ERROR:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=FUSA_ERROR");
+		break;
+	case MAC_DOWN:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=MAC_DOWN");
+		break;
+	case MAC_UP:
+		snprintf(event_type, sizeof(event_type), "SAFETY_EVENT=MAC_UP");
+		break;
+	default:
+		dev_warn(priv->device, "Unknown UMD event %d\n", event);
+		return;
+	}
+
+	envp[i++] = event_type;
+
+	if (event != FUSA_ERROR) {
+		snprintf(phy_mode, sizeof(phy_mode), "PHY_MODE=%s",
+			 phy_modes(priv->plat->phy_interface));
+		envp[i++] = phy_mode;
+	}
+
+	envp[i] = NULL;
+
+	kobject_uevent_env(&priv->device->kobj, KOBJ_CHANGE, envp);
 }
 
 static int qcom_ethqos_hdma_cfg(struct platform_device *pdev, struct plat_stmmacenet_data *plat)
@@ -1190,8 +1314,17 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	if (data->has_macsec) {
+		ethqos->macsec_base = devm_platform_ioremap_resource_byname(pdev, "macsec");
+		if (IS_ERR(ethqos->macsec_base)) {
+			return dev_err_probe(dev, PTR_ERR(ethqos->macsec_base),
+					"Failed to map macsec resource\n");
+		}
+	}
+
 	ethqos->por = data->por;
 	ethqos->num_por = data->num_por;
+	ethqos->has_macsec = data->has_macsec;
 	ethqos->has_io_macro_ge_4 = data->has_io_macro_ge_4;
 	ethqos->rgmii_config_loopback_en = data->rgmii_config_loopback_en;
 	ethqos->has_emac_ge_3 = data->has_emac_ge_3;
@@ -1220,6 +1353,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ethqos_update_link_clk(ethqos, SPEED_1000);
 	ethqos_set_func_clk_en(ethqos);
 
+	if (stmmac_res.sfty_irq > 0)
+		plat_dat->report_uevents = ethqos_report_uevents;
 	plat_dat->bsp_priv = ethqos;
 	plat_dat->fix_mac_speed = ethqos_fix_mac_speed;
 	plat_dat->dump_debug_regs = rgmii_dump;
@@ -1242,6 +1377,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 				qcom_ethqos_get_queue_and_tc_from_vdma;
 		}
 	}
+	if (plat_dat->has_gmac4)
+		plat_dat->fix_soc_reset = qcom_ethqos_dma_reset;
 	if (of_property_present(dev->of_node, "qcom-xpcs-handle")) {
 		plat_dat->pcs_init = ethqos_xpcs_init;
 		plat_dat->pcs_exit = ethqos_xpcs_exit;
@@ -1282,6 +1419,7 @@ static const struct of_device_id qcom_ethqos_match[] = {
 	{ .compatible = "qcom,sm8150-ethqos", .data = &emac_v2_1_0_data},
 	{ .compatible = "qcom,sa8620p-ethqos", .data = &emac_v4_0_0_data},
 	{ .compatible = "qcom,sa8797p-ethqos", .data = &emac_v6_6_0_data},
+	{ .compatible = "qcom,sa8787p-ethqos", .data = &emac_v6_6_1_data},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, qcom_ethqos_match);

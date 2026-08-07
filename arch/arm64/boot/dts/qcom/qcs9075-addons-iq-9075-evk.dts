@@ -441,3 +441,8 @@
 	};
 
 };
+
+&vreg_cam1_1p8 {
+	status = "disabled";
+};
+
