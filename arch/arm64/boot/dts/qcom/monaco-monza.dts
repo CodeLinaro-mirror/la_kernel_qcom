@@ -797,6 +797,10 @@
 	status = "okay";
 };
 
+&spi3 {
+	status = "okay";
+};
+
 &thermal_zones {
 	cpuss-0-0-thermal {
 		trips {
