@@ -2151,12 +2151,8 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		goto err_restore;
 	}
 
-	ret = ethqos_init_gpio(ethqos);
-	if (ret) {
-		dev_err(dev, "%s: GPIO init failed with ret = %d\n", __func__, ret);
-		ethqos_disable_regulators(ethqos);
-		goto err_restore;
-	}
+	if (ethqos_init_gpio(ethqos))
+		dev_warn(dev, "ethqos_init_gpio failed.\n");
 
 	ret = pm_runtime_force_resume(dev);
 	if (ret) {
@@ -2487,11 +2483,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		if (ret)
 			return ret;
 
-		ret = ethqos_init_gpio(ethqos);
-
-		if (ret)
-			return dev_err_probe(dev, ret, "%s: init_gpio failed with ret = %d\n",
-					     __func__, ret);
+		if (ethqos_init_gpio(ethqos))
+			dev_warn(dev, "ethqos_init_gpio failed.\n");
 
 		ethqos->link_clk = devm_clk_get(dev, data->link_clk_name ?: "rgmii");
 		if (IS_ERR(ethqos->link_clk))
