@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2007 Google, Inc.
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QPIC_NAND_H
@@ -179,6 +179,9 @@
 #define MSM_NAND_AUTO_STATUS_EN(info)       MSM_NAND_REG(info, 0x3002c)
 #define MSM_NAND_MULTI_PAGE_CMD(info)       MSM_NAND_REG(info, 0x30F60)
 
+#define QPIC_EBI2_CFG(info)		    MSM_NAND_REG(info, 0x27004)
+#define QPIC_EBI2_CFG_DRIVE_OE_EN	BIT(26)
+
 #define NAND_FLASH_STATUS_EN                     BIT(0)
 #define NANDC_BUFFER_STATUS_EN                   BIT(1)
 #define NAND_ERASED_CW_DETECT_STATUS_EN          BIT(3)
@@ -290,6 +293,8 @@ struct msm_nand_chip {
 #define MSM_NAND_CAP_MULTI_PAGE_READ	BIT(1)
 #define MSM_NAND_CAP_BOOST_MODE		BIT(2)
 #define MSM_NAND_INTERRUPT_MODE_ENABLE  BIT(3) /* To enable nand in Interrupt mode */
+/* Clear QPIC_EBI2_CFG.DRIVE_OE_EN on M.2 boards */
+#define MSM_NAND_CAP_EBI2_DRIVE_OE_DISABLE  BIT(4)
 };
 
 /* Structure that defines an SPS end point for a NANDc BAM pipe. */

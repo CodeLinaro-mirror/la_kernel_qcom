@@ -47,6 +47,10 @@
 
 #define DM_MSG_PREFIX "crypt"
 
+#ifdef CONFIG_FSPAPP_CLIENT
+extern struct key *dmcrypt_keyring;
+#endif
+
 /*
  * context holding the current state of a multi-part conversion
  */
@@ -2578,11 +2582,34 @@ static int crypt_set_keyring_key(struct crypt_config *cc, const char *key_string
 	if (!new_key_string)
 		return -ENOMEM;
 
+#ifdef CONFIG_FSPAPP_CLIENT
+	if (dmcrypt_keyring) {
+		key_ref_t ref;
+
+		ref = keyring_search(
+				make_key_ref(dmcrypt_keyring, true),
+				type,
+				key_desc + 1,
+				false);
+
+		if (!IS_ERR(ref)) {
+			key = key_ref_to_ptr(ref);
+			DMINFO("found key '%s' in private keyring",
+			       key_desc + 1);
+			goto key_found;
+		}
+	}
+#endif /* CONFIG_FSPAPP_CLIENT */
+
 	key = request_key(type, key_desc + 1, NULL);
 	if (IS_ERR(key)) {
 		kfree_sensitive(new_key_string);
 		return PTR_ERR(key);
 	}
+
+#ifdef CONFIG_FSPAPP_CLIENT
+key_found:
+#endif /* CONFIG_FSPAPP_CLIENT */
 
 	down_read(&key->sem);
 
