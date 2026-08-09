@@ -54,6 +54,14 @@
 
 #define LT7911_DP_STATE_MS        1000
 
+/*
+ * Bits in the LT7911 interrupt-type / ready-state value (reg 0x84).  The chip
+ * reports which parts of the stream description it has just refreshed, so the
+ * bits also tell us which register banks are meaningful on this read.
+ */
+#define LT7911_IRQ_VIDEO_READY    BIT(0)
+#define LT7911_IRQ_AUDIO_READY    BIT(1)
+
 struct lt7911uxc_data {
 	struct device *dev;
 	struct altmode_client *amclient;
@@ -72,6 +80,14 @@ struct lt7911uxc_data {
 	struct regulator *lt7911_vdd;         /* LT7911 VDD supply (L4B) */
 	bool connected;
 	bool lt7911_poweron;
+	int last_width;
+	int last_height;
+	int last_fps;
+	int last_format;
+	int last_afreq;
+	int last_ach;
+	bool have_video_info;
+	bool have_audio_info;
 	bool usb_mux_only;        /* USB-only connect: just switch PS8822, no LT7911 ops */
 	int lanes;
 	int orientation;
@@ -340,6 +356,8 @@ static void lt7911uxc_dpalt_work_fn(struct work_struct *work)
 
 		mutex_lock(&lt7911->device_lock);
 		lt7911_power_down(lt7911);
+		lt7911->have_video_info = false;
+		lt7911->have_audio_info = false;
 		mutex_unlock(&lt7911->device_lock);
 
 		/*
@@ -382,6 +400,7 @@ static void lt7911_info_work_fn(struct work_struct *work)
 		container_of(to_delayed_work(work), struct lt7911uxc_data, info_work);
 	int irq = 0, width = 0, height = 0, fps = 0, format = 0, afreq = 0, ach = 0;
 	int snapshot, rc, retries = 0;
+	bool video_live, audio_live, suppress;
 
 	/*
 	 * Drain-loop for hotplug robustness:
@@ -397,6 +416,13 @@ static void lt7911_info_work_fn(struct work_struct *work)
 	 */
 	do {
 		snapshot = atomic_read(&lt7911->int_event_cnt);
+		irq = 0;
+		width = 0;
+		height = 0;
+		fps = 0;
+		format = 0;
+		afreq = 0;
+		ach = 0;
 
 		mutex_lock(&lt7911->device_lock);
 		if (!lt7911->lt7911_poweron) {
@@ -432,7 +458,56 @@ static void lt7911_info_work_fn(struct work_struct *work)
 		}
 		cci_util_lt7911_disable_i2c(lt7911->cci_handle);
 
-		if (lt7911->connected && (!irq || !width || !height)) {
+		/*
+		 * The LT7911 only refreshes the register bank belonging to the
+		 * event that raised GPIO0.
+		 */
+		video_live = (width > 0 && height > 0);
+		audio_live = (afreq > 0);
+
+		mutex_lock(&lt7911->device_lock);
+
+		if (irq & LT7911_IRQ_VIDEO_READY) {
+			if (video_live) {
+				lt7911->last_width = width;
+				lt7911->last_height = height;
+				lt7911->last_fps = fps;
+				lt7911->last_format = format;
+				lt7911->have_video_info = true;
+			} else if (lt7911->have_video_info) {
+				width = lt7911->last_width;
+				height = lt7911->last_height;
+				fps = lt7911->last_fps;
+				format = lt7911->last_format;
+				dev_dbg(lt7911->dev,
+					"video registers stale, using cached %dx%d\n",
+					width, height);
+			}
+		}
+
+		if (irq & LT7911_IRQ_AUDIO_READY) {
+			if (audio_live) {
+				lt7911->last_afreq = afreq;
+				lt7911->last_ach = ach;
+				lt7911->have_audio_info = true;
+			} else if (lt7911->have_audio_info) {
+				afreq = lt7911->last_afreq;
+				ach = lt7911->last_ach;
+				dev_dbg(lt7911->dev,
+					"audio registers stale, using cached %dKhz/%dch\n",
+					afreq, ach);
+			}
+		}
+
+		/*
+		 * Only a connected cable with nothing at all reported is treated
+		 * as a spurious read worth dropping.
+		 */
+		suppress = lt7911->connected && !irq;
+
+		mutex_unlock(&lt7911->device_lock);
+
+		if (suppress) {
 			dev_dbg(lt7911->dev,
 				"Ignore notification when connected and registers indicate 0\n");
 		} else {
