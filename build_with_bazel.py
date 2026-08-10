@@ -516,6 +516,17 @@ class BazelBuilder:
             if out_dir == target.get_out_dir("dist"):
                 self.setup_kbdev_symlinks(out_dir)
 
+            abl_elf = os.path.join(out_dir, "abl-userdebug", "unsigned_abl.elf")
+            if os.path.isfile(abl_elf):
+                os.utime(abl_elf, None)
+            for name in ("abl_userdebug.elf", "unsigned_abl_userdebug.elf"):
+                p = os.path.join(out_dir, name)
+                if os.path.isfile(p):
+                    os.utime(p, None)
+            abl_link = os.path.join(out_dir, "abl.elf")
+            if os.path.islink(abl_link):
+                os.utime(abl_link, follow_symlinks=False)
+
     def setup_kbdev_symlinks(self, out_dir):
         """Setup k*.img sylinks needed for test builds"""
         images = [
