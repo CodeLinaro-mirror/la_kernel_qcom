@@ -80,6 +80,7 @@ glymur_perf_config = {
     "CONFIG_QCOM_CLK_RPMH": "m",
     "CONFIG_QCOM_COMMAND_DB": "m",
     "CONFIG_QCOM_CPUCP": "m",
+    "CONFIG_QCOM_CPUSS_TELEMETRY": "m",
     "CONFIG_QCOM_CPU_PHYS_LOG_MAP": "m",
     "CONFIG_QCOM_CPU_VENDOR_HOOKS": "m",
     "CONFIG_QCOM_DCVS": "m",
