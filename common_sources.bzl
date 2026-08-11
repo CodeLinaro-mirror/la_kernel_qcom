@@ -12,6 +12,7 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 COPY_FILES = [
     "drivers/leds/trigger/ledtrig-pattern.c",
+    "drivers/leds/leds-aw200xx.c",
     "drivers/char/virtio_console.c",
     "drivers/dma/qcom/gpi.c",
     "drivers/dma/dmaengine.h",
