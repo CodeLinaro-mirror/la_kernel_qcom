@@ -1209,7 +1209,7 @@ static const struct msm_pingroup sa7255p_groups[] = {
 };
 
 static const struct msm_gpio_wakeirq_map sa7255_pdc_map[] = {
-	{ 0, 169 }, { 1, 174 }, { 2, 221 }, { 3, 176 }, { 4, 171 }, { 9, 198 },
+	{ 0, 169 }, { 1, 174 }, { 2, 221 }, { 3, 176 }, { 9, 198 },
 	{ 10, 187 }, { 11, 188 }, { 13, 211 }, { 16, 203 }, { 17, 213 }, { 18, 209 },
 	{ 19, 201 }, { 20, 230 }, { 21, 231 }, { 22, 175 }, { 23, 170 }, { 24, 232 },
 	{ 28, 235 }, { 29, 216 }, { 31, 208 }, { 32, 200 }, { 36, 212 }, { 37, 177 },
@@ -1249,6 +1249,7 @@ MODULE_DEVICE_TABLE(of, sa7255p_pinctrl_of_match);
 static struct platform_driver sa7255p_pinctrl_driver = {
 	.driver = {
 		.name = "sa7255p-tlmm",
+		.pm = &msm_pinctrl_dev_pm_ops,
 		.of_match_table = sa7255p_pinctrl_of_match,
 	},
 	.probe = sa7255p_pinctrl_probe,
