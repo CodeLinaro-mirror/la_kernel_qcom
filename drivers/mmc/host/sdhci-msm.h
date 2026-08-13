@@ -211,7 +211,7 @@ struct sdhci_msm_host {
 	bool pltfm_init_done;
 	bool fake_core_3_0v_support;
 	bool use_7nm_dll;
-	struct sdhci_msm_dll_hsr *dll_hsr;
+	struct sdhci_msm_dll_cfg *dll_cfg;
 	struct sdhci_msm_regs_restore regs_restore;
 	struct cqe_regs_restore cqe_regs;
 	u32 *sup_ice_clk_table;
