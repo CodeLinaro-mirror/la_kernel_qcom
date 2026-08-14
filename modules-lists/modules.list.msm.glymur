@@ -101,3 +101,5 @@ qcom_glink_smem.ko
 qcom_glink.ko
 qrtr.ko
 qrtr-smd.ko
+qcom_logbuf_vendor_hooks.ko
+qcom_logbuf_boot_log.ko
