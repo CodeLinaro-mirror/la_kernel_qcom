@@ -1703,6 +1703,63 @@ static ssize_t lt7911_reg_access_show(struct device *dev,
 	return len;
 }
 
+/**
+ * lt7911_replay_uevent_store - re-emit the DPIN_HOST_INFO uevent on demand.
+ * @dev:   device the sysfs attribute belongs to
+ * @attr:  device attribute descriptor
+ * @buf:   userspace input; any non-zero integer requests a replay
+ * @count: number of bytes in @buf
+ *
+ * Return: @count on success, negative errno on failure.
+ */
+static ssize_t lt7911_replay_uevent_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
+	int rc, val = 0;
+
+	if (!lt7911)
+		return -ENODEV;
+
+	rc = kstrtoint(buf, 10, &val);
+	if (rc) {
+		dev_err(dev, "replay_uevent: kstrtoint error rc=%d\n", rc);
+		return rc;
+	}
+
+	if (!val)
+		return count;
+
+	mutex_lock(&lt7911->device_lock);
+	if (!lt7911->connected || !lt7911->lt7911_poweron) {
+		mutex_unlock(&lt7911->device_lock);
+		dev_info(dev, "replay_uevent: no active DPIN stream (connected=%d poweron=%d)\n",
+			 lt7911->connected, lt7911->lt7911_poweron);
+		return -ENODEV;
+	}
+	mutex_unlock(&lt7911->device_lock);
+
+	if (!lt7911->cci_handle) {
+		dev_err(dev, "replay_uevent: cci_handle not available\n");
+		return -ENODEV;
+	}
+
+	if (atomic_read(&lt7911->fw_upgrade_in_progress)) {
+		dev_warn(dev, "replay_uevent: firmware upgrade in progress, deferred\n");
+		return -EBUSY;
+	}
+
+	dev_info(dev, "replay_uevent: re-driving info_work to re-emit DPIN_HOST_INFO\n");
+
+	atomic_inc(&lt7911->int_event_cnt);
+	cancel_delayed_work(&lt7911->info_work);
+	queue_delayed_work(system_freezable_wq, &lt7911->info_work,
+			msecs_to_jiffies(LT7911_DRAIN_SETTLE_MS));
+
+	return count;
+}
+
 static DEVICE_ATTR_RW(firmware_upgrade);
 static DEVICE_ATTR_RW(firmware_debug_flag);
 static DEVICE_ATTR_RW(lt7911_cc_switch);
@@ -1712,6 +1769,7 @@ static DEVICE_ATTR_RO(lt7911_hdcp_version);
 static DEVICE_ATTR_RW(lt7911_mipi_status);
 static DEVICE_ATTR_RO(lt7911_stream_info);
 static DEVICE_ATTR_RW(lt7911_reg_access);
+static DEVICE_ATTR_WO(lt7911_replay_uevent);
 
 static struct attribute *lt7911_sysfs_attrs[] = {
 	&dev_attr_firmware_upgrade.attr,
@@ -1723,6 +1781,7 @@ static struct attribute *lt7911_sysfs_attrs[] = {
 	&dev_attr_lt7911_mipi_status.attr,
 	&dev_attr_lt7911_stream_info.attr,
 	&dev_attr_lt7911_reg_access.attr,
+	&dev_attr_lt7911_replay_uevent.attr,
 	NULL,
 };
 
