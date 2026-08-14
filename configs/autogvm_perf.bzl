@@ -154,6 +154,7 @@ autogvm_perf_config = {
     "CONFIG_RPMSG_QCOM_GLINK_CMA": "m",
     "CONFIG_RTC_DRV_PM8XXX": "m",
     "CONFIG_SCSI_UFS_QCOM": "m",
+    "CONFIG_SCSI_UFS_QCOM_SCMI": "m",
     "CONFIG_SERIAL_MSM_GENI": "m",
     "CONFIG_SERIAL_QCOM_GENI_MSM": "m",
     "CONFIG_SND_USB_AUDIO_QMI": "m",
