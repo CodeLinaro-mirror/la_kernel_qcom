@@ -323,7 +323,7 @@ struct glink_cma_dev *qcom_glink_cma_register(struct device *parent, struct devi
 	struct glink_cma_dev *gdev;
 	struct qcom_glink *glink;
 	struct device *dev;
-	int rc, ret;
+	int rc, ret, irq;
 
 	if (!parent || !node || !config)
 		return ERR_PTR(-EINVAL);
@@ -369,13 +369,19 @@ struct glink_cma_dev *qcom_glink_cma_register(struct device *parent, struct devi
 
 	gdev->glink = glink;
 
-	gdev->irq = of_irq_get(gdev->dev.of_node, 0);
+	irq = of_irq_get(gdev->dev.of_node, 0);
+	if (irq < 0) {
+		pr_err("%s: failed to get IRQ %d\n", __func__, irq);
+		rc = irq;
+		goto err_put_glink;
+	}
+	gdev->irq = irq;
 	ret = devm_request_irq(&gdev->dev, gdev->irq, qcom_glink_cma_intr,
 							IRQF_NO_SUSPEND,
 							gdev->irqname, gdev);
 	if (ret) {
-		pr_err("%s: failed to request irq\n", __func__);
-		goto err_put_dev;
+		pr_err("%s: failed to request irq %d\n", __func__, ret);
+		goto err_put_glink;
 	}
 
 	gdev->mbox_client.dev = &gdev->dev;

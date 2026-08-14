@@ -141,6 +141,8 @@ struct hab_header {
  * 500KB is big enough for now and leave a margin for other usage
  */
 #define HAB_HEADER_SIZE_MAX  0x0007D000
+/* chunk size for draining a channel in hab_msg_drop() */
+#define HAB_DROP_CHUNK_SIZE  256
 #define HAB_HEADER_TYPE_MASK 0x000F0000
 /* TYPE_LEN is the number of 1 bit in TYPE_MASK */
 #define HAB_HEADER_TYPE_LEN 4
