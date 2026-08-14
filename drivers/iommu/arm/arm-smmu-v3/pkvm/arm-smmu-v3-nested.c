@@ -961,7 +961,12 @@ static bool smmu_dabt_device(struct hyp_arm_smmu_v3_device *smmu,
 		if (is_write) {
 			if (is_evtq_enabled(smmu))
 				break;
-			smmu->evtq_base = val;
+			else {
+				/* Warn on write after SMMUv3 shutdown */
+				if (smmu->cr0 == 0)
+					break;
+				smmu->evtq_base = val;
+			}
 		}
 		mask = read_write;
 		break;
@@ -973,7 +978,12 @@ static bool smmu_dabt_device(struct hyp_arm_smmu_v3_device *smmu,
 		if (is_write) {
 			if (is_priq_enabled(smmu))
 				break;
-			smmu->priq_base = val;
+			else {
+				/* Warn on write after SMMUv3 shutdown */
+				if (smmu->cr0 == 0)
+					break;
+				smmu->priq_base = val;
+			}
 		}
 		mask = read_write;
 		break;

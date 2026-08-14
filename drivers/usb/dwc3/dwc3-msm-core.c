@@ -6843,7 +6843,7 @@ static int dwc3_msm_parse_params(struct platform_device *pdev, struct device_nod
 				"qcom,enable_host_slow_suspend");
 
 	mdwc->hibernate_skip_thaw = of_property_read_bool(node,
-					"qcom,hibernate-skip-thaw");
+				"qcom,hibernate-skip-thaw");
 
 	mdwc->dis_sending_cm_l1_quirk = of_property_read_bool(node,
 				"qcom,dis-sending-cm-l1-quirk");

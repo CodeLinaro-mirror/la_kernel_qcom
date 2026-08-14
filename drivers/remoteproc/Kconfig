@@ -216,6 +216,20 @@ config QCOM_CRASH_SYMBOL_MATCH
 	  If disabled, only raw stack addresses are printed.
 	  Helps improve clarity and debugging of crash logs.
 
+config QCOM_RPROC_SLATE
+	tristate "QCOM Slate remoteproc support"
+	depends on OF && ARCH_QCOM
+	select QCOM_PIL_INFO
+	select QCOM_MDT_LOADER
+	select QCOM_RPROC_COMMON
+	select QCOM_SCM
+	help
+	  Say y here to support the TrustZone based Peripheral Image Loader
+	  for the QCOM Slate.
+
+	  It's safe to say N here if you're not intereseted in utilizing
+	  a aon processor slate.
+
 endif # REMOTEPROC
 
 endmenu

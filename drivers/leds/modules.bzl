@@ -51,6 +51,17 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/leds/trigger/ledtrig-netdev",
+        out = "ledtrig-netdev.ko",
+        config = "CONFIG_LEDS_TRIGGER_NETDEV",
+        srcs = [
+            # do not sort
+            "drivers/leds/trigger/ledtrig-netdev_fixed.c",
+            "drivers/leds/leds.h",
+        ],
+    )
+
+    registry.register(
         name = "drivers/leds/leds-qpnp-vibrator-ldo",
         out = "leds-qpnp-vibrator-ldo.ko",
         config = "CONFIG_LEDS_QPNP_VIBRATOR_LDO",

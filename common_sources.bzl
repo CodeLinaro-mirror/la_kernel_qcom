@@ -11,6 +11,8 @@ module sources due to DDK limitations that exist today.
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 COPY_FILES = [
+    "drivers/leds/leds.h",
+    "drivers/leds/trigger/ledtrig-netdev.c",
     "drivers/leds/trigger/ledtrig-pattern.c",
     "drivers/char/virtio_console.c",
     "drivers/dma/qcom/gpi.c",
@@ -23,7 +25,39 @@ COPY_FILES = [
     "drivers/i2c/busses/i2c-qcom-geni.c",
     "drivers/i2c/busses/i2c-virtio.c",
     "drivers/spi/spi-geni-qcom.c",
+    "drivers/virtio/virtio_dma_buf.c",
     "drivers/virtio/virtio_input.c",
+    # virtio_snd.ko files start
+    "sound/virtio/virtio_card.c",
+    "sound/virtio/virtio_card.h",
+    "sound/virtio/virtio_chmap.c",
+    "sound/virtio/virtio_ctl_msg.c",
+    "sound/virtio/virtio_ctl_msg.h",
+    "sound/virtio/virtio_jack.c",
+    "sound/virtio/virtio_kctl.c",
+    "sound/virtio/virtio_pcm_msg.c",
+    "sound/virtio/virtio_pcm_ops.c",
+    "sound/virtio/virtio_pcm.c",
+    "sound/virtio/virtio_pcm.h",
+    # virtio_snd.ko files end
+    # virtio-gpu.ko files start
+    "drivers/gpu/drm/virtio/virtgpu_debugfs.c",
+    "drivers/gpu/drm/virtio/virtgpu_display.c",
+    "drivers/gpu/drm/virtio/virtgpu_drv.c",
+    "drivers/gpu/drm/virtio/virtgpu_drv.h",
+    "drivers/gpu/drm/virtio/virtgpu_fence.c",
+    "drivers/gpu/drm/virtio/virtgpu_gem.c",
+    "drivers/gpu/drm/virtio/virtgpu_ioctl.c",
+    "drivers/gpu/drm/virtio/virtgpu_kms.c",
+    "drivers/gpu/drm/virtio/virtgpu_object.c",
+    "drivers/gpu/drm/virtio/virtgpu_plane.c",
+    "drivers/gpu/drm/virtio/virtgpu_prime.c",
+    "drivers/gpu/drm/virtio/virtgpu_submit.c",
+    "drivers/gpu/drm/virtio/virtgpu_trace_points.c",
+    "drivers/gpu/drm/virtio/virtgpu_trace.h",
+    "drivers/gpu/drm/virtio/virtgpu_vq.c",
+    "drivers/gpu/drm/virtio/virtgpu_vram.c",
+    # virtio-gpu.ko files end
     "net/core/failover.c",
     "lib/crc-itu-t.c",
     "drivers/net/ethernet/realtek/r8169.h",
@@ -260,4 +294,14 @@ def define_common_upstream_files():
         ],
         outs = ["drivers/net/virtio_net_fixed.c"],
         cmd = "patch --follow-symlinks -o $@ -i $(execpath :drivers/net/virtio_net_fix.diff) $(execpath //common:drivers/net/virtio_net.c)",
+    )
+
+    native.genrule(
+        name = "patched-drivers/leds/trigger/ledtrig-netdev.c",
+        srcs = [
+            "//common:drivers/leds/trigger/ledtrig-netdev.c",
+            ":drivers/leds/ledtrig-netdev_fix.diff",
+        ],
+        outs = ["drivers/leds/trigger/ledtrig-netdev_fixed.c"],
+        cmd = "patch --follow-symlinks -o $@ -i $(execpath :drivers/leds/ledtrig-netdev_fix.diff) $(execpath //common:drivers/leds/trigger/ledtrig-netdev.c)",
     )

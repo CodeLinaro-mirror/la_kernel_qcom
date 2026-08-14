@@ -279,8 +279,7 @@ static int modem_notifier_cb(struct notifier_block *this, unsigned long code,
 				DHMS_MEM_PROC_MPSS_V01 &&
 				!memblock[i].guarantee &&
 				!memblock[i].client_request &&
-				memblock[i].allotted &&
-				!memblock[i].alloc_request) {
+				memblock[i].allotted) {
 
 				if (memblock[i].hyp_mapping) {
 					ret = shared_hyp_unmapping(i);
@@ -350,8 +349,9 @@ static void shared_hyp_mapping(int index)
 	}
 	ret = qcom_scm_assign_mem(mb->phy_addr, mb->size, source_vmlist,
 			      newvm, dest->num_vmids);
+	kfree(newvm);
 	if (ret != 0) {
-		dev_err(memsh_drv->dev, "memshare: qcom_scm_assign_mem failed size=%u err=%d\n",
+		dev_err(memsh_drv->dev, "memshare: qcom_scm_assign_mem failed size: %u, err: %d\n",
 				mb->size, ret);
 		return;
 	}

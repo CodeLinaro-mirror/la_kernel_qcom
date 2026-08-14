@@ -48,6 +48,7 @@ static const struct qcom_cc_desc gx_clkctl_kaanapali_desc = {
 	.config = &gx_clkctl_regmap_config,
 	.gdscs = gx_clkctl_gdscs,
 	.num_gdscs = ARRAY_SIZE(gx_clkctl_gdscs),
+	.use_rpm = true,
 };
 
 static const struct of_device_id gx_clkctl_kaanapali_match_table[] = {

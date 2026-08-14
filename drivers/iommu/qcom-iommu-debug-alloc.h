@@ -57,5 +57,6 @@ struct iommu_debug_mem *iommu_debug_mem_alloc_sgt(struct iommu_debug_usecase_dev
 void iommu_debug_mem_free(struct iommu_debug_usecase_device *dev, struct iommu_debug_mem *mem);
 
 extern const struct iommu_debug_allocator_ops standard_allocator_ops;
+extern const struct iommu_debug_allocator_ops secure_allocator_ops;
 
 #endif /* __DRIVERS_IOMMU_QCOM_IOMMU_DEBUG_ALLOC_H__ */
