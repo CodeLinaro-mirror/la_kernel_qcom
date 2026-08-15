@@ -328,3 +328,19 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v5.h",
         ],
     )
+
+    registry.register(
+        name = "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-glymur",
+        out = "phy-qcom-ufs-qmp-v4-glymur.ko",
+        config = "CONFIG_PHY_QCOM_UFS_V4_GLYMUR",
+        srcs = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs-i.h",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-glymur.c",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-glymur.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs",
+        ],
+    )
