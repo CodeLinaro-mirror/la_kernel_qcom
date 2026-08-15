@@ -29,6 +29,7 @@ enum dpin_cci_util_i2c_type {
 enum dpin_cci_util_i2c_freq_mode {
 	DPIN_CCI_UTIL_I2C_STANDARD_MODE = 0,
 	DPIN_CCI_UTIL_I2C_FAST_MODE,
+	DPIN_CCI_UTIL_I2C_CUSTOM_MODE,
 	DPIN_CCI_UTIL_I2C_FAST_PLUS_MODE,
 	DPIN_CCI_UTIL_I2C_MAX_MODES,
 };
@@ -221,7 +222,7 @@ struct dpin_cci_util_ctrl {
  * without any risk of operating on uninitialised state.
  */
 
-#define LT7911UXC_VERSION_NUM   0x20000
+#define LT7911UXC_VERSION_NUM   0x4020000
 #define LT7911_HDCPKEY_SIZE     32
 
 struct firmware;
@@ -259,6 +260,7 @@ int      cci_util_lt7911_reg_write(struct cci_util_handle *handle,
 				   struct dpin_cci_util_i2c_reg_array *reg_cfg, int reg_sz);
 void     cci_util_lt7911_enable_i2c(struct cci_util_handle *handle);
 void     cci_util_lt7911_disable_i2c(struct cci_util_handle *handle);
+void     cci_util_lt7911_release_cci(struct cci_util_handle *handle);
 int      cci_util_lt7911_get_information(struct cci_util_handle *handle,
 					 int *irq, int *width, int *height,
 					 int *fps, int *format, int *afreq, int *ach);
