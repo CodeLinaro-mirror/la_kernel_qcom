@@ -8,3 +8,13 @@ def register_modules(registry):
             "drivers/gpu/drm/bridge/lt9611uxc.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/gpu/drm/bridge/aux-bridge",
+        out = "aux-bridge.ko",
+        config = "CONFIG_DRM_AUX_BRIDGE",
+        srcs = [
+            # do not sort
+            "drivers/gpu/drm/bridge/aux-bridge.c",
+        ],
+    )

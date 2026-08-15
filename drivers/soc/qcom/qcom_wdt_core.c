@@ -35,6 +35,7 @@
 #include <asm/hardirq.h>
 #include <linux/suspend.h>
 #include <linux/notifier.h>
+#include <linux/kmsg_dump.h>
 
 #define MASK_SIZE        32
 
@@ -185,7 +186,8 @@ int qcom_wdt_pet_suspend(struct device *dev)
 	wdog_data->ops->reset_wdt(wdog_data);
 	del_timer_sync(&wdog_data->pet_timer);
 	if (wdog_data->wakeup_irq_enable) {
-		if (wdog_data->hibernate || (pm_suspend_target_state == PM_SUSPEND_MEM)) {
+		if (wdog_data->hibernate || (pm_suspend_target_state == PM_SUSPEND_MEM) ||
+				(pm_suspend_target_state == PM_SUSPEND_TO_IDLE)) {
 			wdog_data->ops->disable_wdt(wdog_data);
 			wdog_data->enabled = false;
 		}
@@ -233,7 +235,8 @@ int qcom_wdt_pet_resume(struct device *dev)
 	wdog_data->freeze_in_progress = false;
 	spin_unlock(&wdog_data->freeze_lock);
 	if (wdog_data->wakeup_irq_enable) {
-		if (wdog_data->hibernate || (pm_suspend_target_state == PM_SUSPEND_MEM)) {
+		if (wdog_data->hibernate || (pm_suspend_target_state == PM_SUSPEND_MEM) ||
+				(pm_suspend_target_state == PM_SUSPEND_TO_IDLE)) {
 			wdog_data->ops->set_bark_time(wdog_data->bark_time, wdog_data);
 			wdog_data->ops->set_bite_time(wdog_data->bark_time + 3 * 1000, wdog_data);
 			val |= BIT(UNMASKED_INT_EN);
@@ -709,6 +712,11 @@ static irqreturn_t qcom_wdt_bark_handler(int irq, void *dev_id)
 
 	if (wdog_dd->freeze_in_progress)
 		dev_info(wdog_dd->dev, "Suspend in progress\n");
+
+#if defined(CONFIG_ARCH_QTI_VM) && !defined(MODULE)
+	/* Dump logs to shared memory for QTVM */
+	kmsg_dump(KMSG_DUMP_OOPS);
+#endif
 
 	md_dump_process();
 	qcom_wdt_trigger_bite();

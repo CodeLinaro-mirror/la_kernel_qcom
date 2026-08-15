@@ -95,6 +95,26 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-bourtzi",
+        out = "pinctrl-bourtzi.ko",
+        config = "CONFIG_PINCTRL_BOURTZI",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-bourtzi.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
         name = "drivers/pinctrl/qcom/pinctrl-sun",
         out = "pinctrl-sun.ko",
         config = "CONFIG_PINCTRL_SUN",
@@ -410,12 +430,53 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-glymur",
+        out = "pinctrl-glymur.ko",
+        config = "CONFIG_PINCTRL_GLYMUR",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+            "drivers/pinctrl/qcom/pinctrl-glymur.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
         name = "drivers/pinctrl/qcom/pinctrl-seraph",
         out = "pinctrl-seraph.ko",
         config = "CONFIG_PINCTRL_SERAPH",
         srcs = [
             # do not sort
             "drivers/pinctrl/qcom/pinctrl-seraph.c",
+            "drivers/pinctrl/qcom/pinctrl-msm.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-msm",
+            "drivers/firmware/qcom/qcom-scm",
+            "drivers/virt/gunyah/gh_rm_drv",
+            "drivers/virt/gunyah/gh_msgq",
+            "drivers/virt/gunyah/gh_dbl",
+            "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/pinctrl/qcom/pinctrl-waipio",
+        out = "pinctrl-waipio.ko",
+        config = "CONFIG_PINCTRL_WAIPIO",
+        srcs = [
+            # do not sort
+            "drivers/pinctrl/qcom/pinctrl-waipio.c",
+            "drivers/pinctrl/qcom/pinctrl-waipio.h",
             "drivers/pinctrl/qcom/pinctrl-msm.h",
         ],
         deps = [

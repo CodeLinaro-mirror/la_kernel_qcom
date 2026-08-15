@@ -35,11 +35,14 @@
 #define BWMON_FEATURE_1MS	2103 /* For 1ms sampling rate */
 #define BWMON_FEATURE_HIST	2104 /* For Histogram sampling mode */
 #define BWMON_FEATURE_MULTIMEDIA	2107 /* For Multimedia masters */
+#define BUFFER_FILL_MS 100
 
 static struct bwprof_dev_data *bwprof_data;
 void __iomem *base_src;
+void __iomem *buffer_fill_status_src;
 struct bwprof_monitor_data *monitor_data;
 struct bwprof_hist_data *hist_data;
+struct buffer_fill_state *buffer_fill_status;
 
 static void reset_monitor_data(void)
 {
@@ -353,12 +356,10 @@ static ssize_t bwprof_available_config_show(struct config_item *item,
 	struct sampling_mode_info *mode;
 	u32 cnt = 0, j, i;
 	u8 k;
-	u32 samp_cnt;
 	const char *hw_name;
 
 	for (i = 0; i < bwprof_data->hw_cnt; i++) {
 		hw_node = bwprof_data->hw_node[i];
-		samp_cnt = hw_node->sampling_cnt;
 		if (hw_node->hw_type == BWPROF_DDR)
 			hw_name = "DDR";
 		else if (hw_node->hw_type == BWPROF_LLCC)
@@ -368,8 +369,10 @@ static ssize_t bwprof_available_config_show(struct config_item *item,
 
 		cnt += scnprintf(page + cnt, PAGE_SIZE - cnt, "\nhw_type: %s",
 				hw_name);
-		for (j = 0; j < samp_cnt; j++) {
+		for (j = 0; j < TOTAL_SAMPLING_MODE_TYPES; j++) {
 			mode = hw_node->default_mode_val[j];
+			if (!mode)
+				continue;
 			if (j == BWPROF_HIST)
 				cnt += scnprintf(page + cnt, PAGE_SIZE - cnt,
 					"\nsampling_ms: %dms hist masters :",
@@ -420,7 +423,18 @@ static ssize_t bwprof_enable_config_store(struct config_item *item,
 
 	bwprof_data->is_sampling_enable = enable ? true : false;
 
-	if (!enable)
+	if (bwprof_data->polling_mode) {
+		if (bwprof_data->is_sampling_enable) {
+			if (!hrtimer_active(&bwprof_data->bwprof_hrtimer))
+				hrtimer_start(&bwprof_data->bwprof_hrtimer,
+				ms_to_ktime(BUFFER_FILL_MS),
+				HRTIMER_MODE_REL_PINNED);
+		} else {
+			hrtimer_cancel(&bwprof_data->bwprof_hrtimer);
+		}
+	}
+
+	if (!bwprof_data->is_sampling_enable)
 		reset_monitor_data();
 
 	return count;
@@ -743,6 +757,11 @@ static void bwprof_mon_rx(struct mbox_client *client, void *msg)
 	trace_event();
 }
 
+static void bwprof_mon_rx_timer(void)
+{
+	bwprof_mon_rx(NULL, NULL);
+}
+
 static const struct config_item_type bwprof_subsys_type = {
 	.ct_attrs = bwprof_attrs,
 	.ct_owner   = THIS_MODULE,
@@ -870,6 +889,22 @@ int cpucp_bwprof_init(struct scmi_device *sdev)
 	return 0;
 }
 
+static enum hrtimer_restart bwprof_hrtimer_handler(struct hrtimer *timer)
+{
+	ktime_t now = ktime_get();
+
+	if (!atomic_read(&buffer_fill_status->state)) {
+		hrtimer_forward(timer, now, ms_to_ktime(1));
+		return HRTIMER_RESTART;
+	}
+
+	bwprof_mon_rx_timer();
+	atomic_set(&buffer_fill_status->state, 0);
+	hrtimer_forward(timer, now, ms_to_ktime(BUFFER_FILL_MS));
+
+	return HRTIMER_RESTART;
+}
+
 static int bwprof_dev_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -882,6 +917,7 @@ static int bwprof_dev_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	bwprof_data->dev = dev;
+	bwprof_data->polling_mode = false;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mem-base");
 	if (!res) {
@@ -905,13 +941,37 @@ static int bwprof_dev_probe(struct platform_device *pdev)
 	cl->tx_block = false;
 	cl->knows_txdone = true;
 	cl->rx_callback = bwprof_mon_rx;
+	bwprof_data->bwprof_hrtimer.function = NULL;
 
 	bwprof_data->ch = mbox_request_channel(cl, 0);
 	if (IS_ERR(bwprof_data->ch)) {
 		ret = PTR_ERR(bwprof_data->ch);
-		if (ret != -EPROBE_DEFER)
+		if ((ret == -ENODEV) || (ret == -ENOENT))
+			bwprof_data->polling_mode = true;
+		else if (ret != -EPROBE_DEFER) {
 			dev_err(dev, "Failed mbox_request_channel: %d\n", ret);
-		return ret;
+			return ret;
+		} else
+			return ret;
+	}
+
+	if (bwprof_data->polling_mode) {
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "buff-fill-base");
+		if (!res) {
+			dev_err(dev, "Failed to get buff-fill-base resource\n");
+			return -ENODEV;
+		}
+		buffer_fill_status_src = devm_ioremap_resource(&pdev->dev, res);
+		if (!buffer_fill_status_src) {
+			dev_err(dev, "ioremap failed for buffer-fill-base\n");
+			return -ENOMEM;
+		}
+
+		buffer_fill_status = (struct buffer_fill_state *)buffer_fill_status_src;
+		hrtimer_init(&bwprof_data->bwprof_hrtimer, CLOCK_MONOTONIC,
+				HRTIMER_MODE_REL);
+
+		bwprof_data->bwprof_hrtimer.function = bwprof_hrtimer_handler;
 	}
 
 	bwprof_data->inited = true;

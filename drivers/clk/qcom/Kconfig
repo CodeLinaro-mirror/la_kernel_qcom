@@ -751,6 +751,15 @@ config SC_DEBUGCC_X1E80100
 	  Say Y if you want to support the debug clocks such as clock
 	  measurement functionality.
 
+config SC_DEBUGCC_X1P42100
+	tristate "X1P42100 Debug Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the debug clock controller on Qualcomm Technologies, Inc
+	  X1P42100 devices.
+	  Say Y if you want to support the debug clocks such as clock
+	  measurement functionality.
+
 config SDW_GCC_MONACO
 	tristate "MONACO Global Clock Controller"
 	depends on COMMON_CLK_QCOM
@@ -1052,10 +1061,10 @@ config SXR_DEBUGCC_PIKACHU
 
 config SM_GPUCC_MALABAR
         tristate "Malabar Graphics Clock Controller"
-        select SM_GCC_MALABAR
+        depends on SM_GCC_MALABAR || SM_GCC_4450
         help
           Support for the graphics clock controller on Qualcomm Technologies, Inc
-          Malabar devices.
+          Malabar and Bourtzi devices.
           Say Y if you want to support graphics controller devices and
           functionality such as 3D graphics.
 
@@ -1144,6 +1153,15 @@ config CLK_SHIKRA_DEBUGCC
 	  Say Y if you want to support the debug clocks such as clock
 	  measurement functionality.
 
+config CLK_SHIKRA_AUDIOCORECC
+	tristate "Shikra Audiocore Clock Controller"
+	select CLK_SHIKRA_GCC
+	help
+	  Support for the audiocore clock controller on Qualcomm Technologies,
+	  Inc Shikra devices.
+	  Say Y if you want to use AudiocoreCC clocks required to support audio
+	  devices and it's functionality.
+
 config QCM_GCC_2290
 	tristate "QCM2290 Global Clock Controller"
 	select QCOM_GDSC
@@ -1180,5 +1198,109 @@ config QCM_DEBUGCC_2290
 	 QCM2290 devices.
 	 Say Y if you want to support the debug clocks such as
 	 clock measurement functionality.
+
+config CLK_GLYMUR_TCSRCC
+	tristate "GLYMUR TCSR Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the TCSR clock controller on Qualcomm Technologies, Inc
+	  Glymur devices.
+	  Say Y if you want to use peripheral devices such as USB/PCIe/EDP.
+	  This controller manages clocks used by various on-chip peripherals.
+
+config CLK_GLYMUR_EVACC
+	tristate "Glymur EVA Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_GLYMUR_GCC
+	help
+	  Support for the Enhanced Video Analytics clock controller on Glymur devices.
+	  Say Y if you want to support EVA(Enhanced Video Analytics) and functionality
+	  such as vision processing.
+
+config CLK_GLYMUR_GCC
+	tristate "GLYMUR Global Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  Glymur devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI,
+	  I2C, USB, UFS, SDCC, etc.
+
+config CLK_GLYMUR_VIDEOCC
+	tristate "Glymur Video Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_GLYMUR_GCC
+	help
+	  Support for the video clock controller on Glymur devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode and decode.
+
+config CLK_GLYMUR_CAMCC
+	tristate "Glymur Camera Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_GLYMUR_GCC
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc
+	  Glymur devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config CLK_GLYMUR_DISPCC
+	tristate "GLYMUR Display Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_GLYMUR_GCC
+	help
+	  Support for the display clock controllers on Qualcomm
+	  Technologies, Inc. GLYMUR devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config CLK_GLYMUR_GPUCC
+	tristate "GLYMUR Graphics Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select CLK_GLYMUR_GCC
+	help
+	  Support for the graphics clock controller on GLYMUR devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SM_GCC_8450
+	tristate "SM8450 Global Clock Controller"
+	depends on ARM64 || COMPILE_TEST
+	select QCOM_GDSC
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SM8450 devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI,
+	  I2C, USB, UFS, SDCC, PCIe etc.
+
+config SM_DISPCC_8450
+	tristate "SM8450 Display Clock Controller"
+	depends on SM_GCC_8450
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc
+	  SM8450 devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config SM_CAMCC_8450
+	tristate "SM8450 Camera Clock Controller"
+	select SM_GCC_8450
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  SM8450 devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config SM_VIDEOCC_8450
+	tristate "SM8450 Video Clock Controller"
+	select SM_GCC_8450
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  SM8450 devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
 
 endif

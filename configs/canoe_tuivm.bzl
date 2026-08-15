@@ -1,5 +1,6 @@
 canoe_tuivm_config = {
     "CONFIG_ARCH_ALOR": "y",
+    "CONFIG_ARCH_BOURTZI": "y",
     "CONFIG_ARCH_CANOE": "y",
     "CONFIG_ARCH_CHORA": "y",
     "CONFIG_ARCH_QTI_VM": "y",
@@ -28,6 +29,7 @@ canoe_tuivm_config = {
     "CONFIG_INTERCONNECT_CLK": "m",
     "CONFIG_MSM_GPI_DMA": "y",
     "CONFIG_PINCTRL_ALOR": "m",
+    "CONFIG_PINCTRL_BOURTZI": "m",
     "CONFIG_PINCTRL_CANOE": "m",
     "CONFIG_PINCTRL_CHORA": "m",
     "CONFIG_PINCTRL_MSM": "m",
@@ -56,6 +58,7 @@ canoe_tuivm_config = {
     "CONFIG_QCOM_SOC_WATCHDOG": "m",
     "CONFIG_QCOM_TLMM_VM_IRQCHIP": "m",
     "CONFIG_QCOM_TZMEM": "m",
+    "CONFIG_QCOM_TZMEM_LOW_MEMORY": "y",
     "CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE": "y",
     "CONFIG_QCOM_VM_DMESG_DUMPER": "m",
     "CONFIG_QCOM_WATCHDOG_WAKEUP_ENABLE": "n",

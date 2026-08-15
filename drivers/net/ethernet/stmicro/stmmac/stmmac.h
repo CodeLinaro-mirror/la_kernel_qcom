@@ -5,6 +5,7 @@
 
   Author: Giuseppe Cavallaro <peppe.cavallaro@st.com>
 *******************************************************************************/
+// Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #ifndef __STMMAC_H__
 #define __STMMAC_H__
@@ -34,6 +35,7 @@ struct stmmac_resources {
 	int sfty_irq;
 	int sfty_ce_irq;
 	int sfty_ue_irq;
+	int tx_rx_irq[STMMAC_CH_MAX];
 	int rx_irq[MTL_MAX_RX_QUEUES];
 	int tx_irq[MTL_MAX_TX_QUEUES];
 };
@@ -58,10 +60,14 @@ struct stmmac_tx_info {
 #define STMMAC_TBS_AVAIL	BIT(0)
 #define STMMAC_TBS_EN		BIT(1)
 
+#define BOARD_UNKNOWN -1
 #define AIR_BOARD 1
 #define STAR_BOARD 2
+
+#define PHY_UNKNOWN -1
 #define PHY_1G 1
 #define PHY_25G 2
+#define SWITCH 3
 
 /* Frequently used values are kept adjacent for cache effect */
 struct stmmac_tx_queue {
@@ -351,6 +357,7 @@ struct stmmac_priv {
 	int sfty_irq;
 	int sfty_ce_irq;
 	int sfty_ue_irq;
+	int tx_rx_irq[STMMAC_CH_MAX];
 	int rx_irq[MTL_MAX_RX_QUEUES];
 	int tx_irq[MTL_MAX_TX_QUEUES];
 	/*irq name */
@@ -360,6 +367,7 @@ struct stmmac_priv {
 	char int_name_sfty[IFNAMSIZ + 10];
 	char int_name_sfty_ce[IFNAMSIZ + 10];
 	char int_name_sfty_ue[IFNAMSIZ + 10];
+	char int_name_tx_rx_irq[STMMAC_CH_MAX][IFNAMSIZ + 18];
 	char int_name_rx_irq[MTL_MAX_TX_QUEUES][IFNAMSIZ + 14];
 	char int_name_tx_irq[MTL_MAX_TX_QUEUES][IFNAMSIZ + 18];
 
@@ -427,6 +435,7 @@ int stmmac_reinit_queues(struct net_device *dev, u32 rx_cnt, u32 tx_cnt);
 int stmmac_reinit_ringparam(struct net_device *dev, u32 rx_size, u32 tx_size);
 int stmmac_bus_clks_config(struct stmmac_priv *priv, bool enabled);
 void stmmac_fpe_apply(struct stmmac_priv *priv);
+void stmmac_handle_switch_reset(struct stmmac_priv *priv);
 
 static inline bool stmmac_xdp_is_enabled(struct stmmac_priv *priv)
 {

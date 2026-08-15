@@ -4,6 +4,7 @@ targets = [
     #"gen3auto",
     "autogvm",
     "bengal",
+    "glymur",
     "hamoa",
     "hamoa_la",
     "lahaina",
@@ -11,8 +12,11 @@ targets = [
     "monaco",
     "seraph",
     "shikra",
+    "shikra_auto",
+    "shikra_tiny",
     "sun",
     "vienna",
+    "waipio",
 ]
 
 la_variants = [
@@ -26,6 +30,7 @@ le_targets = [
     #"sun-allyes",
     "alor-le",
     "autogvm",
+    "bengal-le",
     "vienna-le",
 ]
 
@@ -46,6 +51,7 @@ vm_target_bases = [
     "canoe",
     "malabar",
     "seraph",
+    "shikra",
 ]
 
 vm_targets = [

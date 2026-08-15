@@ -21,7 +21,7 @@ def define_hamoa():
             "kvm-arm.mode=protected",
             "arm64_sw.hvhe=0",
             "id_aa64mmfr1.vh=0",
-            "kvm-arm.protected_modules=rpmh-regulator.ko,clk-rpmh.ko,gcc-x1e80100.ko,gpucc-x1e80100.ko,pkvm-geni,pkvm-smc-filter,qcom_smmu_v2_v3_dispatcher",
+            "kvm-arm.protected_modules=rpmh-regulator.ko,clk-rpmh.ko,gcc-x1e80100.ko,gpucc-x1e80100.ko,qnoc-x1e80100.ko,pkvm-geni,pkvm-smc-filter,qcom_smmu_v2_v3_dispatcher",
             "cpufreq.default_governor=performance",
             "log_buf_len=512K",
             "irqaffinity=0-3",

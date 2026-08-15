@@ -28,9 +28,9 @@
 #define CX_GMU_CBCR_WAKE_MASK		0xf
 #define CX_GMU_CBCR_WAKE_SHIFT		8
 
-static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L1 + 1, 1, vdd_corner);
-static DEFINE_VDD_REGULATORS(vdd_gfx, VDD_HIGH_L1 + 1, 1, vdd_corner);
-static DEFINE_VDD_REGULATORS(vdd_mx, VDD_HIGH_L1 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L2 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_gfx, VDD_HIGH_L2 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_mx, VDD_HIGH_L2 + 1, 1, vdd_corner);
 
 static struct clk_vdd_class *gpu_cc_malabar_regulators[] = {
 	&vdd_cx,
@@ -98,11 +98,11 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 	},
 };
 
-/* 690.0 MHz Configuration */
+/* 1050.0 MHz Configuration */
 static const struct alpha_pll_config gpu_cc_pll1_config = {
-	.l = 0x23,
+	.l = 0x36,
 	.cal_l = 0x44,
-	.alpha = 0xf000,
+	.alpha = 0xb000,
 	.config_ctl_val = 0x20485699,
 	.config_ctl_hi_val = 0x00182261,
 	.config_ctl_hi1_val = 0x32aa299c,
@@ -213,6 +213,22 @@ static const struct freq_tbl ftbl_gpu_cc_gx_gfx3d_clk_src[] = {
 	F(770000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(840000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(950000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(1050000000, P_GPU_CC_PLL1_OUT_EVEN, 1, 0, 0),
+	{ }
+};
+
+static const struct freq_tbl ftbl_gpu_cc_gx_gfx3d_clk_src_bourtzi[] = {
+	F(215000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(266000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(328000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(390000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(440000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(490000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(600000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(650000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(770000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(840000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(950000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	{ }
 };
 
@@ -246,7 +262,8 @@ static struct clk_rcg2 gpu_cc_gx_gfx3d_clk_src = {
 			[VDD_NOMINAL] = 650000000,
 			[VDD_NOMINAL_L1] = 770000000,
 			[VDD_HIGH] = 840000000,
-			[VDD_HIGH_L1] = 950000000},
+			[VDD_HIGH_L1] = 950000000,
+			[VDD_HIGH_L2] = 1050000000},
 	},
 };
 
@@ -462,9 +479,30 @@ static const struct qcom_cc_desc gpu_cc_malabar_desc = {
 
 static const struct of_device_id gpu_cc_malabar_match_table[] = {
 	{ .compatible = "qcom,malabar-gpucc" },
+	{ .compatible = "qcom,bourtzi-gpucc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_malabar_match_table);
+
+static void gpu_cc_malabar_fixup_bourtzi(void)
+{
+	gpu_cc_gx_gfx3d_clk_src.freq_tbl = ftbl_gpu_cc_gx_gfx3d_clk_src_bourtzi;
+}
+
+static int gpu_cc_malabar_fixup(struct platform_device *pdev)
+{
+	const char *compat = NULL;
+	int compatlen = 0;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || (compatlen <= 0))
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,bourtzi-gpucc"))
+		gpu_cc_malabar_fixup_bourtzi();
+
+	return 0;
+}
 
 static int gpu_cc_malabar_probe(struct platform_device *pdev)
 {
@@ -475,6 +513,10 @@ static int gpu_cc_malabar_probe(struct platform_device *pdev)
 	regmap = qcom_cc_map(pdev, &gpu_cc_malabar_desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
+
+	ret = gpu_cc_malabar_fixup(pdev);
+	if (ret)
+		return ret;
 
 	clk_lucid_evo_pll_configure(&gpu_cc_pll0, regmap, &gpu_cc_pll0_config);
 	clk_lucid_evo_pll_configure(&gpu_cc_pll1, regmap, &gpu_cc_pll1_config);

@@ -414,7 +414,7 @@ static void eva_cc_alor_fixup(struct regmap *regmap)
 
 static void eva_cc_whale_fixup(struct regmap *regmap)
 {
-	eva_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
+	eva_cc_pll0_config.config_ctl_hi_val = 0x0a826060;
 	eva_cc_pll0_config.cal_l = 0x48;
 }
 

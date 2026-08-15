@@ -190,7 +190,7 @@ static int qcom_mhi_qrtr_probe(struct mhi_device *mhi_dev,
 	}
 	complete_all(&qdev->prepared);
 
-	dev_dbg(qdev->dev, "Qualcomm MHI QRTR driver probed\n");
+	dev_dbg(qdev->dev, "Qualcomm MHI QRTR driver probed for channel: %s\n", id->chan);
 
 	return 0;
 }
@@ -210,6 +210,14 @@ static void qcom_mhi_qrtr_remove(struct mhi_device *mhi_dev)
 
 static const struct mhi_device_id qcom_mhi_qrtr_id_table[] = {
 	{ .chan = "IPCR" },
+	{ .chan = "IPCR_NSP0" },
+	{ .chan = "IPCR_NSP1" },
+	{ .chan = "IPCR_NSP2" },
+	{ .chan = "IPCR_NSP3" },
+	{ .chan = "IPCR_NSP4" },
+	{ .chan = "IPCR_NSP5" },
+	{ .chan = "IPCR_NSP6" },
+	{ .chan = "IPCR_NSP7" },
 	{}
 };
 MODULE_DEVICE_TABLE(mhi, qcom_mhi_qrtr_id_table);

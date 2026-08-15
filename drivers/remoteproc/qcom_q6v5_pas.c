@@ -63,17 +63,27 @@
 #define EARLY_BOOT_RETRY_COUNT 5
 #define EARLY_BOOT_RETRY_INTERVAL_MS 1000
 
+/* Bit set in the early_boot SMEM item when the bootloader boots the subsystem. */
+#define EARLY_BOOT_SMEM_BIT		BIT(0)
+
 struct q6_subdev {
 	const char *firmware_name;
+	const char *dtb_firmware_name;
 	int pas_id;
+	int dtb_pas_id;
 	char *ssr_name;
-	bool is_dtb;
 	const struct firmware *firmware;
+	const struct firmware *dtb_firmware;
 	phys_addr_t mem_phys;
+	phys_addr_t dtb_mem_phys;
 	phys_addr_t mem_reloc;
+	phys_addr_t dtb_mem_reloc;
 	void *mem_region;
+	void *dtb_mem_region;
 	size_t mem_size;
+	size_t dtb_mem_size;
 	struct qcom_scm_pas_metadata pas_metadata;
+	struct qcom_scm_pas_metadata dtb_pas_metadata;
 	struct device *dev;
 	struct list_head dump_segments;
 };
@@ -101,6 +111,7 @@ struct adsp_data {
 	const char *sysmon_name;
 	int ssctl_id;
 	unsigned int smem_host_id;
+	unsigned int early_boot_smem_id;
 
 	int region_assign_idx;
 	int region_assign_count;
@@ -386,9 +397,15 @@ static int adsp_unprepare(struct rproc *rproc)
 	qcom_scm_pas_metadata_release(&adsp->pas_metadata, dev);
 	if (adsp->dtb_pas_id)
 		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
-	if (adsp->q6_subdev)
-		for (i = 0; i < adsp->q6_subdev_count; i++)
-			qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata, dev);
+	if (adsp->q6_subdev) {
+		for (i = 0; i < adsp->q6_subdev_count; i++) {
+			qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata,
+						      dev);
+			if (adsp->q6_subdev[i].dtb_firmware_name)
+				qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].dtb_pas_metadata,
+							      dev);
+		}
+	}
 
 	return 0;
 }
@@ -450,37 +467,107 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 
 	if (adsp->q6_subdev) {
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
+			if (adsp->q6_subdev[i].dtb_firmware_name) {
+				ret = request_firmware(&adsp->q6_subdev[i].dtb_firmware,
+					adsp->q6_subdev[i].dtb_firmware_name, adsp->dev);
+				if (ret) {
+					dev_err(adsp->dev, "request_firmware failed for %s: %d\n",
+						adsp->q6_subdev[i].dtb_firmware_name, ret);
+					goto release_q6_subdev_all_previous;
+				}
+				ret = qcom_mdt_pas_init(adsp->dev, adsp->q6_subdev[i].dtb_firmware,
+							adsp->q6_subdev[i].dtb_firmware_name,
+							adsp->q6_subdev[i].dtb_pas_id,
+							adsp->q6_subdev[i].dtb_mem_phys,
+							&adsp->q6_subdev[i].dtb_pas_metadata,
+							adsp->dma_phys_below_32b);
+				if (ret)
+					goto release_q6_subdev_dtb_firmware_current;
+
+				ret = qcom_mdt_load_no_init(adsp->dev,
+							    adsp->q6_subdev[i].dtb_firmware,
+							    adsp->q6_subdev[i].dtb_firmware_name,
+							    adsp->q6_subdev[i].dtb_pas_id,
+							    adsp->q6_subdev[i].dtb_mem_region,
+							    adsp->q6_subdev[i].dtb_mem_phys,
+							    adsp->q6_subdev[i].dtb_mem_size,
+							    &adsp->q6_subdev[i].dtb_mem_reloc);
+				if (ret)
+					goto release_q6_subdev_dtb_metadata_current;
+			}
+
 			ret = request_firmware(&adsp->q6_subdev[i].firmware,
 				adsp->q6_subdev[i].firmware_name, adsp->dev);
 			if (ret) {
 				dev_err(adsp->dev, "request_firmware failed for %s: %d\n",
 					adsp->q6_subdev[i].firmware_name, ret);
-				goto release_dtb_metadata;
+				goto release_q6_subdev_dtb_metadata_current;
 			}
 			ret = qcom_mdt_pas_init(adsp->dev, adsp->q6_subdev[i].firmware,
 				adsp->q6_subdev[i].firmware_name, adsp->q6_subdev[i].pas_id,
 				adsp->q6_subdev[i].mem_phys, &adsp->q6_subdev[i].pas_metadata,
 				adsp->dma_phys_below_32b);
 			if (ret)
-				goto release_q6_subdev_firmware;
+				goto release_q6_subdev_firmware_current;
 
-			ret = qcom_mdt_load_no_init(adsp->dev, adsp->q6_subdev[i].firmware,
-					adsp->q6_subdev[i].firmware_name, adsp->q6_subdev[i].pas_id,
-					adsp->q6_subdev[i].mem_region, adsp->q6_subdev[i].mem_phys,
-					adsp->q6_subdev[i].mem_size, &adsp->q6_subdev[i].mem_reloc);
+			ret = qcom_mdt_load_no_init(adsp->dev,
+						    adsp->q6_subdev[i].firmware,
+						    adsp->q6_subdev[i].firmware_name,
+						    adsp->q6_subdev[i].pas_id,
+						    adsp->q6_subdev[i].mem_region,
+						    adsp->q6_subdev[i].mem_phys,
+						    adsp->q6_subdev[i].mem_size,
+						    &adsp->q6_subdev[i].mem_reloc);
 			if (ret)
-				goto release_q6_subdev_metadata;
+				goto release_q6_subdev_metadata_current;
 		}
 	}
 	goto exit_load;
 
-release_q6_subdev_metadata:
-	if (adsp->q6_subdev)
-		for (idx = 0; idx <= i; idx++)
-			qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata, dev);
-release_q6_subdev_firmware:
-	for (idx = 0; idx <= i; idx++)
+/* Clean up the failing subdev's resources */
+release_q6_subdev_metadata_current:
+	qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata, dev);
+
+release_q6_subdev_firmware_current:
+	if (adsp->q6_subdev[i].firmware) {
 		release_firmware(adsp->q6_subdev[i].firmware);
+		adsp->q6_subdev[i].firmware = NULL;
+	}
+
+release_q6_subdev_dtb_metadata_current:
+	if (adsp->q6_subdev[i].dtb_firmware_name)
+		qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].dtb_pas_metadata, dev);
+
+release_q6_subdev_dtb_firmware_current:
+	if (adsp->q6_subdev[i].dtb_firmware_name && adsp->q6_subdev[i].dtb_firmware) {
+		release_firmware(adsp->q6_subdev[i].dtb_firmware);
+		adsp->q6_subdev[i].dtb_firmware = NULL;
+	}
+
+/* Clean up resources for all successful subdev */
+release_q6_subdev_all_previous:
+	if (adsp->q6_subdev) {
+		for (idx = 0; idx < i; idx++) {
+			qcom_scm_pas_metadata_release(&adsp->q6_subdev[idx].pas_metadata, dev);
+
+			if (adsp->q6_subdev[idx].firmware) {
+				release_firmware(adsp->q6_subdev[idx].firmware);
+				adsp->q6_subdev[idx].firmware = NULL;
+			}
+
+			if (adsp->q6_subdev[idx].dtb_firmware_name)
+				qcom_scm_pas_metadata_release(
+						&adsp->q6_subdev[idx].dtb_pas_metadata,
+						dev);
+
+			if (adsp->q6_subdev[idx].dtb_firmware_name &&
+			    adsp->q6_subdev[idx].dtb_firmware) {
+				release_firmware(adsp->q6_subdev[idx].dtb_firmware);
+				adsp->q6_subdev[idx].dtb_firmware = NULL;
+			}
+		}
+	}
+
 release_dtb_metadata:
 	if (adsp->dtb_pas_id && adsp->dma_phys_below_32b)
 		qcom_scm_pas_shutdown(adsp->dtb_pas_id);
@@ -488,7 +575,8 @@ release_dtb_metadata:
 	if (adsp->dtb_pas_id)
 		qcom_scm_pas_metadata_release(&adsp->dtb_pas_metadata, dev);
 release_dtb_firmware:
-	release_firmware(adsp->dtb_firmware);
+	if (adsp->dtb_firmware)
+		release_firmware(adsp->dtb_firmware);
 
 exit_load:
 	trace_rproc_qcom_event(dev_name(adsp->dev), "adsp_load", "exit");
@@ -640,6 +728,65 @@ static void subdev_da_to_va(struct qcom_adsp *adsp, struct q6_subdev *subdev)
 	}
 }
 
+static void adsp_update_subdev_coredump_segments(struct qcom_adsp *adsp,
+						 struct q6_subdev *subdev)
+{
+	/*
+	 * Drop any segments left from a previous SSR so the table is rebuilt
+	 * from scratch for this recovery cycle.
+	 */
+	coredump_cleanup(&subdev->dump_segments);
+	if (register_dump_segments(&subdev->dump_segments, subdev->firmware) < 0) {
+		/*
+		 * register_dump_segments() may have added segments before
+		 * failing; discard the partial list so stale/incomplete
+		 * segments are not used during dump collection.
+		 */
+		dev_err(adsp->dev, "failed to register dump segments for subdev %s\n",
+			subdev->firmware_name);
+		coredump_cleanup(&subdev->dump_segments);
+		return;
+	}
+
+	subdev_da_to_va(adsp, subdev);
+}
+
+static void adsp_add_subdev_coredump_segments(struct qcom_adsp *adsp)
+{
+	int i;
+
+	if (!adsp->q6_subdev)
+		return;
+
+	for (i = 0; i < adsp->q6_subdev_count; i++)
+		adsp_update_subdev_coredump_segments(adsp, &adsp->q6_subdev[i]);
+}
+
+static void adsp_attach_subdev_coredump_segments(struct qcom_adsp *adsp)
+{
+	int i, ret;
+
+	if (!adsp->q6_subdev)
+		return;
+
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		ret = request_firmware(&adsp->q6_subdev[i].firmware,
+				       adsp->q6_subdev[i].firmware_name,
+				       adsp->dev);
+		if (ret) {
+			dev_err(adsp->dev,
+				"request_firmware failed for subdev %s during attach: %d\n",
+				adsp->q6_subdev[i].firmware_name, ret);
+			continue;
+		}
+
+		adsp_update_subdev_coredump_segments(adsp, &adsp->q6_subdev[i]);
+
+		release_firmware(adsp->q6_subdev[i].firmware);
+		adsp->q6_subdev[i].firmware = NULL;
+	}
+}
+
 static int adsp_start(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
@@ -709,20 +856,18 @@ static int adsp_start(struct rproc *rproc)
 	}
 
 	/* prepare subdev coredump segment table */
-	if (adsp->q6_subdev) {
-		for (i = 0; i < adsp->q6_subdev_count; i++) {
-			coredump_cleanup(&adsp->q6_subdev[i].dump_segments);
-			if (register_dump_segments(&adsp->q6_subdev[i].dump_segments,
-						adsp->q6_subdev[i].firmware) < 0) {
-				coredump_cleanup(&adsp->q6_subdev[i].dump_segments);
-				continue;
-			}
-			subdev_da_to_va(adsp, &adsp->q6_subdev[i]);
-		}
-	}
+	adsp_add_subdev_coredump_segments(adsp);
 
 	if (adsp->q6_subdev) {
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
+			if (adsp->q6_subdev[i].dtb_firmware_name) {
+				ret = qcom_scm_pas_auth_and_reset(adsp->q6_subdev[i].dtb_pas_id);
+				if (ret)
+					panic(
+					      "Panicking, auth and reset failed for subdev %s ret=%d\n",
+					      adsp->q6_subdev[i].dtb_firmware_name, ret);
+			}
+
 			ret = qcom_scm_pas_auth_and_reset(adsp->q6_subdev[i].pas_id);
 			if (ret)
 				panic("Panicking, auth and reset failed for subdev %s ret=%d\n",
@@ -818,6 +963,13 @@ exit_start:
 		for (i = 0; i < adsp->q6_subdev_count; i++) {
 			qcom_scm_pas_metadata_release(&adsp->q6_subdev[i].pas_metadata, dev);
 			release_firmware(adsp->q6_subdev[i].firmware);
+
+			if (adsp->q6_subdev[i].dtb_firmware_name) {
+				qcom_scm_pas_metadata_release(
+						&adsp->q6_subdev[i].dtb_pas_metadata,
+						dev);
+				release_firmware(adsp->q6_subdev[i].dtb_firmware);
+			}
 		}
 	}
 
@@ -1198,6 +1350,12 @@ static int adsp_stop(struct rproc *rproc)
 			if (ret)
 				panic("Panicking, remoteproc %s subdev fw failed to shutdown.\n",
 						adsp->q6_subdev[i].firmware_name);
+			if (adsp->q6_subdev[i].dtb_firmware_name) {
+				ret = qcom_scm_pas_shutdown(adsp->q6_subdev[i].dtb_pas_id);
+				if (ret)
+					panic("Panicking, remoteproc %s subdev fw failed to shutdown.\n",
+							adsp->q6_subdev[i].dtb_firmware_name);
+			}
 		}
 	}
 
@@ -1353,6 +1511,8 @@ static int adsp_attach(struct rproc *rproc)
 		} else {
 			adsp_add_coredump_segments(adsp, adsp->firmware);
 		}
+
+		adsp_attach_subdev_coredump_segments(adsp);
 	}
 
 	return ret;
@@ -1536,7 +1696,8 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 {
 	struct reserved_mem *rmem;
 	struct device_node *node;
-	int i;
+	int i, mem_idx;
+	bool has_dtb = false;
 
 	node = of_parse_phandle(adsp->dev->of_node, "memory-region", 0);
 	if (!node) {
@@ -1585,14 +1746,19 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 		return -EBUSY;
 	}
 
-	if (!adsp->q6_subdev)
+	if (!adsp->q6_subdev || !adsp->q6_subdev_count)
 		return 0;
 
-	for (i = 0; i < adsp->q6_subdev_count; i++) {
-		node = of_parse_phandle(adsp->dev->of_node, "subdev-memory-region", i);
+	if (adsp->q6_subdev[0].dtb_firmware_name)
+		has_dtb = true;
 
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		mem_idx = has_dtb ? (i * 2) : i;
+		node = of_parse_phandle(adsp->dev->of_node, "subdev-memory-region", mem_idx);
 		if (!node) {
-			dev_err(adsp->dev, "no subdev-memory-region specified for offset %d\n", i);
+			dev_err(adsp->dev,
+				"no subdev-memory-region at index %d for subdev %d\n",
+				mem_idx, i);
 			return -EINVAL;
 		}
 		rmem = of_reserved_mem_lookup(node);
@@ -1601,8 +1767,8 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 			dev_err(adsp->dev, "unable to resolve subdev-memory-region\n");
 			return -EINVAL;
 		}
-		adsp->q6_subdev[i].mem_phys = rmem->base;
 
+		adsp->q6_subdev[i].mem_phys = rmem->base;
 		adsp->q6_subdev[i].mem_size = rmem->size;
 		adsp->q6_subdev[i].mem_region = devm_ioremap_wc(adsp->dev,
 			adsp->q6_subdev[i].mem_phys, adsp->q6_subdev[i].mem_size);
@@ -1610,6 +1776,38 @@ static int adsp_alloc_memory_region(struct qcom_adsp *adsp)
 			dev_err(adsp->dev, "unable to map subdev-memory region: %pa+%zx\n",
 				&rmem->base, adsp->q6_subdev[i].mem_size);
 			return -EBUSY;
+		}
+
+		if (has_dtb) {
+			mem_idx = (i * 2) + 1;
+			node = of_parse_phandle(adsp->dev->of_node,
+						"subdev-memory-region",
+						mem_idx);
+
+			if (!node) {
+				dev_err(adsp->dev,
+					"no subdev-memory-region at index %d for subdev %d\n",
+					mem_idx, i);
+				return -EINVAL;
+			}
+
+			rmem = of_reserved_mem_lookup(node);
+			of_node_put(node);
+			if (!rmem) {
+				dev_err(adsp->dev, "unable to resolve subdev-memory-region\n");
+				return -EINVAL;
+			}
+			adsp->q6_subdev[i].dtb_mem_phys = rmem->base;
+			adsp->q6_subdev[i].dtb_mem_size = rmem->size;
+			adsp->q6_subdev[i].dtb_mem_region = devm_ioremap_wc(adsp->dev,
+					adsp->q6_subdev[i].dtb_mem_phys,
+					adsp->q6_subdev[i].dtb_mem_size);
+			if (!adsp->q6_subdev[i].dtb_mem_region) {
+				dev_err(adsp->dev,
+					"unable to map subdev-memory region: %pa+%zx\n",
+					&rmem->base, adsp->q6_subdev[i].dtb_mem_size);
+				return -EBUSY;
+			}
 		}
 	}
 
@@ -1675,7 +1873,10 @@ EXPORT_SYMBOL_GPL(qcom_rproc_update_recovery_status);
 static void adsp_parse_subdev_fw(struct qcom_adsp *adsp)
 {
 	const char *subdev_fw_name = NULL;
-	int i, count, ret;
+
+	int i, count, ret, fw_idx;
+	int fw_count = 0, dtb_fw_count = 0;
+	bool has_dtb = false;
 
 	if (!adsp->q6_subdev || !adsp->q6_subdev_count)
 		return;
@@ -1684,16 +1885,54 @@ static void adsp_parse_subdev_fw(struct qcom_adsp *adsp)
 	if (count <= 0)
 		return;
 
-	adsp->q6_subdev_count = min_t(int, adsp->q6_subdev_count, count);
-	for (i = 0; i < adsp->q6_subdev_count; i++) {
+	for (i = 0; i < count; i++) {
 		ret = of_property_read_string_index(adsp->dev->of_node,
 			"subdev-firmware-name", i, &subdev_fw_name);
 		if (ret < 0) {
-			dev_err(adsp->dev, "Failed to read subdev firmware: %d\n", ret);
+			dev_err(adsp->dev, "Failed to read subdev firmware at index %d: %d\n",
+				i, ret);
+			return;
+		}
+
+		if (strstr(subdev_fw_name, "_dtb"))
+			dtb_fw_count++;
+		else
+			fw_count++;
+	}
+
+	if (dtb_fw_count > 0) {
+		if (dtb_fw_count != fw_count) {
+			dev_err(adsp->dev,
+				"Invalid firmware count: %d firmware, %d DTB\n", fw_count,
+				dtb_fw_count);
+			return;
+		}
+		has_dtb = true;
+	}
+
+	adsp->q6_subdev_count = min_t(int, fw_count, adsp->q6_subdev_count);
+
+	for (i = 0; i < adsp->q6_subdev_count; i++) {
+		fw_idx = has_dtb ? (i * 2) : i;
+		ret = of_property_read_string_index(adsp->dev->of_node,
+			"subdev-firmware-name", fw_idx, &subdev_fw_name);
+		if (ret < 0) {
+			dev_err(adsp->dev, "Failed to read firmware for subdev[%d]: %d\n", i, ret);
 			return;
 		}
 		adsp->q6_subdev[i].firmware_name = subdev_fw_name;
-		subdev_fw_name = NULL;
+
+		if (has_dtb) {
+			fw_idx = (i * 2) + 1;
+			ret = of_property_read_string_index(adsp->dev->of_node,
+				"subdev-firmware-name", fw_idx, &subdev_fw_name);
+			if (ret < 0) {
+				dev_err(adsp->dev, "Failed to read DTB for subdev[%d]: %d\n",
+					i, ret);
+				return;
+			}
+			adsp->q6_subdev[i].dtb_firmware_name = subdev_fw_name;
+		}
 	}
 }
 
@@ -1798,6 +2037,43 @@ static int q6v5_debugfs_init(struct qcom_q6v5 *q6v5)
 	return 0;
 }
 
+/**
+ * adsp_use_early_boot() - decide whether to take the early-boot path
+ * @adsp: PAS remoteproc instance to query
+ * @early_boot: subsystem is statically flagged for the early-boot path
+ * @early_boot_smem_id: per-subsystem SMEM item id, or 0 if unused
+ *
+ * The early-boot path is used when the subsystem is statically flagged for it
+ * (@early_boot), or when the bootloader advertises at runtime that it has
+ * already brought the subsystem out of reset. The latter is published in bit 0
+ * of the per-subsystem SMEM item @early_boot_smem_id, which lives in the
+ * subsystem's own SMEM host partition.
+ *
+ * Return: true if the early-boot path should be taken, false otherwise.
+ */
+static bool adsp_use_early_boot(struct qcom_adsp *adsp, bool early_boot,
+				unsigned int early_boot_smem_id)
+{
+	size_t size = 0;
+	u32 *flag;
+
+	if (early_boot)
+		return true;
+
+	if (!early_boot_smem_id)
+		return false;
+
+	flag = qcom_smem_get(adsp->smem_host_id, early_boot_smem_id, &size);
+	if (IS_ERR(flag)) {
+		dev_err(adsp->dev,
+			"failed to read early-boot SMEM flag (host=%u item=%u err=%pe size=%zu)\n",
+			adsp->smem_host_id, early_boot_smem_id, flag, size);
+		return false;
+	}
+
+	return !!(*flag & EARLY_BOOT_SMEM_BIT);
+}
+
 static int adsp_probe(struct platform_device *pdev)
 {
 	const struct adsp_data *desc;
@@ -1876,6 +2152,10 @@ static int adsp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, adsp);
 
+	/* Take the early-boot path only if the bootloader booted the subsystem. */
+	adsp->q6v5.early_boot = adsp_use_early_boot(adsp, desc->early_boot,
+						    desc->early_boot_smem_id);
+
 	ret = device_init_wakeup(adsp->dev, true);
 	if (ret)
 		goto free_rproc;
@@ -1908,7 +2188,7 @@ static int adsp_probe(struct platform_device *pdev)
 
 	ret = qcom_q6v5_init(&adsp->q6v5, pdev, rproc, desc->crash_reason_smem,
 			     desc->crash_reason_stack, desc->smem_host_id,
-			     desc->load_state, desc->early_boot, qcom_pas_handover);
+			     desc->load_state, adsp->q6v5.early_boot, qcom_pas_handover);
 	if (ret)
 		goto detach_proxy_pds;
 
@@ -2273,7 +2553,6 @@ static const struct adsp_data x1e80100_adsp_resource = {
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
 	.minidump_id = 5,
-	.auto_boot = true,
 	.load_state = "adsp",
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
@@ -2290,7 +2569,6 @@ static const struct adsp_data x1e80100_cdsp_resource = {
 	.pas_id = 18,
 	.dtb_pas_id = 0x25,
 	.minidump_id = 7,
-	.auto_boot = true,
 	.load_state = "cdsp",
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
@@ -2634,7 +2912,6 @@ static const struct adsp_data canoe_adsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
-	.auto_boot = true,
 };
 
 static const struct adsp_data canoe_cdsp_resource = {
@@ -2651,7 +2928,6 @@ static const struct adsp_data canoe_cdsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 5,
-	.auto_boot = true,
 };
 
 static const struct adsp_data canoe_mpss_resource = {
@@ -2685,7 +2961,6 @@ static const struct adsp_data canoe_soccp_resource = {
 	.ssr_name = "soccp",
 	.sysmon_name = "soccp",
 	.early_boot = true,
-	.auto_boot = true,
 };
 
 static const struct adsp_data ravelin_adsp_resource = {
@@ -2783,8 +3058,16 @@ static const struct adsp_data pineapple_mpss_resource = {
 };
 
 static struct q6_subdev vienna_adsp_subdev[] = {
-	{ "lpai_wm.mdt", 0x4F, "lpai_wm"},
-	{ "lpai_am.mdt", 0x4E, "lpai_am"},
+	{
+		.firmware_name = "lpai_wm.mdt",
+		.pas_id = 0x4F,
+		.ssr_name = "lpai_wm",
+	},
+	{
+		.firmware_name = "lpai_am.mdt",
+		.pas_id = 0x4E,
+		.ssr_name = "lpai_am",
+	},
 };
 
 static const struct adsp_data vienna_adsp_resource = {
@@ -2803,6 +3086,7 @@ static const struct adsp_data vienna_adsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
+	.early_boot_smem_id = 695,
 };
 
 static const struct adsp_data vienna_cdsp_resource = {
@@ -2891,6 +3175,20 @@ static const struct adsp_data yupik_wpss_resource = {
 	.ssctl_id = 0x19,
 };
 
+static const struct adsp_data lahaina_slpi_resource = {
+	.crash_reason_smem = 424,
+	.firmware_name = "slpi.mdt",
+	.pas_id = 12,
+	.load_state = "slpi",
+	.ssr_name = "dsps",
+	.uses_elf64 = true,
+	.sysmon_name = "slpi",
+	.ssctl_id = 0x16,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+	.auto_boot = true,
+};
+
 static const struct adsp_data alor_wpss_resource = {
 	.crash_reason_smem = 626,
 	.firmware_name = "wpss.mdt",
@@ -2937,7 +3235,6 @@ static const struct adsp_data alor_adsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 2,
-	.auto_boot = true,
 };
 
 static const struct adsp_data alor_cdsp_resource = {
@@ -2954,7 +3251,6 @@ static const struct adsp_data alor_cdsp_resource = {
 	.uses_elf64 = true,
 	.crash_reason_stack = 660,
 	.smem_host_id = 5,
-	.auto_boot = true,
 };
 
 static const struct adsp_data alor_soccp_resource = {
@@ -2968,7 +3264,6 @@ static const struct adsp_data alor_soccp_resource = {
 	.ssr_name = "soccp",
 	.sysmon_name = "soccp",
 	.early_boot = true,
-	.auto_boot = true,
 };
 
 static const struct adsp_data khaje_adsp_resource = {
@@ -3079,6 +3374,9 @@ static const struct adsp_data malabar_mpss_resource = {
 	.dma_phys_below_32b = true,
 	.decrypt_shutdown = true,
 	.both_dumps = true,
+	.region_assign_idx = 3,
+	.region_assign_count = 1,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
 };
 
 static const struct adsp_data malabar_wpss_resource = {
@@ -3186,10 +3484,22 @@ static const struct adsp_data seraph_soccp_resource = {
 	.auto_boot = true,
 };
 
+static struct q6_subdev pikachu_adsp_subdev[] = {
+	{
+		.firmware_name = "lpaicp.mdt",
+		.dtb_firmware_name = "lpaicp_dtb.mdt",
+		.pas_id = 86,
+		.dtb_pas_id = 87,
+		.ssr_name = "lpaicp",
+	},
+};
+
 static const struct adsp_data pikachu_adsp_resource = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
 	.dtb_firmware_name = "adsp_dtb.mdt",
+	.q6_subdev = pikachu_adsp_subdev,
+	.q6_subdev_count = ARRAY_SIZE(pikachu_adsp_subdev),
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
 	.minidump_id = 5,
@@ -3199,6 +3509,8 @@ static const struct adsp_data pikachu_adsp_resource = {
 	.sysmon_name = "adsp",
 	.load_state = "adsp",
 	.ssctl_id = 0x14,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
 };
 
 static const struct adsp_data pikachu_cdsp_resource = {
@@ -3214,6 +3526,8 @@ static const struct adsp_data pikachu_cdsp_resource = {
 	.sysmon_name = "cdsp",
 	.load_state = "cdsp",
 	.ssctl_id = 0x17,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
 };
 
 static const struct adsp_data pikachu_soccp_resource = {
@@ -3268,10 +3582,11 @@ static const struct adsp_data shikra_lpaicp_resource = {
 	.dtb_firmware_name = "lpaicp_dtb.mbn",
 	.pas_id = 0x56,
 	.dtb_pas_id = 0x57,
-	.minidump_id = 0,//TODO
+	.minidump_id = 33,
 	.ssr_name = "lpaicp",
 	.uses_elf64 = true,
 	.sysmon_name = "lpaicp",
+	.auto_boot = true,
 };
 
 
@@ -3301,6 +3616,83 @@ static const struct adsp_data scuba_mpss_resource = {
 	.both_dumps = true,
 };
 
+static const struct adsp_data bourtzi_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.minidump_id = 5,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.auto_boot = true,
+};
+
+static const struct adsp_data bourtzi_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.load_state = "modem",
+	.uses_elf64 = true,
+	.auto_boot = false,
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.dma_phys_below_32b = true,
+	.decrypt_shutdown = true,
+	.both_dumps = true,
+	.region_assign_idx = 2,
+	.region_assign_count = 1,
+	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+};
+
+static const struct adsp_data bourtzi_wpss_resource = {
+	.crash_reason_smem = 626,
+	.firmware_name = "wpss.mdt",
+	.pas_id = 6,
+	.minidump_id = 4,
+	.load_state = "wpss",
+	.uses_elf64 = true,
+	.ssr_name = "wpss",
+	.sysmon_name = "wpss",
+	.ssctl_id = 0x19,
+};
+
+static const struct adsp_data glymur_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.dtb_firmware_name = "adsp_dtb.mdt",
+	.pas_id = 1,
+	.dtb_pas_id = 0x24,
+	.minidump_id = 5,
+	.auto_boot = true,
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 2,
+};
+
+static const struct adsp_data glymur_cdsp_resource = {
+	.crash_reason_smem = 601,
+	.firmware_name = "cdsp.mdt",
+	.dtb_firmware_name = "cdsp_dtb.mdt",
+	.pas_id = 18,
+	.dtb_pas_id = 0x25,
+	.minidump_id = 7,
+	.auto_boot = true,
+	.load_state = "cdsp",
+	.ssr_name = "cdsp",
+	.sysmon_name = "cdsp",
+	.ssctl_id = 0x17,
+	.uses_elf64 = true,
+	.crash_reason_stack = 660,
+	.smem_host_id = 5,
+};
 
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
@@ -3413,6 +3805,15 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,ravelin-wpss-pas", .data = &ravelin_wpss_resource},
 	{ .compatible = "qcom,scuba-adsp-pas", .data = &scuba_adsp_resource},
 	{ .compatible = "qcom,scuba-modem-pas", .data = &scuba_mpss_resource},
+	{ .compatible = "qcom,lahaina-adsp-pas", .data = &yupik_adsp_resource},
+	{ .compatible = "qcom,lahaina-cdsp-pas", .data = &yupik_cdsp_resource},
+	{ .compatible = "qcom,lahaina-modem-pas", .data = &yupik_mpss_resource},
+	{ .compatible = "qcom,lahaina-slpi-pas", .data = &lahaina_slpi_resource},
+	{ .compatible = "qcom,bourtzi-wpss-pas", .data = &bourtzi_wpss_resource},
+	{ .compatible = "qcom,bourtzi-adsp-pas", .data = &bourtzi_adsp_resource},
+	{ .compatible = "qcom,bourtzi-modem-pas", .data = &bourtzi_mpss_resource},
+	{ .compatible = "qcom,glymur-adsp-pas", .data = &glymur_adsp_resource},
+	{ .compatible = "qcom,glymur-cdsp-pas", .data = &glymur_cdsp_resource},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, adsp_of_match);

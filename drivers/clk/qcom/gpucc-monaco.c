@@ -26,7 +26,7 @@
 #define CX_GMU_CBCR_WAKE_MASK		0xf
 #define CX_GMU_CBCR_WAKE_SHIFT		8
 
-static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L1 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L2 + 1, 1, vdd_corner);
 
 static struct clk_vdd_class *gpu_cc_monaco_regulators[] = {
 	&vdd_cx,
@@ -176,6 +176,7 @@ static const struct freq_tbl ftbl_gpu_cc_gx_gfx3d_clk_src[] = {
 	F(700000000, P_GPU_CC_PLL0_OUT_EVEN, 1, 0, 0),
 	F(900000000, P_GPU_CC_PLL0_OUT_EVEN, 1, 0, 0),
 	F(1010000000, P_GPU_CC_PLL0_OUT_EVEN, 1, 0, 0),
+	F(1100000000, P_GPU_CC_PLL0_OUT_EVEN, 1, 0, 0),
 	{ }
 };
 
@@ -202,7 +203,8 @@ static struct clk_rcg2 gpu_cc_gx_gfx3d_clk_src = {
 			[VDD_LOW_L1] = 583000000,
 			[VDD_NOMINAL] = 700000000,
 			[VDD_HIGH] = 900000000,
-			[VDD_HIGH_L1] = 1010000000},
+			[VDD_HIGH_L1] = 1010000000,
+			[VDD_HIGH_L2] = 1100000000},
 	},
 };
 

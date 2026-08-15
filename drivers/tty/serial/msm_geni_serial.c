@@ -576,6 +576,8 @@ struct msm_geni_serial_port {
 	dma_addr_t ts_dma[TS_DMA_MAX_INSTANCES];
 	bool time_stamp;
 	struct one_wire_uart_config one_wire_uart;
+	u32 cpu_affinity_ids[2];
+	bool cpu_affinity;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -1378,6 +1380,51 @@ static void dump_ipc(struct uart_port *uport, void *ipc_ctx, char *prefix,
 	UART_LOG_DBG(ipc_ctx, uport->dev, "%s : %s\n", __func__, data);
 }
 
+/*
+ * msm_geni_find_wakeup_byte() - Checks if wakeup byte is present
+ * in rx buffer
+ *
+ * @uport: pointer to uart port
+ * @size: size of rx data
+ *
+ * Return: true if wakeup byte found else false
+ */
+static bool msm_geni_find_wakeup_byte(struct uart_port *uport, int size)
+{
+	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
+	unsigned char *buf = NULL;
+
+	if (size <= 0) {
+		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
+			     "Invalid size(%d) when checking wakeup-byte\n", size);
+		return false;
+	}
+
+	if (port->xfer_mode == GENI_GPI_DMA)
+		buf = (unsigned char *)port->rx_gsi_buf[port->rx_buf_idx];
+	else
+		buf = (unsigned char *)port->rx_buf;
+
+	if (!buf) {
+		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
+			     "NULL RX buffer pointer in wakeup-byte check\n");
+		return false;
+	}
+
+	/* Wakeup-byte can be expected anywhere in the buffer */
+	if (memchr(buf, port->wakeup_byte, size)) {
+		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
+			     "Found wakeup byte (0x%x) in size %u\n",
+			     port->wakeup_byte, size);
+		atomic_set(&port->check_wakeup_byte, 0);
+		return true;
+	}
+
+	dump_ipc(uport, port->ipc_log_rx, "No wakeup-byte found. Dropped Rx", buf, 0, size);
+
+	return false;
+}
+
 static bool check_transfers_inflight(struct uart_port *uport)
 {
 	bool xfer_on = false;
@@ -1437,11 +1484,26 @@ static int wait_for_transfers_inflight(struct uart_port *uport)
 		rx_len_in =
 			geni_read_reg(uport->membase, SE_DMA_RX_LEN_IN);
 		if (rx_len_in) {
+			/*
+			 * During wakeup-byte detection, RX may remain active with rx_len_in
+			 * set while wakeup_comp is still pending. Allow suspend to continue
+			 * so the normal suspend path can stop the RX sequencer.
+			 */
+			if (port->wakeup_byte && port->wakeup_irq &&
+			    atomic_read(&port->check_wakeup_byte) &&
+			    !completion_done(&port->wakeup_comp)) {
+				UART_LOG_DBG(port->ipc_log_misc, uport->dev,
+					     "%s: rx_len_in=%u wakeup byte pending\n",
+					     __func__, rx_len_in);
+				return 0;
+			}
+
 			UART_LOG_DBG(port->ipc_log_misc, uport->dev,
-				"%s: Bailout rx_len_in is set %d\n", __func__, rx_len_in);
+				     "%s: Bailout rx_len_in is set %u\n",
+				     __func__, rx_len_in);
 			return -EBUSY;
 		}
-		geni_se_dump_dbg_regs(uport);
+			geni_se_dump_dbg_regs(uport);
 	}
 	return 0;
 }
@@ -2234,6 +2296,11 @@ static void msm_geni_uart_gsi_tx_cb(void *ptr)
 	msm_port->xmit_size = 0;
 	complete(&msm_port->tx_xfer);
 	if (!kfifo_is_empty(&tport->xmit_fifo)) {
+		if (msm_port->port_state != UART_PORT_OPEN) {
+			UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
+				     "%s: Port not open, skip re-queue\n", __func__);
+			return;
+		}
 		queue_work(msm_port->tx_wq, &msm_port->tx_xfer_work);
 		UART_LOG_DBG(msm_port->ipc_log_misc, msm_port->uport.dev,
 			     "%s: End\n", __func__);
@@ -2310,6 +2377,13 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 		return;
 	}
 
+	if (atomic_read(&msm_port->check_wakeup_byte)) {
+		ret = msm_geni_find_wakeup_byte(uport, rx_bytes);
+		if (!ret)
+		/* Wakeup byte not found; drop data and recycle DMA buffer */
+			goto skip_tty_push;
+	}
+
 	ret = tty_insert_flip_string(tport, (unsigned char *)(msm_port->rx_gsi_buf[idx]), rx_bytes);
 	if (ret != rx_bytes)
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
@@ -2318,6 +2392,8 @@ static void msm_geni_uart_gsi_rx_cb(void *ptr)
 
 	uport->icount.rx += ret;
 	tty_flip_buffer_push(tport);
+
+skip_tty_push:
 	dump_ipc(uport, msm_port->ipc_log_rx, "GSI Rx",
 		 (char *)msm_port->rx_gsi_buf[idx], 0, rx_bytes);
 
@@ -2343,6 +2419,33 @@ static void msm_geni_deallocate_chan(struct uart_port *uport)
 		msm_port->gsi->tx_c = NULL;
 	}
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "DMA channel release done\n");
+}
+
+/**
+ * msm_geni_serial_set_gsi_cpu_affinity() - Configure CPU affinity for GSI IRQ
+ * @uport: Pointer to the UART port
+ *
+ * This function sets the CPU affinity for the shared GPII (General Purpose
+ * Interface) IRQ used by both TX and RX channels in GSI DMA mode. It configures
+ * the IRQ to be handled by specific CPUs to optimize performance and reduce
+ * latency.
+ *
+ * Return: None
+ */
+static void msm_geni_serial_set_gsi_cpu_affinity(struct uart_port *uport)
+{
+	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+
+	cpumask_clear(&msm_port->gsi->tx_ev.cpu_affinity.cpu_mask);
+	cpumask_set_cpu(msm_port->cpu_affinity_ids[0],
+			&msm_port->gsi->tx_ev.cpu_affinity.cpu_mask);
+	cpumask_set_cpu(msm_port->cpu_affinity_ids[1],
+			&msm_port->gsi->tx_ev.cpu_affinity.cpu_mask);
+
+	msm_port->gsi->tx_ev.cmd = MSM_GPI_SET_CPU_AFFINITY;
+	if (dmaengine_slave_config(msm_port->gsi->tx_c, NULL))
+		UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
+			     "Failed to set GSI CPU affinity\n");
 }
 
 static int msm_geni_allocate_chan(struct uart_port *uport)
@@ -2396,6 +2499,10 @@ static int msm_geni_allocate_chan(struct uart_port *uport)
 			msm_geni_deallocate_chan(uport);
 			goto out;
 		}
+
+		/* Set CPU affinity for GPI IRQ after both channels are ready */
+		if (msm_port->cpu_affinity)
+			msm_geni_serial_set_gsi_cpu_affinity(uport);
 	}
 out:
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev,
@@ -3910,31 +4017,6 @@ exit_handle_tx:
 	return 0;
 }
 
-/*
- * msm_geni_find_wakeup_byte() - Checks if wakeup byte is present
- * in rx buffer
- *
- * @uport: pointer to uart port
- * @size: size of rx data
- *
- * Return: true if wakeup byte found else false
- */
-static bool msm_geni_find_wakeup_byte(struct uart_port *uport, int size)
-{
-	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
-	unsigned char *buf = (unsigned char *)port->rx_buf;
-
-	if (buf[0] == port->wakeup_byte) {
-		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
-			     "%s Found wakeup byte\n", __func__);
-		atomic_set(&port->check_wakeup_byte, 0);
-		return true;
-	}
-	dump_ipc(uport, port->ipc_log_rx, "Dropped Rx", buf, 0, size);
-
-	return false;
-}
-
 static void check_rx_buf(char *buf, struct uart_port *uport, int size)
 {
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
@@ -4023,7 +4105,7 @@ static int msm_geni_serial_handle_dma_rx(struct uart_port *uport, bool drop_rx)
 	rx_bytes_copied = ret;
 	if (ret != rx_bytes) {
 		UART_LOG_DBG(msm_port->ipc_log_rx, uport->dev,
-			     "%s: ret %d rx_bytes %d\n", __func__, ret, rx_bytes);
+			     "tty_insert_flip: ret-bytes %d rx_bytes %d\n", ret, rx_bytes);
 		rx_buf = (unsigned char *)(msm_port->rx_buf);
 		rx_buf += ret;
 		/* Bytes still left to copy from rx buffer */
@@ -4450,19 +4532,12 @@ static void msm_geni_wakeup_work(struct work_struct *work)
 
 	port = container_of(work, struct msm_geni_serial_port,
 			    wakeup_irq_dwork.work);
-
 	uport = &port->uport;
-	UART_LOG_DBG(port->ipc_log_rx, uport->dev, "Wakeup work start\n");
 
 	if (!atomic_read(&port->check_wakeup_byte))
 		return;
 
-	if (port->xfer_mode == GENI_GPI_DMA) {
-		if (msm_geni_serial_power_on(uport))
-			UART_LOG_DBG(port->ipc_log_pwr, uport->dev, "Failed to power on\n");
-		return;
-	}
-
+	UART_LOG_DBG(port->ipc_log_rx, uport->dev, "Wakeup work started\n");
 	reinit_completion(&port->wakeup_comp);
 	if (msm_geni_serial_power_on(uport)) {
 		atomic_set(&port->check_wakeup_byte, 0);
@@ -4473,6 +4548,7 @@ static void msm_geni_wakeup_work(struct work_struct *work)
 	/* wait to receive wakeup byte in rx path */
 	if (!wait_for_completion_timeout(&port->wakeup_comp,
 					 msecs_to_jiffies(WAKEBYTE_TIMEOUT_MSEC)))
+		/* Wakeup byte was not received before the timeout. */
 		UART_LOG_DBG(port->ipc_log_rx, uport->dev,
 			     "%s completion of wakeup_comp task timedout %dmsec\n",
 			     __func__, WAKEBYTE_TIMEOUT_MSEC);
@@ -4624,18 +4700,44 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 				(&msm_port->xfer,
 				msecs_to_jiffies(GSI_STOP_RX_TIMEOUT));
 
-			if (!timeout)
+			if (!timeout) {
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev,
 					     "%s: Timeout for Rx reset\n",
 					     __func__);
+				/*
+				 * rx_cancel_work may still be running concurrently, so
+				 * flush it first to avoid racing with it over
+				 * dmaengine_terminate_all() and the gsi_rx_done/
+				 * stop_rx_inprogress flags below. After the flush,
+				 * rx_cancel_work has either already terminated the
+				 * channel (gsi_rx_done now 0) or never got to run
+				 * (gsi_rx_done still 1), so it's safe to check the
+				 * flag here without racing.
+				 */
+				if (msm_port->rx_wq)
+					flush_workqueue(msm_port->rx_wq);
+
+				/*
+				 * If rx_cancel_work didn't get to terminate the GSI
+				 * channel before the timeout, the DMA engine may
+				 * still be actively writing to the Rx buffers below.
+				 * Terminate it here to avoid unmapping/releasing the
+				 * channel out from under an in-flight transfer, which
+				 * faults the SMMU.
+				 */
+				if (atomic_read(&msm_port->gsi_rx_done)) {
+					if (msm_port->gsi->rx_c)
+						dmaengine_terminate_all(msm_port->gsi->rx_c);
+					atomic_set(&msm_port->gsi_rx_done, 0);
+				}
+				atomic_set(&msm_port->stop_rx_inprogress, 0);
+			}
 
 			if (msm_port->gsi->rx_c) {
 				UART_LOG_DBG(msm_port->ipc_log_misc,
 					     uport->dev,
 					     "%s:GSI DMA-Rx ch\n", __func__);
-				if (msm_port->rx_wq)
-					flush_workqueue(msm_port->rx_wq);
 
 				for (i = 0; i < NUM_RX_BUF; i++) {
 					if (msm_port->dma_addr[i]) {
@@ -5334,6 +5436,9 @@ static unsigned int msm_geni_serial_tx_empty(struct uart_port *uport)
 
 	if (port->xfer_mode == GENI_SE_DMA)
 		tx_fifo_status = port->tx_dma ? 1 : 0;
+	else if (port->xfer_mode == GENI_GPI_DMA)
+		tx_fifo_status = (port->tx_dma ||
+				  port->split_dma_tre.immediate_dma_in_progress) ? 1 : 0;
 	else
 		tx_fifo_status = geni_read_reg(uport->membase,
 						SE_GENI_TX_FIFO_STATUS);
@@ -5858,17 +5963,6 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 		return PTR_ERR(dev_port->serial_rsc.geni_pinctrl);
 	}
 
-	if (!dev_port->is_console) {
-		if (IS_ERR_OR_NULL(pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
-				PINCTRL_SHUTDOWN))) {
-			dev_info(&pdev->dev, "No Shutdown config specified\n");
-		} else {
-			dev_port->serial_rsc.geni_gpio_shutdown =
-			pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
-							PINCTRL_SHUTDOWN);
-		}
-	}
-
 	dev_port->serial_rsc.geni_gpio_active =
 		pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
 							PINCTRL_ACTIVE);
@@ -5893,6 +5987,19 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 	if (IS_ERR_OR_NULL(dev_port->serial_rsc.geni_gpio_sleep)) {
 		dev_err(&pdev->dev, "No sleep config specified!\n");
 		return PTR_ERR(dev_port->serial_rsc.geni_gpio_sleep);
+	}
+
+	if (!dev_port->is_console) {
+		if (IS_ERR_OR_NULL(pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
+				PINCTRL_SHUTDOWN))) {
+			dev_warn(&pdev->dev, "No Shutdown config specified, use sleep config\n");
+			dev_port->serial_rsc.geni_gpio_shutdown =
+				  dev_port->serial_rsc.geni_gpio_sleep;
+		} else {
+			dev_port->serial_rsc.geni_gpio_shutdown =
+			pinctrl_lookup_state(dev_port->serial_rsc.geni_pinctrl,
+							PINCTRL_SHUTDOWN);
+		}
 	}
 
 	uport->irq = platform_get_irq(pdev, 0);
@@ -6114,6 +6221,21 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,split-tx-dma-tre")) {
 		dev_port->split_dma_tre.split_tx = true;
 		dev_dbg(&pdev->dev, "UART split Tx support is enabled\n");
+	}
+
+	if (!of_property_read_u32_array(pdev->dev.of_node, "qcom,cpu-affinity",
+					dev_port->cpu_affinity_ids, 2)) {
+		if (dev_port->cpu_affinity_ids[0] < nr_cpu_ids &&
+		    dev_port->cpu_affinity_ids[1] < nr_cpu_ids) {
+			dev_port->cpu_affinity = true;
+			dev_info(&pdev->dev, "CPU affinity: for cores %u and %u\n",
+				 dev_port->cpu_affinity_ids[0], dev_port->cpu_affinity_ids[1]);
+		} else {
+			dev_warn(&pdev->dev,
+				 "Invalid CPU affinity cores: %u and %u are out of range (nr_cpu_ids=%u), skipping\n",
+				 dev_port->cpu_affinity_ids[0], dev_port->cpu_affinity_ids[1],
+				 nr_cpu_ids);
+		}
 	}
 
 	return ret;
@@ -6359,6 +6481,10 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		goto exit_geni_serial_probe;
 
 	msm_geni_serial_debug_init(uport, is_console);
+
+	/* Initialize the GSI mode */
+	msm_geni_serial_init_gsi(uport);
+
 	ret = msm_geni_serial_port_init(pdev, dev_port);
 	if (ret)
 		goto exit_geni_serial_probe;
@@ -6369,8 +6495,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_port->port_setup = false;
 
 	dev_port->uart_error = UART_ERROR_DEFAULT;
-	/* Initialize the GSI mode */
-	msm_geni_serial_init_gsi(uport);
 
 	/*
 	 * In abrupt kill scenarios, previous state of the uart causing runtime
@@ -6439,6 +6563,14 @@ static void msm_geni_serial_remove(struct platform_device *pdev)
 	uart_remove_one_port(drv, &port->uport);
 
 	if (port->gsi_mode) {
+		/*
+		 * Mark port as shutting down before cancelling work. This prevents
+		 * msm_geni_uart_gsi_tx_cb() from re-queuing tx_xfer_work after
+		 * cancel_work_sync() returns, which would otherwise cause stale
+		 * GSI DMA TX transfers to continue after driver removal.
+		 */
+		port->port_state = UART_PORT_SHUTDOWN_IN_PROGRESS;
+
 		/* Cancel specific works and wait for any running instance to finish */
 		cancel_work_sync(&port->tx_xfer_work);
 		cancel_work_sync(&port->tx_cancel_work);
@@ -6543,10 +6675,15 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 			/* Flow on from UART only for In band sleep(IBS)
 			 * Avoid manual RFR FLOW ON for Out of band sleep(OBS)
 			 */
-			if (port->wakeup_byte && port->wakeup_irq)
+			if (port->wakeup_byte && port->wakeup_irq) {
+			/* Port is open; wakeup IRQ was received but no wakeup byte was
+			 * detected. Continue to suspend the driver.
+			 */
 				msm_geni_serial_allow_rx(port);
-			ret = -EBUSY;
-			goto exit_runtime_suspend;
+			} else {
+				ret = -EBUSY;
+				goto exit_runtime_suspend;
+			}
 		}
 	}
 	/*

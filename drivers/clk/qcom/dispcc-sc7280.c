@@ -252,7 +252,7 @@ static struct clk_rcg2 disp_cc_mdss_dp_crypto_clk_src = {
 		.rate_max = (unsigned long[VDD_NUM]) {
 			[VDD_LOWER] = 180000000,
 			[VDD_LOW_L1] = 360000000,
-			[VDD_NOMINAL] = 54000000},
+			[VDD_NOMINAL] = 540000000},
 	},
 };
 

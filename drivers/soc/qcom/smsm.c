@@ -55,7 +55,7 @@
  * Default sizes, in case SMEM_SMSM_SIZE_INFO is not found.
  */
 #define SMSM_DEFAULT_NUM_ENTRIES	8
-#define SMSM_DEFAULT_NUM_HOSTS		3
+#define SMSM_DEFAULT_NUM_HOSTS		5
 
 /* IPC Logging */
 static void *smsm_ilc;

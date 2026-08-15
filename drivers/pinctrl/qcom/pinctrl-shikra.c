@@ -43,6 +43,7 @@
 		.intr_target_bit = 8,		\
 		.intr_wakeup_enable_bit = 7,	\
 		.intr_wakeup_present_bit = 6,	\
+		.intr_target_width = 4,         \
 		.intr_target_kpss_val = 3,	\
 		.intr_raw_status_bit = 4,	\
 		.intr_polarity_bit = 1,		\
@@ -262,13 +263,17 @@ static const struct pinctrl_pin_desc shikra_pins[] = {
 	PINCTRL_PIN(159, "GPIO_159"),
 	PINCTRL_PIN(160, "GPIO_160"),
 	PINCTRL_PIN(161, "GPIO_161"),
-	PINCTRL_PIN(162, "SDC1_DATA"),
-	PINCTRL_PIN(163, "SDC1_RCLK"),
-	PINCTRL_PIN(164, "SDC1_CMD"),
-	PINCTRL_PIN(165, "SDC1_CLK"),
-	PINCTRL_PIN(166, "SDC2_CLK"),
-	PINCTRL_PIN(167, "SDC2_CMD"),
-	PINCTRL_PIN(168, "SDC2_DATA"),
+	PINCTRL_PIN(162, "GPIO_162"),
+	PINCTRL_PIN(163, "GPIO_163"),
+	PINCTRL_PIN(164, "GPIO_164"),
+	PINCTRL_PIN(165, "GPIO_165"),
+	PINCTRL_PIN(166, "SDC1_RCLK"),
+	PINCTRL_PIN(167, "SDC1_CLK"),
+	PINCTRL_PIN(168, "SDC1_CMD"),
+	PINCTRL_PIN(169, "SDC1_DATA"),
+	PINCTRL_PIN(170, "SDC2_CLK"),
+	PINCTRL_PIN(171, "SDC2_CMD"),
+	PINCTRL_PIN(172, "SDC2_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -440,13 +445,13 @@ DECLARE_MSM_GPIO_PINS(163);
 DECLARE_MSM_GPIO_PINS(164);
 DECLARE_MSM_GPIO_PINS(165);
 
-static const unsigned int sdc1_data_pins[] = { 162 };
-static const unsigned int sdc1_rclk_pins[] = { 163 };
-static const unsigned int sdc1_cmd_pins[] = { 164 };
-static const unsigned int sdc1_clk_pins[] = { 165 };
-static const unsigned int sdc2_clk_pins[] = { 166 };
-static const unsigned int sdc2_cmd_pins[] = { 167 };
-static const unsigned int sdc2_data_pins[] = { 168 };
+static const unsigned int sdc1_rclk_pins[] = { 166 };
+static const unsigned int sdc1_clk_pins[] = { 167 };
+static const unsigned int sdc1_cmd_pins[] = { 168 };
+static const unsigned int sdc1_data_pins[] = { 169 };
+static const unsigned int sdc2_clk_pins[] = { 170 };
+static const unsigned int sdc2_cmd_pins[] = { 171 };
+static const unsigned int sdc2_data_pins[] = { 172 };
 
 enum shikra_functions {
 	msm_mux_gpio,
@@ -2655,20 +2660,39 @@ static const struct msm_pingroup shikra_groups[] = {
 			 -1),
 	[161] = PINGROUP(161, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
 			 -1),
-	[162] = SDC_QDSD_PINGROUP(sdc1_data, 0x1AC000, 9, 0),
-	[163] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x1AC004, 0, 0),
-	[164] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x1AC000, 11, 3),
-	[165] = SDC_QDSD_PINGROUP(sdc1_clk, 0x1AC000, 13, 6),
-	[166] = SDC_QDSD_PINGROUP(sdc2_clk, 0x1AA000, 14, 6),
-	[167] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1AA000, 11, 3),
-	[168] = SDC_QDSD_PINGROUP(sdc2_data, 0x1AA000, 9, 0),
+	[162] = PINGROUP(162, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 -1),
+	[163] = PINGROUP(163, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 -1),
+	[164] = PINGROUP(164, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 -1),
+	[165] = PINGROUP(165, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, 0,
+			 -1),
+	[166] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x1AC004, 0, 0),
+	[167] = SDC_QDSD_PINGROUP(sdc1_clk, 0x1AC000, 13, 6),
+	[168] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x1AC000, 11, 3),
+	[169] = SDC_QDSD_PINGROUP(sdc1_data, 0x1AC000, 9, 0),
+	[170] = SDC_QDSD_PINGROUP(sdc2_clk, 0x1AA000, 14, 6),
+	[171] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1AA000, 11, 3),
+	[172] = SDC_QDSD_PINGROUP(sdc2_data, 0x1AA000, 9, 0),
 };
 
 static struct pinctrl_qup shikra_qup_regs[] = {
 };
 
-static const struct msm_gpio_wakeirq_map shikra_pdc_map[] = {
-
+static const struct msm_gpio_wakeirq_map shikra_mpm_map[] = {
+	{ 1, 9 }, { 2, 31 }, { 5, 49 }, { 6, 53 }, { 9, 72 }, { 10, 10 },
+	{ 12, 22 }, { 14, 26 }, { 17, 29 }, { 18, 24 }, { 20, 32 }, { 22, 33 },
+	{ 25, 34 }, { 27, 35 }, { 28, 36 }, { 29, 37 }, { 30, 38 }, { 31, 39 },
+	{ 32, 40 }, { 33, 41 }, { 38, 42 }, { 40, 43 }, { 43, 44 }, { 44, 45 },
+	{ 45, 46 }, { 46, 47 }, { 47, 48 }, { 48, 60 }, { 50, 50 }, { 51, 51 },
+	{ 52, 61 }, { 53, 62 }, { 57, 52 }, { 58, 63 }, { 60, 54 }, { 63, 64 },
+	{ 73, 55 }, { 74, 56 }, { 75, 57 }, { 77, 3 }, { 80, 4 }, { 84, 5 },
+	{ 85, 67 }, { 86, 69 }, { 88, 70 }, { 89, 71 }, { 90, 73 }, { 91, 74 },
+	{ 92, 75 }, { 93, 76 }, { 94, 77 }, { 95, 78 }, { 97, 79 }, { 99, 80 },
+	{ 100, 11 }, { 101, 13 }, { 102, 14 }, { 103, 15 }, { 106, 16 }, { 108, 17 },
+	{ 112, 18 }, { 116, 19 }, { 117, 20 }, { 119, 21 }, { 120, 23 }, { 136, 25 },
+	{ 159, 27 }, { 161, 28 },
 };
 
 static const struct msm_pinctrl_soc_data shikra_tlmm = {
@@ -2681,8 +2705,8 @@ static const struct msm_pinctrl_soc_data shikra_tlmm = {
 	.ngpios = 166,
 	.qup_regs = shikra_qup_regs,
 	.nqup_regs = ARRAY_SIZE(shikra_qup_regs),
-	.wakeirq_map = shikra_pdc_map,
-	.nwakeirq_map = ARRAY_SIZE(shikra_pdc_map),
+	.wakeirq_map = shikra_mpm_map,
+	.nwakeirq_map = ARRAY_SIZE(shikra_mpm_map),
 	.egpio_func = 11,
 };
 

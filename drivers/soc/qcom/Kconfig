@@ -197,6 +197,14 @@ bool "Force staling-mode-capacity when kasan MTE is enabled"
 	  staling mode and uses capacity-based staling whenever hardware
 	  tag-based KASAN (MTE) is in use (kasan_hw_tags_enabled()).
 
+config QCOM_POWER_MODE
+	tristate "Power Mode driver support for Deep Sleep and S2R"
+	help
+	  This option enables Power Mode Driver which creates power mode
+          attribute to distinguish between Suspend-to-RAM (S2R) and Deep
+	  Sleep states and this attribute allows CPMS to write the current
+	  mode based on key events.
+
 config QCOM_SLC_PERFMON
 	tristate "Qualcomm Technologies, Inc. SLC PERFMON Driver"
 	help
@@ -446,6 +454,14 @@ config QCOM_STATS
 	  various SoC level low power modes statistics and export to debugfs
 	  interface.
 
+config QTI_RPM_STATS_LOG
+	tristate "Qualcomm Technologies, Inc. (QTI) RPM Stats Driver"
+	help
+	  This option enables a driver which reads RPM messages from a shared
+	  memory location. These messages provide statistical information about
+	  the low power modes that subsystem enters. The drivers outputs the
+	  message via a debugfs node.
+
 config QCOM_LOGBUF_VENDOR_HOOKS
 	tristate "QTI Logbuf Vendor Hooks Support"
 	depends on ARCH_QCOM
@@ -654,6 +670,49 @@ config MSM_SLATECOM_EVENT
          This event driver register for AON event bridge to receive sensor
          up and down and notifies upper layer HAL about sensor stataus
          through uevent via netlink socket.
+
+config MSM_SLATERSB
+        tristate "Provide support for rsb events on Slate"
+        help
+          SLATERSB communicates to SLATE over rpmsg driver for RSB configuration
+          and enable/disable on device power state change.Add slate rsb driver
+          which is use to configure rsb on slate.Slate rsb driver uses glink
+          to communicate with slate
+
+config MSM_SLATERSB_RPMSG
+        tristate "Provide support for slate events to RSB"
+        depends on MSM_SLATERSB
+        help
+          SLATERSB-RPMSG informs SLATERSB driver if GLINK channel has been
+          opened by remote processor. It doesn't maintain state machine
+          and is probed when SLATE opens channel and removed when the
+          channel is closed by remote processor.
+
+config MSM_SLATECOM
+        tristate "Provide APIs to communicate with Slate chipset"
+        help
+          SLATECOM is a thin layer above SPI. It is used within a SoC for
+          communication between G-Link/slate_com_dev and Slate processor over SPI.
+          This handle the interrupts raised by BG and notify the G-link with
+          interrupt event and event data.
+
+config MSM_SLATECOM_INTERFACE
+        tristate "Driver support for Slate Communication"
+        depends on MSM_SLATECOM
+        help
+          Create a slate_com_dev device node for user space communication.
+          Single user space client can open device node for communication
+          from hardware. Hardware will provide access to read
+          registers and read/write AHB memory in the device.
+
+config MSM_SLATECOM_RPMSG
+        tristate "Provide support for slate control GLINK channel"
+        depends on MSM_SLATECOM_INTERFACE
+        help
+          MSM_SLATECOM_RPMSG informs SLATECOM_INTERFACE driver if GLINK channel
+          has been opened by remote processor. It doesn't maintain state machine
+          and is probed when Slate opens channel and removed when the channel is
+          closed by remote processor.
 
 config QCOM_EUD
 	tristate "QTI Embedded USB Debugger (EUD)"
@@ -1276,6 +1335,18 @@ config QCOM_LPM_MONITOR
 	  then waits for the subsystem to return the data of the last ON/OFF timestamps
 	  for each clock.
 
+config QCOM_DHMS_RPMSG
+	tristate "Qualcomm DHMS RPMSG driver"
+	depends on RPMSG && DMA_SHARED_BUFFER
+	help
+	  This driver provides support for importing DMA-bufs and sharing them
+	  with remote processors via RPMSG channels. It creates a character
+	  device (/dev/dhms) through which userspace can import DMA-bufs and
+	  sends buffer information via RPMSG messages.
+
+	  Say M here to compile this driver as a module. The module will be
+	  called dhms_rpmsg.
+
 config QTI_HW_KEY_MANAGER_V1
 	tristate "Enable QTI Hardware Key Manager v1 for storage encryption"
 	default n
@@ -1336,4 +1407,25 @@ config QCOM_SC_TCM_MEM
 	  PAGE_SIZE bytes.
 
           If not sure, say N.
+
+config QCOM_VM_CRASH_DMESG_DUMP
+	bool "Enable crash log access from VM to PVM"
+	depends on QCOM_VM_DMESG_DUMPER
+	help
+	  Enable support for accessing crash logs from VM to PVM.
+	  This is useful for debugging and post-mortem analysis of VM crashes.
+
+	  If not sure, say N.
+
+config QCOM_QDSS_BRIDGE
+	tristate "Qualcomm Technologies QDSS Bridge driver"
+	depends on MHI_BUS
+	help
+	  This driver provides a bridge between the QDSS hardware trace
+	  infrastructure (via MHI) and a host machine over USB or a
+	  user-space character device interface (/dev/mhi_qdss).
+	  Supports QDSS and IP_HW_QDSS channels.
+
+	  If not sure, say N.
+
 endmenu

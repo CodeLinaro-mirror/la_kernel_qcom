@@ -312,7 +312,8 @@ static irqreturn_t qcom_glink_cma_intr(int irq, void *data)
 {
 	struct glink_cma_dev *gdev = data;
 
-	qcom_glink_native_rx(gdev->glink);
+	if (gdev->glink)
+		qcom_glink_native_rx(gdev->glink);
 
 	return IRQ_HANDLED;
 }
@@ -322,7 +323,7 @@ struct glink_cma_dev *qcom_glink_cma_register(struct device *parent, struct devi
 	struct glink_cma_dev *gdev;
 	struct qcom_glink *glink;
 	struct device *dev;
-	int rc, ret;
+	int rc, ret, irq;
 
 	if (!parent || !node || !config)
 		return ERR_PTR(-EINVAL);
@@ -366,13 +367,21 @@ struct glink_cma_dev *qcom_glink_cma_register(struct device *parent, struct devi
 		goto err_put_dev;
 	}
 
-	gdev->irq = of_irq_get(gdev->dev.of_node, 0);
+	gdev->glink = glink;
+
+	irq = of_irq_get(gdev->dev.of_node, 0);
+	if (irq < 0) {
+		pr_err("%s: failed to get IRQ %d\n", __func__, irq);
+		rc = irq;
+		goto err_put_glink;
+	}
+	gdev->irq = irq;
 	ret = devm_request_irq(&gdev->dev, gdev->irq, qcom_glink_cma_intr,
 							IRQF_NO_SUSPEND,
 							gdev->irqname, gdev);
 	if (ret) {
-		pr_err("%s: failed to request irq\n", __func__);
-		goto err_put_dev;
+		pr_err("%s: failed to request irq %d\n", __func__, ret);
+		goto err_put_glink;
 	}
 
 	gdev->mbox_client.dev = &gdev->dev;
@@ -386,8 +395,6 @@ struct glink_cma_dev *qcom_glink_cma_register(struct device *parent, struct devi
 
 	qcom_glink_native_start(glink);
 
-	gdev->glink = glink;
-
 	GLINK_CMA_DEBUG_LOG(gdev->glink_cma_ilc, "success");
 	return gdev;
 
@@ -396,7 +403,6 @@ err_put_glink:
 err_put_dev:
 	GLINK_CMA_DEBUG_LOG(gdev->glink_cma_ilc, "Exit error %d", rc);
 	device_unregister(dev);
-	kfree(gdev);
 
 	return ERR_PTR(rc);
 }

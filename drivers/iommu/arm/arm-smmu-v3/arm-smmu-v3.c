@@ -1929,7 +1929,8 @@ static void arm_smmu_tlb_inv_page_nosync(struct iommu_iotlb_gather *gather,
 	struct arm_smmu_domain *smmu_domain = cookie;
 	struct iommu_domain *domain = &smmu_domain->domain;
 
-	iommu_iotlb_gather_add_page(domain, gather, iova, granule);
+	if (gather)
+		iommu_iotlb_gather_add_page(domain, gather, iova, granule);
 }
 
 static void arm_smmu_tlb_inv_walk(unsigned long iova, size_t size,
@@ -3253,8 +3254,10 @@ int arm_smmu_init_structures(struct arm_smmu_device *smmu)
 {
 	int ret;
 
-	mutex_init(&smmu->streams_mutex);
-	smmu->streams = RB_ROOT;
+	if (!(smmu->options & ARM_SMMU_OPT_VIRTIO)) {
+		mutex_init(&smmu->streams_mutex);
+		smmu->streams = RB_ROOT;
+	}
 
 	ret = arm_smmu_init_queues(smmu);
 	if (ret)
@@ -3581,10 +3584,18 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 
 	arm_smmu_probe_irq(pdev, smmu);
 
+	smmu->pwr = arm_smmu_init_power_resources(dev);
+	if (IS_ERR(smmu->pwr))
+		return PTR_ERR(smmu->pwr);
+
+	ret = arm_smmu_power_on(smmu->pwr);
+	if (ret)
+		return ret;
+
 	/* Probe the h/w */
 	ret = arm_smmu_device_hw_probe(smmu);
 	if (ret)
-		return ret;
+		goto out_power_off;
 
 	if (arm_smmu_sva_supported(smmu))
 		smmu->features |= ARM_SMMU_FEAT_SVA;
@@ -3620,6 +3631,8 @@ err_disable:
 	arm_smmu_device_disable(smmu);
 err_free_iopf:
 	iopf_queue_free(smmu->evtq.iopf);
+out_power_off:
+	arm_smmu_power_off(smmu, smmu->pwr);
 	return ret;
 }
 

@@ -20,7 +20,8 @@
 #define IMM_SVC_MAP (0)
 #define IMM_F_READ BIT(0)
 #define IMM_F_WRITE BIT(1)
-#define IMM_VALID_FLAGS GENMASK(1, 0)
+#define IMM_F_EXEC BIT(2)
+#define IMM_VALID_FLAGS GENMASK(2, 0)
 
 struct imm_map_cmd {
 	u32 eVM;

@@ -976,13 +976,13 @@ static int video_cc_canoe_fixup(struct platform_device *pdev, struct regmap *reg
 	}
 
 	if (!strcmp(compat, "qcom,whale-videocc")) {
-		video_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
+		video_cc_pll0_config.config_ctl_hi_val = 0x0a826060;
 		video_cc_pll0_config.cal_l = 0x48;
-		video_cc_pll1_config.config_ctl_hi_val = 0x0a8060e0;
+		video_cc_pll1_config.config_ctl_hi_val = 0x0a826060;
 		video_cc_pll1_config.cal_l = 0x48;
-		video_cc_pll2_config.config_ctl_hi_val = 0x0a8060e0;
+		video_cc_pll2_config.config_ctl_hi_val = 0x0a826060;
 		video_cc_pll2_config.cal_l = 0x48;
-		video_cc_pll3_config.config_ctl_hi_val = 0x0a8060e0;
+		video_cc_pll3_config.config_ctl_hi_val = 0x0a826060;
 		video_cc_pll3_config.cal_l = 0x48;
 	}
 

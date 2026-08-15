@@ -27,6 +27,22 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-kalama",
+        out = "phy-qcom-ufs-qmp-v4-kalama.ko",
+        config = "CONFIG_PHY_QCOM_UFS_V4_KALAMA",
+        srcs = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs-i.h",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-kalama.c",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-kalama.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs",
+        ],
+    )
+
+    registry.register(
         name = "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-yupik",
         out = "phy-qcom-ufs-qmp-v4-yupik.ko",
         config = "CONFIG_PHY_QCOM_UFS_V4_YUPIK",

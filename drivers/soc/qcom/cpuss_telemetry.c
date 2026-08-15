@@ -41,15 +41,19 @@ static u64 *fid;
  */
 const char *get_telemetry_counter_name(u32 counter_id)
 {
-	const char *name  = pname[counter_id].name;
+	if (!pname)
+		return NULL;
 
-	return name;
+	return pname[counter_id].name;
 }
 EXPORT_SYMBOL_GPL(get_telemetry_counter_name);
 
 int64_t get_telemetry_counter_value(u32 counter_id)
 {
 	int64_t stat;
+
+	if (!telemetry || !pvalue)
+		return -ENODEV;
 
 	while (1) {
 		int64_t start_value;
@@ -130,12 +134,20 @@ DEFINE_DEBUGFS_ATTRIBUTE(telemetry_stats_fops, generic_get, NULL, "%llu\n");
 
 static void telemetry_memory_deallocation(void)
 {
-	if (telemetry)
+	if (telemetry) {
 		iounmap(telemetry);
-	if (pname)
+		telemetry = NULL;
+	}
+
+	if (pname) {
 		iounmap((void *)pname);
-	if (pvalue)
+		pname = NULL;
+	}
+
+	if (pvalue) {
 		iounmap(pvalue);
+		pvalue = NULL;
+	}
 }
 
 static int cpuss_telemetry_create_fs_entries(struct scmi_device *sdev)
@@ -292,7 +304,7 @@ static int scmi_cpuss_telemetry_probe(struct scmi_device *sdev)
 		return -ENODEV;
 	}
 
-	gsize = sizeof(struct telemetry_global_param_t *);
+	gsize = sizeof(struct telemetry_global_param_t);
 
 	telemetry = (struct telemetry_global_param_t *)
 			ioremap_cache(sh_mem_base_address, gsize);

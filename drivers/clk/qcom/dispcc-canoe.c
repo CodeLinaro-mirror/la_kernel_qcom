@@ -2204,6 +2204,7 @@ static struct qcom_cc_desc disp_cc_mx_canoe_desc = {
 static const struct of_device_id disp_cc_canoe_match_table[] = {
 	{ .compatible = "qcom,canoe-dispcc" },
 	{ .compatible = "qcom,alor-dispcc" },
+	{ .compatible = "qcom,whale-dispcc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, disp_cc_canoe_match_table);
@@ -2212,6 +2213,12 @@ static void disp_cc_alor_fixup(struct regmap *regmap)
 {
 	disp_cc_pll0_config.config_ctl_hi_val = 0x0a8060e0;
 	disp_cc_pll1_config.config_ctl_hi_val = 0x0a8060e0;
+}
+
+static void disp_cc_whale_fixup(struct regmap *regmap)
+{
+	disp_cc_pll0_config.config_ctl_hi_val = 0x0a826060;
+	disp_cc_pll1_config.config_ctl_hi_val = 0x0a826060;
 }
 
 static int disp_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regmap)
@@ -2225,6 +2232,9 @@ static int disp_cc_canoe_fixup(struct platform_device *pdev, struct regmap *regm
 
 	if (!strcmp(compat, "qcom,alor-dispcc"))
 		disp_cc_alor_fixup(regmap);
+
+	if (!strcmp(compat, "qcom,whale-dispcc"))
+		disp_cc_whale_fixup(regmap);
 
 	return 0;
 }

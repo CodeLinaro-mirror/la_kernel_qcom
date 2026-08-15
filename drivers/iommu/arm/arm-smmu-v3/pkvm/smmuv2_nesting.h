@@ -22,6 +22,8 @@
 /* Maximum number of SMRs and S2CRs per SMMU */
 #define ARM_SMMU_MAX_SMRS 256
 #define ARM_SMMU_MAX_S2CRS ARM_SMMU_MAX_SMRS
+
+#define ARM_SMMU_MAX_HANDOFF_SMRS 8
 /**
  * struct smmu_v2_nested - SMMUv2 nested virtualization structure
  * @iommu: Base IOMMU structure
@@ -53,12 +55,28 @@ struct smmu_v2_nested {
 	u32 num_s2cr; /* S2CR allocation for NS */
 	u32 num_cbar; /* CBAR allocation for NS */
 	u32 num_cb;   /* CB allocation for NS */
+	u32 num_handoff_smrs; /* Number of Handoff SMRs */
 	u32 pgshift;  /* Page size 4KB or 64KB  */
 	u32 numpage;
 	u32 host_s2_cb_idx;  /* Index of reserved host S2 context bank */
 	u32 smr_pool[ARM_SMMU_MAX_SMRS];
 	u32 s2cr_pool[ARM_SMMU_MAX_S2CRS];
 	u32 cbar_pool[ARM_SMMU_MAX_CBS];
+	u32 handoff_smrs[ARM_SMMU_MAX_HANDOFF_SMRS];
+#define ARM_SMMU_FEAT_COHERENT_WALK	(1 << 0)
+#define ARM_SMMU_FEAT_STREAM_MATCH	(1 << 1)
+#define ARM_SMMU_FEAT_TRANS_S1_V2	(1 << 2)
+#define ARM_SMMU_FEAT_TRANS_S2_V2	(1 << 3)
+#define ARM_SMMU_FEAT_TRANS_NESTED	(1 << 4)
+#define ARM_SMMU_FEAT_TRANS_OPS		(1 << 5)
+#define ARM_SMMU_FEAT_VMID16		(1 << 6)
+#define ARM_SMMU_FEAT_FMT_AARCH64_4K	(1 << 7)
+#define ARM_SMMU_FEAT_FMT_AARCH64_16K	(1 << 8)
+#define ARM_SMMU_FEAT_FMT_AARCH64_64K	(1 << 9)
+#define ARM_SMMU_FEAT_FMT_AARCH32_L	(1 << 10)
+#define ARM_SMMU_FEAT_FMT_AARCH32_S	(1 << 11)
+#define ARM_SMMU_FEAT_EXIDS		(1 << 12)
+	u32				features;
 };
 
 int smmuv2_hyp_nesting_init(void);

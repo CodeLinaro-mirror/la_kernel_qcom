@@ -25,6 +25,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/suspend.h>
 #include <linux/wait.h>
 
 #include <clocksource/arm_arch_timer.h>
@@ -1531,6 +1532,16 @@ static int rpmh_rsc_restore_noirq(struct device *dev)
 	return 0;
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static int rpmh_rsc_restore_noirq_wrapper(struct device *dev)
+{
+	if (pm_suspend_target_state == PM_SUSPEND_MEM)
+		return rpmh_rsc_restore_noirq(dev);
+
+	return 0;
+}
+#endif
+
 static struct rsc_drv_top *rpmh_rsc_get_top_device(const char *name)
 {
 	struct rsc_drv_top *rsc_top;
@@ -1902,6 +1913,10 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 static const struct dev_pm_ops rpmh_rsc_dev_pm_ops = {
 	.poweroff_noirq = rpmh_rsc_poweroff_noirq,
 	.restore_noirq = rpmh_rsc_restore_noirq,
+#ifdef CONFIG_DEEPSLEEP
+	.suspend_noirq = rpmh_rsc_poweroff_noirq,
+	.resume_noirq = rpmh_rsc_restore_noirq_wrapper,
+#endif
 };
 
 static const struct of_device_id rpmh_drv_match[] = {

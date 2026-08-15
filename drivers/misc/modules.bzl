@@ -26,7 +26,7 @@ def register_modules(registry):
     )
 
     registry.register(
-        name = "drivers/misc/fastrpc",
+        name = "drivers/misc/frpc-adsprpc",
         out = "frpc-adsprpc.ko",
         config = "CONFIG_QTI_FASTRPC",
         srcs = [
@@ -36,5 +36,35 @@ def register_modules(registry):
         deps = [
             # do not sort
             "drivers/firmware/qcom/qcom-scm",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/misc/tps6286",
+        out = "tps6286.ko",
+        config = "CONFIG_TPS6286_STEP_DOWN_CONV",
+        srcs = [
+            # do not sort
+            "drivers/misc/tps6286.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/misc/ina234b",
+        out = "ina234b.ko",
+        config = "CONFIG_INA234_CURRENT_MONITOR",
+        srcs = [
+            # do not sort
+            "drivers/misc/ina234b.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/misc/slg4dc",
+        out = "slg4dc.ko",
+        config = "CONFIG_SLG4DC_SIGNAL_IC",
+        srcs = [
+            # do not sort
+            "drivers/misc/slg4dc.c",
         ],
     )

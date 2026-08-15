@@ -18,3 +18,12 @@ def register_modules(registry):
             "drivers/nvmem/qfprom.c",
         ],
     )
+
+    registry.register(
+        name = "drivers/nvmem/layouts/nvmem_layout_qcom_eth_mac",
+        out = "nvmem_layout_qcom_eth_mac.ko",
+        config = "CONFIG_NVMEM_LAYOUT_QCOM_ETH_MAC",
+        srcs = [
+            "drivers/nvmem/layouts/qcom-eth-mac.c",
+        ],
+    )

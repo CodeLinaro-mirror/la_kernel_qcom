@@ -67,3 +67,17 @@ def register_modules(registry):
             "drivers/hwtracing/stm/stm_core",
         ],
     )
+
+    registry.register(
+        name = "drivers/hwtracing/stm/stm_passthrough",
+        out = "stm_passthrough.ko",
+        config = "CONFIG_STM_PASSTHROUGH",
+        srcs = [
+            # do not sort
+            "drivers/hwtracing/stm/stm_passthrough.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/hwtracing/stm/stm_core",
+        ],
+    )

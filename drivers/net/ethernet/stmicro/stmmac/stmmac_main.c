@@ -130,8 +130,9 @@ static irqreturn_t stmmac_interrupt(int irq, void *dev_id);
 /* For MSI interrupts handling */
 static irqreturn_t stmmac_mac_interrupt(int irq, void *dev_id);
 static irqreturn_t stmmac_safety_interrupt(int irq, void *dev_id);
-static irqreturn_t stmmac_msi_intr_tx(int irq, void *data);
-static irqreturn_t stmmac_msi_intr_rx(int irq, void *data);
+static irqreturn_t stmmac_dma_tx_rx_interrupt(int irq, void *data);
+static irqreturn_t stmmac_dma_tx_interrupt(int irq, void *data);
+static irqreturn_t stmmac_dma_rx_interrupt(int irq, void *data);
 static void stmmac_reset_rx_queue(struct stmmac_priv *priv, u32 queue);
 static void stmmac_reset_tx_queue(struct stmmac_priv *priv, u32 queue);
 static void stmmac_reset_queues_param(struct stmmac_priv *priv);
@@ -286,6 +287,14 @@ static void stmmac_global_err(struct stmmac_priv *priv)
 	set_bit(STMMAC_RESET_REQUESTED, &priv->state);
 	stmmac_service_event_schedule(priv);
 }
+
+void stmmac_handle_switch_reset(struct stmmac_priv *priv)
+{
+	if (netif_running(priv->dev) &&
+	    !test_bit(STMMAC_RESET_REQUESTED, &priv->state))
+		stmmac_global_err(priv);
+}
+EXPORT_SYMBOL_GPL(stmmac_handle_switch_reset);
 
 /**
  * stmmac_clk_csr_set - dynamically set the MDC clock
@@ -3554,8 +3563,12 @@ static int stmmac_hw_setup(struct net_device *dev, bool ptp_register)
 		}
 	}
 
-	if (priv->hw->pcs)
-		stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, priv->hw->ps, 0);
+	if (priv->hw->pcs) {
+		if (priv->plat->disable_pcs_ane)
+			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 0, priv->hw->ps, 0);
+		else
+			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, priv->hw->ps, 0);
+	}
 
 	/* set TX and RX rings length */
 	stmmac_set_rings_length(priv);
@@ -3636,7 +3649,14 @@ static void stmmac_free_irq(struct net_device *dev,
 				free_irq(priv->rx_irq[j], &priv->dma_conf.rx_queue[j]);
 			}
 		}
-
+		fallthrough;
+	case REQ_IRQ_ERR_TX_RX:
+		for (j = irq_idx - 1; j >= 0; j--) {
+			if (priv->tx_rx_irq[j] > 0) {
+				irq_set_affinity_hint(priv->tx_rx_irq[j], NULL);
+				free_irq(priv->tx_rx_irq[j], &priv->channel[j]);
+			}
+		}
 		if (priv->sfty_ue_irq > 0 && priv->sfty_ue_irq != dev->irq)
 			free_irq(priv->sfty_ue_irq, dev);
 		fallthrough;
@@ -3666,7 +3686,7 @@ static void stmmac_free_irq(struct net_device *dev,
 	}
 }
 
-static int stmmac_request_irq_multi_msi(struct net_device *dev)
+static int stmmac_request_irq_multi(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	enum request_irq_err irq_err;
@@ -3676,6 +3696,9 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 	int ret;
 	int i;
 	size_t buff_size;
+	u32 maxq;
+
+	maxq = max(priv->plat->rx_queues_to_use, priv->plat->tx_queues_to_use);
 
 	/* For common interrupt */
 	int_name = priv->int_name_mac;
@@ -3792,7 +3815,33 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		}
 	}
 
-	/* Request Rx MSI irq */
+	/* Request Tx and Rx per channel irq */
+	for (i = 0; i < maxq; i++) {
+		if (i >= STMMAC_CH_MAX)
+			break;
+		if (priv->tx_rx_irq[i] == 0)
+			continue;
+
+		int_name = priv->int_name_tx_rx_irq[i];
+		buff_size = sizeof(priv->int_name_tx_rx_irq[i]);
+		snprintf(int_name, buff_size, "%s:%s-%d", dev->name, "tx_rx", i);
+		ret = request_irq(priv->tx_rx_irq[i],
+				  stmmac_dma_tx_rx_interrupt,
+				  0, int_name, &priv->channel[i]);
+		if (unlikely(ret < 0)) {
+			netdev_err(priv->dev,
+				   "%s: alloc tx_rx-%d  dma tx_rx_irq %d (error: %d)\n",
+				   __func__, i, priv->tx_rx_irq[i], ret);
+			irq_err = REQ_IRQ_ERR_TX_RX;
+			irq_idx = i;
+			goto irq_error;
+		}
+		cpumask_clear(&cpu_mask);
+		cpumask_set_cpu(i % num_online_cpus(), &cpu_mask);
+		irq_set_affinity_hint(priv->tx_rx_irq[i], &cpu_mask);
+	}
+
+	/* Request Rx irq */
 	for (i = 0; i < priv->plat->rx_queues_to_use; i++) {
 		if (i >= MTL_MAX_RX_QUEUES)
 			break;
@@ -3804,11 +3853,11 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		snprintf(int_name, buff_size, "%s:%s-%d",
 			 dev->name, "rx", i);
 		ret = request_irq(priv->rx_irq[i],
-				  stmmac_msi_intr_rx,
+				  stmmac_dma_rx_interrupt,
 				  0, int_name, &priv->dma_conf.rx_queue[i]);
 		if (unlikely(ret < 0)) {
 			netdev_err(priv->dev,
-				   "%s: alloc rx-%d  MSI %d (error: %d)\n",
+				   "%s: alloc rx-%d  dma rx_irq %d (error: %d)\n",
 				   __func__, i, priv->rx_irq[i], ret);
 			irq_err = REQ_IRQ_ERR_RX;
 			irq_idx = i;
@@ -3819,7 +3868,7 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		irq_set_affinity_hint(priv->rx_irq[i], &cpu_mask);
 	}
 
-	/* Request Tx MSI irq */
+	/* Request Tx irq */
 	for (i = 0; i < priv->plat->tx_queues_to_use; i++) {
 		if (i >= MTL_MAX_TX_QUEUES)
 			break;
@@ -3831,11 +3880,11 @@ static int stmmac_request_irq_multi_msi(struct net_device *dev)
 		snprintf(int_name, buff_size, "%s:%s-%d",
 			 dev->name, "tx", i);
 		ret = request_irq(priv->tx_irq[i],
-				  stmmac_msi_intr_tx,
+				  stmmac_dma_tx_interrupt,
 				  0, int_name, &priv->dma_conf.tx_queue[i]);
 		if (unlikely(ret < 0)) {
 			netdev_err(priv->dev,
-				   "%s: alloc tx-%d  MSI %d (error: %d)\n",
+				   "%s: alloc tx-%d  dma tx_irq %d (error: %d)\n",
 				   __func__, i, priv->tx_irq[i], ret);
 			irq_err = REQ_IRQ_ERR_TX;
 			irq_idx = i;
@@ -3927,8 +3976,8 @@ static int stmmac_request_irq(struct net_device *dev)
 	int ret;
 
 	/* Request the IRQ lines */
-	if (priv->plat->flags & STMMAC_FLAG_MULTI_MSI_EN)
-		ret = stmmac_request_irq_multi_msi(dev);
+	if (priv->plat->flags & STMMAC_FLAG_MULTI_IRQ_EN)
+		ret = stmmac_request_irq_multi(dev);
 	else
 		ret = stmmac_request_irq_single(dev);
 
@@ -5010,13 +5059,14 @@ static unsigned int stmmac_rx_buf2_len(struct stmmac_priv *priv,
 	if (!priv->sph)
 		return 0;
 
-	/* Not last descriptor */
-	if (status & rx_not_ls)
+	/* Not GMAC4/XGMAC and not last descriptor */
+	if (!priv->plat->has_gmac4 && !priv->plat->has_xgmac &&
+	    (status & rx_not_ls))
 		return priv->dma_conf.dma_buf_sz;
 
+	/* GMAC4/XGMAC or last descriptor */
 	plen = stmmac_get_rx_frame_len(priv, p, coe);
 
-	/* Last descriptor */
 	return plen - len;
 }
 
@@ -5608,6 +5658,8 @@ read_again:
 		/* check if managed by the DMA otherwise go ahead */
 		if (unlikely(status & dma_own))
 			break;
+
+		dma_rmb();
 
 		rx_q->cur_rx = STMMAC_GET_ENTRY(rx_q->cur_rx,
 						priv->dma_conf.dma_rx_size);
@@ -6219,6 +6271,9 @@ static irqreturn_t stmmac_mac_interrupt(int irq, void *dev_id)
 	/* To handle Common interrupts */
 	stmmac_common_interrupt(priv);
 
+	if (priv->plat->dma_cfg->multi_irq_en)
+		stmmac_dma_interrupt(priv);
+
 	return IRQ_HANDLED;
 }
 
@@ -6237,7 +6292,30 @@ static irqreturn_t stmmac_safety_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t stmmac_msi_intr_tx(int irq, void *data)
+/* Interrupt handler for Tx and Rx combined IRQ line */
+static irqreturn_t stmmac_dma_tx_rx_interrupt(int irq, void *data)
+{
+	struct stmmac_channel *ch = (struct stmmac_channel *)data;
+	struct stmmac_priv *priv = ch->priv_data;
+	int status;
+
+	/* Check if adapter is up */
+	if (test_bit(STMMAC_DOWN, &priv->state))
+		return IRQ_HANDLED;
+
+	status = stmmac_napi_check(priv, ch->index, DMA_DIR_RXTX);
+
+	if (unlikely(status & tx_hard_error_bump_tc)) {
+		/* Try to bump up the dma threshold on this failure */
+		stmmac_bump_dma_threshold(priv, ch->index);
+	} else if (unlikely(status == tx_hard_error)) {
+		stmmac_tx_err(priv, ch->index);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t stmmac_dma_tx_interrupt(int irq, void *data)
 {
 	struct stmmac_tx_queue *tx_q = (struct stmmac_tx_queue *)data;
 	struct stmmac_dma_conf *dma_conf;
@@ -6264,7 +6342,7 @@ static irqreturn_t stmmac_msi_intr_tx(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t stmmac_msi_intr_rx(int irq, void *data)
+static irqreturn_t stmmac_dma_rx_interrupt(int irq, void *data)
 {
 	struct stmmac_rx_queue *rx_q = (struct stmmac_rx_queue *)data;
 	struct stmmac_dma_conf *dma_conf;
@@ -7265,6 +7343,23 @@ static void stmmac_flush_mtl_tx(struct stmmac_priv *priv)
 		stmmac_flush_tx_mtl(priv, priv->hw, chan);
 }
 
+static void stmmac_disable_perch_irq(struct stmmac_priv *priv)
+{
+	int i = 0;
+	u32 maxq;
+
+	maxq = max(priv->plat->rx_queues_to_use, priv->plat->tx_queues_to_use);
+
+	for (i = 0; i < maxq; i++) {
+		if (i >= STMMAC_CH_MAX)
+			break;
+		if (priv->tx_rx_irq[i] <= 0)
+			continue;
+
+		disable_irq(priv->tx_rx_irq[i]);
+	}
+}
+
 static void stmmac_reset_subtask(struct stmmac_priv *priv)
 {
 	if (!test_and_clear_bit(STMMAC_RESET_REQUESTED, &priv->state))
@@ -7280,6 +7375,7 @@ static void stmmac_reset_subtask(struct stmmac_priv *priv)
 		usleep_range(1000, 2000);
 
 	disable_irq(priv->dev->irq);
+	stmmac_disable_perch_irq(priv);
 	set_bit(STMMAC_DOWN, &priv->state);
 	stmmac_stop_all_dma(priv);
 	stmmac_flush_mtl_tx(priv);
@@ -7658,8 +7754,8 @@ int stmmac_dvr_probe(struct device *device,
 	priv->plat = plat_dat;
 	priv->ioaddr = res->addr;
 	priv->dev->base_addr = (unsigned long)res->addr;
-	priv->plat->dma_cfg->multi_msi_en =
-		(priv->plat->flags & STMMAC_FLAG_MULTI_MSI_EN);
+	priv->plat->dma_cfg->multi_irq_en =
+		(priv->plat->flags & STMMAC_FLAG_MULTI_IRQ_EN);
 
 	priv->dev->irq = res->irq;
 	priv->wol_irq = res->wol_irq;
@@ -7671,6 +7767,8 @@ int stmmac_dvr_probe(struct device *device,
 		priv->rx_irq[i] = res->rx_irq[i];
 	for (i = 0; i < MTL_MAX_TX_QUEUES; i++)
 		priv->tx_irq[i] = res->tx_irq[i];
+	for (i = 0; i < STMMAC_CH_MAX; i++)
+		priv->tx_rx_irq[i] = res->tx_rx_irq[i];
 
 	if (!is_zero_ether_addr(res->mac))
 		eth_hw_addr_set(priv->dev, res->mac);
@@ -7800,7 +7898,7 @@ int stmmac_dvr_probe(struct device *device,
 #ifdef STMMAC_VLAN_TAG_USED
 	/* Both mac100 and gmac support receive VLAN tag detection */
 	ndev->features |= NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_STAG_RX;
-	if (priv->plat->has_gmac4) {
+	if (priv->plat->has_gmac4 || priv->plat->has_xgmac) {
 		ndev->hw_features |= NETIF_F_HW_VLAN_CTAG_RX;
 		priv->hw->hw_vlan_en = true;
 	}
@@ -8179,14 +8277,14 @@ int stmmac_resume(struct device *dev)
 	struct stmmac_priv *priv = netdev_priv(ndev);
 	int ret;
 
+	if (!netif_running(ndev))
+		return 0;
+
 	if (priv->plat->resume) {
 		ret = priv->plat->resume(dev, priv->plat->bsp_priv);
 		if (ret)
 			return ret;
 	}
-
-	if (!netif_running(ndev))
-		return 0;
 
 	/* Power Down bit, into the PM register, is cleared
 	 * automatically as soon as a magic packet or a Wake-up frame

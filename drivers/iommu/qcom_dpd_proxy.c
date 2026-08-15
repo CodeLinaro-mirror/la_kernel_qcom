@@ -77,6 +77,9 @@ int dpd_svc_map(struct dpd_scatterlist *dpd_sg, u32 domain_id, u32 flags, u64 io
 	struct si_object_invoke_ctx oic;
 	struct imm_map_cmd cmd = {0};
 
+	if (dpd_sg->perms & QCOM_SCM_PERM_EXEC)
+		flags |= IMM_F_EXEC;
+
 	if (flags & ~IMM_VALID_FLAGS)
 		return -EINVAL;
 
@@ -489,7 +492,7 @@ static int dpd_memory_reclaim(struct dpd_mem_ops_args *args, struct sg_table *sg
 	if (!args->iommu_bypass && val) {
 		dpd_args_show(args, true, "Mapped by service\n");
 		return -EINVAL;
-	} else if (args->iommu_bypass && val != 1) {
+	} else if (args->iommu_bypass && val != dpd_args_len(args)) {
 		dpd_args_show(args, true, "Unexpected mapcount %ld for iommu bypass\n", val);
 		return -EINVAL;
 	}
@@ -534,6 +537,22 @@ static int dpd_mtree_insert(struct dpd_scatterlist *dpd_sg)
 	return 0;
 }
 
+static int scm_to_ffa_perm(int scm_perm)
+{
+	int ffa_perm = 0;
+
+	if (scm_perm & QCOM_SCM_PERM_READ) {
+		if (scm_perm & QCOM_SCM_PERM_WRITE)
+			ffa_perm |= FFA_MEM_RW;
+		else
+			ffa_perm |= FFA_MEM_RO;
+	}
+	if (scm_perm & QCOM_SCM_PERM_EXEC)
+		ffa_perm |= FFA_MEM_EXEC;
+
+	return ffa_perm;
+}
+
 /*
  * On success, takes ownership of the scatterlist in sgt and sgt is zero'd.
  * This may occur for certain failure cases as well.
@@ -545,6 +564,7 @@ static int dpd_memory_lend_share(struct dpd_mem_ops_args *args, struct sg_table 
 	uint32_t flags = 0;
 	struct scatterlist *sg;
 	u32 op = args->op;
+	struct qcom_scm_vmperm vmperm;
 
 	dpd_sg = kzalloc(sizeof(*dpd_sg), GFP_KERNEL);
 	if (!dpd_sg)
@@ -564,6 +584,15 @@ static int dpd_memory_lend_share(struct dpd_mem_ops_args *args, struct sg_table 
 		flags |= SI_CORE_MEM_OBJ_SHARE;
 	else
 		flags |= SI_CORE_MEM_OBJ_LEND;
+
+	for (i = 0; i < dpd_args_dst_len(args); i++) {
+		vmperm = dpd_args_dst_vmperm(args, i);
+		if (vmperm.vmid != VMID_HLOS) {
+			dpd_sg->perms = vmperm.perm;
+			flags |= SI_CORE_MEM_OBJ_FFA_PERM(scm_to_ffa_perm(dpd_sg->perms));
+			break;
+		}
+	}
 
 	dpd_sg->shm = init_si_mem_object_sg(&dpd_sg->sgt, 0, flags, dpd_si_release, dpd_sg);
 	if (!dpd_sg->shm) {

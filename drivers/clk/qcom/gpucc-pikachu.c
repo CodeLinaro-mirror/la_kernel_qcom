@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
 #include <dt-bindings/clock/qcom,pikachu-gpucc.h>
@@ -15,6 +16,7 @@
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
 #include "clk-pll.h"
+#include "clk-pm.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "clk-regmap-divider.h"
@@ -52,7 +54,7 @@ static const struct pll_vco taycan_eko_t_vco[] = {
 };
 
 /* 360.0 MHz Configuration */
-static const struct alpha_pll_config gpu_cc_pll0_config = {
+static struct alpha_pll_config gpu_cc_pll0_config = {
 	.l = 0x12,
 	.cal_l = 0x48,
 	.alpha = 0xc000,
@@ -68,6 +70,7 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &gpu_cc_pll0_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gpu_cc_pll0",
@@ -90,7 +93,7 @@ static struct clk_alpha_pll gpu_cc_pll0 = {
 };
 
 /* 440.0 MHz Configuration */
-static const struct alpha_pll_config gpu_cc_pll1_config = {
+static struct alpha_pll_config gpu_cc_pll1_config = {
 	.l = 0x16,
 	.cal_l = 0x48,
 	.alpha = 0xeaaa,
@@ -106,6 +109,7 @@ static struct clk_alpha_pll gpu_cc_pll1 = {
 	.vco_table = taycan_eko_t_vco,
 	.num_vco = ARRAY_SIZE(taycan_eko_t_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_TAYCAN_EKO_T],
+	.config = &gpu_cc_pll1_config,
 	.clkr = {
 		.hw.init = &(const struct clk_init_data) {
 			.name = "gpu_cc_pll1",
@@ -544,6 +548,19 @@ static struct clk_regmap *gpu_cc_pikachu_clocks[] = {
 	[GPU_CC_PLL1] = &gpu_cc_pll1.clkr,
 };
 
+/*
+ *	gpu_cc_cb_clk
+ *	gpu_cc_cxo_aon_clk
+ *	gpu_cc_demet_clk
+ *	gpu_cc_sleep_clk
+ */
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0x93c0, .mask = BIT(0) },
+	{ .offset = 0x9004, .mask = BIT(0) },
+	{ .offset = 0x900c, .mask = BIT(0) },
+	{ .offset = 0x913c, .mask = BIT(0) },
+};
+
 static struct gdsc *gpu_cc_pikachu_gdscs[] = {
 	[GPU_CC_CX_GDSC] = &gpu_cc_cx_gdsc,
 	[GPU_CC_CX_SMMU_GDSC] = &gpu_cc_cx_smmu_gdsc,
@@ -570,7 +587,7 @@ static const struct regmap_config gpu_cc_pikachu_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc gpu_cc_pikachu_desc = {
+static struct qcom_cc_desc gpu_cc_pikachu_desc = {
 	.config = &gpu_cc_pikachu_regmap_config,
 	.clks = gpu_cc_pikachu_clocks,
 	.num_clks = ARRAY_SIZE(gpu_cc_pikachu_clocks),
@@ -578,6 +595,8 @@ static const struct qcom_cc_desc gpu_cc_pikachu_desc = {
 	.num_resets = ARRAY_SIZE(gpu_cc_pikachu_resets),
 	.clk_regulators = gpu_cc_pikachu_regulators,
 	.num_clk_regulators = ARRAY_SIZE(gpu_cc_pikachu_regulators),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 	.gdscs = gpu_cc_pikachu_gdscs,
 	.num_gdscs = ARRAY_SIZE(gpu_cc_pikachu_gdscs),
 };
@@ -597,27 +616,26 @@ static int gpu_cc_pikachu_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
+	ret = register_qcom_clks_pm(pdev, true, &gpu_cc_pikachu_desc);
+	if (ret)
+		dev_err_probe(&pdev->dev, ret, "Failed to register for pm ops\n");
+
 	clk_taycan_eko_t_pll_configure(&gpu_cc_pll0, regmap, &gpu_cc_pll0_config);
 	clk_taycan_eko_t_pll_configure(&gpu_cc_pll1, regmap, &gpu_cc_pll1_config);
 
-	/*
-	 * Keep clocks always enabled:
-	 *	gpu_cc_cb_clk
-	 *	gpu_cc_cxo_aon_clk
-	 *	gpu_cc_demet_clk
-	 *	gpu_cc_sleep_clk
-	 */
-	regmap_update_bits(regmap, 0x93c0, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x9004, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x900c, BIT(0), BIT(0));
-	regmap_update_bits(regmap, 0x913c, BIT(0), BIT(0));
+	/* Enabling always ON clocks */
+	clk_restore_critical_clocks(&pdev->dev);
 
 	ret = qcom_cc_really_probe(&pdev->dev, &gpu_cc_pikachu_desc, regmap);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Failed to register GPU CC clocks\n");
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret, "Failed to register GPU CC clocks\n");
+		goto err;
+	}
 
 	dev_info(&pdev->dev, "Registered GPU CC clocks\n");
 
+err:
+	pm_runtime_put_sync(&pdev->dev);
 	return ret;
 }
 

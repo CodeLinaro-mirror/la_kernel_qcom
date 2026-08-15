@@ -87,6 +87,7 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 	struct walt_sched_cluster *cluster;
 	bool trailblazer_boost_cpu = false;
 	bool large_cpu_cap_low = is_large_cpu_cap_low();
+	unsigned long max_capacity = 1024;
 
 	if (unlikely(walt_disabled))
 		return NULL;
@@ -96,11 +97,13 @@ struct sched_avg_stats *sched_get_nr_running_avg(void)
 
 	/* read and reset nr_running counts */
 	for_each_possible_cpu(cpu) {
+		unsigned long cpu_capacity;
 		unsigned long flags;
 		u64 diff;
 
+		cpu_capacity = arch_scale_cpu_capacity(cpu);
 		trailblazer_boost_cpu |= (walt_trailblazer_tasks(cpu) &&
-				cpumask_test_cpu(cpu, &cpu_array[0][num_sched_clusters-1]) &&
+				cpu_capacity == max_capacity &&
 				per_cpu(ipc_cnt, cpu) >= trailblazer_boost_thresh_ipc &&
 				!large_cpu_cap_low);
 

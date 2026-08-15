@@ -277,7 +277,6 @@
 #define QCOM_ID_SM8650			557
 #define QCOM_ID_KHAJEP			561
 #define QCOM_ID_KHAJEQ			562
-#define QCOM_ID_SM4450			568
 #define QCOM_ID_RAVELIN			568
 #define QCOM_ID_QCS5430			575
 #define QCOM_ID_QCM5430			576
@@ -309,21 +308,32 @@
 #define QCOM_ID_QCS8845			764
 #define QCOM_ID_CANOEP			661
 #define QCOM_ID_SERAPH			672
+#define QCOM_ID_SERAPHP                 673
+#define QCOM_ID_SERAPH_MEP_POP          792
+#define QCOM_ID_QCS_KALAMAP_N		668
 #define QCOM_ID_VIENNA			669
 #define QCOM_ID_VIENNAP			670
 #define QCOM_ID_ALOR			685
 #define QCOM_ID_ALORP			727
+#define QCOM_ID_QCS8625_PINEAPPLE	702
 #define QCOM_ID_ALOR_INTERPOSER		704
+#define QCOM_ID_CQ8750S			705
+#define QCOM_ID_CQ8725S			706
 #define QCOM_ID_WHALE			722
 #define QCOM_ID_WHALEP			723
 #define QCOM_ID_CHORA			724
+#define QCOM_ID_CHORAP			744
 #define QCOM_ID_MALABAR			733
 #define QCOM_ID_PIKACHU			736
 #define QCOM_ID_CANOEPSG		743
 #define QCOM_ID_SHIKRA			756
 #define QCOM_ID_MALABARP                757
+#define QCOM_ID_KHAJEAPQ		762
 #define QCOM_ID_BOURTZI			776
 #define QCOM_ID_BOURTZIP		777
+#define QCOM_ID_DIWALI			506
+#define QCOM_ID_DIWALIP			547
+#define QCOM_ID_MAHUA			693
 
 /*
  * The board type and revision information, used by Qualcomm bootloaders and

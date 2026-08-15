@@ -352,6 +352,7 @@ static int glink_rpm_probe(struct platform_device *pdev)
 		return PTR_ERR(glink);
 	}
 
+	qcom_glink_native_set_rx_wakeup(glink, false);
 	rpm->glink = glink;
 
 	platform_set_drvdata(pdev, rpm);

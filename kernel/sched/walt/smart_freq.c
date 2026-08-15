@@ -746,7 +746,8 @@ void smart_freq_init(const char *name)
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "WHALE")
 			|| !strcmp(name, "ALORP")
 			|| !strcmp(name, "WHALEP") || !strcmp(name, "CANOEPSG")
-			|| !strcmp(name, "ALOR") || !strcmp(name, "CANOEP")) {
+			|| !strcmp(name, "ALOR") || !strcmp(name, "CANOEP")
+			|| !strcmp(name, "QCS8845")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
@@ -820,7 +821,8 @@ void smart_freq_init(const char *name)
 				cluster->smart_freq_info->min_cycles = 7004160;
 			}
 		}
-	} else if (!strcmp(name, "MALABAR")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP") ||
+			!strcmp(name, "BOURTZI") || !strcmp(name, "BOURTZIP")) {
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
 				/* Legacy */
@@ -1011,7 +1013,7 @@ void smart_freq_init(const char *name)
 					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 			}
 		}
-	} else if (!strcmp(name, "CHORA")) {
+	} else if (!strcmp(name, "CHORA") || !strcmp(name, "CHORAP")) {
 
 		for_each_sched_cluster(cluster) {
 			if (cluster->id == 0) {
@@ -1055,7 +1057,7 @@ void smart_freq_init(const char *name)
 					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
 			}
 		}
-	} else if (!strcmp(name, "X1E80100")) {
+	} else if (!strcmp(name, "X1E80100") || !strcmp(name, "X1P42100")) {
 		for_each_sched_cluster(cluster) {
 			/* Legacy */
 			/* Keeping the legacy freq reasons hyst default as canoe.
@@ -1069,12 +1071,55 @@ void smart_freq_init(const char *name)
 			cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
 				300000000;
 
-			/* All X1E80100 clusters share the same frequency points, and
-			 * cluster 1 and cluster 2 have the same capacity. we can keep
+			/* All clusters share the same frequency points. we can keep
 			 * the current configuration and wait for the perf/power team
 			 * to tune an appropriate value
 			 */
 			cluster->smart_freq_info->min_cycles = 7004160;
+		}
+	} else if (!strcmp(name, "SHIKRA")) {
+
+		for_each_sched_cluster(cluster) {
+			if (cluster->id == 0) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					1804800;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(TRAILBLAZER_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
+
+			} else if (cluster->id == 1) {
+				/* Legacy */
+				cluster->smart_freq_info->legacy_reason_config[0].freq_allowed =
+					1900800;
+				cluster->smart_freq_info->legacy_reason_config[2].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[3].hyst_ns =
+					1000000000;
+				cluster->smart_freq_info->legacy_reason_config[4].hyst_ns =
+					300000000;
+				cluster->smart_freq_info->smart_freq_participation_mask |=
+					BIT(BOOST_SMART_FREQ) |
+					BIT(SUSTAINED_HIGH_UTIL_SMART_FREQ) |
+					BIT(BIG_TASKCNT_SMART_FREQ) |
+					BIT(TRAILBLAZER_SMART_FREQ) |
+					BIT(SBT_SMART_FREQ) |
+					BIT(PIPELINE_60FPS_OR_LESSER_SMART_FREQ) |
+					BIT(PIPELINE_90FPS_SMART_FREQ) |
+					BIT(PIPELINE_120FPS_OR_GREATER_SMART_FREQ);
+			}
 		}
 	}
 

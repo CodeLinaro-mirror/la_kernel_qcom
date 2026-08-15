@@ -1,6 +1,7 @@
 seraph_consolidate_config = {
     # keep sorted
     "CONFIG_ATOMIC64_SELFTEST": "m",
+    "CONFIG_BATTERY_MAX1720X": "m",
     "CONFIG_CMA_DEBUGFS": "y",
     "CONFIG_CORESIGHT_SOURCE_ETM4X": "m",
     "CONFIG_CPU_IDLE_SIMPLE_GOV_QCOM_LPM": "m",
@@ -14,6 +15,7 @@ seraph_consolidate_config = {
     "CONFIG_MHI_BUS_DEBUG": "y",
     "CONFIG_MSM_GPI_DMA_DEBUG": "y",
     "CONFIG_PAGE_OWNER": "y",
+    "CONFIG_QCOM_VM_CRASH_DMESG_DUMP": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
     "CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE": "y",
     "CONFIG_RUNTIME_TESTING_MENU": "y",

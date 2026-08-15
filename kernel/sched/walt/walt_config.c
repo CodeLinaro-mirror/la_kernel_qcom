@@ -9,6 +9,8 @@
 
 unsigned long __read_mostly soc_flags;
 unsigned int trailblazer_floor_freq[MAX_CLUSTERS];
+unsigned int sf_misfit_delay_low_cap[MAX_CLUSTERS];
+unsigned int sf_misfit_delay_high_cap[MAX_CLUSTERS];
 cpumask_t asym_cap_sibling_cpus;
 cpumask_t pipeline_sync_cpus;
 cpumask_t storage_boost_cpus;
@@ -89,6 +91,8 @@ void walt_config(void)
 		high_perf_cluster_freq_cap[i] = FREQ_QOS_MAX_DEFAULT_VALUE;
 		sysctl_sched_idle_enough_clust[i] = SCHED_IDLE_ENOUGH_DEFAULT;
 		sysctl_sched_cluster_util_thres_pct_clust[i] = SCHED_CLUSTER_UTIL_THRES_PCT_DEFAULT;
+		sf_misfit_delay_low_cap[i] = 0;
+		sf_misfit_delay_high_cap[i] = 0;
 		trailblazer_floor_freq[i] = 0;
 		for (j = 0; j < MAX_CLUSTERS; j++) {
 			load_sync_util_thres[i][j] = 0;
@@ -127,7 +131,8 @@ void walt_config(void)
 			|| !strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
 			|| !strcmp(name, "ALORP")
 			|| !strcmp(name, "WHALE") || !strcmp(name, "WHALEP")
-			|| !strcmp(name, "CANOEPSG") || !strcmp(name, "CANOEP")) {
+			|| !strcmp(name, "CANOEPSG") || !strcmp(name, "CANOEP")
+			|| !strcmp(name, "QCS8845")) {
 		sysctl_sched_suppress_region2		= 1;
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
@@ -186,7 +191,7 @@ void walt_config(void)
 		}
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 		if (strcmp(name, "ALOR_INTERPOSER") && strcmp(name, "ALOR")
-				&& strcmp(name, "ALORP"))
+				&& strcmp(name, "ALORP") && strcmp(name, "QCS8845"))
 			demand_scaling_factor = 70;
 
 		/*
@@ -194,8 +199,13 @@ void walt_config(void)
 		 * for Alor platforms
 		 */
 		if (!strcmp(name, "ALOR_INTERPOSER") || !strcmp(name, "ALOR")
-				|| !strcmp(name, "ALORP"))
+				|| !strcmp(name, "ALORP") || !strcmp(name, "QCS8845"))
 			soc_feat_set(SOC_ENABLE_LIMIT_PRIME_USAGE);
+
+		for (i = 0; i < MAX_CLUSTERS - 1; i++) {
+			sf_misfit_delay_low_cap[i]  = 0;
+			sf_misfit_delay_high_cap[i] = 0;
+		}
 
 	} else if (!strcmp(name, "PINEAPPLE")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
@@ -273,7 +283,7 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "CHORA")) {
+	} else if (!strcmp(name, "CHORA")  || !strcmp(name, "CHORAP")) {
 		soc_sched_lib_name_capacity = 4;
 		/*
 		 * Trailblazer settings
@@ -289,7 +299,8 @@ void walt_config(void)
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "MALABAR")) {
+	} else if (!strcmp(name, "MALABAR") || !strcmp(name, "MALABARP") ||
+			!strcmp(name, "BOURTZI") || !strcmp(name, "BOURTZIP")) {
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);
 		soc_feat_unset(SOC_ENABLE_UCLAMP_BOOSTED_BIT);
@@ -300,6 +311,7 @@ void walt_config(void)
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 		sysctl_walt_features |= WALT_FEAT_SYNC_FREQ_CAP_BIT;
 		sysctl_walt_features |= WALT_FEAT_TOPAPP_BASED_HISPEED;
+		soc_feat_unset(SOC_ENABLE_COLOCATION_PLACEMENT_BOOST_BIT);
 		soc_feat_set(SOC_ENABLE_FT_BOOST_TO_ALL);
 		cpumask_copy(&storage_boost_cpus, cpu_possible_mask);
 		soc_feat_unset(SOC_ENABLE_PIPELINE_SWAPPING_BIT);
@@ -321,20 +333,21 @@ void walt_config(void)
 		}
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
-	} else if (!strcmp(name, "VIENNA") || !strcmp(name, "VIENNAP")) {
+	} else if (!strcmp(name, "VIENNA") || !strcmp(name, "VIENNAP") || !strcmp(name, "SHIKRA")) {
 		/*
 		 * Do not put the whole cluster at Fmin during thermal halt condition.
 		 */
 		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
-	} else if (!strcmp(name, "X1E80100")) {
-		/*
-		 * By default this SOC flag will be disabled. Enable this only
-		 * for X1E80100 platforms
-		 */
+	} else if (!strcmp(name, "X1E80100") || !strcmp(name, "X1P42100")) {
 		trailblazer_boost_thresh_ipc = 225;
 		trailblazer_floor_freq[0] = 2500000;
 		trailblazer_floor_freq[1] = 2500000;
+		trailblazer_floor_freq[2] = 2500000;
 		sysctl_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+		/*
+		 * By default this SOC flag will be disabled.
+		 * Enable explicitly for platforms that support SW cycle counter.
+		 */
 		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
 	} else if (!strcmp(name, "SERAPH") || !strcmp(name, "PIKACHU")) {
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);

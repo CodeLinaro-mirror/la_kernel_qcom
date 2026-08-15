@@ -426,8 +426,8 @@ static int lpg_calc_freq(struct lpg_channel *chan, uint64_t period)
 	unsigned int div, best_div = 0;
 	unsigned int m, best_m = 0;
 	unsigned int resolution;
-	unsigned int error;
-	unsigned int best_err = UINT_MAX;
+	u64 error;
+	u64 best_err = U64_MAX;
 	u64 max_period, min_period;
 	u64 best_period = 0;
 	u64 max_res;
@@ -510,7 +510,11 @@ static int lpg_calc_freq(struct lpg_channel *chan, uint64_t period)
 
 				actual = DIV_ROUND_UP_ULL(denominator * (1 << m),
 							  clk_rate_arr[clk_sel]);
-				error = period - actual;
+				if (period > actual)
+					error = period - actual;
+				else
+					error = actual - period;
+
 				if (error < best_err) {
 					best_err = error;
 					best_div = div;
@@ -895,7 +899,7 @@ static int lpg_blink_set(struct lpg_led *led,
 			 unsigned long *delay_on, unsigned long *delay_off)
 {
 	struct lpg_channel *chan;
-	unsigned int period;
+	u64 period;
 	unsigned int triled_mask = 0;
 	struct lpg *lpg = led->lpg;
 	u64 duty;

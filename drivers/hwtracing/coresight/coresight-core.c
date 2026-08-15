@@ -1607,7 +1607,7 @@ const char *coresight_alloc_device_name(struct coresight_dev_list *dict,
 			list = krealloc_array(dict->fwnode_list,
 					      idx + 1, sizeof(*dict->fwnode_list),
 					      GFP_KERNEL);
-			if (ZERO_OR_NULL_PTR(list)) {
+			if (!list) {
 				idx = -ENOMEM;
 				goto done;
 			}

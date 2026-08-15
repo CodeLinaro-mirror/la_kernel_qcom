@@ -11,6 +11,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/platform_device.h>
+#include <linux/of.h>
 
 static const char * const qcom_scmi_plat_names[NUM_QCOM_SCMI_PLATFORMS] = {
 	[QCOM_PLAT_CPUCP]	= "CPUCP",
@@ -29,9 +30,32 @@ static struct qcom_scmi_dev_node qcom_scmi_devices[NUM_QCOM_SCMI_PLATFORMS];
 struct scmi_device *platform_get_qcom_scmi_device(enum qcom_scmi_platforms plat)
 {
 	struct qcom_scmi_dev_node *node;
+	struct device_node *np = NULL;
+	struct device_node *child = NULL;
+	u32 prot_num = QCOM_SCMI_VENDOR_PROTOCOL;
+	bool prot_found = false;
+	u32 reg;
 
 	if (plat > NUM_QCOM_SCMI_PLATFORMS)
 		return ERR_PTR(-EINVAL);
+
+	for_each_compatible_node(np, NULL, "arm,scmi") {
+		prot_found = false;
+
+		for_each_child_of_node(np, child) {
+			if (!of_property_read_u32(child, "reg", &reg) &&
+						reg == prot_num) {
+				prot_found = true;
+				break;
+			}
+		}
+		of_node_put(child);
+		if (prot_found)
+			break;
+	}
+
+	if (!np || !prot_found)
+		return ERR_PTR(-ENODEV);
 
 	node = &qcom_scmi_devices[plat];
 	if (!node || !node->inited)

@@ -1189,6 +1189,8 @@ static void md_ipi_stop(void *unused, struct pt_regs *regs)
 	unsigned int cpu = smp_processor_id();
 
 	per_cpu(regs_before_stop, cpu) = *regs;
+	if (!oops_in_progress)
+		return;
 	dump_stack_minidump(regs->sp);
 }
 #endif
