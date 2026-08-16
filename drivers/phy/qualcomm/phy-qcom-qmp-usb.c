@@ -1922,6 +1922,7 @@ static int __maybe_unused qmp_usb_runtime_resume(struct device *dev)
 static int qmp_usb_pm_suspend(struct device *dev)
 {
 	struct qmp_usb *qmp = dev_get_drvdata(dev);
+	const struct qmp_phy_cfg *cfg = qmp->cfg;
 
 	dev_err(dev, "Suspending QMP phy, mode:%d\n", qmp->mode);
 
@@ -1932,6 +1933,11 @@ static int qmp_usb_pm_suspend(struct device *dev)
 
 	qmp_usb_enable_autonomous_mode(qmp);
 
+	if (qmp->mode != PHY_MODE_USB_HOST_SS &&
+	    qmp->mode != PHY_MODE_USB_DEVICE_SS)
+		qphy_clrbits(qmp->pcs, cfg->regs[QPHY_PCS_POWER_DOWN_CONTROL],
+			     SW_PWRDN);
+
 	clk_disable_unprepare(qmp->pipe_clk);
 	clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
 
@@ -1941,6 +1947,7 @@ static int qmp_usb_pm_suspend(struct device *dev)
 static int qmp_usb_pm_resume(struct device *dev)
 {
 	struct qmp_usb *qmp = dev_get_drvdata(dev);
+	const struct qmp_phy_cfg *cfg = qmp->cfg;
 	int ret = 0;
 
 	dev_err(dev, "Resuming QMP phy, mode:%d\n", qmp->mode);
@@ -1960,6 +1967,11 @@ static int qmp_usb_pm_resume(struct device *dev)
 		clk_bulk_disable_unprepare(qmp->num_clks, qmp->clks);
 		return ret;
 	}
+
+	if (qmp->mode != PHY_MODE_USB_HOST_SS &&
+	    qmp->mode != PHY_MODE_USB_DEVICE_SS)
+		qphy_setbits(qmp->pcs, cfg->regs[QPHY_PCS_POWER_DOWN_CONTROL],
+			     SW_PWRDN);
 
 	qmp_usb_disable_autonomous_mode(qmp);
 
@@ -2271,6 +2283,8 @@ static int qmp_usb_probe(struct platform_device *pdev)
 	}
 
 	phy_set_drvdata(qmp->phy, qmp);
+
+	pm_runtime_allow(dev);
 
 	of_node_put(np);
 
