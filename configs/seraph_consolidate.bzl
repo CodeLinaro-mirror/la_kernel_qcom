@@ -14,8 +14,6 @@ seraph_consolidate_config = {
     "CONFIG_LOCK_TORTURE_TEST": "m",
     "CONFIG_MHI_BUS_DEBUG": "y",
     "CONFIG_MSM_GPI_DMA_DEBUG": "y",
-    "CONFIG_MTD": "y",
-    "CONFIG_MTD_SPI_NOR": "y",
     "CONFIG_PAGE_OWNER": "y",
     "CONFIG_QCOM_VM_CRASH_DMESG_DUMP": "y",
     "CONFIG_RCU_TORTURE_TEST": "m",
