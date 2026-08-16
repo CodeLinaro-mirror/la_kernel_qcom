@@ -354,6 +354,72 @@ static enum usb_device_speed dwc3_qcom_read_usb2_speed(struct dwc3_qcom *qcom, i
 	return udev->speed;
 }
 
+static bool dwc3_qcom_ss_port_connected(struct dwc3_qcom *qcom, int port_index)
+{
+	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+	struct usb_hcd *hcd, *shared_hcd;
+	struct usb_device *udev;
+
+	hcd = platform_get_drvdata(dwc->xhci);
+	if (!hcd)
+		return false;
+
+	shared_hcd = hcd->shared_hcd;
+	if (!shared_hcd)
+		return false;
+
+#ifdef CONFIG_USB
+	udev = usb_hub_find_child(shared_hcd->self.root_hub, port_index + 1);
+#else
+	udev = NULL;
+#endif
+	if (!udev) {
+		dev_err(qcom->dev, "PM: %s() port-%d no SS device\n",
+			__func__, port_index + 1);
+		return false;
+	}
+
+	return udev->speed >= USB_SPEED_SUPER;
+}
+
+static void dwc3_qcom_ss_phy_suspend_powerdown(struct dwc3_qcom *qcom)
+{
+	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+	int i;
+
+	for (i = 0; i < dwc->num_usb3_ports; i++) {
+		if (!dwc->usb3_generic_phy[i])
+			continue;
+
+		if (dwc3_qcom_ss_port_connected(qcom, i)) {
+			dev_err(qcom->dev,
+				"PM: %s() port-%d SS connected, keeping SS PHY powered\n",
+				__func__, i + 1);
+			phy_set_mode(dwc->usb3_generic_phy[i], PHY_MODE_USB_HOST_SS);
+		} else {
+			dev_err(qcom->dev,
+				"PM: %s() port-%d no SS device, powering down SS PHY\n",
+				__func__, i + 1);
+			phy_set_mode(dwc->usb3_generic_phy[i], PHY_MODE_USB_HOST);
+		}
+	}
+}
+
+static void dwc3_qcom_ss_phy_resume_powerup(struct dwc3_qcom *qcom)
+{
+	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+	int i;
+
+	for (i = 0; i < dwc->num_usb3_ports; i++) {
+		if (!dwc->usb3_generic_phy[i])
+			continue;
+
+		dev_err(qcom->dev, "PM: %s() port-%d restoring SS PHY mode\n",
+			__func__, i + 1);
+		phy_set_mode(dwc->usb3_generic_phy[i], PHY_MODE_USB_HOST_SS);
+	}
+}
+
 static void dwc3_qcom_enable_wakeup_irq(int irq, unsigned int polarity)
 {
 	if (!irq)
@@ -506,7 +572,11 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 	for (i = 0; i < qcom->num_ports; i++) {
 		val = readl(qcom->qscratch_base + pwr_evnt_irq_stat_reg[i]);
 		if (!(val & PWR_EVNT_LPM_IN_L2_MASK))
-			dev_err(qcom->dev, "port-%d HS-PHY not in L2\n", i + 1);
+			dev_err(qcom->dev, "port-%d HS-PHY not in L2 (pwr_evnt=0x%x)\n",
+				i + 1, val);
+		else
+			dev_err(qcom->dev, "port-%d HS-PHY in L2, ready to suspend (pwr_evnt=0x%x)\n",
+				i + 1, val);
 	}
 
 	for (i = qcom->num_clocks - 1; i >= 0; i--)
@@ -1101,6 +1171,10 @@ static int __maybe_unused dwc3_qcom_pm_suspend(struct device *dev)
 	bool wakeup = device_may_wakeup(dev);
 	int ret;
 
+
+	if (dwc3_qcom_is_host(qcom))
+		dwc3_qcom_ss_phy_suspend_powerdown(qcom);
+
 	ret = dwc3_qcom_suspend(qcom, wakeup);
 	if (ret)
 		return ret;
@@ -1119,6 +1193,9 @@ static int __maybe_unused dwc3_qcom_pm_resume(struct device *dev)
 	ret = dwc3_qcom_resume(qcom, wakeup);
 	if (ret)
 		return ret;
+
+	if (dwc3_qcom_is_host(qcom))
+		dwc3_qcom_ss_phy_resume_powerup(qcom);
 
 	qcom->pm_suspended = false;
 
