@@ -411,7 +411,6 @@ static struct clk_branch disp_cc_mdss_ahb_clk = {
 	},
 };
 
-/* CLK_DONT_HOLD_STATE flag is needed due to sync_state */
 static struct clk_branch disp_cc_mdss_byte0_clk = {
 	.halt_reg = 0x2024,
 	.halt_check = BRANCH_HALT,
@@ -424,15 +423,12 @@ static struct clk_branch disp_cc_mdss_byte0_clk = {
 				&disp_cc_mdss_byte0_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT |
-				     CLK_GET_RATE_NOCACHE |
-				     CLK_DONT_HOLD_STATE,
+			.flags = CLK_SET_RATE_PARENT | CLK_GET_RATE_NOCACHE,
 			.ops = &clk_branch2_ops,
 		},
 	},
 };
 
-/* CLK_DONT_HOLD_STATE flag is needed due to sync_state */
 static struct clk_branch disp_cc_mdss_byte0_intf_clk = {
 	.halt_reg = 0x2028,
 	.halt_check = BRANCH_HALT,
@@ -445,9 +441,7 @@ static struct clk_branch disp_cc_mdss_byte0_intf_clk = {
 				&disp_cc_mdss_byte0_div_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT |
-				     CLK_GET_RATE_NOCACHE |
-				     CLK_DONT_HOLD_STATE,
+			.flags = CLK_SET_RATE_PARENT | CLK_GET_RATE_NOCACHE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -525,7 +519,6 @@ static struct clk_branch disp_cc_mdss_non_gdsc_ahb_clk = {
 	},
 };
 
-/* CLK_DONT_HOLD_STATE flag is needed due to sync_state */
 static struct clk_branch disp_cc_mdss_pclk0_clk = {
 	.halt_reg = 0x2004,
 	.halt_check = BRANCH_HALT,
@@ -538,9 +531,7 @@ static struct clk_branch disp_cc_mdss_pclk0_clk = {
 				&disp_cc_mdss_pclk0_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT |
-				     CLK_GET_RATE_NOCACHE |
-				     CLK_DONT_HOLD_STATE,
+			.flags = CLK_SET_RATE_PARENT | CLK_GET_RATE_NOCACHE,
 			.ops = &clk_branch2_ops,
 		},
 	},
