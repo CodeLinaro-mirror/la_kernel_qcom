@@ -555,6 +555,7 @@ struct dwc3_msm {
 	struct clk		*noc_aggr_north_axi_clk;
 	struct clk		*noc_aggr_south_axi_clk;
 	struct clk		*noc_sys_clk;
+	struct clk		*atb_clk;
 	struct reset_control	*core_reset;
 	struct regulator	*dwc3_gdsc;
 
@@ -3251,6 +3252,7 @@ static int dwc3_msm_link_clk_reset(struct dwc3_msm *mdwc, bool assert)
 		disable_irq_wake(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 		/* Using asynchronous block reset to the hardware */
 		dev_dbg(mdwc->dev, "block_reset ASSERT\n");
+		clk_disable_unprepare(mdwc->atb_clk);
 		clk_disable_unprepare(mdwc->utmi_clk);
 		clk_disable_unprepare(mdwc->sleep_clk);
 		clk_disable_unprepare(mdwc->core_clk);
@@ -3268,6 +3270,7 @@ static int dwc3_msm_link_clk_reset(struct dwc3_msm *mdwc, bool assert)
 		clk_prepare_enable(mdwc->core_clk);
 		clk_prepare_enable(mdwc->sleep_clk);
 		clk_prepare_enable(mdwc->utmi_clk);
+		clk_prepare_enable(mdwc->atb_clk);
 		enable_irq_wake(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 		enable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 	}
@@ -4273,7 +4276,7 @@ static int dwc3_clk_enable_disable(struct dwc3_msm *mdwc, bool enable, bool togg
 		return 0;
 
 	if (!enable)
-		goto disable_noc_sys_clk;
+		goto disable_atb_clk;
 
 	/* Vote for TCXO while waking up USB HSPHY */
 	ret = clk_prepare_enable(mdwc->xo_clk);
@@ -4366,9 +4369,17 @@ static int dwc3_clk_enable_disable(struct dwc3_msm *mdwc, bool enable, bool togg
 		dev_err(mdwc->dev, "%s: noc_sys_clk enable failed\n", __func__);
 		goto disable_noc_aggr_south_axi_clk;
 	}
+
+	ret = clk_prepare_enable(mdwc->atb_clk);
+	if (ret < 0) {
+		dev_err(mdwc->dev, "%s: atb_clk enable failed\n", __func__);
+		goto disable_noc_sys_clk;
+	}
 	return 0;
 
 	/* Disable clocks */
+disable_atb_clk:
+	clk_disable_unprepare(mdwc->atb_clk);
 disable_noc_sys_clk:
 	clk_disable_unprepare(mdwc->noc_sys_clk);
 disable_noc_aggr_south_axi_clk:
@@ -5317,6 +5328,10 @@ static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 	mdwc->noc_sys_clk = devm_clk_get(mdwc->dev, "noc_sys_clk");
 	if (IS_ERR(mdwc->noc_sys_clk))
 		mdwc->noc_sys_clk = NULL;
+
+	mdwc->atb_clk = devm_clk_get(mdwc->dev, "atb_clk");
+	if (IS_ERR(mdwc->atb_clk))
+		mdwc->atb_clk = NULL;
 
 	return 0;
 }
@@ -7207,6 +7222,7 @@ static void dwc3_msm_remove(struct platform_device *pdev)
 			clk_prepare_enable(mdwc->sleep_clk);
 			clk_prepare_enable(mdwc->bus_aggr_clk);
 			clk_prepare_enable(mdwc->xo_clk);
+			clk_prepare_enable(mdwc->atb_clk);
 		}
 	}
 
@@ -7250,6 +7266,7 @@ static void dwc3_msm_remove(struct platform_device *pdev)
 		clk_disable_unprepare(mdwc->iface_clk);
 		clk_disable_unprepare(mdwc->sleep_clk);
 		clk_disable_unprepare(mdwc->xo_clk);
+		clk_disable_unprepare(mdwc->atb_clk);
 		dwc3_msm_config_gdsc(mdwc, 0);
 	} else {
 		dwc3_msm_modeled_d0_to_d1(mdwc);
