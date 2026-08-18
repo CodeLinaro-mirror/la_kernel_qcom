@@ -202,6 +202,7 @@ shikra_auto_perf_config = {
     "CONFIG_RTC_DRV_PM8XXX": "m",
     "CONFIG_SCHED_WALT": "m",
     "CONFIG_SERIAL_MSM_GENI": "m",
+    "CONFIG_SND_SOC_MAX98090": "m",
     "CONFIG_SPI_MSM_GENI": "m",
     "CONFIG_SPMI_MSM_PMIC_ARB": "m",
     "CONFIG_SPS": "m",
