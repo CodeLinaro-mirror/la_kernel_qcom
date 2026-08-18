@@ -64,6 +64,7 @@ pinctrl-khaje.ko
 pinctrl-bengal.ko
 pinctrl-scuba.ko
 qcom_tsens.ko
+qcom-dload-mode.ko
 qcom-scm.ko
 qcom_hwspinlock.ko
 qrtr.ko

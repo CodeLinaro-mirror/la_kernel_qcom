@@ -5163,6 +5163,16 @@ static void android_rvh_set_task_cpu(void *unused, struct task_struct *p, unsign
 		return;
 
 	get_entry_instr(SET_TASK_CPU);
+
+	/*
+	 * If the task is migrating to a different cluster, reset sf_misfit_time.
+	 * The pending state was for the previous cluster and is no longer
+	 * meaningful; task_fits_capacity() will re-arm the timer if needed.
+	 */
+	if (wts->sf_misfit_time &&
+	    !same_cluster(task_cpu(p), new_cpu))
+		wts->sf_misfit_time = 0;
+
 	migrate_busy_time_subtraction(p, (int) new_cpu);
 
 	/* a blocked task can move to owner's cpu(which may not be in it's affinity mask) */
