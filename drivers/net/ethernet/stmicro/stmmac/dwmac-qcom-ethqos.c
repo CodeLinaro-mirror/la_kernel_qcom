@@ -1316,12 +1316,18 @@ static int ethqos_configure_sgmii(struct qcom_ethqos *ethqos)
 			      RGMII_CONFIG2_RGMII_CLK_SEL_CFG,
 			      RGMII_IO_MACRO_CONFIG2);
 		ethqos_set_serdes_speed(ethqos, SPEED_1000);
-		stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, 0, 0);
+		if (priv->plat->disable_pcs_ane)
+			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 0, 0, 0);
+		else
+			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, 0, 0);
 		break;
 	case SPEED_100:
 		val |= ETHQOS_MAC_CTRL_PORT_SEL | ETHQOS_MAC_CTRL_SPEED_MODE;
 		ethqos_set_serdes_speed(ethqos, SPEED_1000);
-		stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, 0, 0);
+		if (priv->plat->disable_pcs_ane)
+			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 0, 0, 0);
+		else
+			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, 0, 0);
 		break;
 	case SPEED_10:
 		val |= ETHQOS_MAC_CTRL_PORT_SEL;
@@ -1331,7 +1337,10 @@ static int ethqos_configure_sgmii(struct qcom_ethqos *ethqos)
 					 SGMII_10M_RX_CLK_DVDR),
 			      RGMII_IO_MACRO_CONFIG);
 		ethqos_set_serdes_speed(ethqos, SPEED_1000);
-		stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, 0, 0);
+		if (priv->plat->disable_pcs_ane)
+			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 0, 0, 0);
+		else
+			stmmac_pcs_ctrl_ane(priv, priv->ioaddr, 1, 0, 0);
 		break;
 	}
 
@@ -2137,12 +2146,8 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		goto err_restore;
 	}
 
-	ret = ethqos_init_gpio(ethqos);
-	if (ret) {
-		dev_err(dev, "%s: GPIO init failed with ret = %d\n", __func__, ret);
-		ethqos_disable_regulators(ethqos);
-		goto err_restore;
-	}
+	if (ethqos_init_gpio(ethqos))
+		dev_dbg(dev, "ethqos_init_gpio failed.\n");
 
 	ret = pm_runtime_force_resume(dev);
 	if (ret) {
@@ -2359,6 +2364,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 				     "dt configuration failed\n");
 	}
 
+	plat_dat->disable_pcs_ane =
+		of_property_read_bool(pdev->dev.of_node, "disable_pcs_ane");
+	dev_info(dev, "disable_pcs_ane = %d\n", plat_dat->disable_pcs_ane);
+
 	plat_dat->clks_config = ethqos_clks_config;
 
 	ethqos = devm_kzalloc(dev, sizeof(*ethqos), GFP_KERNEL);
@@ -2465,13 +2474,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		if (ret)
 			return dev_err_probe(dev, ret, "ethqos_init_regulators failed\n");
 
-		ret = ethqos_init_gpio(ethqos);
-
-		if (ret) {
-			ethqos_disable_regulators(ethqos);
-			return dev_err_probe(dev, ret, "%s: init_gpio failed with ret = %d\n",
-					     __func__, ret);
-		}
+		if (ethqos_init_gpio(ethqos))
+			dev_dbg(dev, "ethqos_init_gpio failed.\n");
 
 		ethqos->link_clk = devm_clk_get(dev, data->link_clk_name ?: "rgmii");
 		if (IS_ERR(ethqos->link_clk))
