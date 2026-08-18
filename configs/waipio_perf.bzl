@@ -66,7 +66,7 @@ waipio_perf_config = {
     "CONFIG_GH_RM_DRV": "m",
     "CONFIG_GH_TLMM_VM_MEM_ACCESS": "m",
     "CONFIG_GH_VCPU_MGR": "m",
-    "CONFIG_GH_VIRT_WATCHDOG": "n",
+    "CONFIG_GH_VIRT_WATCHDOG": "m",
     "CONFIG_GIC_INTERRUPT_ROUTING": "m",
     "CONFIG_GUNYAH_DRIVERS": "y",
     "CONFIG_GUNYAH_TRACE": "m",
