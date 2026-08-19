@@ -95,3 +95,4 @@ phy-msm-ssusb-qmp.ko
 phy-msm-qusb.ko
 cqhci-crypto-qti.ko
 msm_sharedmem.ko
+qrtr.ko
