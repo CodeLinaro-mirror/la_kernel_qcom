@@ -8,7 +8,10 @@ config TYPEC_MUX_PS883X
 	depends on I2C
 	depends on DRM || DRM=n
 	select DRM_AUX_BRIDGE if DRM_BRIDGE && OF
+	select FW_LOADER
 	select REGMAP_I2C
 	help
 	  Say Y or M if your system has a Parade PS883x Type-C retimer chip
-	  found on some devices with a Type-C port.
+	  found on some devices with a Type-C port. The driver also exposes
+	  a sysfs-triggered firmware update path backed by the kernel firmware
+	  loader.
