@@ -224,6 +224,7 @@ struct stmmac_priv {
 	u32 sarc_type;
 
 	unsigned int rx_copybreak;
+	unsigned int rx_err_log_threshold;
 	u32 rx_riwt[MTL_MAX_TX_QUEUES];
 	int hwts_rx_en;
 
@@ -312,6 +313,7 @@ struct stmmac_priv {
 	unsigned long state;
 	struct workqueue_struct *wq;
 	struct work_struct service_task;
+	struct work_struct uevent_work;
 
 	/* Workqueue for handling FPE hand-shaking */
 	unsigned long fpe_task_state;

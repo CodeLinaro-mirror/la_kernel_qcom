@@ -2856,8 +2856,8 @@ static bool stmmac_safety_feat_interrupt(struct stmmac_priv *priv)
 {
 	int ret;
 
-	if (priv->plat->report_uevents)
-		priv->plat->report_uevents(priv, FUSA_ERROR);
+	if (priv->plat->flags & STMMAC_FLAG_HAS_ERROR_UEVENT)
+		queue_work(priv->wq, &priv->uevent_work);
 
 	ret = stmmac_safety_feat_irq_status(priv, priv->dev,
 			priv->ioaddr, priv->dma_cap.asp, &priv->sstats);
@@ -5298,6 +5298,7 @@ static int stmmac_rx_zc(struct stmmac_priv *priv, int limit, u32 queue)
 	struct bpf_prog *prog;
 	bool failure = false;
 	int xdp_status = 0;
+	int err_status = 0;
 	int status = 0;
 
 	if (netif_msg_rx_status(priv)) {
@@ -5381,7 +5382,17 @@ read_again:
 		if (priv->extend_desc)
 			stmmac_rx_extended_status(priv, &priv->xstats,
 						  rx_q->dma_erx + entry);
-		if (unlikely(status == discard_frame)) {
+
+		if (unlikely(priv->plat->flags & STMMAC_FLAG_HAS_ERROR_UEVENT)) {
+			err_status = stmmac_check_rx_err_status(priv, &priv->xstats, p,
+								priv->rx_err_log_threshold);
+			if (unlikely(err_status == rx_pkt_error) && priv->plat->report_uevents) {
+				priv->plat->report_uevents(priv, FUSA_ERROR);
+				err_status = discard_frame;
+			}
+		}
+
+		if (unlikely(status == discard_frame || err_status == discard_frame)) {
 			xsk_buff_free(buf->xdp);
 			buf->xdp = NULL;
 			dirty++;
@@ -5499,6 +5510,7 @@ static int stmmac_rx(struct stmmac_priv *priv, int limit, u32 queue)
 	struct sk_buff *skb = NULL;
 	struct stmmac_xdp_buff ctx;
 	int xdp_status = 0;
+	int err_status = 0;
 	int bufsz;
 
 	dma_dir = page_pool_get_dma_dir(rx_q->page_pool);
@@ -5574,7 +5586,17 @@ read_again:
 
 		if (priv->extend_desc)
 			stmmac_rx_extended_status(priv, &priv->xstats, rx_q->dma_erx + entry);
-		if (unlikely(status == discard_frame)) {
+
+		if (unlikely(priv->plat->flags & STMMAC_FLAG_HAS_ERROR_UEVENT)) {
+			err_status = stmmac_check_rx_err_status(priv, &priv->xstats, p,
+								priv->rx_err_log_threshold);
+			if (unlikely(err_status == rx_pkt_error) && priv->plat->report_uevents) {
+				priv->plat->report_uevents(priv, FUSA_ERROR);
+				err_status = discard_frame;
+			}
+		}
+
+		if (unlikely(status == discard_frame || err_status == discard_frame)) {
 			page_pool_recycle_direct(rx_q->page_pool, buf->page);
 			buf->page = NULL;
 			error = 1;
@@ -7282,6 +7304,15 @@ static void stmmac_reset_subtask(struct stmmac_priv *priv)
 	rtnl_unlock();
 }
 
+static void stmmac_uevent_task(struct work_struct *work)
+{
+	struct stmmac_priv *priv = container_of(work, struct stmmac_priv,
+			uevent_work);
+
+	if (priv->plat->report_uevents)
+		priv->plat->report_uevents(priv, FUSA_ERROR);
+}
+
 static void stmmac_service_task(struct work_struct *work)
 {
 	struct stmmac_priv *priv = container_of(work, struct stmmac_priv,
@@ -7677,6 +7708,7 @@ int stmmac_dvr_probe(struct device *device,
 	priv->sfty_irq = res->sfty_irq;
 	priv->sfty_ce_irq = res->sfty_ce_irq;
 	priv->sfty_ue_irq = res->sfty_ue_irq;
+	priv->rx_err_log_threshold = XGMAC_RX_ERR_THRESHOLD;
 	for (i = 0; i < MTL_MAX_RX_QUEUES; i++)
 		priv->rx_irq[i] = res->rx_irq[i];
 	for (i = 0; i < MTL_MAX_TX_QUEUES; i++)
@@ -7705,6 +7737,7 @@ int stmmac_dvr_probe(struct device *device,
 	}
 
 	INIT_WORK(&priv->service_task, stmmac_service_task);
+	INIT_WORK(&priv->uevent_work, stmmac_uevent_task);
 
 	/* Initialize Link Partner FPE workqueue */
 	INIT_WORK(&priv->fpe_task, stmmac_fpe_lp_task);
