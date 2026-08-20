@@ -92,6 +92,7 @@ gh_msgq.ko
 gh_vcpu_mgr.ko
 gh_rm_drv.ko
 gh_rm_heap_manager.ko
+gh_virt_wdt.ko
 gunyah_loader.ko
 mdt_loader.ko
 qcom_wdt_core.ko
