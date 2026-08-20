@@ -1155,6 +1155,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/rpm_master_stat",
+        out = "rpm_master_stat.ko",
+        config = "CONFIG_QTI_RPM_STATS_LOG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/rpm_master_stat.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_tlmm_vm_irqchip",
         out = "qcom_tlmm_vm_irqchip.ko",
         config = "CONFIG_QCOM_TLMM_VM_IRQCHIP",
@@ -1979,5 +1989,21 @@ def register_modules(registry):
         srcs = [
             # do not sort
             "drivers/soc/qcom/power_mode.c",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/qdss_bridge",
+        out = "qdss_bridge.ko",
+        config = "CONFIG_QCOM_QDSS_BRIDGE",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/qdss_bridge.h",
+            "drivers/soc/qcom/qdss_bridge.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/bus/mhi/host/mhi",
+            "drivers/usb/gadget/function/usb_f_qdss",
         ],
     )

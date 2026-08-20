@@ -15,6 +15,8 @@
 #include <linux/usb/composite.h>
 #include <linux/usb/ch9.h>
 #include <linux/device.h>
+#include <linux/workqueue.h>
+#include <linux/power_supply.h>
 #include "drivers/usb/dwc3/core.h"
 #include "debug-ipc.h"
 #include "drivers/usb/dwc3/gadget.h"
@@ -30,6 +32,13 @@ union kprobe_data {
 	};
 	struct work_struct *data;
 };
+
+struct vbus_draw_work {
+	struct work_struct work;
+	unsigned int mA;
+};
+
+static struct vbus_draw_work *vbus_work_item;
 
 static int entry_dwc3_suspend_common(struct kretprobe_instance *ri,
 				struct pt_regs *regs)
@@ -363,6 +372,51 @@ static int entry_android_work(struct kretprobe_instance *ri,
 	return 0;
 }
 
+static void vbus_draw_work_handler(struct work_struct *work)
+{
+	struct vbus_draw_work *vbus_work = container_of(work, struct vbus_draw_work, work);
+	unsigned int mA = vbus_work->mA;
+	union power_supply_propval val = {0};
+	struct power_supply *usb_psy;
+	int ret;
+
+	usb_psy = power_supply_get_by_name("usb");
+	if (!usb_psy) {
+		pr_err("Could not get usb psy\n");
+		return;
+	}
+
+	pr_info("Avail curr from USB = %u\n", mA);
+	val.intval = 1000 * mA;
+	ret = power_supply_set_property(usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &val);
+	if (ret)
+		pr_err("failed to set power supply property, ret=%d\n", ret);
+
+	power_supply_put(usb_psy);
+}
+
+static int entry_dwc3_gadget_vbus_draw(struct kretprobe_instance *ri,
+				       struct pt_regs *regs)
+{
+	struct usb_gadget *g = (struct usb_gadget *)regs->regs[0];
+	unsigned int mA = (unsigned int)regs->regs[1];
+	struct dwc3 *dwc = gadget_to_dwc(g);
+
+	/*
+	 * Only set power supply for generic phy subsystem
+	 * usb-phy case wil be handled in gadget.c
+	 */
+	if (dwc->usb2_phy)
+		return 0;
+
+	if (vbus_work_item) {
+		vbus_work_item->mA = mA;
+		schedule_work(&vbus_work_item->work);
+	}
+
+	return 0;
+}
+
 static int exit_android_work(struct kretprobe_instance *ri,
 			    struct pt_regs *regs)
 {
@@ -419,6 +473,7 @@ static struct kretprobe dwc3_msm_probes[] = {
 	ENTRY_EXIT(android_work),
 	ENTRY_EXIT(usb_ep_set_maxpacket_limit),
 	ENTRY_EXIT(dwc3_suspend_common),
+	ENTRY(dwc3_gadget_vbus_draw),
 	ENTRY(trace_event_raw_event_dwc3_log_request),
 	ENTRY(trace_event_raw_event_dwc3_log_gadget_ep_cmd),
 	ENTRY(trace_event_raw_event_dwc3_log_trb),
@@ -431,6 +486,12 @@ int dwc3_msm_kretprobe_init(void)
 {
 	int ret;
 	int i;
+
+	vbus_work_item = kzalloc(sizeof(*vbus_work_item), GFP_KERNEL);
+	if (!vbus_work_item)
+		return -ENOMEM;
+
+	INIT_WORK(&vbus_work_item->work, vbus_draw_work_handler);
 
 	for (i = 0; i < ARRAY_SIZE(dwc3_msm_probes) ; i++) {
 		ret = register_kretprobe(&dwc3_msm_probes[i]);
@@ -448,4 +509,11 @@ void dwc3_msm_kretprobe_exit(void)
 
 	for (i = 0; i < ARRAY_SIZE(dwc3_msm_probes); i++)
 		unregister_kretprobe(&dwc3_msm_probes[i]);
+
+	/* Flush any pending work from system workqueue */
+	if (vbus_work_item) {
+		flush_work(&vbus_work_item->work);
+		kfree(vbus_work_item);
+		vbus_work_item = NULL;
+	}
 }

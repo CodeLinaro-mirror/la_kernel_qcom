@@ -661,13 +661,6 @@ static void qcom_geni_serial_stop_tx_dma(struct uart_port *uport)
 	if (!qcom_geni_serial_main_active(uport))
 		return;
 
-	if (port->tx_dma_addr) {
-		geni_se_tx_dma_unprep(&port->se, port->tx_dma_addr,
-				      port->tx_remaining);
-		port->tx_dma_addr = 0;
-		port->tx_remaining = 0;
-	}
-
 	geni_se_cancel_m_cmd(&port->se);
 
 	done = qcom_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
@@ -682,6 +675,14 @@ static void qcom_geni_serial_stop_tx_dma(struct uart_port *uport)
 	}
 
 	writel(M_CMD_CANCEL_EN, uport->membase + SE_GENI_M_IRQ_CLEAR);
+
+	if (port->tx_dma_addr) {
+		geni_se_tx_dma_unprep(&port->se, port->tx_dma_addr,
+				      port->tx_remaining);
+		port->tx_dma_addr = 0;
+		port->tx_remaining = 0;
+	}
+
 	trace_serial_info(uport->dev, __func__, "Done");
 }
 

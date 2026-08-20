@@ -277,7 +277,6 @@
 #define QCOM_ID_SM8650			557
 #define QCOM_ID_KHAJEP			561
 #define QCOM_ID_KHAJEQ			562
-#define QCOM_ID_SM4450			568
 #define QCOM_ID_RAVELIN			568
 #define QCOM_ID_QCS5430			575
 #define QCOM_ID_QCM5430			576
@@ -309,6 +308,8 @@
 #define QCOM_ID_QCS8845			764
 #define QCOM_ID_CANOEP			661
 #define QCOM_ID_SERAPH			672
+#define QCOM_ID_SERAPHP                 673
+#define QCOM_ID_SERAPH_MEP_POP          792
 #define QCOM_ID_QCS_KALAMAP_N		668
 #define QCOM_ID_VIENNA			669
 #define QCOM_ID_VIENNAP			670
