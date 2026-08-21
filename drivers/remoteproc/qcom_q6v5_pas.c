@@ -441,7 +441,6 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
 
 	if (adsp->lite_pas_id)
 		ret = qcom_scm_pas_shutdown(adsp->lite_pas_id);
-
 	qcom_q6v5_pas_set_bw(&adsp->q6v5, UINT_MAX, UINT_MAX);
 	if (adsp->dtb_pas_id) {
 		ret = request_firmware(&adsp->dtb_firmware, adsp->dtb_firmware_name, adsp->dev);
@@ -2552,6 +2551,7 @@ static const struct adsp_data x1e80100_adsp_resource = {
 	.dtb_firmware_name = "adsp_dtb.mdt",
 	.pas_id = 1,
 	.dtb_pas_id = 0x24,
+	.lite_pas_id = 0x1f,
 	.minidump_id = 5,
 	.load_state = "adsp",
 	.ssr_name = "lpass",
