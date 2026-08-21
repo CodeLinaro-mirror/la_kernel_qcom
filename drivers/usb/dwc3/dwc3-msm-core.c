@@ -8345,10 +8345,11 @@ static int dwc3_msm_pm_suspend(struct device *dev)
 	}
 
 	/*
-	 * Power collapse the core. Hence call dwc3_msm_suspend with
-	 * 'force_power_collapse' set to 'true'.
+	 * Power collapse the core, unless the device is wakeup capable.
+	 * Hence call dwc3_msm_suspend with 'force_power_collapse' set
+	 * based on the device's wakeup capability.
 	 */
-	ret = dwc3_msm_suspend(mdwc, true);
+	ret = dwc3_msm_suspend(mdwc, !device_may_wakeup(mdwc->dev));
 	if (!ret)
 		atomic_set(&mdwc->pm_suspended, 1);
 
