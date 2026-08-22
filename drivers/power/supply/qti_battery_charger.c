@@ -24,6 +24,7 @@
 #include <linux/soc/qcom/pmic_glink.h>
 #include <linux/soc/qcom/battery_charger.h>
 #include <linux/soc/qcom/panel_event_notifier.h>
+#include "qti_typec_class.h"
 
 #define MSG_OWNER_BC			32778
 #define MSG_TYPE_REQ_RESP		1
@@ -254,6 +255,7 @@ struct battery_chg_dev {
 	struct device			*dev;
 	struct class			battery_class;
 	struct pmic_glink_client	*client;
+	struct typec_role_class		*typec_class;
 	struct mutex			rw_lock;
 	struct rw_semaphore		state_sem;
 	struct completion		ack;
@@ -299,6 +301,7 @@ struct battery_chg_dev {
 	bool				initialized;
 	bool				notify_en;
 	bool				error_prop;
+	bool				micro_usb;
 	unsigned int			num_usb_ports;
 };
 
@@ -806,6 +809,11 @@ static void battery_chg_update_uusb_type(struct battery_chg_dev *bcdev,
 	    !bcdev->extcon)
 		return;
 
+	if (IS_ENABLED(CONFIG_QTI_TYPEC_CLASS)) {
+		if (!bcdev->typec_class)
+			return;
+	}
+
 	rc = read_property_id(bcdev, pst, USB_SCOPE);
 	if (rc < 0) {
 		dev_err(bcdev->dev, "Failed to read USB_SCOPE rc=%d\n", rc);
@@ -820,12 +828,25 @@ static void battery_chg_update_uusb_type(struct battery_chg_dev *bcdev,
 			/* Device mode connect notification */
 			extcon_set_state_sync(bcdev->extcon, EXTCON_USB, 1);
 			bcdev->usb_prev_mode = EXTCON_USB;
+			if (IS_ENABLED(CONFIG_QTI_TYPEC_CLASS)) {
+				rc = qti_typec_partner_register(bcdev->typec_class,
+								TYPEC_DEVICE);
+				if (rc < 0)
+					dev_err(bcdev->dev,
+						"Failed to register typec partner rc=%d\n", rc);
+			}
 		}
 		break;
 	case POWER_SUPPLY_SCOPE_SYSTEM:
 		/* Host mode connect notification */
 		extcon_set_state_sync(bcdev->extcon, EXTCON_USB_HOST, 1);
 		bcdev->usb_prev_mode = EXTCON_USB_HOST;
+		if (IS_ENABLED(CONFIG_QTI_TYPEC_CLASS)) {
+			rc = qti_typec_partner_register(bcdev->typec_class, TYPEC_HOST);
+			if (rc < 0)
+				dev_err(bcdev->dev, "Failed to register typec partner rc=%d\n",
+					rc);
+		}
 		break;
 	default:
 		if (bcdev->usb_prev_mode == EXTCON_USB ||
@@ -834,6 +855,8 @@ static void battery_chg_update_uusb_type(struct battery_chg_dev *bcdev,
 			extcon_set_state_sync(bcdev->extcon,
 					      bcdev->usb_prev_mode, 0);
 			bcdev->usb_prev_mode = EXTCON_NONE;
+			if (IS_ENABLED(CONFIG_QTI_TYPEC_CLASS))
+				qti_typec_partner_unregister(bcdev->typec_class);
 		}
 		break;
 	}
@@ -913,7 +936,8 @@ static void battery_chg_update_usb_type_work(struct work_struct *work)
 		}
 	}
 
-	battery_chg_update_uusb_type(bcdev, pst->prop[USB_ADAP_TYPE]);
+	if (bcdev->micro_usb)
+		battery_chg_update_uusb_type(bcdev, pst->prop[USB_ADAP_TYPE]);
 }
 
 static void battery_chg_check_status_work(struct work_struct *work)
@@ -1275,6 +1299,17 @@ static enum power_supply_property usb_props[] = {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
 	POWER_SUPPLY_PROP_USB_TYPE,
 	POWER_SUPPLY_PROP_TEMP,
+};
+
+static enum power_supply_property uusb_props[] = {
+	POWER_SUPPLY_PROP_ONLINE,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
+	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,
+	POWER_SUPPLY_PROP_USB_TYPE,
+	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_SCOPE,
 };
 
@@ -1616,6 +1651,11 @@ static int battery_chg_init_psy(struct battery_chg_dev *bcdev)
 
 	psy_cfg.drv_data = bcdev;
 	psy_cfg.of_node = bcdev->dev->of_node;
+	if (bcdev->micro_usb) {
+		usb_psy_desc[USB_1_PORT_ID].properties = uusb_props;
+		usb_psy_desc[USB_1_PORT_ID].num_properties = ARRAY_SIZE(uusb_props);
+	}
+
 	bcdev->psy_list[PSY_TYPE_USB].psy =
 		devm_power_supply_register(bcdev->dev, &usb_psy_desc[USB_1_PORT_ID], &psy_cfg);
 	if (IS_ERR(bcdev->psy_list[PSY_TYPE_USB].psy)) {
@@ -2641,6 +2681,9 @@ static int register_extcon_conn_type(struct battery_chg_dev *bcdev)
 	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_USB];
 	int rc;
 
+	if (!bcdev->micro_usb)
+		return 0;
+
 	rc = read_property_id(bcdev, pst, USB_CONNECTOR_TYPE);
 	if (rc < 0) {
 		dev_err(bcdev->dev, "Failed to read prop USB_CONNECTOR_TYPE, rc=%d\n",
@@ -2780,6 +2823,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 	bcdev->restrict_fcc_ua = DEFAULT_RESTRICT_FCC_UA;
 	platform_set_drvdata(pdev, bcdev);
 	bcdev->fake_soc = -EINVAL;
+	bcdev->micro_usb = of_property_read_bool(bcdev->dev->of_node, "qcom,micro-usb");
 	rc = battery_chg_init_psy(bcdev);
 	if (rc < 0)
 		goto error;
@@ -2828,6 +2872,17 @@ static int battery_chg_probe(struct platform_device *pdev)
 		}
 	}
 
+	if (IS_ENABLED(CONFIG_QTI_TYPEC_CLASS)) {
+		if (bcdev->connector_type == USB_CONNECTOR_TYPE_MICRO_USB) {
+			bcdev->typec_class = qti_typec_class_init(bcdev->dev);
+			if (IS_ERR_OR_NULL(bcdev->typec_class)) {
+				rc = PTR_ERR_OR_ZERO(bcdev->typec_class);
+				dev_err(dev, "Failed to init typec class err=%d\n", rc);
+				goto error;
+			}
+		}
+	}
+
 	schedule_work(&bcdev->usb_type_work);
 
 	rc = get_charge_control_en(bcdev);
@@ -2860,6 +2915,8 @@ error:
 	cancel_work_sync(&bcdev->battery_check_work);
 	complete(&bcdev->ack);
 	unregister_reboot_notifier(&bcdev->reboot_notifier);
+	if (bcdev->typec_class)
+		qti_typec_class_deinit(bcdev->typec_class);
 reg_error:
 	if (bcdev->notifier_cookie)
 		panel_event_notifier_unregister(bcdev->notifier_cookie);
@@ -2886,6 +2943,8 @@ static int battery_chg_remove(struct platform_device *pdev)
 	cancel_work_sync(&bcdev->usb_type_work);
 	cancel_work_sync(&bcdev->battery_check_work);
 	unregister_reboot_notifier(&bcdev->reboot_notifier);
+	if (bcdev->typec_class)
+		qti_typec_class_deinit(bcdev->typec_class);
 
 	return 0;
 }

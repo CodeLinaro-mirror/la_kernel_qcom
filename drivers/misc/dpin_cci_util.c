@@ -1593,6 +1593,47 @@ int cci_util_lt7911_reg_write(struct cci_util_handle *handle,
 }
 EXPORT_SYMBOL_GPL(cci_util_lt7911_reg_write);
 
+/**
+ * cci_util_lt7911_reg_read_seq - read multiple consecutive bytes from a register.
+ * @handle:    opaque device handle obtained from cci_util_lt7911_get_device()
+ * @reg:       starting register address (8-bit)
+ * @out_buf:   caller-allocated buffer of at least @num_bytes bytes
+ * @num_bytes: number of consecutive bytes to read (1-32)
+ *
+ * Acquires g_cci_util_lock, performs a sequential CCI read, then releases
+ * the lock.  The I2C gate must already be open before calling.
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int cci_util_lt7911_reg_read_seq(struct cci_util_handle *handle,
+				 u8 reg, u8 *out_buf, u16 num_bytes)
+{
+	int rc;
+	struct cci_util_dev *dev;
+
+	if (!handle || !handle->dev || !out_buf || num_bytes == 0 || num_bytes > 32)
+		return -EINVAL;
+
+	mutex_lock(&g_cci_util_lock);
+	dev = handle->dev;
+
+	rc = cci_ensure_configured(dev);
+	if (rc < 0) {
+		mutex_unlock(&g_cci_util_lock);
+		return rc;
+	}
+
+	rc = dpin_cci_util_read_seq(&dev->client, reg, out_buf, num_bytes);
+	mutex_unlock(&g_cci_util_lock);
+
+	if (rc < 0)
+		dev_err(&dev->ppdev->dev,
+			"[dpin_cci_util] reg_read_seq failed reg=0x%02x len=%u rc=%d\n",
+			reg, num_bytes, rc);
+	return rc;
+}
+EXPORT_SYMBOL_GPL(cci_util_lt7911_reg_read_seq);
+
 static int32_t cci_util_probe(struct platform_device *pdev)
 {
 	struct cci_util_dev *dpbdev;

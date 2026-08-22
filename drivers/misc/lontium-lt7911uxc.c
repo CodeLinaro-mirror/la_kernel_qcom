@@ -54,6 +54,14 @@
 
 #define LT7911_DP_STATE_MS        1000
 
+/*
+ * Bits in the LT7911 interrupt-type / ready-state value (reg 0x84).  The chip
+ * reports which parts of the stream description it has just refreshed, so the
+ * bits also tell us which register banks are meaningful on this read.
+ */
+#define LT7911_IRQ_VIDEO_READY    BIT(0)
+#define LT7911_IRQ_AUDIO_READY    BIT(1)
+
 struct lt7911uxc_data {
 	struct device *dev;
 	struct altmode_client *amclient;
@@ -72,6 +80,14 @@ struct lt7911uxc_data {
 	struct regulator *lt7911_vdd;         /* LT7911 VDD supply (L4B) */
 	bool connected;
 	bool lt7911_poweron;
+	int last_width;
+	int last_height;
+	int last_fps;
+	int last_format;
+	int last_afreq;
+	int last_ach;
+	bool have_video_info;
+	bool have_audio_info;
 	bool usb_mux_only;        /* USB-only connect: just switch PS8822, no LT7911 ops */
 	int lanes;
 	int orientation;
@@ -340,6 +356,8 @@ static void lt7911uxc_dpalt_work_fn(struct work_struct *work)
 
 		mutex_lock(&lt7911->device_lock);
 		lt7911_power_down(lt7911);
+		lt7911->have_video_info = false;
+		lt7911->have_audio_info = false;
 		mutex_unlock(&lt7911->device_lock);
 
 		/*
@@ -382,6 +400,7 @@ static void lt7911_info_work_fn(struct work_struct *work)
 		container_of(to_delayed_work(work), struct lt7911uxc_data, info_work);
 	int irq = 0, width = 0, height = 0, fps = 0, format = 0, afreq = 0, ach = 0;
 	int snapshot, rc, retries = 0;
+	bool video_live, audio_live, suppress;
 
 	/*
 	 * Drain-loop for hotplug robustness:
@@ -397,6 +416,13 @@ static void lt7911_info_work_fn(struct work_struct *work)
 	 */
 	do {
 		snapshot = atomic_read(&lt7911->int_event_cnt);
+		irq = 0;
+		width = 0;
+		height = 0;
+		fps = 0;
+		format = 0;
+		afreq = 0;
+		ach = 0;
 
 		mutex_lock(&lt7911->device_lock);
 		if (!lt7911->lt7911_poweron) {
@@ -432,12 +458,60 @@ static void lt7911_info_work_fn(struct work_struct *work)
 		}
 		cci_util_lt7911_disable_i2c(lt7911->cci_handle);
 
-		if (lt7911->connected && (!irq || !width || !height)) {
+		/*
+		 * The LT7911 only refreshes the register bank belonging to the
+		 * event that raised GPIO0.
+		 */
+		video_live = (width > 0 && height > 0);
+		audio_live = (afreq > 0);
+
+		mutex_lock(&lt7911->device_lock);
+
+		if (irq & LT7911_IRQ_VIDEO_READY) {
+			if (video_live) {
+				lt7911->last_width = width;
+				lt7911->last_height = height;
+				lt7911->last_fps = fps;
+				lt7911->last_format = format;
+				lt7911->have_video_info = true;
+			} else if (lt7911->have_video_info) {
+				width = lt7911->last_width;
+				height = lt7911->last_height;
+				fps = lt7911->last_fps;
+				format = lt7911->last_format;
+				dev_dbg(lt7911->dev,
+					"video registers stale, using cached %dx%d\n",
+					width, height);
+			}
+		}
+
+		if (irq & LT7911_IRQ_AUDIO_READY) {
+			if (audio_live) {
+				lt7911->last_afreq = afreq;
+				lt7911->last_ach = ach;
+				lt7911->have_audio_info = true;
+			} else if (lt7911->have_audio_info) {
+				afreq = lt7911->last_afreq;
+				ach = lt7911->last_ach;
+				dev_dbg(lt7911->dev,
+					"audio registers stale, using cached %dKhz/%dch\n",
+					afreq, ach);
+			}
+		}
+
+		/*
+		 * Only a connected cable with nothing at all reported is treated
+		 * as a spurious read worth dropping.
+		 */
+		suppress = lt7911->connected && !irq;
+
+		mutex_unlock(&lt7911->device_lock);
+
+		if (suppress) {
 			dev_dbg(lt7911->dev,
 				"Ignore notification when connected and registers indicate 0\n");
 		} else {
 			lt7911_mipi_enable(lt7911, 1);
-			cci_util_lt7911_enable_i2c(lt7911->cci_handle);
 			lt7911_notify_event(lt7911, irq, width, height, fps, format, afreq, ach);
 		}
 
@@ -1436,6 +1510,199 @@ static ssize_t lt7911_mipi_status_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%d\n", val);
 }
 
+/*
+ * lt7911_reg_access — generic register read/write sysfs interface
+ *
+ * Allows userspace to execute arbitrary Lontium register sequences via a
+ * simple 4-byte-per-command protocol.  Each command is four hex bytes
+ * separated by spaces:
+ *
+ *   <slave> <reg> <data/count> <mask>
+ *
+ * Command encoding (slave byte is 0x86 for the LT7911):
+ *   mask == 0x00  → WRITE reg_addr=<reg>, reg_data=<data>
+ *   mask == 0xFF  → READ  <count> bytes starting at <reg>
+ *   slave == 0x00 && reg == 0x00 && mask == 0x00
+ *                 → DELAY of <data> * 100 ms
+ *
+ * Multiple commands are separated by whitespace (spaces or newlines).
+ * Read results accumulate internally and are returned on the next cat of
+ * the same node.
+ *
+ * Example — DP Lane Error Count sequence:
+ *   echo "86 ff e0 00  86 ee 01 00  86 FF E1 00  86 00 02 FF \
+ *         86 FF F1 00  86 A5 0F 00  86 A5 00 00  00 00 01 00 \
+ *         86 CC 08 FF  86 ff e0 00  86 ee 00 00" \
+ *     > /sys/devices/.../lt7911_reg_access
+ *   cat /sys/devices/.../lt7911_reg_access
+ *     # prints read results as hex bytes
+ */
+
+/* Maximum accumulated read data (bytes) */
+#define LT7911_REG_ACCESS_BUF_SZ  256
+/* Maximum commands per single write (4 bytes each) */
+#define LT7911_REG_ACCESS_MAX_CMDS 64
+
+/* Per-device storage for read results between store→show */
+static u8  lt7911_reg_access_rdbuf[LT7911_REG_ACCESS_BUF_SZ];
+static int lt7911_reg_access_rdlen;
+
+/**
+ * lt7911_reg_access_store - execute a register command sequence.
+ * @dev:   device the sysfs attribute belongs to
+ * @attr:  device attribute descriptor
+ * @buf:   user-space input buffer (hex command string)
+ * @count: number of bytes in @buf
+ *
+ * Parses and executes the command sequence described above.
+ *
+ * Return: @count on success, negative errno on failure.
+ */
+static ssize_t lt7911_reg_access_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
+	const char *p = buf;
+	unsigned int slave, reg, data, mask;
+	int rc, n, rd_offset = 0;
+	struct dpin_cci_util_i2c_reg_array wr;
+	u8 rd_tmp[32];
+
+	if (!lt7911)
+		return -ENODEV;
+
+	if (!lt7911->lt7911_poweron) {
+		dev_err(dev, "lt7911 not powered on\n");
+		return -ENODEV;
+	}
+
+	if (!lt7911->cci_handle) {
+		dev_err(dev, "cci_handle not available\n");
+		return -ENODEV;
+	}
+
+	/* Clear previous read results */
+	lt7911_reg_access_rdlen = 0;
+	memset(lt7911_reg_access_rdbuf, 0, sizeof(lt7911_reg_access_rdbuf));
+
+	while (*p) {
+		/* Skip whitespace and commas */
+		while (*p == ' ' || *p == '\t' || *p == '\n' || *p == ',')
+			p++;
+		if (*p == '\0')
+			break;
+
+		/* Parse 4 hex values */
+		n = sscanf(p, "%x %x %x %x", &slave, &reg, &data, &mask);
+		if (n != 4) {
+			dev_err(dev, "reg_access: parse error near '%.20s'\n", p);
+			break;
+		}
+
+		/* Advance past the 4 tokens we just consumed */
+		{
+			int tokens = 0;
+
+			while (tokens < 4 && *p) {
+				/* skip whitespace before token */
+				while (*p == ' ' || *p == '\t' || *p == '\n')
+					p++;
+				/* skip the token itself */
+				while (*p && *p != ' ' && *p != '\t' && *p != '\n')
+					p++;
+				tokens++;
+			}
+		}
+
+		dev_dbg(dev, "reg_access cmd: %02x %02x %02x %02x\n",
+			slave, reg, data, mask);
+
+		/* DELAY command: slave==0 && reg==0 && mask==0 */
+		if (slave == 0x00 && reg == 0x00 && mask == 0x00) {
+			unsigned int delay_ms = data * 100;
+
+			dev_dbg(dev, "reg_access: delay %u ms\n", delay_ms);
+			if (delay_ms > 5000)
+				delay_ms = 5000; /* cap at 5s */
+			msleep(delay_ms);
+			continue;
+		}
+
+		/* READ command: mask == 0xFF */
+		if (mask == 0xFF) {
+			u16 num_bytes = (u16)data;
+
+			if (num_bytes == 0 || num_bytes > 32) {
+				dev_err(dev,
+					"reg_access: invalid read count %u\n",
+					num_bytes);
+				continue;
+			}
+			if (rd_offset + num_bytes > LT7911_REG_ACCESS_BUF_SZ) {
+				dev_err(dev,
+					"reg_access: read buffer full\n");
+				continue;
+			}
+
+			rc = cci_util_lt7911_reg_read_seq(lt7911->cci_handle,
+							  (u8)reg, rd_tmp,
+							  num_bytes);
+			if (rc < 0) {
+				dev_err(dev,
+					"reg_access: read reg 0x%02x len %u failed rc=%d\n",
+					reg, num_bytes, rc);
+			} else {
+				memcpy(&lt7911_reg_access_rdbuf[rd_offset],
+				       rd_tmp, num_bytes);
+				rd_offset += num_bytes;
+			}
+			continue;
+		}
+
+		/* WRITE command: mask == 0x00 (or anything else) */
+		wr.reg_addr  = reg;
+		wr.reg_data  = data;
+		wr.delay     = 0;
+		wr.data_mask = 0;
+
+		rc = cci_util_lt7911_reg_write(lt7911->cci_handle, &wr, 1);
+		if (rc < 0)
+			dev_err(dev,
+				"reg_access: write reg 0x%02x=0x%02x failed rc=%d\n",
+				reg, data, rc);
+	}
+
+	lt7911_reg_access_rdlen = rd_offset;
+	return count;
+}
+
+/**
+ * lt7911_reg_access_show - return accumulated read data from the last command.
+ * @dev:  device the sysfs attribute belongs to
+ * @attr: device attribute descriptor
+ * @buf:  output buffer (PAGE_SIZE bytes)
+ *
+ * Return: number of bytes written to @buf.
+ */
+static ssize_t lt7911_reg_access_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int i, len = 0;
+
+	if (lt7911_reg_access_rdlen == 0)
+		return snprintf(buf, PAGE_SIZE, "(no data)\n");
+
+	for (i = 0; i < lt7911_reg_access_rdlen; i++) {
+		len += snprintf(buf + len, PAGE_SIZE - len, "%02x ",
+				lt7911_reg_access_rdbuf[i]);
+		if (len >= PAGE_SIZE - 4)
+			break;
+	}
+	len += snprintf(buf + len, PAGE_SIZE - len, "\n");
+	return len;
+}
+
 static DEVICE_ATTR_RW(firmware_upgrade);
 static DEVICE_ATTR_RW(firmware_debug_flag);
 static DEVICE_ATTR_RW(lt7911_cc_switch);
@@ -1444,6 +1711,7 @@ static DEVICE_ATTR_RO(lt7911_dp_traning);
 static DEVICE_ATTR_RO(lt7911_hdcp_version);
 static DEVICE_ATTR_RW(lt7911_mipi_status);
 static DEVICE_ATTR_RO(lt7911_stream_info);
+static DEVICE_ATTR_RW(lt7911_reg_access);
 
 static struct attribute *lt7911_sysfs_attrs[] = {
 	&dev_attr_firmware_upgrade.attr,
@@ -1454,6 +1722,7 @@ static struct attribute *lt7911_sysfs_attrs[] = {
 	&dev_attr_lt7911_hdcp_version.attr,
 	&dev_attr_lt7911_mipi_status.attr,
 	&dev_attr_lt7911_stream_info.attr,
+	&dev_attr_lt7911_reg_access.attr,
 	NULL,
 };
 
