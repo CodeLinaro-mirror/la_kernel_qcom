@@ -1583,7 +1583,6 @@ static const struct qcom_llcc_config lahaina_cfg[] = {
 		.need_llcc_cfg  = true,
 		.reg_offset = llcc_v1_reg_offset,
 		.edac_reg_offset = &llcc_v1_edac_reg_offset,
-		.no_edac	= true,
 	},
 };
 
