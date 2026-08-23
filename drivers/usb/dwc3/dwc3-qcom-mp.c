@@ -94,6 +94,7 @@ struct dwc3_qcom {
 	struct extcon_dev	*host_edev;
 	struct notifier_block	vbus_nb;
 	struct notifier_block	host_nb;
+	struct notifier_block	xhci_nb;
 
 	enum usb_dr_mode	mode;
 	bool			is_suspended;
@@ -872,6 +873,42 @@ static int dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
 	return 0;
 }
 
+/*
+ * The dwc3 core (core.c) and xhci-plat (xhci-plat.c) both pm_runtime_forbid()
+ * themselves in their own probe and never re-allow on the success path. Allow
+ * their runtime PM once they are actually bound, so the host stack can idle:
+ * xHCI autosuspends -> dwc3 core -> this glue.
+ *
+ * BUS_NOTIFY_BOUND_DRIVER fires after the child's probe completes (i.e. after
+ * xhci-plat's final pm_runtime_forbid), unlike USB_BUS_ADD which fires
+ * mid-probe (during usb_add_hcd) and would be overridden by that forbid.
+ */
+static int dwc3_qcom_xhci_nb(struct notifier_block *nb,
+			     unsigned long action, void *data)
+{
+	struct dwc3_qcom *qcom = container_of(nb, struct dwc3_qcom, xhci_nb);
+	struct device *dev = data;
+
+	if (action != BUS_NOTIFY_BOUND_DRIVER)
+		return NOTIFY_DONE;
+
+	/* dwc3 core == direct child of this glue */
+	if (dev->parent == qcom->dev) {
+		pm_runtime_allow(dev);
+		return NOTIFY_DONE;
+	}
+
+	/* xHCI == grandchild: xhci-hcd -> dwc3 core -> glue */
+	if (dev->parent && dev->parent->parent == qcom->dev) {
+		pm_runtime_set_autosuspend_delay(dev, 2000);
+		pm_runtime_use_autosuspend(dev);
+		pm_runtime_allow(dev);
+		pm_runtime_mark_last_busy(dev);
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int dwc3_qcom_probe(struct platform_device *pdev)
 {
 	struct device_node	*np = pdev->dev.of_node;
@@ -987,7 +1024,36 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	qcom->is_suspended = false;
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
-	pm_runtime_forbid(dev);
+	pm_runtime_set_autosuspend_delay(dev, 2000);
+	pm_runtime_use_autosuspend(dev);
+	pm_runtime_allow(dev);
+
+	/*
+	 * dwc3 core + xHCI forbid runtime PM in their own probes and may bind
+	 * after us (deferred probe). Catch their bind via a bus notifier and
+	 * allow their RPM then.
+	 */
+	qcom->xhci_nb.notifier_call = dwc3_qcom_xhci_nb;
+	bus_register_notifier(&platform_bus_type, &qcom->xhci_nb);
+
+	/*
+	 * If the core + xHCI already bound synchronously during
+	 * dwc3_qcom_of_register_core() above, the notifier missed them; allow
+	 * their RPM now (this runs after xhci-plat's final pm_runtime_forbid).
+	 */
+	if (qcom->dwc3) {
+		struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+
+		pm_runtime_allow(&qcom->dwc3->dev);
+
+		if (dwc && dwc->xhci) {
+			pm_runtime_set_autosuspend_delay(&dwc->xhci->dev, 2000);
+			pm_runtime_use_autosuspend(&dwc->xhci->dev);
+			pm_runtime_allow(&dwc->xhci->dev);
+			pm_runtime_mark_last_busy(&dwc->xhci->dev);
+			pm_runtime_put_autosuspend(&dwc->xhci->dev);
+		}
+	}
 
 	return 0;
 
@@ -1010,6 +1076,8 @@ static void dwc3_qcom_remove(struct platform_device *pdev)
 	struct dwc3_qcom *qcom = platform_get_drvdata(pdev);
 	struct device *dev = &pdev->dev;
 	int i;
+
+	bus_unregister_notifier(&platform_bus_type, &qcom->xhci_nb);
 
 	of_platform_depopulate(&pdev->dev);
 	platform_device_put(qcom->dwc3);
