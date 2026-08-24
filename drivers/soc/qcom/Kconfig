@@ -427,6 +427,15 @@ config QTI_SYS_PM_VX
 	  preventing deeper system low power modes. The data is stored in the
 	  MSGRAM by AOP and read and reported in the debugfs by this driver.
 
+config QTI_SYS_PM_VX_V2
+	tristate "Qualcomm Technologies, Inc. (QTI) System PM Violators V2 driver"
+	depends on QCOM_AOSS_QMP
+	help
+	  This option enables the debug of subystems that prevent system low power
+	  modes. The user sends a QMP message to AOP to record subsystems
+	  preventing deeper system low power modes. The data is stored in the
+	  MSGRAM by AOP and read and reported in the debugfs by this driver.
+
 config QCOM_SOCINFO
 	tristate "Qualcomm socinfo driver"
 	depends on QCOM_SMEM

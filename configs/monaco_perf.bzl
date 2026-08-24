@@ -87,6 +87,7 @@ monaco_perf_config = {
     "CONFIG_MSM_QMP": "n",
     "CONFIG_MSM_RDBG": "m",
     "CONFIG_MSM_RPM_SMD": "m",
+    "CONFIG_MSM_RPM_SMD_DEBUG": "m",
     "CONFIG_MSM_SEB": "m",
     "CONFIG_MSM_SEB_RPMSG": "m",
     "CONFIG_MSM_SLATECOM": "m",
