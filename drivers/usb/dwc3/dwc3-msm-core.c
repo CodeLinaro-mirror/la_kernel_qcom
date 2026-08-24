@@ -3871,7 +3871,7 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc, bool ignore_p3_state)
 	}
 	if (!(reg & PWR_EVNT_LPM_IN_L2_MASK)) {
 		dev_err(mdwc->dev, "could not transition HS PHY to L2\n");
-		ret = -EBUSY;
+		ret = mdwc->force_suspend ? 0 : -EBUSY;
 	}
 
 	/* Clear L2 event bit */
