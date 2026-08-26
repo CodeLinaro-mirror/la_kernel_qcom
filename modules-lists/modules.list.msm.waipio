@@ -17,6 +17,8 @@ crm-v2.ko
 debug_symbol.ko
 qcom_soc_wdt.ko
 debug-regulator.ko
+gcc-sm8450.ko
+dispcc-sm8450.ko
 qcom-cpufreq-hw.ko
 gdsc-regulator.ko
 smem.ko
@@ -106,3 +108,4 @@ msm_gpi.ko
 msm_geni_serial.ko
 pinctrl-spmi-gpio.ko
 qcom_geni_serial.ko
+phy-qcom-ufs-qmp-v4-waipio.ko
