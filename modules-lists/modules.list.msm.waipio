@@ -120,3 +120,6 @@ eom_driver.ko
 arm_smmu.ko
 eud.ko
 phy-qcom-ufs-qmp-v4-diwali.ko
+qnoc-diwali.ko
+gcc-fillmore.ko
+dispcc-diwali.ko
