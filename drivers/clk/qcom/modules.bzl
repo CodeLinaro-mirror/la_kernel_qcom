@@ -916,6 +916,23 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/clk/qcom/debugcc-diwali",
+        out = "debugcc-diwali.ko",
+        config = "CONFIG_SM_DEBUGCC_DIWALI",
+        srcs = [
+            # do not sort
+            "drivers/clk/qcom/clk-debug.h",
+            "drivers/clk/qcom/common.h",
+            "drivers/clk/qcom/debugcc-diwali.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/clk/qcom/clk-dummy",
+            "drivers/clk/qcom/clk-qcom",
+        ],
+    )
+
+    registry.register(
         name = "drivers/clk/qcom/debugcc-khaje",
         out = "debugcc-khaje.ko",
         config = "CONFIG_SM_DEBUGCC_KHAJE",
