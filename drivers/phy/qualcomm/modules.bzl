@@ -225,6 +225,10 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v7.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-usb43-pcs-v8.h",
         ],
+        deps = [
+            # do not sort
+            "drivers/eom/eom_driver",
+        ],
     )
 
     registry.register(
