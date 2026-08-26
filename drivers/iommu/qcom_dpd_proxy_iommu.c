@@ -270,6 +270,9 @@ static void dpd_smmu_release_device(struct device *dev)
 	struct dpd_smmu *smmu = container_of(dev->iommu->iommu_dev, struct dpd_smmu, iommu);
 	int i;
 
+	if (!fwspec)
+		return;
+
 	mutex_lock(&smmu->streams_lock);
 	for (i = 0; i < fwspec->num_ids; i++)
 		xa_erase(&smmu->streams, fwspec->ids[i]);
@@ -694,7 +697,7 @@ static int si_cbo_dispatch(unsigned int context_id, struct si_object *object,
 	struct dpd_smmu *smmu;
 	struct imm_fault_info *cfi;
 	struct device *client;
-	struct iommu_domain *domain;
+	struct iommu_domain *domain = NULL;
 	static DEFINE_RATELIMIT_STATE(_rs,
 				      DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
