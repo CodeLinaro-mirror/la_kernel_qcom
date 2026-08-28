@@ -629,6 +629,8 @@ static int lt7911uxc_dpalt_notify(void *priv, void *payload_data, size_t len)
 	if (newly_connected && local_lanes > 0) {
 		lt7911_notify_event(lt7911, -1, 0, 0, 0, 0, 0, 0);
 		queue_work(system_freezable_wq, &lt7911->dpalt_work);
+	} else {
+		lt7911uxc_send_pan_ack(lt7911, DPIN_PAN_ACK, port_index);
 	}
 
 	return rc;
