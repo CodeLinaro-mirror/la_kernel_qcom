@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2018, 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include "linux/habmm.h"
@@ -39,6 +39,26 @@ int gsl_hab_recv(int habfd, unsigned char *p, size_t sz, int interruptible)
 	ret = habmm_socket_recv(habfd, p, &size_bytes, 0, flags);
 
 	if (ret && (ret != -EINTR))
+		LOGE("habmm_socket_recv failed, %d, socket %x. size_bytes %u, expects %u",
+				ret, habfd, size_bytes, sz);
+
+	return ret;
+}
+
+int gsl_hab_recv_timeout(int habfd, unsigned char *p, size_t sz,
+			 int interruptible, uint32_t timeout_ms)
+{
+	int ret = 0;
+	uint32_t size_bytes = 0;
+	uint32_t flags = HABMM_SOCKET_RECV_FLAGS_TIMEOUT;
+
+	if (!interruptible)
+		flags |= HABMM_SOCKET_RECV_FLAGS_UNINTERRUPTIBLE;
+
+	size_bytes = (uint32_t)sz;
+	ret = habmm_socket_recv(habfd, p, &size_bytes, timeout_ms, flags);
+
+	if (ret && (ret != -EINTR) && (ret != -ETIMEDOUT))
 		LOGE("habmm_socket_recv failed, %d, socket %x. size_bytes %u, expects %u",
 				ret, habfd, size_bytes, sz);
 
