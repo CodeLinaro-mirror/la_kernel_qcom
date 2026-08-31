@@ -264,7 +264,7 @@ int pmic_glink_write(struct pmic_glink_client *client, void *data,
 	mutex_lock(&client->lock);
 	do {
 		rc = rpmsg_send(client->pgdev->rpdev->ept, data, len);
-		if (rc != -ECANCELED)
+		if (rc != -EAGAIN)
 			break;
 		pmic_glink_dbg(client->pgdev, "Attempting a retry %d of %d times\n",
 				GLINK_READ_FAIL_RETRIES - retries + 1, GLINK_READ_FAIL_RETRIES);
