@@ -178,10 +178,13 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-common.h",
             "drivers/phy/qualcomm/phy-qcom-qmp.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-misc-v3.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-pcs-misc-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v4.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v5.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v6.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-pcs-usb-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-aon-v6.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-pcs-aon-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-dp-com-v3.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-dp-phy.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-dp-phy-v3.h",
@@ -206,6 +209,9 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-ln-shrd-v6.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v7.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v7.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v8.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-usb43-qserdes-com-v8.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-lalb-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-pll.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v2.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v3.h",
@@ -217,6 +223,7 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v6-n4.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v6_20.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v7.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-usb43-pcs-v8.h",
         ],
     )
 
@@ -292,6 +299,9 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-ln-shrd-v6.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v7.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v7.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v8.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-usb43-qserdes-com-v8.h",
+            "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-lalb-v8.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-pll.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v2.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-v3.h",
@@ -316,5 +326,21 @@ def register_modules(registry):
             "drivers/phy/qualcomm/phy-qcom-qmp-pcs-sgmii.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-com-v5.h",
             "drivers/phy/qualcomm/phy-qcom-qmp-qserdes-txrx-v5.h",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-glymur",
+        out = "phy-qcom-ufs-qmp-v4-glymur.ko",
+        config = "CONFIG_PHY_QCOM_UFS_V4_GLYMUR",
+        srcs = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs-i.h",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-glymur.c",
+            "drivers/phy/qualcomm/phy-qcom-ufs-qmp-v4-glymur.h",
+        ],
+        deps = [
+            # do not sort
+            "drivers/phy/qualcomm/phy-qcom-ufs",
         ],
     )

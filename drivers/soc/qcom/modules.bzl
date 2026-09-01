@@ -1155,6 +1155,16 @@ def register_modules(registry):
     )
 
     registry.register(
+        name = "drivers/soc/qcom/rpm_master_stat",
+        out = "rpm_master_stat.ko",
+        config = "CONFIG_QTI_RPM_STATS_LOG",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/rpm_master_stat.c",
+        ],
+    )
+
+    registry.register(
         name = "drivers/soc/qcom/qcom_tlmm_vm_irqchip",
         out = "qcom_tlmm_vm_irqchip.ko",
         config = "CONFIG_QCOM_TLMM_VM_IRQCHIP",
@@ -1542,6 +1552,20 @@ def register_modules(registry):
             "drivers/virt/gunyah/gh_msgq",
             "drivers/virt/gunyah/gh_dbl",
             "arch/arm64/gunyah/gh_arm_drv",
+        ],
+    )
+
+    registry.register(
+        name = "drivers/soc/qcom/sys_pm_vx_v2",
+        out = "sys_pm_vx_v2.ko",
+        config = "CONFIG_QTI_SYS_PM_VX_V2",
+        srcs = [
+            # do not sort
+            "drivers/soc/qcom/sys_pm_vx_v2.c",
+        ],
+        deps = [
+            # do not sort
+            "drivers/soc/qcom/qcom_aoss",
         ],
     )
 

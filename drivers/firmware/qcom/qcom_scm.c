@@ -3402,7 +3402,6 @@ static int qcom_scm_probe(struct platform_device *pdev)
 
 static void qcom_scm_shutdown(struct platform_device *pdev)
 {
-	idr_destroy(&__scm->waitq.idr);
 	qcom_scm_disable_sdi();
 	qcom_scm_halt_spmi_pmic_arbiter();
 	/* Clean shutdown, disable download mode to allow normal restart */

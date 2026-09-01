@@ -87,9 +87,11 @@ phy-qcom-qmp-combo.ko
 phy-nxp-ptn3222.ko
 phy-qcom-qmp-usb.ko
 dwc3-msm.ko
+videocc-x1p42100.ko
 videocc-sm8550.ko
 camcc-x1e80100.ko
 debugcc-x1e80100.ko
+debugcc-x1p42100.ko
 i2c-msm-geni.ko
 msm_gpi.ko
 arm_ffa.ko

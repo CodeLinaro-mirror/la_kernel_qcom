@@ -14,6 +14,8 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/firmware/qcom/qcom_scm.h>
+#include <soc/qcom/secure_buffer.h>
 #include "qcom-iommu-debug.h"
 
 /**
@@ -192,6 +194,160 @@ static void iommu_debug_free_sgt_impl(struct iommu_debug_usecase_device *dev,
 	dev_dbg(dev->dev, "Freed scatter-gather memory: %zu bytes\n", mem->size);
 }
 
+/**
+ * iommu_debug_alloc_contig_secure - Allocate secure contiguous memory
+ * @dev: Usecase device
+ * @mem: Pre-allocated memory object to populate
+ * @size: Size to allocate
+ *
+ * Returns 0 on success, negative error code on failure
+ */
+static int iommu_debug_alloc_contig_secure(struct iommu_debug_usecase_device *dev,
+					struct iommu_debug_mem *mem, size_t size)
+{
+	struct qcom_scm_vmperm vmperm_set[] = {
+		{.vmid = QCOM_SCM_VMID_CP_PIXEL, .perm = QCOM_SCM_PERM_READ | QCOM_SCM_PERM_WRITE},
+	};
+	u64 srcvm = BIT(QCOM_SCM_VMID_HLOS);
+	phys_addr_t phys;
+	int ret;
+
+	/* First allocate memory using standard implementation */
+	ret = iommu_debug_alloc_contig_impl(dev, mem, size);
+	if (ret) {
+		dev_err(dev->dev, "Failed to allocate contiguous memory for secure allocation\n");
+		return ret;
+	}
+
+	/* Get physical address */
+	phys = page_to_phys(mem->page);
+
+	/* Make memory secure using qcom_scm_assign_mem */
+	ret = qcom_scm_assign_mem(phys, size, &srcvm, vmperm_set, 1);
+	if (ret) {
+		dev_err(dev->dev, "Failed to make contiguous memory secure: %d\n", ret);
+		/* Clean up allocated memory */
+		iommu_debug_free_contig_impl(dev, mem);
+		return ret;
+	}
+
+	dev_dbg(dev->dev, "Allocated secure contiguous memory: %zu bytes at %pa\n", size, &phys);
+	return 0;
+}
+
+/**
+ * iommu_debug_free_contig_secure - Free secure contiguous memory
+ * @dev: Usecase device
+ * @mem: Memory object to free
+ */
+static void iommu_debug_free_contig_secure(struct iommu_debug_usecase_device *dev,
+					struct iommu_debug_mem *mem)
+{
+	struct qcom_scm_vmperm vmperm_unset[] = {
+		{.vmid = QCOM_SCM_VMID_HLOS, .perm = QCOM_SCM_PERM_READ | QCOM_SCM_PERM_WRITE
+		| QCOM_SCM_PERM_EXEC},
+	};
+	u64 srcvm = BIT(QCOM_SCM_VMID_CP_PIXEL);
+	phys_addr_t phys;
+	int ret;
+
+	if (mem->type != IOMMU_DEBUG_MEM_CONTIG) {
+		dev_err(dev->dev, "Memory type mismatch\n");
+		return;
+	}
+
+	if (!mem->page) {
+		dev_err(dev->dev, "No page to free\n");
+		return;
+	}
+
+	/* Get physical address */
+	phys = page_to_phys(mem->page);
+
+	/* Return memory to HLOS */
+	ret = qcom_scm_assign_mem(phys, mem->size, &srcvm, vmperm_unset, 1);
+	if (ret) {
+		dev_err(dev->dev, "Failed to return secure memory to HLOS: %d\n", ret);
+		/* Continue with freeing anyway to avoid memory leak */
+	}
+
+	/* Free the memory using standard implementation */
+	iommu_debug_free_contig_impl(dev, mem);
+
+	dev_dbg(dev->dev, "Freed secure contiguous memory: %zu bytes\n", mem->size);
+}
+
+/**
+ * iommu_debug_alloc_sgt_secure - Allocate secure scatter-gather memory
+ * @dev: Usecase device
+ * @mem: Pre-allocated memory object to populate
+ * @size: Total size to allocate
+ * @chunk_size: Size of each chunk
+ *
+ * Returns 0 on success, negative error code on failure
+ */
+static int iommu_debug_alloc_sgt_secure(struct iommu_debug_usecase_device *dev,
+					struct iommu_debug_mem *mem,
+					size_t size, size_t chunk_size)
+{
+	int vmids_set[] = {QCOM_SCM_VMID_CP_PIXEL};
+	int perms_set[] = {QCOM_SCM_PERM_READ | QCOM_SCM_PERM_WRITE};
+	int vmids_unset[] = {QCOM_SCM_VMID_HLOS};
+	int ret;
+
+	/* First allocate memory using standard implementation */
+	ret = iommu_debug_alloc_sgt_impl(dev, mem, size, chunk_size);
+	if (ret) {
+		dev_err(dev->dev, "Failed to allocate scatter-gather memory for secure allocation\n");
+		return ret;
+	}
+
+	/* Make memory secure using hyp_assign_table */
+	ret = hyp_assign_table(&mem->sgt, vmids_unset, 1, vmids_set, perms_set, 1);
+	if (ret) {
+		dev_err(dev->dev, "Failed to make scatter-gather memory secure: %d\n", ret);
+		/* Clean up allocated memory */
+		iommu_debug_free_sgt_impl(dev, mem);
+		return ret;
+	}
+
+	dev_dbg(dev->dev, "Allocated secure scatter-gather memory: %zu bytes in %zu byte chunks\n",
+		size, chunk_size);
+	return 0;
+}
+
+/**
+ * iommu_debug_free_sgt_secure - Free secure scatter-gather memory
+ * @dev: Usecase device
+ * @mem: Memory object to free
+ */
+static void iommu_debug_free_sgt_secure(struct iommu_debug_usecase_device *dev,
+					struct iommu_debug_mem *mem)
+{
+	int vmids_set[] = {QCOM_SCM_VMID_CP_PIXEL};
+	int vmids_unset[] = {QCOM_SCM_VMID_HLOS};
+	int perms_unset[] = {QCOM_SCM_PERM_READ | QCOM_SCM_PERM_WRITE | QCOM_SCM_PERM_EXEC};
+	int ret;
+
+	if (mem->type != IOMMU_DEBUG_MEM_SGT) {
+		dev_err(dev->dev, "Memory type mismatch\n");
+		return;
+	}
+
+	/* Return memory to HLOS */
+	ret = hyp_assign_table(&mem->sgt, vmids_set, 1, vmids_unset, perms_unset, 1);
+	if (ret) {
+		dev_err(dev->dev,
+			"Failed to return secure scatter-gather memory to HLOS: %d\n", ret);
+		/* Continue with freeing anyway to avoid memory leak */
+	}
+
+	/* Free the memory using standard implementation */
+	iommu_debug_free_sgt_impl(dev, mem);
+
+	dev_dbg(dev->dev, "Freed secure scatter-gather memory: %zu bytes\n", mem->size);
+}
+
 /* Default allocator operations */
 static const struct iommu_debug_allocator_ops default_allocator_ops = {
 	.alloc_contig = iommu_debug_alloc_phoney,
@@ -205,6 +361,13 @@ const struct iommu_debug_allocator_ops standard_allocator_ops = {
 	.free_contig = iommu_debug_free_contig_impl,
 	.alloc_sgt = iommu_debug_alloc_sgt_impl,
 	.free_sgt = iommu_debug_free_sgt_impl,
+};
+
+const struct iommu_debug_allocator_ops secure_allocator_ops = {
+	.alloc_contig = iommu_debug_alloc_contig_secure,
+	.free_contig = iommu_debug_free_contig_secure,
+	.alloc_sgt = iommu_debug_alloc_sgt_secure,
+	.free_sgt = iommu_debug_free_sgt_secure,
 };
 
 /**

@@ -28,6 +28,7 @@ shikra_tuivm_config = {
     "CONFIG_PINCTRL_SHIKRA": "m",
     "CONFIG_PM_AUTOSLEEP": "y",
     "CONFIG_PSI": "y",
+    "CONFIG_QCOM_APCS_IPC": "m",
     "CONFIG_QCOM_DEBUG_SYMBOL": "m",
     "CONFIG_QCOM_DMABUF_HEAPS": "m",
     "CONFIG_QCOM_DMABUF_HEAPS_TVM_CARVEOUT": "y",

@@ -209,8 +209,13 @@ int hab_virq_send(struct virq_uhab_context *ctx,
 	}
 
 	ret = habhyp_virq_send(dbl);
-	if (ret != 0) {
-		pr_err("failed to raise virq to the sender dbl id %d ret %d\n", virq_handle, ret);
+	if (ret == -EAGAIN) {
+		ret = -ENODEV;
+		pr_err("remote closed during virq send ret %d\n", ret);
+		hab_virq_put(dbl);
+		return ret;
+	} else if (ret) {
+		pr_err("failed to send virq id %d ret %d\n", virq_handle, ret);
 		hab_virq_put(dbl);
 		return ret;
 	}
