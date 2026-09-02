@@ -55,6 +55,7 @@ glymur_perf_config = {
     "CONFIG_MSM_BOOT_STATS": "m",
     "CONFIG_MSM_GPI_DMA": "m",
     "CONFIG_MSM_QMP": "m",
+    "CONFIG_MSM_RDBG": "m",
     "CONFIG_NL80211_TESTMODE": "y",
     "CONFIG_NVMEM_QCOM_QFPROM": "m",
     "CONFIG_NVMEM_SPMI_SDAM": "m",
