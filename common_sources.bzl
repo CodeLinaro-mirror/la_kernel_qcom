@@ -15,6 +15,7 @@ COPY_FILES = [
     "drivers/leds/trigger/ledtrig-netdev.c",
     "drivers/leds/trigger/ledtrig-pattern.c",
     "drivers/leds/leds-aw200xx.c",
+    "drivers/char/hw_random/virtio-rng.c",
     "drivers/char/virtio_console.c",
     "drivers/dma/qcom/gpi.c",
     "drivers/dma/dmaengine.h",
