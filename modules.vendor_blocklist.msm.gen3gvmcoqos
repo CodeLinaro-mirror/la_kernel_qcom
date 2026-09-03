@@ -5,3 +5,4 @@ blocklist dummy_hcd
 blocklist locktorture
 blocklist rcutorture
 blocklist torture
+blocklist test_user_copy
