@@ -1555,20 +1555,26 @@ static void ufs_qcom_populate_available_cpus(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	int cid_cpu[MAX_NUM_CLUSTERS] = {-1, -1, -1, -1};
+	struct cpu_freq_info *cpu_freq_info;
 	int cid = -1;
 	int prev_cid = -1;
 	int cpu = 0;
+	int i;
 	/*
 	 * Due to Logical contiguous CPU numbering, one to one mapping
 	 * between physical and logical cpu is no more applicable.
 	 * Hence we are not passing cpu mask from the device tree.
 	 * Hence populate the cpu mask dynamically as below.
 	 */
+
+	host->num_cpus = 0;
+
 	for_each_cpu(cpu, cpu_possible_mask) {
 		cid = topology_cluster_id(cpu);
 		if (cid != prev_cid) {
 			cid_cpu[cid] = cpu;
 			prev_cid = cid;
+			host->num_cpus++;
 		}
 	}
 
@@ -1588,6 +1594,16 @@ static void ufs_qcom_populate_available_cpus(struct ufs_hba *hba)
 	if (cid_cpu[CLUSTER_3] != -1) {
 		host->cluster_mask[CLUSTER_3].bits[0] =
 			topology_cluster_cpumask(cid_cpu[CLUSTER_3])->bits[0];
+	}
+
+
+	/* Allocate and Populate cpu_info */
+	cpu_freq_info = kzalloc(sizeof(struct cpu_freq_info) * host->num_cpus, GFP_KERNEL);
+	if (cpu_freq_info) {
+		for (i = 0; i < host->num_cpus; i++)
+			cpu_freq_info[i].cpu = cid_cpu[i];
+
+		host->cpu_info = cpu_freq_info;
 	}
 }
 
