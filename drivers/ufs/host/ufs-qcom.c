@@ -5675,6 +5675,41 @@ static ssize_t ufs_pm_mode_store(struct device *dev,
 
 static DEVICE_ATTR_RW(ufs_pm_mode);
 
+static ssize_t irq_affinity_masks_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+
+	return scnprintf(buf, PAGE_SIZE,
+			 "perf_mask=0x%lx def_mask=0x%lx\n",
+			 host->perf_mask.bits[0],
+			 host->def_mask.bits[0]);
+}
+
+static ssize_t irq_affinity_masks_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	unsigned long perf_mask;
+	unsigned long def_mask;
+
+	if (sscanf(buf, "%lx %lx",
+		&perf_mask, &def_mask) != 2)
+		return -EINVAL;
+
+	host->perf_mask.bits[0] = perf_mask;
+	host->def_mask.bits[0] = def_mask;
+
+	host->irq_affinity_support = true;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(irq_affinity_masks);
+
 static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_power_mode.attr,
@@ -5687,6 +5722,7 @@ static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_ber_th_exceeded.attr,
 	&dev_attr_irq_affinity_support.attr,
 	&dev_attr_ufs_pm_mode.attr,
+	&dev_attr_irq_affinity_masks.attr,
 	NULL
 };
 
