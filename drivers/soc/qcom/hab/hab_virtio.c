@@ -1253,7 +1253,7 @@ int virtio_physical_channel_send(struct physical_channel *pchan,
 	char *outbuf;
 	int rc = 0;
 	unsigned long lock_flags;
-	struct vh_buf_header *hd;
+	struct vh_buf_header *hd = NULL;
 	int nonblocking_flag = flags & HABMM_SOCKET_SEND_FLAGS_NON_BLOCKING;
 
 	if (link->vpc == NULL) {

@@ -45,6 +45,7 @@ load(
     "define_shikra_oemvm",
     "define_shikra_tuivm",
 )
+load(":kleaf-scripts/targets/shikra_auto.bzl", "define_shikra_auto")
 load(":kleaf-scripts/targets/shikra_tiny.bzl", "define_shikra_tiny")
 load(":kleaf-scripts/targets/shikra_vms.bzl", "define_shikra_vms")
 load(
@@ -384,6 +385,8 @@ define_malabar_vms()
 define_monaco()
 
 define_shikra()
+
+define_shikra_auto()
 
 define_shikra_tiny()
 

@@ -74,4 +74,10 @@ extern const struct file_operations iommu_debug_dma_unmap_fops;
 extern const struct file_operations iommu_debug_test_virt_addr_fops;
 extern const struct file_operations iommu_debug_profiling_fops;
 
+/* Only one function - share header file */
+#if IS_ENABLED(CONFIG_QCOM_DPD_PROXY)
+void iommu_debug_debugfs_setup_dpd(struct iommu_debug_device *ddev);
+#else
+static inline void iommu_debug_debugfs_setup_dpd(struct iommu_debug_device *ddev) {}
+#endif
 #endif

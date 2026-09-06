@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef __QSEECOM_KERNEL_H_
@@ -49,6 +49,7 @@ struct qseecom_drv_ops {
 };
 
 int provide_qseecom_kernel_fun_ops(const struct qseecom_drv_ops *ops);
+int get_qseecom_kernel_fun_ops(void);
 #endif
 
 #endif /* __QSEECOM_KERNEL_H_ */
