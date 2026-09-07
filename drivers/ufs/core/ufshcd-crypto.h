@@ -9,7 +9,6 @@
 
 #include <scsi/scsi_cmnd.h>
 #include <ufs/ufshcd.h>
-#include "ufshcd-priv.h"
 #include <ufs/ufshci.h>
 #include <linux/crypto-qti-common.h>
 
