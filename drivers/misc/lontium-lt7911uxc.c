@@ -54,6 +54,14 @@
 
 #define LT7911_DP_STATE_MS        1000
 
+/*
+ * Bits in the LT7911 interrupt-type / ready-state value (reg 0x84).  The chip
+ * reports which parts of the stream description it has just refreshed, so the
+ * bits also tell us which register banks are meaningful on this read.
+ */
+#define LT7911_IRQ_VIDEO_READY    BIT(0)
+#define LT7911_IRQ_AUDIO_READY    BIT(1)
+
 struct lt7911uxc_data {
 	struct device *dev;
 	struct altmode_client *amclient;
@@ -72,6 +80,14 @@ struct lt7911uxc_data {
 	struct regulator *lt7911_vdd;         /* LT7911 VDD supply (L4B) */
 	bool connected;
 	bool lt7911_poweron;
+	int last_width;
+	int last_height;
+	int last_fps;
+	int last_format;
+	int last_afreq;
+	int last_ach;
+	bool have_video_info;
+	bool have_audio_info;
 	bool usb_mux_only;        /* USB-only connect: just switch PS8822, no LT7911 ops */
 	int lanes;
 	int orientation;
@@ -340,6 +356,8 @@ static void lt7911uxc_dpalt_work_fn(struct work_struct *work)
 
 		mutex_lock(&lt7911->device_lock);
 		lt7911_power_down(lt7911);
+		lt7911->have_video_info = false;
+		lt7911->have_audio_info = false;
 		mutex_unlock(&lt7911->device_lock);
 
 		/*
@@ -382,6 +400,7 @@ static void lt7911_info_work_fn(struct work_struct *work)
 		container_of(to_delayed_work(work), struct lt7911uxc_data, info_work);
 	int irq = 0, width = 0, height = 0, fps = 0, format = 0, afreq = 0, ach = 0;
 	int snapshot, rc, retries = 0;
+	bool video_live, audio_live, suppress;
 
 	/*
 	 * Drain-loop for hotplug robustness:
@@ -397,6 +416,13 @@ static void lt7911_info_work_fn(struct work_struct *work)
 	 */
 	do {
 		snapshot = atomic_read(&lt7911->int_event_cnt);
+		irq = 0;
+		width = 0;
+		height = 0;
+		fps = 0;
+		format = 0;
+		afreq = 0;
+		ach = 0;
 
 		mutex_lock(&lt7911->device_lock);
 		if (!lt7911->lt7911_poweron) {
@@ -432,12 +458,60 @@ static void lt7911_info_work_fn(struct work_struct *work)
 		}
 		cci_util_lt7911_disable_i2c(lt7911->cci_handle);
 
-		if (lt7911->connected && (!irq || !width || !height)) {
+		/*
+		 * The LT7911 only refreshes the register bank belonging to the
+		 * event that raised GPIO0.
+		 */
+		video_live = (width > 0 && height > 0);
+		audio_live = (afreq > 0);
+
+		mutex_lock(&lt7911->device_lock);
+
+		if (irq & LT7911_IRQ_VIDEO_READY) {
+			if (video_live) {
+				lt7911->last_width = width;
+				lt7911->last_height = height;
+				lt7911->last_fps = fps;
+				lt7911->last_format = format;
+				lt7911->have_video_info = true;
+			} else if (lt7911->have_video_info) {
+				width = lt7911->last_width;
+				height = lt7911->last_height;
+				fps = lt7911->last_fps;
+				format = lt7911->last_format;
+				dev_dbg(lt7911->dev,
+					"video registers stale, using cached %dx%d\n",
+					width, height);
+			}
+		}
+
+		if (irq & LT7911_IRQ_AUDIO_READY) {
+			if (audio_live) {
+				lt7911->last_afreq = afreq;
+				lt7911->last_ach = ach;
+				lt7911->have_audio_info = true;
+			} else if (lt7911->have_audio_info) {
+				afreq = lt7911->last_afreq;
+				ach = lt7911->last_ach;
+				dev_dbg(lt7911->dev,
+					"audio registers stale, using cached %dKhz/%dch\n",
+					afreq, ach);
+			}
+		}
+
+		/*
+		 * Only a connected cable with nothing at all reported is treated
+		 * as a spurious read worth dropping.
+		 */
+		suppress = lt7911->connected && !irq;
+
+		mutex_unlock(&lt7911->device_lock);
+
+		if (suppress) {
 			dev_dbg(lt7911->dev,
 				"Ignore notification when connected and registers indicate 0\n");
 		} else {
 			lt7911_mipi_enable(lt7911, 1);
-			cci_util_lt7911_enable_i2c(lt7911->cci_handle);
 			lt7911_notify_event(lt7911, irq, width, height, fps, format, afreq, ach);
 		}
 
@@ -555,6 +629,8 @@ static int lt7911uxc_dpalt_notify(void *priv, void *payload_data, size_t len)
 	if (newly_connected && local_lanes > 0) {
 		lt7911_notify_event(lt7911, -1, 0, 0, 0, 0, 0, 0);
 		queue_work(system_freezable_wq, &lt7911->dpalt_work);
+	} else {
+		lt7911uxc_send_pan_ack(lt7911, DPIN_PAN_ACK, port_index);
 	}
 
 	return rc;
@@ -1629,6 +1705,63 @@ static ssize_t lt7911_reg_access_show(struct device *dev,
 	return len;
 }
 
+/**
+ * lt7911_replay_uevent_store - re-emit the DPIN_HOST_INFO uevent on demand.
+ * @dev:   device the sysfs attribute belongs to
+ * @attr:  device attribute descriptor
+ * @buf:   userspace input; any non-zero integer requests a replay
+ * @count: number of bytes in @buf
+ *
+ * Return: @count on success, negative errno on failure.
+ */
+static ssize_t lt7911_replay_uevent_store(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct lt7911uxc_data *lt7911 = dev_get_drvdata(dev);
+	int rc, val = 0;
+
+	if (!lt7911)
+		return -ENODEV;
+
+	rc = kstrtoint(buf, 10, &val);
+	if (rc) {
+		dev_err(dev, "replay_uevent: kstrtoint error rc=%d\n", rc);
+		return rc;
+	}
+
+	if (!val)
+		return count;
+
+	mutex_lock(&lt7911->device_lock);
+	if (!lt7911->connected || !lt7911->lt7911_poweron) {
+		mutex_unlock(&lt7911->device_lock);
+		dev_info(dev, "replay_uevent: no active DPIN stream (connected=%d poweron=%d)\n",
+			 lt7911->connected, lt7911->lt7911_poweron);
+		return -ENODEV;
+	}
+	mutex_unlock(&lt7911->device_lock);
+
+	if (!lt7911->cci_handle) {
+		dev_err(dev, "replay_uevent: cci_handle not available\n");
+		return -ENODEV;
+	}
+
+	if (atomic_read(&lt7911->fw_upgrade_in_progress)) {
+		dev_warn(dev, "replay_uevent: firmware upgrade in progress, deferred\n");
+		return -EBUSY;
+	}
+
+	dev_info(dev, "replay_uevent: re-driving info_work to re-emit DPIN_HOST_INFO\n");
+
+	atomic_inc(&lt7911->int_event_cnt);
+	cancel_delayed_work(&lt7911->info_work);
+	queue_delayed_work(system_freezable_wq, &lt7911->info_work,
+			msecs_to_jiffies(LT7911_DRAIN_SETTLE_MS));
+
+	return count;
+}
+
 static DEVICE_ATTR_RW(firmware_upgrade);
 static DEVICE_ATTR_RW(firmware_debug_flag);
 static DEVICE_ATTR_RW(lt7911_cc_switch);
@@ -1638,6 +1771,7 @@ static DEVICE_ATTR_RO(lt7911_hdcp_version);
 static DEVICE_ATTR_RW(lt7911_mipi_status);
 static DEVICE_ATTR_RO(lt7911_stream_info);
 static DEVICE_ATTR_RW(lt7911_reg_access);
+static DEVICE_ATTR_WO(lt7911_replay_uevent);
 
 static struct attribute *lt7911_sysfs_attrs[] = {
 	&dev_attr_firmware_upgrade.attr,
@@ -1649,6 +1783,7 @@ static struct attribute *lt7911_sysfs_attrs[] = {
 	&dev_attr_lt7911_mipi_status.attr,
 	&dev_attr_lt7911_stream_info.attr,
 	&dev_attr_lt7911_reg_access.attr,
+	&dev_attr_lt7911_replay_uevent.attr,
 	NULL,
 };
 
