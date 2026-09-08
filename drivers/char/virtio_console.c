@@ -612,6 +612,8 @@ static ssize_t __send_to_port(struct port *port, struct scatterlist *sg,
 	unsigned int len;
 
 	out_vq = port->out_vq;
+	if (!out_vq)
+		return -EPIPE;
 
 	spin_lock_irqsave(&port->outvq_lock, flags);
 
@@ -2193,6 +2195,18 @@ static int virtcons_freeze(struct virtio_device *vdev)
 	}
 
 	remove_vqs(portdev);
+
+	/*
+	 * Null out per-port VQ pointers after freeing. Without this,
+	 * port->out_vq is a dangling pointer after del_vqs(). If printk
+	 * fires through the HVC console (e.g. PM framework logging
+	 * "returned 0" after freeze_noirq), put_chars() ->
+	 * __send_to_port() -> virtqueue_kick() will UAF the freed vq.
+	 */
+	list_for_each_entry(port, &portdev->ports, list) {
+		port->in_vq = NULL;
+		port->out_vq = NULL;
+	}
 
 	return 0;
 }
