@@ -35,9 +35,9 @@
 #define QCOM_IOMMU_ATOS_TRANS_DEFAULT	(0U)
 
 #ifndef IOMMU_SYS_CACHE
-/* Attributes are not supported, so render them ineffective. */
-#define IOMMU_SYS_CACHE		(0)
-#define IOMMU_SYS_CACHE_NWA	(0)
+/* Temp fix: assign real bits so LLC cache PTE attributes are applied */
+#define IOMMU_SYS_CACHE		(1 << 6)
+#define IOMMU_SYS_CACHE_NWA	(1 << 7)
 #endif
 
 /* vendor iommu fault flags */
