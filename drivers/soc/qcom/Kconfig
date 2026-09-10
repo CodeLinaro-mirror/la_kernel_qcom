@@ -275,6 +275,19 @@ config PDR_INDICATION_NOTIF_TIMEOUT
 	  the start and end of notifications, before a warning
 	  is emitted.
 
+config QCOM_PDR_MONITOR
+	tristate "Qualcomm Protection Domain Restart Monitor"
+	depends on QCOM_PDR_HELPERS
+	depends on QCOM_SMEM
+	help
+	  This driver monitors Protection Domain (PD) state changes on
+	  Qualcomm SoCs and logs symbolized stack traces in case of PD down
+	  for debugging purposes. It provides visibility into PD events
+	  that may affect subsystem stability.
+
+	  Say Y here if you need to debug PD-related issues on Qualcomm
+	  platforms.
+
 config MSM_CORE_HANG_DETECT
         tristate "MSM Core Hang Detection Support"
         help
@@ -423,6 +436,15 @@ config QTI_SYS_PM_VX
 	depends on QCOM_AOSS_QMP
 	help
 	  This option enables debug subystems that prevent system low power
+	  modes. The user sends a QMP message to AOP to record subsystems
+	  preventing deeper system low power modes. The data is stored in the
+	  MSGRAM by AOP and read and reported in the debugfs by this driver.
+
+config QTI_SYS_PM_VX_V2
+	tristate "Qualcomm Technologies, Inc. (QTI) System PM Violators V2 driver"
+	depends on QCOM_AOSS_QMP
+	help
+	  This option enables the debug of subystems that prevent system low power
 	  modes. The user sends a QMP message to AOP to record subsystems
 	  preventing deeper system low power modes. The data is stored in the
 	  MSGRAM by AOP and read and reported in the debugfs by this driver.

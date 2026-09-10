@@ -106,6 +106,13 @@ int dpd_svc_map(struct dpd_scatterlist *dpd_sg, u32 domain_id, u32 flags, u64 io
 	if (result) {
 		pr_err("Map service call failed with %d for domain %d\n",
 			result, domain_id);
+		/*
+		 * Return -ENOMEM to client directly when the limit of
+		 * number of FFA SPM handles in pKVM hypervisor is getting
+		 * exhausted and ENOMEM is returned in result of SMCInvoke.
+		 */
+		if (result == ENOMEM)
+			return -ENOMEM;
 		return -EINVAL;
 	}
 

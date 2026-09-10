@@ -325,6 +325,9 @@
 #define QCOM_ID_CHORAP			744
 #define QCOM_ID_MALABAR			733
 #define QCOM_ID_PIKACHU			736
+#define QCOM_ID_PIKACHUP                737
+#define QCOM_ID_PIKACHUS                784
+#define QCOM_ID_PIKACHUPS               783
 #define QCOM_ID_CANOEPSG		743
 #define QCOM_ID_SHIKRA			756
 #define QCOM_ID_MALABARP                757
