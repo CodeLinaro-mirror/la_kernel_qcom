@@ -207,11 +207,6 @@ static int ps883x_restore(struct ps883x_retimer *retimer)
 	if (ret)
 		return ret;
 
-	gpiod_set_value(retimer->reset_gpio, 0);
-
-	/* firmware initialization delay */
-	msleep(65);
-
 	ret = clk_prepare_enable(retimer->xo_clk);
 	if (ret) {
 		dev_err(dev, "failed to enable XO: %d\n", ret);
@@ -219,6 +214,11 @@ static int ps883x_restore(struct ps883x_retimer *retimer)
 		retimer->in_reset = true;
 		return ret;
 	}
+
+	gpiod_set_value(retimer->reset_gpio, 0);
+
+	/* firmware initialization delay */
+	msleep(65);
 
 	/* make sure device is accessible */
 	ret = regmap_read(retimer->regmap, REG_USB_PORT_CONN_STATUS_0,
@@ -516,6 +516,12 @@ static int ps883x_retimer_probe(struct i2c_client *client)
 	if (ret)
 		goto err_mux_put;
 
+	ret = clk_prepare_enable(retimer->xo_clk);
+	if (ret) {
+		dev_err(dev, "failed to enable XO: %d\n", ret);
+		goto err_vregs_disable;
+	}
+
 	already_configured = regmap_test_bits(retimer->regmap, REG_USB_PORT_CONN_STATUS_0,
 					      CONN_STATUS_0_CONNECTION_PRESENT) == 1;
 
@@ -532,12 +538,6 @@ static int ps883x_retimer_probe(struct i2c_client *client)
 
 		/* firmware initialization delay */
 		msleep(60);
-	}
-
-	ret = clk_prepare_enable(retimer->xo_clk);
-	if (ret) {
-		dev_err(dev, "failed to enable XO: %d\n", ret);
-		goto err_vregs_disable;
 	}
 
 	if (!already_configured) {
