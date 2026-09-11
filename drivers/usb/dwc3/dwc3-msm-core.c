@@ -6005,6 +6005,8 @@ static void dwc3_init_dbm(struct dwc3_msm *mdwc)
 
 static int dwc3_start_stop_host(struct dwc3_msm *mdwc, bool start)
 {
+	int retries = 250;
+
 	if (start) {
 		dbg_log_string("start host mode");
 		mdwc->id_state = DWC3_ID_GROUND;
@@ -6029,7 +6031,7 @@ static int dwc3_start_stop_host(struct dwc3_msm *mdwc, bool start)
 		flush_workqueue(mdwc->sm_usb_wq);
 
 		pm_runtime_put(&mdwc->dwc3->dev);
-		while (test_bit(WAIT_FOR_LPM, &mdwc->inputs))
+		while (test_bit(WAIT_FOR_LPM, &mdwc->inputs) && retries--)
 			msleep(20);
 
 		dbg_log_string("stop_host_mode completed");
