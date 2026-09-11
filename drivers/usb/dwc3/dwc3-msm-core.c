@@ -6255,20 +6255,22 @@ static int dwc3_msm_restart_usb_host(struct dwc3_msm *mdwc)
 		return 0;
 
 	mutex_lock(&mdwc->role_switch_mutex);
+	if (mdwc->id_state == DWC3_ID_FLOAT) {
+		mutex_unlock(&mdwc->role_switch_mutex);
+		return 0;
+	}
+	mutex_unlock(&mdwc->role_switch_mutex);
 
-	/* Check if USB cable disconnected */
-	if (mdwc->id_state == DWC3_ID_FLOAT)
-		goto exit;
-
-	/* stop USB host mode */
+	/*
+	 * dwc3_start_stop_host(false) flushes sm_usb_wq, whose queued
+	 * sm_work re-enters role_switch_mutex via dwc3_otg_start_host();
+	 * must not hold the mutex here or that flush deadlocks.
+	 */
 	ret = dwc3_start_stop_host(mdwc, false);
 	if (ret)
-		goto exit;
+		return ret;
 
 	dwc3_start_stop_host(mdwc, true);
-
-exit:
-	mutex_unlock(&mdwc->role_switch_mutex);
 
 	return ret;
 }
