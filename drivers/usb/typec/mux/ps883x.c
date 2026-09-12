@@ -270,7 +270,7 @@ err_vddar_disable:
 	regulator_disable(retimer->vddar_supply);
 err_vdd_disable:
 	regulator_disable(retimer->vdd_supply);
-err_vddat_disable:
+err_vddio_disable:
 	regulator_disable(retimer->vddat_supply);
 err_vdd33_cap_disable:
 	regulator_disable(retimer->vdd33_cap_supply);
