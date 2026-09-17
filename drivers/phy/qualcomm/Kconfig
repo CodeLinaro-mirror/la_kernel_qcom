@@ -188,3 +188,14 @@ config PHY_QCOM_QMP_USB
 	help
 	  Enable this to support the QMP USB PHY transceiver that is used
 	  with USB3 controllers on Qualcomm chips.
+
+config PHY_QCOM_UFS_V4_GLYMUR
+	tristate "Qualcomm Technologies, Inc. UFS Glymur Phy Driver"
+	depends on PHY_QCOM_UFS
+	help
+	  Enable support for the Qualcomm UFS QMP v4 PHY found on
+	  Glymur-based platforms. This driver initializes and manages
+	  the UFS PHY used by the UFS controller during link startup and
+	  normal operation.
+	  Select this option if the target platform uses the Glymur
+	  UFS PHY. To build this driver as a module, choose M here.

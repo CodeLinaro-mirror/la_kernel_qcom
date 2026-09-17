@@ -644,7 +644,7 @@ static int hab_recv_and_enqueue_export_desc(struct physical_channel *pchan,
 {
 	struct hab_import_ack_recvd *ack_recvd = NULL;
 	struct export_desc *exp_desc = NULL;
-	struct export_desc_super *exp_desc_super;
+	struct export_desc_super *exp_desc_super = NULL;
 	const int disabled_irqs = irqs_disabled();
 	int ret;
 

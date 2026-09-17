@@ -5399,12 +5399,6 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 
 	msm_host->saved_tuning_phase = INVALID_TUNING_PHASE;
 
-	ret = sdhci_msm_populate_pdata(dev, msm_host);
-	if (ret) {
-		dev_err(&pdev->dev, "DT parsing error\n");
-		goto pltfm_free;
-	}
-
 	if (msm_host->fw_managed) {
 		ret = dev_pm_domain_attach_list(&pdev->dev, &var_info->pd_data,
 				&msm_host->pd_list);
@@ -5425,6 +5419,12 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		 * for firmware managed platforms.
 		 */
 		goto skip_resource_init;
+	}
+
+	ret = sdhci_msm_populate_pdata(dev, msm_host);
+	if (ret) {
+		dev_err(&pdev->dev, "DT parsing error\n");
+		goto pltfm_free;
 	}
 
 	sdhci_msm_gcc_reset(&pdev->dev, host);

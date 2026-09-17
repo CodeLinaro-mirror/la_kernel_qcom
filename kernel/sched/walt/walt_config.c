@@ -349,6 +349,12 @@ void walt_config(void)
 		 * Enable explicitly for platforms that support SW cycle counter.
 		 */
 		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
+	} else if (!strcmp(name, "MAHUA")) {
+		/*
+		 * By default this SOC flag will be disabled.
+		 * Enable explicitly for platforms that support SW cycle counter.
+		 */
+		soc_feat_set(SOC_ENABLE_SW_CYCLE_COUNTER_BIT);
 	} else if (!strcmp(name, "SERAPH") || !strcmp(name, "PIKACHU")) {
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_TOPAPP_BIT);
 		soc_feat_unset(SOC_ENABLE_CONSERVATIVE_BOOST_FG_BIT);

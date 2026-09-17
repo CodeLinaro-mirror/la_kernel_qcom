@@ -60,6 +60,8 @@ seraph_perf_config = {
     "CONFIG_HWSPINLOCK_QCOM": "m",
     "CONFIG_I2C_EUSB2_REPEATER": "m",
     "CONFIG_I2C_MSM_GENI": "m",
+    "CONFIG_I2C_MUX": "m",
+    "CONFIG_I2C_MUX_GPIO": "m",
     "CONFIG_I3C_MASTER_MSM_GENI": "m",
     "CONFIG_INA234_CURRENT_MONITOR": "m",
     "CONFIG_INPUT_PM8941_PWRKEY": "m",
