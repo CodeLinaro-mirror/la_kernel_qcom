@@ -3333,7 +3333,7 @@ int gpi_terminate_all(struct dma_chan *chan)
 	struct gpii_chan *gpii_chan = to_gpii_chan(chan);
 	struct gpii *gpii = gpii_chan->gpii;
 	int schid, echid, i;
-	int ret = 0;
+	int ret = 0, err = 0;
 	u32 ch_state;
 
 	GPII_INFO(gpii, gpii_chan->chid, "Enter\n");
@@ -3358,16 +3358,22 @@ int gpi_terminate_all(struct dma_chan *chan)
 
 		/* send command to Stop the channel */
 		ret = gpi_send_cmd(gpii, gpii_chan, GPI_CH_CMD_STOP);
-		if (ret) {
+		if (ret)
 			GPII_ERR(gpii, gpii_chan->chid,
 				 "Error Stopping Chan:%d resetting\n", ret);
-		} else {
-			gpi_noop_tre(gpii_chan);
-			if (gpii->protocol == SE_PROTOCOL_UART)
-				gpi_free_chan_desc(gpii_chan);
-			else
-				gpi_free_all_chan_desc(gpii_chan);
-		}
+
+		/*
+		 * Always perform cleanup regardless of STOP result.
+		 * When STOP fails the channel may still be running; marking
+		 * pending TREs as NOOPs prevents hardware from executing them
+		 * during the window between STOP failure and the subsequent
+		 * RESET command.
+		 */
+		gpi_noop_tre(gpii_chan);
+		if (gpii->protocol == SE_PROTOCOL_UART)
+			gpi_free_chan_desc(gpii_chan);
+		else
+			gpi_free_all_chan_desc(gpii_chan);
 	}
 
 	/* Reset the channels (clears any pending TREs) */
@@ -3380,23 +3386,37 @@ int gpi_terminate_all(struct dma_chan *chan)
 		ch_state = gpi_read_ch_state(gpii_chan);
 		GPII_ERR(gpii, gpii_chan->chid, "CH state state:%s\n",
 			 TO_GPI_CH_STATE_STR(ch_state));
-		if (ch_state != CH_STATE_STOPPED) {
-			ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
-			if (ret) {
-				GPII_ERR(gpii, gpii_chan->chid, "Error resetting channel: %d\n",
-					 ret);
-				gpi_dump_debug_reg(gpii);
-				goto terminate_exit;
-			}
+		if (ch_state == CH_STATE_STOPPED)
+			continue;
 
-			/* reprogram channel CNTXT */
-			ret = gpi_alloc_chan(gpii_chan, false);
-			if (ret) {
-				GPII_ERR(gpii, gpii_chan->chid, "Error allocating channel: %d\n",
-					 ret);
-				goto terminate_exit;
-			}
+		ret = gpi_reset_chan(gpii_chan, GPI_CH_CMD_RESET);
+		if (ret) {
+			GPII_ERR(gpii, gpii_chan->chid, "Error resetting channel: %d\n",
+				 ret);
+			gpi_dump_debug_reg(gpii);
+			err = ret;
+			/*
+			 * Do not exit the loop on failure. Every channel must be
+			 * attempted. Leaving any channel (especially RX/ch:1) in
+			 * CH_STATE_ERROR while it still holds a mapped DMA buffer
+			 * will cause an SMMU context fault when the buffer is
+			 * subsequently unmapped by the client driver.
+			 */
+			continue;
 		}
+
+		/* reprogram channel CNTXT */
+		ret = gpi_alloc_chan(gpii_chan, false);
+		if (ret) {
+			GPII_ERR(gpii, gpii_chan->chid, "Error allocating channel: %d\n",
+				 ret);
+			err = ret;
+			continue;
+		}
+	}
+	if (err) {
+		ret = err;
+		goto terminate_exit;
 	}
 
 	/* Restart the channels */
