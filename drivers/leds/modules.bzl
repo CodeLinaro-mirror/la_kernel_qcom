@@ -139,3 +139,16 @@ def register_modules(registry):
             # do not sort
         ],
     )
+
+    registry.register(
+        name = "drivers/leds/leds-aw200xx",
+        out = "leds-aw200xx.ko",
+        config = "CONFIG_LEDS_AW200XX",
+        srcs = [
+            # do not sort
+            "drivers/leds/leds-aw200xx.c",
+        ],
+        deps = [
+            # do not sort
+        ],
+    )
