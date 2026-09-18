@@ -2078,7 +2078,7 @@ static int qcom_ethqos_check_mdio_and_fix_link(struct platform_device *pdev,
 	}
 
 	/* Restore DT-provided mdio node for phylink phy-handle resolution. */
-	if (dt_mdio)
+	if (!plat->has_virtio_mdio && dt_mdio)
 		plat->mdio_node = dt_mdio;
 
 	return 0;
@@ -2110,12 +2110,8 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 		goto err_restore;
 	}
 
-	ret = ethqos_init_gpio(ethqos);
-	if (ret) {
-		dev_err(dev, "%s: GPIO init failed with ret = %d\n", __func__, ret);
-		ethqos_disable_regulators(ethqos);
-		goto err_restore;
-	}
+	if (ethqos_init_gpio(ethqos))
+		dev_warn(dev, "ethqos_init_gpio failed.\n");
 
 	ret = pm_runtime_force_resume(dev);
 	if (ret) {
@@ -2374,6 +2370,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ethqos->pdev = pdev;
 	ethqos->speed = SPEED_1000;
 
+	if (of_property_read_bool(np, "virtio-mdio"))
+		plat_dat->has_virtio_mdio = true;
+
 	qcom_ethqos_check_mdio_and_fix_link(pdev, plat_dat);
 
 	ethqos->rgmii_base = devm_platform_ioremap_resource_byname(pdev, "rgmii");
@@ -2446,11 +2445,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		if (ret)
 			return ret;
 
-		ret = ethqos_init_gpio(ethqos);
-
-		if (ret)
-			return dev_err_probe(dev, ret, "%s: init_gpio failed with ret = %d\n",
-					     __func__, ret);
+		if (ethqos_init_gpio(ethqos))
+			dev_warn(dev, "ethqos_init_gpio failed.\n");
 
 		ethqos->link_clk = devm_clk_get(dev, data->link_clk_name ?: "rgmii");
 		if (IS_ERR(ethqos->link_clk))
@@ -2509,8 +2505,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		plat_dat->safety_irq = ethqos_safety_feature;
 		plat_dat->safety_pcs_stats = ethqos_xpcs_safety_stats;
 	}
-	if (of_property_read_bool(np, "virtio-mdio"))
-		plat_dat->has_virtio_mdio = true;
 	if (of_property_read_bool(np, "snps,tso"))
 		plat_dat->flags |= STMMAC_FLAG_TSO_EN;
 	if (of_device_is_compatible(np, "qcom,qcs404-ethqos"))

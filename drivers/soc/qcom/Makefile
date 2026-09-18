@@ -187,6 +187,8 @@ obj-$(CONFIG_QCOM_SYSMON_SUBSYSTEM_STATS) += sysmon_subsystem_stats.o
 
 obj-$(CONFIG_QTI_SYS_PM_VX) += sys_pm_vx.o
 
+obj-$(CONFIG_QTI_SYS_PM_VX_V2) += sys_pm_vx_v2.o
+
 obj-$(CONFIG_QCOM_WCD_USBSS_I2C) += wcd_usbss_i2c.o
 wcd_usbss_i2c-objs += wcd-usbss-regmap.o wcd-usbss-tables.o wcd-usbss-utils.o wcd939x-i2c.o
 
