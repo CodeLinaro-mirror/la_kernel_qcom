@@ -1,5 +1,3 @@
-<<<<<<< PATCH SET (6e6f3c Revert "pinctrl: qcom: Snapshot of Waipio SoC pin control")
-=======
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
@@ -1658,4 +1656,3 @@ static const struct msm_gpio_wakeirq_map diwali_pdc_map[] = {
 	{ 159, 123 }, { 161, 124 }, { 162, 84 }, { 163, 128 }, { 164, 129 },
 	{ 165, 130 }, { 167, 131 }, { 169, 132 },
 };
->>>>>>> BASE      (570ec9 Merge "soc: qcom: llcc: Add LLCC support for Diwali" into ke)

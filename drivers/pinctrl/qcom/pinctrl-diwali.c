@@ -1,5 +1,3 @@
-<<<<<<< PATCH SET (6e6f3c Revert "pinctrl: qcom: Snapshot of Waipio SoC pin control")
-=======
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
@@ -84,4 +82,3 @@ MODULE_DESCRIPTION("QTI diwali pinctrl driver");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(of, diwali_pinctrl_of_match);
 MODULE_SOFTDEP("pre: qcom_tlmm_vm_irqchip");
->>>>>>> BASE      (570ec9 Merge "soc: qcom: llcc: Add LLCC support for Diwali" into ke)
