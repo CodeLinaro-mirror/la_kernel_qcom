@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013-2014, 2016-2018, 2021 The Linux Foundation.
  * All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * RMNET Data configuration engine
  */
@@ -60,6 +61,13 @@ struct rmnet_vnd_stats {
 	u64 tx_pkts;
 	u64 tx_bytes;
 	u32 tx_drops;
+	/* Protocol-specific counters */
+	u64 rx_icmp_pkts;
+	u64 rx_icmpv6_pkts;
+	u64 tx_icmp_pkts;
+	u64 tx_icmpv6_pkts;
+	u64 rx_dns_pkts;
+	u64 tx_dns_pkts;
 };
 
 struct rmnet_pcpu_stats {

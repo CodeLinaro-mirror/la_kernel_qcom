@@ -1,9 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013-2014, 2016-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef _RMNET_PRIVATE_H_
 #define _RMNET_PRIVATE_H_
+
+#define RMNET_IP_VERSION_4         0x40
+#define RMNET_IP_VERSION_6         0x60
 
 #define RMNET_MAX_PACKET_SIZE      16384
 #define RMNET_DFLT_PACKET_SIZE     1500
