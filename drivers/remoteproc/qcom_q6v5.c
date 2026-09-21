@@ -483,12 +483,8 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	}
 
 #ifdef CONFIG_QCOM_CRASH_SYMBOL_MATCH
-	if (queue_work(system_freezable_wq, &q6v5->symbol_loader)) {
-		dev_info(q6v5->dev, "Symbol loader work started\n");
-		flush_work(&q6v5->symbol_loader);
-	} else {
-		dev_err(q6v5->dev, "Failed to queue symbol loader work\n");
-	}
+	if (q6v5->crash_stack)
+		queue_work(system_freezable_wq, &q6v5->symbol_loader);
 #endif
 
 	trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_fatal", msg);
@@ -861,6 +857,9 @@ EXPORT_SYMBOL_GPL(qcom_q6v5_init);
  */
 void qcom_q6v5_deinit(struct qcom_q6v5 *q6v5)
 {
+#ifdef CONFIG_QCOM_CRASH_SYMBOL_MATCH
+	cancel_work_sync(&q6v5->symbol_loader);
+#endif
 	wakeup_source_unregister(q6v5->ws);
 	qmp_put(q6v5->qmp);
 }
