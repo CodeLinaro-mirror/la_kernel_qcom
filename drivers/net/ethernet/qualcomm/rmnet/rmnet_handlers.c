@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2013-2018, 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * RMNET Data ingress/egress handler
  */
@@ -14,8 +15,6 @@
 #include "rmnet_map.h"
 #include "rmnet_handlers.h"
 
-#define RMNET_IP_VERSION_4 0x40
-#define RMNET_IP_VERSION_6 0x60
 
 /* Helper Functions */
 
@@ -245,7 +244,7 @@ void rmnet_egress_handler(struct sk_buff *skb)
 	struct rmnet_port *port;
 	struct rmnet_priv *priv;
 	u8 mux_id;
-	int err;
+	int err, proto;
 
 	sk_pacing_shift_update(skb->sk, 8);
 
@@ -258,10 +257,15 @@ void rmnet_egress_handler(struct sk_buff *skb)
 	if (!port)
 		goto drop;
 
+	proto = rmnet_vnd_classify_tx_proto(skb);
+
 	err = rmnet_map_egress_handler(skb, port, mux_id, orig_dev);
 	if (err == -ENOMEM)
 		goto drop;
-	else if (err == -EINPROGRESS)
+
+	rmnet_vnd_update_tx_proto_stats(proto, orig_dev);
+
+	if (err == -EINPROGRESS)
 		return;
 
 	rmnet_vnd_tx_fixup(skb, orig_dev);
