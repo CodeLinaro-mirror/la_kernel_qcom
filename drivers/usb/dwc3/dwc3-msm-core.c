@@ -3697,16 +3697,6 @@ void dwc3_msm_notify_event(struct dwc3 *dwc,
 	case DWC3_IMEM_UPDATE_PID:
 		dwc3_msm_update_imem_pid(dwc);
 		break;
-	case DWC3_QSRAM_WRITE:
-		if (!mdwc->qsram) {
-			dev_err(mdwc->dev, "qsram not available\n");
-			break;
-		}
-
-		u32 offset = (void __iomem *)&mdwc->qsram->data[4] - mdwc->base;
-
-		dwc3_msm_write_reg(mdwc->base, offset, value);
-		break;
 	default:
 		dev_dbg(mdwc->dev, "unknown dwc3 event\n");
 		break;
