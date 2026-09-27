@@ -764,7 +764,8 @@ static arm_lpae_iopte arm_lpae_prot_to_pte(struct arm_lpae_io_pgtable *data,
 				<< ARM_LPAE_PTE_ATTRINDX_SHIFT);
 	}
 
-	if (prot & IOMMU_CACHE)
+	if ((prot & IOMMU_CACHE) && !(data->iop.cfg.quirks &
+		    IO_PGTABLE_QUIRK_QCOM_OSH_FOR_IOMMU_CACHE))
 		pte |= ARM_LPAE_PTE_SH_IS;
 	else
 		pte |= ARM_LPAE_PTE_SH_OS;
@@ -1415,7 +1416,8 @@ arm_64_lpae_alloc_pgtable_s1(struct io_pgtable_cfg *cfg, void *cookie)
 			    IO_PGTABLE_QUIRK_ARM_TTBR1 |
 			    IO_PGTABLE_QUIRK_ARM_OUTER_WBWA |
 			    IO_PGTABLE_QUIRK_QCOM_USE_LLC_NWA |
-			    IO_PGTABLE_QUIRK_QCOM_TCR_IRGN_NC))
+			    IO_PGTABLE_QUIRK_QCOM_TCR_IRGN_NC |
+			    IO_PGTABLE_QUIRK_QCOM_OSH_FOR_IOMMU_CACHE))
 		return NULL;
 
 	data = arm_lpae_alloc_pgtable(cfg);

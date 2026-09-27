@@ -162,6 +162,7 @@ hamoa_la_perf_config = {
     "CONFIG_QCOM_IOMMU_DEBUG": "m",
     "CONFIG_QCOM_IOMMU_UTIL": "m",
     "CONFIG_QCOM_IPCC": "m",
+    "CONFIG_QCOM_IRQ_STAT": "y",
     "CONFIG_QCOM_LAZY_MAPPING": "m",
     "CONFIG_QCOM_LLCC": "m",
     "CONFIG_QCOM_LOGBUF_BOOTLOG": "m",

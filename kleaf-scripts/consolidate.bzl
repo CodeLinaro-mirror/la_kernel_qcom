@@ -11,7 +11,13 @@ load(
 )
 load("//common:modules.bzl", "get_gki_modules_list", "get_kunit_modules_list")
 
-def define_consolidated_kernel(name = "kernel_aarch64_consolidate"):
+def define_consolidated_kernel(
+        name = "kernel_aarch64_consolidate",
+        defconfig = "//common:arch/arm64/configs/gki_defconfig",
+        pre_defconfig_fragments = None):
+    if pre_defconfig_fragments == None:
+        pre_defconfig_fragments = [":arch/arm64/configs/consolidate.fragment"]
+
     # mostly copied from build/kleaf/common_kernels.bzl:_define_common_kernel().
     # Kept what I could, dropped what I couldn't keep or doesn't make sense,
     # specifically ABI monitoring.
@@ -32,8 +38,8 @@ def define_consolidated_kernel(name = "kernel_aarch64_consolidate"):
             "certs/signing_key.x509",
         ],
         build_config = ":build.config.qcom.dtb",
-        defconfig = "//common:arch/arm64/configs/gki_defconfig",
-        pre_defconfig_fragments = [":arch/arm64/configs/consolidate.fragment"],
+        defconfig = defconfig,
+        pre_defconfig_fragments = pre_defconfig_fragments,
         # TODO: make this True to align with gki kernel
         strip_modules = False,
         module_implicit_outs = get_gki_modules_list("arm64") + get_kunit_modules_list("arm64"),
