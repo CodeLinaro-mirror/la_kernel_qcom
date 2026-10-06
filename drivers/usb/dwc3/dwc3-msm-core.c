@@ -3873,7 +3873,7 @@ static int dwc3_msm_prepare_suspend(struct dwc3_msm *mdwc, bool ignore_p3_state)
 	}
 	if (!(reg & PWR_EVNT_LPM_IN_L2_MASK)) {
 		dev_err(mdwc->dev, "could not transition HS PHY to L2\n");
-		ret = -EBUSY;
+		ret = mdwc->force_suspend ? 0 : -EBUSY;
 	}
 
 	/* Clear L2 event bit */
@@ -4620,7 +4620,8 @@ static void dwc3_msm_suspend_release_wakeup(struct dwc3_msm *mdwc)
 		return;
 	}
 
-	pm_relax(mdwc->dev);
+	if (!mdwc->force_suspend || (dwc3_msm_get_role(mdwc) != USB_ROLE_HOST))
+		pm_relax(mdwc->dev);
 }
 
 static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
@@ -6533,8 +6534,10 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
 	 * dwc3_suspend_common() while operating in host mode.
 	 */
 	mdwc->wakeup_source = of_property_read_bool(node, "wakeup-source");
-	device_init_wakeup(mdwc->dev, mdwc->wakeup_source);
-	device_init_wakeup(dwc->dev, mdwc->wakeup_source);
+	if (mdwc->force_suspend) {
+		device_init_wakeup(mdwc->dev, mdwc->wakeup_source);
+		device_init_wakeup(dwc->dev, mdwc->wakeup_source);
+	}
 
 	mdwc->xhci_pm_ops = kzalloc(sizeof(struct dev_pm_ops), GFP_ATOMIC);
 	if (!mdwc->xhci_pm_ops)
@@ -8454,7 +8457,7 @@ static int dwc3_msm_pm_resume(struct device *dev)
 		 * The sequence should be acceptable to add here, as:
 		 *   1. If role is DEVICE or NONE - PM suspend is aborted due to
 		 *      in_lpm == 1.
-		 *	 2. PM resume is likely only called during host mode use cases.
+		 *   2. PM resume is likely only called during host mode use cases.
 		 *
 		 */
 		pm_runtime_disable(dev);
@@ -8615,7 +8618,7 @@ static int dwc3_msm_runtime_resume(struct device *dev)
 	if (mdwc->dwc3)
 		dwc = platform_get_drvdata(mdwc->dwc3);
 
-	if (dwc)
+	if (dwc && mdwc->force_suspend)
 		device_init_wakeup(dwc->dev, mdwc->wakeup_source);
 
 	if (dev->pm_domain) {
