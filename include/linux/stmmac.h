@@ -321,8 +321,8 @@ struct plat_stmmacenet_data {
 	bool ext_snapshot_en;
 	bool multi_msi_en;
 	int msi_mac_vec;
-	int msi_wol_vec;
 	int msi_lpi_vec;
+	int msi_wol_vec;
 	int msi_sfty_ce_vec;
 	int msi_sfty_ue_vec;
 	int msi_rx_base_vec;

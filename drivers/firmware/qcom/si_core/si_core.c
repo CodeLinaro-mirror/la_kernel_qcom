@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/kobject.h>
@@ -1013,6 +1013,17 @@ int si_object_do_invoke(struct si_object_invoke_ctx *oic,
 					&response_type, &data);
 				if (ret)
 					pr_err("qseecom bridge failed with= %d\n", ret);
+			}
+
+			/* Dispatch it the same way as the direct-dispatch case above. */
+			if (response_type == QTEE_RESULT_INBOUND_REQ_NEEDED) {
+				oic->flags |= OIC_FLAG_BUSY;
+
+				__fetch__async_reqs(oic);
+
+				si_object_invoke(oic, cb_msg);
+
+				continue;
 			}
 #endif
 
