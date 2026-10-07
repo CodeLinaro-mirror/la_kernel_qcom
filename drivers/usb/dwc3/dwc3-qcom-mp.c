@@ -103,6 +103,8 @@ struct dwc3_qcom {
 	struct icc_path		*icc_path_apps;
 	unsigned int is_mp;
 	bool			use_eusb2_phy;
+	bool			dynamic_ss_phy_powerdown;
+	bool			ss_phy_off[DWC3_QCOM_MAX_PORTS];
 };
 
 static inline void dwc3_qcom_setbits(void __iomem *base, u32 offset, u32 val)
@@ -354,6 +356,84 @@ static enum usb_device_speed dwc3_qcom_read_usb2_speed(struct dwc3_qcom *qcom, i
 	return udev->speed;
 }
 
+static bool dwc3_qcom_ss_port_connected(struct dwc3_qcom *qcom, int port_index)
+{
+	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+	struct usb_hcd *hcd, *shared_hcd;
+	struct usb_device *udev;
+
+	if (!dwc)
+		return false;
+
+	hcd = platform_get_drvdata(dwc->xhci);
+	if (!hcd)
+		return false;
+
+	shared_hcd = hcd->shared_hcd;
+	if (!shared_hcd)
+		return false;
+
+#ifdef CONFIG_USB
+	udev = usb_hub_find_child(shared_hcd->self.root_hub, port_index + 1);
+#else
+	udev = NULL;
+#endif
+	if (!udev)
+		return false;
+
+	return udev->speed >= USB_SPEED_SUPER;
+}
+
+/**
+ * Power down unused SuperSpeed PHYs during wake-capable suspend.
+ *
+ * Keep the PHY active when a SuperSpeed device is connected. Track each
+ * powered-down PHY so that it can be reinitialized during resume without
+ * unbalancing the PHY init/exit sequence.
+ */
+static void dwc3_qcom_ss_phy_powerdown(struct dwc3_qcom *qcom)
+{
+	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+	int i;
+
+	if (!qcom->dynamic_ss_phy_powerdown || !dwc)
+		return;
+
+	for (i = 0; i < dwc->num_usb3_ports; i++) {
+		if (!dwc->usb3_generic_phy[i] || qcom->ss_phy_off[i])
+			continue;
+
+		if (dwc3_qcom_ss_port_connected(qcom, i))
+			continue;
+
+		phy_exit(dwc->usb3_generic_phy[i]);
+		qcom->ss_phy_off[i] = true;
+		dev_dbg(qcom->dev, "port-%d SS PHY powered down\n", i + 1);
+	}
+}
+
+static void dwc3_qcom_ss_phy_powerup(struct dwc3_qcom *qcom)
+{
+	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+	int i, ret;
+
+	if (!dwc)
+		return;
+
+	for (i = 0; i < dwc->num_usb3_ports; i++) {
+		if (!dwc->usb3_generic_phy[i] || !qcom->ss_phy_off[i])
+			continue;
+
+		ret = phy_init(dwc->usb3_generic_phy[i]);
+		if (ret)
+			dev_err(qcom->dev, "port-%d SS PHY re-init failed: %d\n",
+				i + 1, ret);
+
+		qcom->ss_phy_off[i] = false;
+		dev_dbg(qcom->dev, "port-%d SS PHY powered up\n", i + 1);
+	}
+}
+
 static void dwc3_qcom_enable_wakeup_irq(int irq, unsigned int polarity)
 {
 	if (!irq)
@@ -362,6 +442,11 @@ static void dwc3_qcom_enable_wakeup_irq(int irq, unsigned int polarity)
 	if (polarity)
 		irq_set_irq_type(irq, polarity);
 
+	/*
+	 * Clear any wake event latched while the IRQ was disabled to avoid an
+	 * immediate wakeup after entering suspend.
+	 */
+	irq_set_irqchip_state(irq, IRQCHIP_STATE_PENDING, false);
 	enable_irq(irq);
 	enable_irq_wake(irq);
 }
@@ -486,7 +571,7 @@ static void dwc3_qcom_vbus_regulator_enable(struct dwc3_qcom *qcom, bool on)
 	}
 }
 
-static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
+static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup, bool runtime)
 {
 	u32 val;
 	int i, ret;
@@ -495,18 +580,34 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 	if (qcom->is_suspended)
 		return 0;
 
+	/*
+	 * Wait for each HS PHY to enter L2 before disabling controller clocks.
+	 * During runtime suspend, defer the operation if a connected USB2
+	 * device has not reached L2.
+	 */
+	if (dwc3_qcom_is_host(qcom) && wakeup) {
+		for (i = 0; i < qcom->num_ports; i++) {
+			ret = readl_poll_timeout(qcom->qscratch_base + pwr_evnt_irq_stat_reg[i],
+						 val, (val & PWR_EVNT_LPM_IN_L2_MASK),
+						 1000, 5000);
+			if (!ret)
+				continue;
+
+			dev_dbg(qcom->dev, "port-%d HS-PHY not in L2 (pwr_evnt=0x%x)\n",
+				i + 1, val);
+
+			if (runtime &&
+			    dwc3_qcom_read_usb2_speed(qcom, i) != USB_SPEED_UNKNOWN)
+				return -EBUSY;
+		}
+	}
+
 	if (qcom->dev->pm_domain) {
 		genpd = pd_to_genpd(qcom->dev->pm_domain);
 		/* Keep PHY GDSC ON during host mode bus suspend */
 		genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
 		genpd->flags |= GENPD_FLAG_ALWAYS_ON;
 		dev_dbg(qcom->dev, "GDSC flags ON\n");
-	}
-
-	for (i = 0; i < qcom->num_ports; i++) {
-		val = readl(qcom->qscratch_base + pwr_evnt_irq_stat_reg[i]);
-		if (!(val & PWR_EVNT_LPM_IN_L2_MASK))
-			dev_err(qcom->dev, "port-%d HS-PHY not in L2\n", i + 1);
 	}
 
 	for (i = qcom->num_clocks - 1; i >= 0; i--)
@@ -526,7 +627,9 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
 	if (dwc3_qcom_is_host(qcom) && wakeup) {
 		for (i = 0; i < qcom->num_ports; i++)
 			qcom->ports[i].usb2_speed = dwc3_qcom_read_usb2_speed(qcom, i);
+
 		dwc3_qcom_enable_interrupts(qcom);
+		dwc3_qcom_ss_phy_powerdown(qcom);
 	}
 
 	if (!wakeup)
@@ -543,6 +646,9 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 	int i;
 	struct generic_pm_domain *genpd;
 
+	if (!qcom->is_suspended)
+		return 0;
+
 	if (qcom->dev->pm_domain) {
 		genpd = pd_to_genpd(qcom->dev->pm_domain);
 		/*
@@ -553,9 +659,6 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 		genpd->flags &= ~GENPD_FLAG_ALWAYS_ON;
 		dev_dbg(qcom->dev, "GDSC flags OFF\n");
 	}
-
-	if (!qcom->is_suspended)
-		return 0;
 
 	if (!wakeup)
 		dwc3_qcom_vbus_regulator_enable(qcom, true);
@@ -585,6 +688,10 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
 				  pwr_evnt_irq_stat_reg[i],
 				  PWR_EVNT_LPM_IN_L2_MASK | PWR_EVNT_LPM_OUT_L2_MASK);
 	}
+
+	/* Restore SS PHYs powered down during suspend. */
+	if (dwc3_qcom_is_host(qcom) && qcom->dynamic_ss_phy_powerdown)
+		dwc3_qcom_ss_phy_powerup(qcom);
 
 	qcom->is_suspended = false;
 
@@ -874,6 +981,24 @@ static int dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
 }
 
 /*
+ * Allow USB2 PHY providers to runtime suspend when no longer required by
+ * the DWC3 core.
+ */
+static void dwc3_qcom_allow_hsphy_runtime_pm(struct dwc3_qcom *qcom)
+{
+	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+	int i;
+
+	if (!dwc)
+		return;
+
+	for (i = 0; i < dwc->num_usb2_ports; i++) {
+		if (dwc->usb2_generic_phy[i])
+			pm_runtime_allow(dwc->usb2_generic_phy[i]->dev.parent);
+	}
+}
+
+/*
  * The dwc3 core (core.c) and xhci-plat (xhci-plat.c) both pm_runtime_forbid()
  * themselves in their own probe and never re-allow on the success path. Allow
  * their runtime PM once they are actually bound, so the host stack can idle:
@@ -895,6 +1020,7 @@ static int dwc3_qcom_xhci_nb(struct notifier_block *nb,
 	/* dwc3 core == direct child of this glue */
 	if (dev->parent == qcom->dev) {
 		pm_runtime_allow(dev);
+		dwc3_qcom_allow_hsphy_runtime_pm(qcom);
 		return NOTIFY_DONE;
 	}
 
@@ -1017,6 +1143,8 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 	dwc3_qcom_vbus_regulator_enable(qcom, true);
 
 	qcom->use_eusb2_phy = of_property_read_bool(dev->of_node, "qcom,use-eusb2-phy");
+	qcom->dynamic_ss_phy_powerdown =
+		usb_get_maximum_speed(&qcom->dwc3->dev) != USB_SPEED_HIGH;
 	wakeup_source = of_property_read_bool(dev->of_node, "wakeup-source");
 	device_init_wakeup(&pdev->dev, wakeup_source);
 	device_init_wakeup(&qcom->dwc3->dev, wakeup_source);
@@ -1051,8 +1179,9 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
 			pm_runtime_use_autosuspend(&dwc->xhci->dev);
 			pm_runtime_allow(&dwc->xhci->dev);
 			pm_runtime_mark_last_busy(&dwc->xhci->dev);
-			pm_runtime_put_autosuspend(&dwc->xhci->dev);
 		}
+
+		dwc3_qcom_allow_hsphy_runtime_pm(qcom);
 	}
 
 	return 0;
@@ -1101,7 +1230,7 @@ static int __maybe_unused dwc3_qcom_pm_suspend(struct device *dev)
 	bool wakeup = device_may_wakeup(dev);
 	int ret;
 
-	ret = dwc3_qcom_suspend(qcom, wakeup);
+	ret = dwc3_qcom_suspend(qcom, wakeup, false);
 	if (ret)
 		return ret;
 
@@ -1129,7 +1258,7 @@ static int __maybe_unused dwc3_qcom_runtime_suspend(struct device *dev)
 {
 	struct dwc3_qcom *qcom = dev_get_drvdata(dev);
 
-	return dwc3_qcom_suspend(qcom, true);
+	return dwc3_qcom_suspend(qcom, true, true);
 }
 
 static int __maybe_unused dwc3_qcom_runtime_resume(struct device *dev)
