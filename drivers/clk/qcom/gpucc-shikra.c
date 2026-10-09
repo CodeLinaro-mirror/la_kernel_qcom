@@ -351,7 +351,7 @@ static struct gdsc gpu_cc_cx_smmu_gdsc = {
 		.power_off = gdsc_cx_do_nothing,
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.flags = RETAIN_FF_ENABLE | VOTABLE | FORCE_INIT_STATE,
 	.parent = &gpu_cc_cx_gdsc.pd,
 };
 
@@ -367,7 +367,7 @@ static struct gdsc gpu_cc_cx_gpu_gdsc = {
 		.power_off = gdsc_cx_do_nothing,
 	},
 	.pwrsts = PWRSTS_OFF_ON,
-	.flags = RETAIN_FF_ENABLE | VOTABLE,
+	.flags = RETAIN_FF_ENABLE | VOTABLE | FORCE_INIT_STATE,
 	.parent = &gpu_cc_cx_gdsc.pd,
 };
 

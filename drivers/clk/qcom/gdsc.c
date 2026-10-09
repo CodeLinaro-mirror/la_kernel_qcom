@@ -476,9 +476,13 @@ static int gdsc_init(struct gdsc *sc)
 			return ret;
 	}
 
-	on = gdsc_check_status(sc, GDSC_ON);
-	if (on < 0)
-		return on;
+	if (sc->flags & FORCE_INIT_STATE) {
+		on = false;
+	} else {
+		on = gdsc_check_status(sc, GDSC_ON);
+		if (on < 0)
+			return on;
+	}
 
 	if (on) {
 		/* The regulator must be on, sync the kernel state */
